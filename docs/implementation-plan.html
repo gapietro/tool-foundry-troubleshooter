@@ -485,7 +485,7 @@
   <h1>Implementation Plan</h1>
   <div class="meta">
     <span class="badge phase">Phase 1 — Server Foundation</span>
-    <span class="badge stack">14 Tasks</span>
+    <span class="badge stack">15 Tasks</span>
   </div>
 </div>
 
@@ -506,6 +506,7 @@
     <a href="#task6"><span class="task-num tool">6</span> PaToolQueryTable</a>
     <a href="#task7"><span class="task-num tool">7</span> PaToolSchemaLookup</a>
     <a href="#task8"><span class="task-num tool">8</span> PaToolLogAnalysis</a>
+    <a href="#task8b"><span class="task-num tool">8b</span> PaToolCmdbTraverse</a>
 
     <div class="section-label">Infrastructure</div>
     <a href="#task9"><span class="task-num infra">9</span> PaAuditLogger</a>
@@ -722,6 +723,27 @@
       </div>
     </div>
 
+    <!-- Task 8b -->
+    <div class="task" id="task8b">
+      <div class="task-header">
+        <div class="task-number tool">8b</div>
+        <div>
+          <div class="task-title">PaToolCmdbTraverse</div>
+          <div class="task-subtitle">CMDB relationship traversal</div>
+        </div>
+      </div>
+      <div class="task-body">
+        <ul class="file-list">
+          <li><span class="file-action create">Create</span><span class="file-path">src/instance/script-includes/tools/PaToolCmdbTraverse.js</span></li>
+        </ul>
+        <p>Traverses CMDB relationships via GlideRecordSecure. Accepts: <strong>ci</strong> (sys_id, required), <strong>direction</strong> (upstream/downstream/both, default both), <strong>depth</strong> (max hops, default 2, max 5), <strong>rel_type</strong> (optional filter by relationship type name).</p>
+        <p>Queries <code>cmdb_rel_ci</code> following parent/child links, joins <code>cmdb_rel_type</code> for human-readable relationship names. Returns related CIs with class, relationship type, direction, and hop level. Validates CI exists. Caps at 200 results.</p>
+        <p><strong>Use cases:</strong> blast radius analysis, data model exploration, dependency mapping, support group discovery via CI relationships.</p>
+        <p><strong>Phase 2 enhancement:</strong> Detect ServiceNow Knowledge Graph API (<code>sn_cmdb_api</code>). Use if available for faster traversal with cycle detection; fall back to manual <code>cmdb_rel_ci</code> walking if not.</p>
+        <div class="commit-tag"><span class="icon">&#x1F4BE;</span> feat: add PaToolCmdbTraverse for CMDB relationship traversal</div>
+      </div>
+    </div>
+
     <hr class="section-sep">
 
     <!-- Task 9 -->
@@ -890,6 +912,7 @@
             <span class="dep-node tool">6 QueryTable</span>
             <span class="dep-node tool">7 SchemaLookup</span>
             <span class="dep-node tool">8 LogAnalysis</span>
+            <span class="dep-node tool">8b CmdbTraverse</span>
           </div>
           <span class="dep-bracket">parallel</span>
         </div>
