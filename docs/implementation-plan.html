@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ServiceNow Platform Assistant — Implementation Plan</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #232732;
+    --border: #2e3345;
+    --accent: #6c8cff;
+    --accent2: #4ecdc4;
+    --accent3: #ff6b9d;
+    --accent4: #ffd93d;
+    --text: #e4e6f0;
+    --text-muted: #8b90a5;
+    --text-dim: #555a6e;
+    --success: #4ecdc4;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+
+  /* Top nav bar */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(15, 17, 23, 0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .topbar h1 {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+  }
+
+  .topbar .meta {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+  }
+
+  .topbar .badge {
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .badge.phase { background: rgba(108, 140, 255, 0.15); color: var(--accent); border: 1px solid rgba(108, 140, 255, 0.3); }
+  .badge.stack { background: rgba(78, 205, 196, 0.12); color: var(--accent2); border: 1px solid rgba(78, 205, 196, 0.25); }
+
+  /* Layout */
+  .layout {
+    display: flex;
+    max-width: 1280px;
+    margin: 0 auto;
+    min-height: calc(100vh - 49px);
+  }
+
+  /* Sidebar */
+  .sidebar {
+    width: 260px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    padding: 24px 0;
+    position: sticky;
+    top: 49px;
+    height: calc(100vh - 49px);
+    overflow-y: auto;
+  }
+
+  .sidebar .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+    padding: 0 20px;
+    margin-bottom: 8px;
+    margin-top: 20px;
+  }
+
+  .sidebar .section-label:first-child { margin-top: 0; }
+
+  .sidebar a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 20px;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 13px;
+    transition: all 0.15s ease;
+    border-left: 2px solid transparent;
+  }
+
+  .sidebar a:hover {
+    color: var(--text);
+    background: rgba(108, 140, 255, 0.06);
+    border-left-color: var(--accent);
+  }
+
+  .sidebar .task-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .task-num.scaffolding { background: rgba(108, 140, 255, 0.15); color: var(--accent); }
+  .task-num.feature { background: rgba(78, 205, 196, 0.15); color: var(--accent2); }
+  .task-num.tool { background: rgba(255, 217, 61, 0.15); color: var(--accent4); }
+  .task-num.infra { background: rgba(255, 107, 157, 0.15); color: var(--accent3); }
+
+  /* Main content */
+  .content {
+    flex: 1;
+    padding: 32px 48px 80px;
+    max-width: 800px;
+  }
+
+  /* Header section */
+  .plan-header {
+    margin-bottom: 40px;
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .plan-header h2 {
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+    margin-bottom: 16px;
+  }
+
+  .plan-header .goal {
+    font-size: 15px;
+    color: var(--text-muted);
+    margin-bottom: 20px;
+    line-height: 1.7;
+  }
+
+  .meta-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+
+  .meta-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+
+  .meta-card .label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+
+  .meta-card .value {
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  /* Task cards */
+  .task {
+    margin-bottom: 32px;
+    scroll-margin-top: 80px;
+  }
+
+  .task-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    margin-bottom: 16px;
+  }
+
+  .task-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .task-number.scaffolding { background: rgba(108, 140, 255, 0.15); color: var(--accent); }
+  .task-number.feature { background: rgba(78, 205, 196, 0.15); color: var(--accent2); }
+  .task-number.tool { background: rgba(255, 217, 61, 0.15); color: var(--accent4); }
+  .task-number.infra { background: rgba(255, 107, 157, 0.15); color: var(--accent3); }
+
+  .task-title {
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+    margin-bottom: 2px;
+  }
+
+  .task-subtitle {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .task-body {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-left: 50px;
+  }
+
+  .task-body p {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    line-height: 1.7;
+  }
+
+  .task-body p:last-child { margin-bottom: 0; }
+
+  .task-body strong { color: var(--text); font-weight: 600; }
+
+  /* File list */
+  .file-list {
+    list-style: none;
+    margin-bottom: 14px;
+  }
+
+  .file-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 5px 0;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .file-list .file-action {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .file-action.create { background: rgba(78, 205, 196, 0.15); color: var(--accent2); }
+  .file-action.test { background: rgba(108, 140, 255, 0.15); color: var(--accent); }
+
+  .file-path {
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    font-size: 12px;
+    color: var(--text);
+  }
+
+  .file-desc {
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+
+  /* Commit tag */
+  .commit-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 14px;
+    padding: 5px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .commit-tag .icon { font-size: 12px; opacity: 0.5; }
+
+  /* Method list */
+  .method-list {
+    list-style: none;
+    margin: 8px 0 12px;
+  }
+
+  .method-list li {
+    padding: 3px 0;
+    font-size: 12px;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    color: var(--accent2);
+  }
+
+  .method-list li span {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: var(--text-muted);
+    margin-left: 6px;
+  }
+
+  /* Depends badge */
+  .depends {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 10px;
+    padding: 4px 10px;
+    background: rgba(255, 107, 157, 0.08);
+    border: 1px solid rgba(255, 107, 157, 0.2);
+    border-radius: 6px;
+    font-size: 11px;
+    color: var(--accent3);
+  }
+
+  /* TDD badge */
+  .tdd-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    background: rgba(108, 140, 255, 0.1);
+    border: 1px solid rgba(108, 140, 255, 0.25);
+    border-radius: 6px;
+    font-size: 11px;
+    color: var(--accent);
+    margin-top: 10px;
+    margin-right: 8px;
+  }
+
+  /* Dependency graph */
+  .dep-graph {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px 32px;
+    margin: 40px 0;
+  }
+
+  .dep-graph h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 20px;
+  }
+
+  .dep-flow {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .dep-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .dep-node {
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .dep-node.scaffolding { background: rgba(108, 140, 255, 0.12); color: var(--accent); border: 1px solid rgba(108, 140, 255, 0.25); }
+  .dep-node.feature { background: rgba(78, 205, 196, 0.12); color: var(--accent2); border: 1px solid rgba(78, 205, 196, 0.25); }
+  .dep-node.tool { background: rgba(255, 217, 61, 0.12); color: var(--accent4); border: 1px solid rgba(255, 217, 61, 0.25); }
+  .dep-node.infra { background: rgba(255, 107, 157, 0.12); color: var(--accent3); border: 1px solid rgba(255, 107, 157, 0.25); }
+
+  .dep-arrow {
+    color: var(--text-dim);
+    font-size: 16px;
+  }
+
+  .dep-parallel {
+    display: flex;
+    gap: 6px;
+    padding: 4px 0;
+  }
+
+  .dep-bracket {
+    color: var(--text-dim);
+    font-size: 11px;
+    font-style: italic;
+    align-self: center;
+  }
+
+  /* Verification section */
+  .verification {
+    background: var(--surface);
+    border: 1px solid rgba(78, 205, 196, 0.25);
+    border-radius: 12px;
+    padding: 24px 28px;
+    margin-top: 40px;
+  }
+
+  .verification h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    color: var(--accent2);
+  }
+
+  .verification h4 {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+    margin-top: 18px;
+  }
+
+  .verification h4:first-of-type { margin-top: 0; }
+
+  .verification ol, .verification ul {
+    padding-left: 20px;
+    margin-bottom: 8px;
+  }
+
+  .verification li {
+    font-size: 13px;
+    color: var(--text-muted);
+    padding: 3px 0;
+  }
+
+  .verification code {
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    font-size: 12px;
+    background: var(--surface2);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: var(--accent2);
+  }
+
+  /* Separator */
+  .section-sep {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 36px 0;
+  }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .sidebar { display: none; }
+    .content { padding: 24px; max-width: 100%; }
+    .meta-grid { grid-template-columns: 1fr; }
+    .task-body { margin-left: 0; }
+    .topbar { padding: 12px 20px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>Implementation Plan</h1>
+  <div class="meta">
+    <span class="badge phase">Phase 1 — Server Foundation</span>
+    <span class="badge stack">14 Tasks</span>
+  </div>
+</div>
+
+<div class="layout">
+
+  <!-- Sidebar nav -->
+  <nav class="sidebar">
+    <div class="section-label">Scaffolding</div>
+    <a href="#task1"><span class="task-num scaffolding">1</span> Project Scaffolding</a>
+    <a href="#task2"><span class="task-num scaffolding">2</span> Directory + Tables</a>
+    <a href="#task3"><span class="task-num scaffolding">3</span> NASK Skills + Prompt</a>
+
+    <div class="section-label">Core Services</div>
+    <a href="#task4"><span class="task-num feature">4</span> PaLlmProxy</a>
+    <a href="#task5"><span class="task-num feature">5</span> PaToolRegistry</a>
+
+    <div class="section-label">Tools</div>
+    <a href="#task6"><span class="task-num tool">6</span> PaToolQueryTable</a>
+    <a href="#task7"><span class="task-num tool">7</span> PaToolSchemaLookup</a>
+    <a href="#task8"><span class="task-num tool">8</span> PaToolLogAnalysis</a>
+
+    <div class="section-label">Infrastructure</div>
+    <a href="#task9"><span class="task-num infra">9</span> PaAuditLogger</a>
+    <a href="#task10"><span class="task-num infra">10</span> PaSessionManager</a>
+    <a href="#task11"><span class="task-num infra">11</span> PaAgentLoop</a>
+    <a href="#task12"><span class="task-num infra">12</span> REST API</a>
+
+    <div class="section-label">Finalize</div>
+    <a href="#task13"><span class="task-num scaffolding">13</span> Tests + Dependencies</a>
+    <a href="#task14"><span class="task-num scaffolding">14</span> Branch + PR</a>
+
+    <div class="section-label">Reference</div>
+    <a href="#deps">Dependency Graph</a>
+    <a href="#verification">Verification</a>
+  </nav>
+
+  <!-- Main content -->
+  <main class="content">
+
+    <div class="plan-header">
+      <h2>ServiceNow Platform Assistant</h2>
+      <p class="goal">Build an AI-powered troubleshooting assistant that runs entirely within ServiceNow, routing all LLM calls through GenAI Controller via NASK skills. Server-side ReAct agentic loop exposed via Scripted REST API, with a React chat UI. All queries use GlideRecordSecure. Destructive ops require user confirmation.</p>
+      <div class="meta-grid">
+        <div class="meta-card">
+          <div class="label">Architecture</div>
+          <div class="value">Server-side ReAct Loop</div>
+        </div>
+        <div class="meta-card">
+          <div class="label">Tech Stack</div>
+          <div class="value">SN JavaScript, React SDK, NASK</div>
+        </div>
+        <div class="meta-card">
+          <div class="label">PRD</div>
+          <div class="value" style="font-family: monospace; font-size: 12px;">docs/PRD_ServiceNow_Platform_Assistant.md</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Task 1 -->
+    <div class="task" id="task1">
+      <div class="task-header">
+        <div class="task-number scaffolding">1</div>
+        <div>
+          <div class="task-title">Project Scaffolding</div>
+          <div class="task-subtitle">Remaining files — repo already initialized</div>
+        </div>
+      </div>
+      <div class="task-body">
+        <p><strong>Already done:</strong> Git repo initialized, <code>.gitignore</code>, <code>README.md</code>, PRD pushed to main.</p>
+        <ul class="file-list">
+          <li><span class="file-action create">Create</span><span class="file-path">package.json</span>&nbsp;<span class="file-desc">— version 2026.03.1201, Jest devDep, test script</span></li>
+          <li><span class="file-action create">Create</span><span class="file-path">CHANGELOG.md</span>&nbsp;<span class="file-desc">— initial entry</span></li>
+        </ul>
+        <p>Package.json includes Jest for unit testing parsing/logic code that doesn't depend on ServiceNow APIs.</p>
+        <div class="commit-tag"><span class="icon">&#x1F4BE;</span> chore: add package.json and changelog</div>
+      </div>
+    </div>
+
+    <!-- Task 2 -->
+    <div class="task" id="task2">
+      <div class="task-header">
+        <div class="task-number scaffolding">2</div>
+        <div>
+          <div class="task-title">Directory Structure + Table Definitions</div>
+          <div class="task-subtitle">Project tree and schema contracts</div>
+        </div>
+      </div>
+      <div class="task-body">
+        <ul class="file-list">
+          <li><span class="file-action create">Dirs</span><span class="file-path">src/instance/script-includes/tools/</span></li>
+          <li><span class="file-action create">Dirs</span><span class="file-path">src/instance/scripted-rest-api/</span></li>
+          <li><span class="file-action create">Dirs</span><span class="file-path">src/instance/skills/</span></li>
+          <li><span class="file-action create">Dirs</span><span class="file-path">src/instance/tables/</span></li>
+          <li><span class="file-action create">Dirs</span><span class="file-path">src/component/x-snc-platform-assistant/components/</span></li>
+          <li><span class="file-action create">Dirs</span><span class="file-path">src/component/x-snc-platform-assistant/__tests__/</span></li>
+          <li><span class="file-action create">Create</span><span class="file-path">src/instance/tables/u_pa_session.json</span>&nbsp;<span class="file-desc">— session_id, user, status, messages JSON, context, pending_action</span></li>
+          <li><span class="file-action create">Create</span><span class="file-path">src/instance/tables/u_pa_audit_log.json</span>&nbsp;<span class="file-desc">— session_id, user, action_type, tool_name, input, output, target_table, target_record, confirmed_by_user</span></li>
+        </ul>
+        <p>Table definition JSONs serve as documentation for what to create on-instance — they aren't auto-deployed but define the schema contract.</p>
+        <div class="commit-tag"><span class="icon">&#x1F4BE;</span> chore: create directory structure and table definitions</div>
+      </div>
+    </div>
+
+    <!-- Task 3 -->
+    <div class="task" id="task3">
+      <div class="task-header">
+        <div class="task-number scaffolding">3</div>
+        <div>
+          <div class="task-title">NASK Skill Definitions + System Prompt</div>
+          <div class="task-subtitle">LLM behavioral rules and skill configs</div>
+        </div>
+      </div>
+      <div class="task-body">
+        <ul class="file-list">
+          <li><span class="file-action create">Create</span><span class="file-path">src/instance/skills/pa-llm-reason.json</span>&nbsp;<span class="file-desc">— temp 0.2, max 2000 tokens, text_generation</span></li>
+          <li><span class="file-action create">Create</span><span class="file-path">src/instance/skills/pa-llm-summarize.json</span>&nbsp;<span class="file-desc">— temp 0.1, max 1000 tokens</span></li>
+          <li><span class="file-action create">Create</span><span class="file-path">src/instance/skills/system-prompt.md</span>&nbsp;<span class="file-desc">— template with {{tool_definitions}} placeholder</span></li>
+        </ul>
+        <p><strong>System prompt rules:</strong> GlideRecordSecure only, explain before destructive ops, max 100 records, ask if unsure, check 2+ sources. Response format: <code>TOOL_CALL: {...}</code> or <code>ANSWER: ...</code></p>
+        <div class="commit-tag"><span class="icon">&#x1F4BE;</span> feat: add NASK skill definitions and system prompt</div>
+      </div>
+    </div>
+
+    <hr class="section-sep">
+
+    <!-- Task 4 -->
+    <div class="task" id="task4">
+      <div class="task-header">
+        <div class="task-number feature">4</div>
+        <div>
+          <div class="task-title">PaLlmProxy</div>
+          <div class="task-subtitle">LLM invocation wrapper</div>
+        </div>
+      </div>
+      <div class="task-body">
+        <ul class="file-list">
+          <li><span class="file-action create">Create</span><span class="file-path">src/instance/script-includes/PaLlmProxy.js</span></li>
+          <li><span class="file-action test">Test</span><span class="file-path">src/instance/script-includes/__tests__/PaLlmProxy.test.js</span></li>
+        </ul>
+        <p>Wraps <code>sn_gen_ai.GaiScriptedSkill</code> to invoke NASK skills. Two public methods:</p>
+        <ul class="method-list">
+          <li>reason(prompt) <span>— primary reasoning invocation</span></li>
+          <li>summarize(conversation) <span>— context compression</span></li>
+          <li>_parseResponse(raw) <span>— parses into {type: 'tool_call' | 'answer' | 'error', ...}</span></li>
+        </ul>
+        <p>Handles empty responses, malformed JSON in TOOL_CALL, and missing prefixes (fallback to answer).</p>
+        <p><strong>Tests:</strong> valid TOOL_CALL, valid ANSWER, malformed JSON, empty string, no prefix (fallback).</p>
+        <span class="tdd-badge">TDD — tests first</span>
+        <div class="commit-tag"><span class="icon">&#x1F4BE;</span> feat: add PaLlmProxy for NASK skill invocation with response parsing</div>
+      </div>
+    </div>
+
+    <!-- Task 5 -->
+    <div class="task" id="task5">
+      <div class="task-header">
+        <div class="task-number feature">5</div>
+        <div>
+          <div class="task-title">PaToolRegistry</div>
+          <div class="task-subtitle">Tool registration + dispatch</div>
+        </div>
+      </div>
+      <div class="task-body">
+        <ul class="file-list">
+          <li><span class="file-action create">Create</span><span class="file-path">src/instance/script-includes/PaToolRegistry.js</span></li>
+          <li><span class="file-action test">Test</span><span class="file-path">src/instance/script-includes/__tests__/PaToolRegistry.test.js</span></li>
+        </ul>
+        <p>Registry of all 10 tools with metadata: scriptInclude name, destructive flag, description, parameter definitions.</p>
+        <ul class="method-list">
+          <li>listTools() <span>— returns array of tool metadata</span></li>
+          <li>getToolDefinitionsForPrompt() <span>— formats for system prompt injection</span></li>
+          <li>isDestructive(toolName) <span>— returns boolean</span></li>
+          <li>getTool(toolName) <span>— returns config or null</span></li>
+          <li>execute(toolName, args) <span>— validates params, instantiates, calls execute()</span></li>
+        </ul>
+        <span class="tdd-badge">TDD — tests first</span>
+        <div class="commit-tag"><span class="icon">&#x1F4BE;</span> feat: add PaToolRegistry for tool registration, dispatch, and prompt generation</div>
+      </div>
+    </div>
+
+    <hr class="section-sep">
+
+    <!-- Task 6 -->
+    <div class="task" id="task6">
+      <div class="task-header">
+        <div class="task-number tool">6</div>
+        <div>
+          <div class="task-title">PaToolQueryTable</div>
+          <div class="task-subtitle">Table query tool</div>
+        </div>
+      </div>
+      <div class="task-body">
+        <ul class="file-list">
+          <li><span class="file-action create">Create</span><span class="file-path">src/instance/script-includes/tools/PaToolQueryTable.js</span></li>
+        </ul>
+        <p>Executes GlideRecordSecure queries. Accepts: <strong>table</strong> (required), <strong>query</strong> (encoded query string), <strong>fields</strong> (comma-separated, default: sys_id,number,short_description,state), <strong>limit</strong> (default 20, max 100).</p>
+        <p>Validates table exists via <code>GlideTableDescriptor.isValid()</code>. Orders by sys_created_on desc. Returns <code>{success, data: {table, query, count, records[]}}</code>.</p>
+        <div class="commit-tag"><span class="icon">&#x1F4BE;</span> feat: add PaToolQueryTable for GlideRecordSecure table queries</div>
+      </div>
+    </div>
+
+    <!-- Task 7 -->
+    <div class="task" id="task7">
+      <div class="task-header">
+        <div class="task-number tool">7</div>
+        <div>
+          <div class="task-title">PaToolSchemaLookup</div>
+          <div class="task-subtitle">Schema inspection tool</div>
+        </div>
+      </div>
+      <div class="task-body">
+        <ul class="file-list">
+          <li><span class="file-action create">Create</span><span class="file-path">src/instance/script-includes/tools/PaToolSchemaLookup.js</span></li>
+        </ul>
+        <p>Two modes: <strong>table-level</strong> (queries sys_dictionary for all fields — name/label/type/max_length/mandatory/reference) and <strong>field-level</strong> (single field details plus choice values from sys_choice). Validates table exists.</p>
+        <div class="commit-tag"><span class="icon">&#x1F4BE;</span> feat: add PaToolSchemaLookup for table/field schema inspection</div>
+      </div>
+    </div>
+
+    <!-- Task 8 -->
+    <div class="task" id="task8">
+      <div class="task-header">
+        <div class="task-number tool">8</div>
+        <div>
+          <div class="task-title">PaToolLogAnalysis</div>
+          <div class="task-subtitle">System log search</div>
+        </div>
+      </div>
+      <div class="task-body">
+        <ul class="file-list">
+          <li><span class="file-action create">Create</span><span class="file-path">src/instance/script-includes/tools/PaToolLogAnalysis.js</span></li>
+        </ul>
+        <p>Queries syslog table via GlideRecordSecure. Filters by <strong>level</strong>, <strong>source</strong> (CONTAINS), <strong>message</strong> (CONTAINS), and <strong>time range</strong> (minutes_ago, default 60). Default limit 50, max 100. Orders by sys_created_on desc.</p>
+        <div class="commit-tag"><span class="icon">&#x1F4BE;</span> feat: add PaToolLogAnalysis for system log search</div>
+      </div>
+    </div>
+
+    <hr class="section-sep">
+
+    <!-- Task 9 -->
+    <div class="task" id="task9">
+      <div class="task-header">
+        <div class="task-number infra">9</div>
+        <div>
+          <div class="task-title">PaAuditLogger</div>
+          <div class="task-subtitle">Audit trail</div>
+        </div>
+      </div>
+      <div class="task-body">
+        <ul class="file-list">
+          <li><span class="file-action create">Create</span><span class="file-path">src/instance/script-includes/PaAuditLogger.js</span></li>
+        </ul>
+        <p>Writes to u_pa_audit_log table. Three methods:</p>
+        <ul class="method-list">
+          <li>logIntent(params) <span>— before destructive execution</span></li>
+          <li>logResult(params) <span>— after success</span></li>
+          <li>logError(params) <span>— on failure</span></li>
+        </ul>
+        <p>All methods capture session_id, user, tool_name, input/output JSON, target_table, target_record, confirmed_by_user flag.</p>
+        <div class="commit-tag"><span class="icon">&#x1F4BE;</span> feat: add PaAuditLogger for audit trail of tool executions</div>
+      </div>
+    </div>
+
+    <!-- Task 10 -->
+    <div class="task" id="task10">
+      <div class="task-header">
+        <div class="task-number infra">10</div>
+        <div>
+          <div class="task-title">PaSessionManager</div>
+          <div class="task-subtitle">Conversation state</div>
+        </div>
+      </div>
+      <div class="task-body">
+        <ul class="file-list">
+          <li><span class="file-action create">Create</span><span class="file-path">src/instance/script-includes/PaSessionManager.js</span></li>
+        </ul>
+        <p>Manages u_pa_session records:</p>
+        <ul class="method-list">
+          <li>getOrCreateSession(sessionId?) <span>— loads existing or creates new (GUID)</span></li>
+          <li>addMessage(sessionId, role, content, toolExecutions?) <span>— appends to u_messages JSON</span></li>
+          <li>setPendingAction(sessionId, action) <span>— for destructive op confirmation</span></li>
+          <li>consumePendingAction(sessionId) <span>— retrieves and clears pending action</span></li>
+          <li>buildConversationPrompt(sessionId) <span>— assembles context + messages for LLM</span></li>
+          <li>closeSession(sessionId) <span>— sets status to closed</span></li>
+        </ul>
+        <p><strong>Context summarization:</strong> after 10 messages, calls PaLlmProxy.summarize(), stores summary in u_context, keeps only last 4 messages. <strong>Session expiry:</strong> 30 min inactivity check on load.</p>
+        <span class="depends">Depends on: PaLlmProxy (Task 4)</span>
+        <div class="commit-tag"><span class="icon">&#x1F4BE;</span> feat: add PaSessionManager for conversation state and context management</div>
+      </div>
+    </div>
+
+    <!-- Task 11 -->
+    <div class="task" id="task11">
+      <div class="task-header">
+        <div class="task-number infra">11</div>
+        <div>
+          <div class="task-title">PaAgentLoop</div>
+          <div class="task-subtitle">Core ReAct agentic loop</div>
+        </div>
+      </div>
+      <div class="task-body">
+        <ul class="file-list">
+          <li><span class="file-action create">Create</span><span class="file-path">src/instance/script-includes/PaAgentLoop.js</span></li>
+          <li><span class="file-action test">Test</span><span class="file-path">src/instance/script-includes/__tests__/PaAgentLoop.test.js</span></li>
+        </ul>
+        <p>The central orchestrator. <code>run(params)</code> implements:</p>
+        <ol style="padding-left: 20px; margin: 10px 0; font-size: 13px; color: var(--text-muted);">
+          <li style="padding: 3px 0;">Get/create session via PaSessionManager</li>
+          <li style="padding: 3px 0;">If confirmationResponse provided → handle confirmation flow</li>
+          <li style="padding: 3px 0;">Otherwise: add user message, enter ReAct loop (max 8 iterations)</li>
+          <li style="padding: 3px 0;">Each iteration: build prompt → PaLlmProxy.reason() → parse response</li>
+          <li style="padding: 3px 0;">TOOL_CALL + destructive → store pending action, return <code>confirmation_required</code></li>
+          <li style="padding: 3px 0;">TOOL_CALL + safe → execute via PaToolRegistry, feed result back</li>
+          <li style="padding: 3px 0;">ANSWER → save to session, return <code>{status: 'success', response, toolExecutions}</code></li>
+          <li style="padding: 3px 0;">Max iterations → return partial results</li>
+        </ol>
+        <p>Helper: <code>_describeAction(toolName, args)</code> — human-readable description for confirmation dialog.</p>
+        <span class="tdd-badge">TDD — tests first</span>
+        <span class="depends">Depends on: Tasks 4, 5, 9, 10</span>
+        <div class="commit-tag"><span class="icon">&#x1F4BE;</span> feat: add PaAgentLoop with ReAct pattern, confirmation flow, and iteration bounds</div>
+      </div>
+    </div>
+
+    <!-- Task 12 -->
+    <div class="task" id="task12">
+      <div class="task-header">
+        <div class="task-number infra">12</div>
+        <div>
+          <div class="task-title">Scripted REST API</div>
+          <div class="task-subtitle">4 endpoints</div>
+        </div>
+      </div>
+      <div class="task-body">
+        <ul class="file-list">
+          <li><span class="file-action create">Create</span><span class="file-path">src/instance/scripted-rest-api/api-definition.js</span>&nbsp;<span class="file-desc">— namespace x_snc_pa</span></li>
+          <li><span class="file-action create">Create</span><span class="file-path">src/instance/scripted-rest-api/resource-chat.js</span>&nbsp;<span class="file-desc">— POST /chat</span></li>
+          <li><span class="file-action create">Create</span><span class="file-path">src/instance/scripted-rest-api/resource-status.js</span>&nbsp;<span class="file-desc">— GET /status</span></li>
+          <li><span class="file-action create">Create</span><span class="file-path">src/instance/scripted-rest-api/resource-tools.js</span>&nbsp;<span class="file-desc">— GET /tools</span></li>
+          <li><span class="file-action create">Create</span><span class="file-path">src/instance/scripted-rest-api/resource-history.js</span>&nbsp;<span class="file-desc">— GET /history/{session_id}</span></li>
+        </ul>
+        <p>All require authentication. Chat endpoint triggers the full agentic loop. History endpoint enforces user ownership via GlideRecordSecure.</p>
+        <div class="commit-tag"><span class="icon">&#x1F4BE;</span> feat: add Scripted REST API with chat, status, tools, and history endpoints</div>
+      </div>
+    </div>
+
+    <hr class="section-sep">
+
+    <!-- Task 13 -->
+    <div class="task" id="task13">
+      <div class="task-header">
+        <div class="task-number scaffolding">13</div>
+        <div>
+          <div class="task-title">Install Dependencies + Run All Tests</div>
+          <div class="task-subtitle">Jest configuration and validation</div>
+        </div>
+      </div>
+      <div class="task-body">
+        <p>Run <code>npm install</code> to get Jest. Configure Jest in package.json (testMatch, testEnvironment: node). Run <code>npm test</code> — all unit tests should pass:</p>
+        <ul style="padding-left: 20px; margin: 8px 0; font-size: 13px; color: var(--text-muted);">
+          <li style="padding: 2px 0;">PaLlmProxy response parsing</li>
+          <li style="padding: 2px 0;">PaToolRegistry lookups</li>
+          <li style="padding: 2px 0;">PaAgentLoop prompt building</li>
+        </ul>
+        <div class="commit-tag"><span class="icon">&#x1F4BE;</span> chore: configure Jest and install dependencies</div>
+      </div>
+    </div>
+
+    <!-- Task 14 -->
+    <div class="task" id="task14">
+      <div class="task-header">
+        <div class="task-number scaffolding">14</div>
+        <div>
+          <div class="task-title">Branch + PR</div>
+          <div class="task-subtitle">feature/phase1-server-foundation</div>
+        </div>
+      </div>
+      <div class="task-body">
+        <p>Per CLAUDE.md — all work on a feature branch, never main. Branch name: <code>feature/phase1-server-foundation</code>. Push and create PR with summary of all Phase 1 deliverables.</p>
+        <p><strong>Note:</strong> The branch should be created <strong>before Task 1</strong> — first thing when execution starts. This task is a reminder to push and PR at the end.</p>
+      </div>
+    </div>
+
+    <!-- Dependency Graph -->
+    <div class="dep-graph" id="deps">
+      <h3>Dependency Order</h3>
+      <div class="dep-flow">
+        <div class="dep-row">
+          <span class="dep-node scaffolding">1 Scaffolding</span>
+          <span class="dep-arrow">→</span>
+          <span class="dep-node scaffolding">2 Dirs + Tables</span>
+          <span class="dep-arrow">→</span>
+          <span class="dep-node scaffolding">3 NASK Skills</span>
+        </div>
+        <div class="dep-row" style="padding-left: 40px;">
+          <span class="dep-arrow">→</span>
+          <span class="dep-node feature">4 PaLlmProxy</span>
+          <span class="dep-arrow">→</span>
+          <span class="dep-node feature">5 PaToolRegistry</span>
+        </div>
+        <div class="dep-row" style="padding-left: 80px;">
+          <span class="dep-arrow">→</span>
+          <div class="dep-parallel">
+            <span class="dep-node tool">6 QueryTable</span>
+            <span class="dep-node tool">7 SchemaLookup</span>
+            <span class="dep-node tool">8 LogAnalysis</span>
+          </div>
+          <span class="dep-bracket">parallel</span>
+        </div>
+        <div class="dep-row" style="padding-left: 80px;">
+          <span class="dep-arrow">→</span>
+          <span class="dep-node infra">9 AuditLogger</span>
+          <span class="dep-arrow">→</span>
+          <span class="dep-node infra">10 SessionManager</span>
+        </div>
+        <div class="dep-row" style="padding-left: 120px;">
+          <span class="dep-arrow">→</span>
+          <span class="dep-node infra">11 AgentLoop</span>
+          <span class="dep-arrow">→</span>
+          <span class="dep-node infra">12 REST API</span>
+        </div>
+        <div class="dep-row" style="padding-left: 160px;">
+          <span class="dep-arrow">→</span>
+          <span class="dep-node scaffolding">13 Tests</span>
+          <span class="dep-arrow">→</span>
+          <span class="dep-node scaffolding">14 PR</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Verification -->
+    <div class="verification" id="verification">
+      <h3>Verification</h3>
+
+      <h4>Local</h4>
+      <ul>
+        <li><code>npm test</code> — all unit tests pass</li>
+      </ul>
+
+      <h4>On-Instance (Phase 1 Milestone)</h4>
+      <ol>
+        <li>Deploy Script Includes to test instance</li>
+        <li>Deploy Scripted REST API</li>
+        <li>Create NASK skills via Skills Kit automation</li>
+        <li>Create custom tables (u_pa_session, u_pa_audit_log)</li>
+        <li><code>curl -X POST https://&lt;instance&gt;/api/x_snc_pa/assistant/chat -d '{"message": "Show me all P1 incidents"}'</code> → verify response with tool execution trace</li>
+        <li><code>curl https://&lt;instance&gt;/api/x_snc_pa/assistant/status</code> → all checks pass</li>
+      </ol>
+    </div>
+
+  </main>
+</div>
+
+</body>
+</html>
