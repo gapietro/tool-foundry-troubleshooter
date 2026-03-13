@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ServiceNow Platform Assistant — Architecture</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #232732;
+    --border: #2e3345;
+    --accent: #6c8cff;
+    --accent2: #4ecdc4;
+    --accent3: #ff6b9d;
+    --accent4: #ffd93d;
+    --text: #e4e6f0;
+    --text-muted: #8b90a5;
+    --success: #4ecdc4;
+    --warning: #ffd93d;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 40px;
+    min-height: 100vh;
+  }
+
+  .header {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+
+  .header h1 {
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+    margin-bottom: 8px;
+  }
+
+  .header .subtitle {
+    color: var(--text-muted);
+    font-size: 14px;
+    font-weight: 400;
+  }
+
+  .header .badge {
+    display: inline-block;
+    margin-top: 12px;
+    padding: 4px 12px;
+    background: rgba(108, 140, 255, 0.15);
+    border: 1px solid rgba(108, 140, 255, 0.3);
+    border-radius: 12px;
+    font-size: 12px;
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  .diagram {
+    max-width: 960px;
+    margin: 0 auto;
+    position: relative;
+  }
+
+  /* Boundary boxes */
+  .boundary {
+    border: 1px dashed var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 20px;
+    position: relative;
+  }
+
+  .boundary-label {
+    position: absolute;
+    top: -10px;
+    left: 24px;
+    background: var(--bg);
+    padding: 0 10px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-muted);
+  }
+
+  .boundary.client { border-color: rgba(108, 140, 255, 0.3); }
+  .boundary.api { border-color: rgba(78, 205, 196, 0.3); }
+  .boundary.orchestration { border-color: rgba(255, 107, 157, 0.3); }
+  .boundary.services { border-color: rgba(255, 217, 61, 0.3); }
+  .boundary.data { border-color: rgba(108, 140, 255, 0.2); }
+
+  /* Component cards */
+  .component {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    transition: all 0.2s ease;
+  }
+
+  .component:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 20px rgba(108, 140, 255, 0.1);
+    transform: translateY(-1px);
+  }
+
+  .component .name {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .component .desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+
+  .component .tech {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 2px 8px;
+    background: var(--surface2);
+    border-radius: 4px;
+    font-size: 10px;
+    color: var(--text-muted);
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  }
+
+  /* Layout helpers */
+  .row {
+    display: flex;
+    gap: 16px;
+    align-items: stretch;
+  }
+
+  .row > * { flex: 1; }
+
+  .center-component {
+    max-width: 480px;
+    margin: 0 auto;
+  }
+
+  /* Flow arrows */
+  .flow-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 0;
+    position: relative;
+  }
+
+  .flow-arrow .arrow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .flow-arrow .line {
+    width: 2px;
+    height: 20px;
+    background: linear-gradient(to bottom, var(--accent), var(--accent2));
+    opacity: 0.5;
+  }
+
+  .flow-arrow .chevron {
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid var(--accent2);
+    opacity: 0.5;
+  }
+
+  .flow-arrow .label {
+    position: absolute;
+    right: calc(50% - 180px);
+    font-size: 11px;
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  /* Horizontal connector within orchestration */
+  .connector-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 0;
+  }
+
+  .connector-line {
+    height: 2px;
+    flex: 1;
+    max-width: 60px;
+    opacity: 0.3;
+  }
+
+  .connector-line.left { background: linear-gradient(to right, transparent, var(--accent3)); }
+  .connector-line.right { background: linear-gradient(to left, transparent, var(--accent4)); }
+
+  .connector-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--surface2);
+    border: 2px solid var(--accent);
+    opacity: 0.5;
+  }
+
+  /* Tool grid */
+  .tool-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+
+  .tool-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    transition: all 0.2s ease;
+  }
+
+  .tool-card:hover {
+    border-color: var(--accent4);
+    box-shadow: 0 0 12px rgba(255, 217, 61, 0.08);
+  }
+
+  .tool-card .tool-name {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 3px;
+  }
+
+  .tool-card .tool-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.3;
+  }
+
+  .tool-card.destructive {
+    border-color: rgba(255, 107, 157, 0.3);
+  }
+
+  .tool-card.destructive .tool-name::after {
+    content: ' *';
+    color: var(--accent3);
+    font-size: 10px;
+  }
+
+  /* Data layer */
+  .data-row {
+    display: flex;
+    gap: 16px;
+  }
+
+  .table-card {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+
+  .table-card .table-name {
+    font-size: 12px;
+    font-weight: 600;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    color: var(--accent2);
+    margin-bottom: 6px;
+  }
+
+  .table-card .fields {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  /* LLM path */
+  .llm-path {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    justify-content: center;
+    padding: 8px 0;
+  }
+
+  .llm-step {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-size: 11px;
+    font-weight: 500;
+    text-align: center;
+  }
+
+  .llm-arrow {
+    color: var(--text-muted);
+    font-size: 14px;
+    opacity: 0.4;
+  }
+
+  /* Security callout */
+  .security-bar {
+    background: linear-gradient(90deg, rgba(78, 205, 196, 0.08), rgba(108, 140, 255, 0.08));
+    border: 1px solid rgba(78, 205, 196, 0.2);
+    border-radius: 10px;
+    padding: 16px 24px;
+    margin-top: 20px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .security-bar .icon {
+    font-size: 24px;
+    flex-shrink: 0;
+  }
+
+  .security-bar .principles {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  .security-bar .principle {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .security-bar .principle strong {
+    color: var(--success);
+    font-weight: 600;
+  }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .legend-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    body { padding: 20px; }
+    .row { flex-direction: column; }
+    .tool-grid { grid-template-columns: 1fr; }
+    .data-row { flex-direction: column; }
+    .security-bar { flex-direction: column; text-align: center; }
+    .security-bar .principles { justify-content: center; }
+    .flow-arrow .label { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>ServiceNow Platform Assistant</h1>
+  <div class="subtitle">Server-Side ReAct Architecture &mdash; All processing within ServiceNow instance boundary</div>
+  <div class="badge">Phase 1 &mdash; Server Foundation</div>
+</div>
+
+<div class="diagram">
+
+  <!-- CLIENT LAYER -->
+  <div class="boundary client">
+    <div class="boundary-label">Client Layer</div>
+    <div class="center-component">
+      <div class="component">
+        <div class="name">React Chat UI</div>
+        <div class="desc">Conversational interface for SCs &mdash; message input, response display, confirmation dialogs for destructive operations, tool execution trace</div>
+        <span class="tech">x-snc-platform-assistant &bull; ServiceNow SDK</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Arrow -->
+  <div class="flow-arrow">
+    <div class="arrow"><div class="line"></div><div class="chevron"></div></div>
+    <div class="label">HTTP / JSON</div>
+  </div>
+
+  <!-- API LAYER -->
+  <div class="boundary api">
+    <div class="boundary-label">API Layer &mdash; Scripted REST API</div>
+    <div class="row">
+      <div class="component">
+        <div class="name">POST /chat</div>
+        <div class="desc">Primary entry point &mdash; triggers agentic loop</div>
+        <span class="tech">resource-chat.js</span>
+      </div>
+      <div class="component">
+        <div class="name">GET /status</div>
+        <div class="desc">Health check &mdash; plugin readiness</div>
+        <span class="tech">resource-status.js</span>
+      </div>
+      <div class="component">
+        <div class="name">GET /tools</div>
+        <div class="desc">Available tool listing</div>
+        <span class="tech">resource-tools.js</span>
+      </div>
+      <div class="component">
+        <div class="name">GET /history</div>
+        <div class="desc">Session message history</div>
+        <span class="tech">resource-history.js</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Arrow -->
+  <div class="flow-arrow">
+    <div class="arrow"><div class="line"></div><div class="chevron"></div></div>
+  </div>
+
+  <!-- ORCHESTRATION LAYER -->
+  <div class="boundary orchestration">
+    <div class="boundary-label">Orchestration Layer</div>
+    <div class="center-component">
+      <div class="component" style="border-color: rgba(255, 107, 157, 0.4); text-align: center;">
+        <div class="name" style="font-size: 16px;">PaAgentLoop</div>
+        <div class="desc">Core ReAct orchestrator &mdash; reason / act / observe<br>Max 8 iterations &bull; Destructive op confirmation &bull; Partial result fallback</div>
+        <span class="tech">Script Include &bull; PaAgentLoop.js</span>
+      </div>
+    </div>
+
+    <div class="connector-row">
+      <div class="connector-line left"></div>
+      <div class="connector-dot"></div>
+      <div class="connector-line right"></div>
+    </div>
+
+    <div class="row">
+      <div class="component">
+        <div class="name">PaSessionManager</div>
+        <div class="desc">Session CRUD, message history, context summarization (after 10 msgs), pending action queue, 30-min expiry</div>
+        <span class="tech">PaSessionManager.js</span>
+      </div>
+      <div class="component">
+        <div class="name">PaLlmProxy</div>
+        <div class="desc">LLM invocation wrapper &mdash; reason() and summarize() methods, response parsing (TOOL_CALL / ANSWER)</div>
+        <span class="tech">PaLlmProxy.js</span>
+      </div>
+      <div class="component">
+        <div class="name">PaAuditLogger</div>
+        <div class="desc">Audit trail &mdash; logIntent(), logResult(), logError() for every tool execution</div>
+        <span class="tech">PaAuditLogger.js</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Arrow -->
+  <div class="flow-arrow">
+    <div class="arrow"><div class="line"></div><div class="chevron"></div></div>
+  </div>
+
+  <!-- LLM Path -->
+  <div class="boundary" style="border-color: rgba(108, 140, 255, 0.2); padding: 16px 24px;">
+    <div class="boundary-label">LLM Invocation Path</div>
+    <div class="llm-path">
+      <div class="llm-step">PaLlmProxy</div>
+      <div class="llm-arrow">&rarr;</div>
+      <div class="llm-step" style="border-color: rgba(108, 140, 255, 0.3);">sn_gen_ai<br>.GaiScriptedSkill</div>
+      <div class="llm-arrow">&rarr;</div>
+      <div class="llm-step" style="border-color: rgba(78, 205, 196, 0.3);">NASK Skills<br><small style="color: var(--text-muted);">pa-llm-reason &bull; pa-llm-summarize</small></div>
+      <div class="llm-arrow">&rarr;</div>
+      <div class="llm-step" style="border-color: rgba(255, 217, 61, 0.3);">GenAI Controller</div>
+      <div class="llm-arrow">&rarr;</div>
+      <div class="llm-step" style="border-color: rgba(255, 107, 157, 0.3); background: rgba(255, 107, 157, 0.08);">Customer LLM<br><small style="color: var(--text-muted);">Now LLM &bull; Azure BYOK &bull; Bedrock</small></div>
+    </div>
+  </div>
+
+  <!-- Arrow -->
+  <div class="flow-arrow">
+    <div class="arrow"><div class="line"></div><div class="chevron"></div></div>
+  </div>
+
+  <!-- SERVICES / TOOLS LAYER -->
+  <div class="boundary services">
+    <div class="boundary-label">Tool Registry &mdash; PaToolRegistry</div>
+    <div style="margin-bottom: 12px;">
+      <div class="component" style="border-color: rgba(255, 217, 61, 0.3);">
+        <div class="name">PaToolRegistry</div>
+        <div class="desc">Tool registration, metadata, validation, dispatch &bull; listTools() &bull; getToolDefinitionsForPrompt() &bull; isDestructive() &bull; execute()</div>
+        <span class="tech">PaToolRegistry.js</span>
+      </div>
+    </div>
+    <div class="tool-grid">
+      <div class="tool-card">
+        <div class="tool-name">PaToolQueryTable</div>
+        <div class="tool-desc">GlideRecordSecure queries with field selection, encoded queries, limit 100</div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">PaToolSchemaLookup</div>
+        <div class="tool-desc">Table/field schema via sys_dictionary + sys_choice</div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">PaToolLogAnalysis</div>
+        <div class="tool-desc">Syslog search by level, source, message, time range</div>
+      </div>
+      <div class="tool-card" style="opacity: 0.4;">
+        <div class="tool-name">ACL Check</div>
+        <div class="tool-desc">Phase 2</div>
+      </div>
+      <div class="tool-card" style="opacity: 0.4;">
+        <div class="tool-name">Script Search</div>
+        <div class="tool-desc">Phase 2</div>
+      </div>
+      <div class="tool-card destructive" style="opacity: 0.4;">
+        <div class="tool-name">Record Update</div>
+        <div class="tool-desc">Phase 3 &bull; Requires confirmation</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Arrow -->
+  <div class="flow-arrow">
+    <div class="arrow"><div class="line"></div><div class="chevron"></div></div>
+  </div>
+
+  <!-- DATA LAYER -->
+  <div class="boundary data">
+    <div class="boundary-label">Data Layer &mdash; Custom Tables</div>
+    <div class="data-row">
+      <div class="table-card">
+        <div class="table-name">u_pa_session</div>
+        <div class="fields">
+          u_session_id &bull; u_user &bull; u_status<br>
+          u_messages <em>(JSON)</em> &bull; u_context<br>
+          u_pending_action
+        </div>
+      </div>
+      <div class="table-card">
+        <div class="table-name">u_pa_audit_log</div>
+        <div class="fields">
+          u_session_id &bull; u_user &bull; u_action_type<br>
+          u_tool_name &bull; u_input &bull; u_output<br>
+          u_target_table &bull; u_target_record &bull; u_confirmed_by_user
+        </div>
+      </div>
+      <div class="table-card" style="border-color: rgba(78, 205, 196, 0.2);">
+        <div class="table-name" style="color: var(--text-muted);">ServiceNow Platform Tables</div>
+        <div class="fields">
+          incident &bull; change_request &bull; sys_dictionary<br>
+          sys_choice &bull; syslog &bull; sys_security_acl<br>
+          <em>Accessed via GlideRecordSecure</em>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Security bar -->
+  <div class="security-bar">
+    <div class="icon">&#x1f512;</div>
+    <div class="principles">
+      <div class="principle"><strong>Zero data egress</strong> &mdash; all processing on-instance</div>
+      <div class="principle"><strong>GlideRecordSecure</strong> &mdash; respects user ACLs</div>
+      <div class="principle"><strong>Audit logged</strong> &mdash; every tool execution tracked</div>
+      <div class="principle"><strong>Confirmation required</strong> &mdash; destructive ops gated</div>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="legend-item">
+      <div class="legend-swatch" style="background: rgba(108, 140, 255, 0.4);"></div>
+      Client / UI
+    </div>
+    <div class="legend-item">
+      <div class="legend-swatch" style="background: rgba(78, 205, 196, 0.4);"></div>
+      API Surface
+    </div>
+    <div class="legend-item">
+      <div class="legend-swatch" style="background: rgba(255, 107, 157, 0.4);"></div>
+      Orchestration
+    </div>
+    <div class="legend-item">
+      <div class="legend-swatch" style="background: rgba(255, 217, 61, 0.4);"></div>
+      Tools / Services
+    </div>
+    <div class="legend-item">
+      <div class="legend-swatch" style="background: rgba(108, 140, 255, 0.2);"></div>
+      Data
+    </div>
+    <div class="legend-item">
+      <span style="color: var(--accent3);">*</span>&nbsp; Destructive (confirmation required)
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
