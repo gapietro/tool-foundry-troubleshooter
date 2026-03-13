@@ -10,6 +10,24 @@
 
 **PRD:** `docs/PRD_ServiceNow_Platform_Assistant.md`
 
+**Architecture Decisions:** `docs/ARCHITECTURE_DECISIONS.md`
+
+---
+
+## Architectural Decision: LLM Invocation via NASK Skills
+
+**Decision:** Use NASK Skills (`sn_gen_ai.GaiScriptedSkill`) for all LLM invocation, wrapped behind PaLlmProxy.
+
+| Approach | Verdict | Reason |
+|----------|---------|--------|
+| **NASK Skills** | **Selected** | Platform-native, visible to customers in Skills Kit UI, existing automation (~24 API calls), insulates from GenAI Controller changes |
+| **AI Agent Use Cases** | Rejected | Would nest an agent inside our agent — we ARE the orchestrator (PaAgentLoop). Surrenders control of iteration limits, tool selection, and confirmation flow |
+| **Direct GenAI Controller calls** | Rejected (for now) | Simplest to implement but no customer visibility, no abstraction from API changes |
+
+**Key constraint:** `PaLlmProxy` must be the **only file that knows NASK exists.** Switching LLM invocation methods is a single-file change.
+
+See `docs/ARCHITECTURE_DECISIONS.md` for full layer-by-layer rationale.
+
 ---
 
 ## Task 1: Project Scaffolding (Remaining Files)
@@ -44,9 +62,9 @@
 **Files:**
 - Create: `src/instance/skills/pa-llm-reason.json` — Primary reasoning skill config (temp 0.2, max 2000 tokens, text_generation type)
 - Create: `src/instance/skills/pa-llm-summarize.json` — Context compression skill config (temp 0.1, max 1000 tokens)
-- Create: `src/instance/skills/system-prompt.md` — System prompt template with `{{tool_definitions}}` placeholder, rules (GlideRecordSecure only, explain before destructive, max 100 records, ask if unsure, check 2+ sources), response format spec (`TOOL_CALL: {...}` or `ANSWER: ...`)
+- Create: `src/instance/skills/system-prompt.md` — System prompt template with `{{tool_definitions}}` placeholder, rules (GlideRecordSecure only, explain before destructive, max 100 records, ask if unsure, check 2+ sources), response format spec (`TOOL_CALL: {...}` or `ANSWER: ...`). **Must include CMDB knowledge:** relationship traversal patterns (`cmdb_rel_ci` parent/child queries, `cmdb_rel_type` for relationship types like Depends on/Runs on/Contains), common data model paths (incident -> CI -> support_group, CI -> application_service -> dependent CIs).
 
-**What:** Define the NASK skills that will be created on-instance via Skills Kit automation. The system prompt encodes all behavioral rules for the LLM.
+**What:** Define the NASK skills that will be created on-instance via Skills Kit automation. The system prompt encodes all behavioral rules for the LLM, including CMDB data model knowledge for relationship traversal.
 
 **Commit:** `feat: add NASK skill definitions and system prompt`
 
@@ -119,6 +137,25 @@
 **What:** Queries syslog table via GlideRecordSecure. Filters by level, source (CONTAINS), message (CONTAINS), and time range (minutes_ago, default 60). Default limit 50, max 100. Orders by sys_created_on desc. Returns timestamp, level, source, message for each entry.
 
 **Commit:** `feat: add PaToolLogAnalysis for system log search`
+
+---
+
+## Task 8b: PaToolCmdbTraverse — CMDB Relationship Traversal
+
+**Files:**
+- Create: `src/instance/script-includes/tools/PaToolCmdbTraverse.js`
+
+**What:** Traverses CMDB relationships via GlideRecordSecure. Accepts: ci (sys_id, required), direction (upstream/downstream/both, default both), depth (max hops, default 2, max 5), rel_type (optional filter by relationship type name). Queries `cmdb_rel_ci` following parent/child links, joins `cmdb_rel_type` for human-readable relationship names. Returns `{success, data: {ci, direction, depth, relationships[]}}` where each relationship includes: related_ci (sys_id, name, class), relationship_type, direction, hop_level. Validates CI exists before traversal. Caps total results at 200 to prevent runaway queries on highly-connected CIs.
+
+**Phase 2 enhancement — Knowledge Graph:** Check if `sn_cmdb_api` or CMDB GraphQL API is available on the instance. If yes, use ServiceNow Knowledge Graph for traversal (faster, handles cycle detection, understands impact/service-aware relationships). If no, fall back to manual `cmdb_rel_ci` walking. This keeps the tool universally compatible while leveraging better infrastructure when available.
+
+**Use cases:**
+- "What depends on this CI?" -> downstream, depth 1
+- "What's the blast radius if this app service goes down?" -> downstream, depth 2-3
+- "Show me the full relationship map for this server" -> both, depth 2
+- "Help me understand the data model path from incident to support group" -> schema_lookup + cmdb_traverse in sequence
+
+**Commit:** `feat: add PaToolCmdbTraverse for CMDB relationship traversal`
 
 ---
 
@@ -215,7 +252,7 @@ Helper: `_describeAction(toolName, args)` — human-readable description for con
 ```
 Task 1 (scaffolding) → Task 2 (dirs + tables) → Task 3 (skills)
   → Task 4 (PaLlmProxy) → Task 5 (PaToolRegistry)
-    → Tasks 6,7,8 (tools — can be parallel)
+    → Tasks 6,7,8,8b (tools — can be parallel)
     → Task 9 (PaAuditLogger)
     → Task 10 (PaSessionManager, depends on Task 4)
       → Task 11 (PaAgentLoop, depends on 4,5,9,10)

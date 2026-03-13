@@ -7,7 +7,7 @@ An AI-powered troubleshooting and configuration assistant that runs **entirely w
 ## What It Does
 
 - **Explore** — Query tables, inspect records, understand schemas
-- **Diagnose** — Search logs, trace business rules, check ACLs, identify misconfigurations
+- **Diagnose** — Search logs, trace business rules, check ACLs, traverse CMDB relationships, identify misconfigurations
 - **Configure** — Create and update records with confirmation prompts and full audit trail
 
 ## Architecture
@@ -23,8 +23,8 @@ React Chat UI (ServiceNow SDK)
   PaLlmProxy   PaToolRegistry
   (NASK/GenAI)  (dispatch + validation)
                  |
-          ┌──────┼──────┐
-    QueryTable  Schema  LogAnalysis  ...
+          ┌──────┼──────┼──────┐
+    QueryTable  Schema  Logs  CmdbTraverse
 ```
 
 All queries use `GlideRecordSecure`. Destructive operations require user confirmation. Every tool execution is audit-logged.
@@ -76,6 +76,10 @@ docs/
 ## Documentation
 
 - [Product Requirements Document](docs/PRD_ServiceNow_Platform_Assistant.md)
+- [Architecture Decisions](docs/ARCHITECTURE_DECISIONS.md)
+- [Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
+- [Architecture Diagram](docs/architecture-diagram.html) (open in browser)
+- [Implementation Plan (interactive)](docs/implementation-plan.html) (open in browser)
 
 ## License
 

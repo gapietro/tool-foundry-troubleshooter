@@ -84,6 +84,8 @@ SC's Browser                    Customer's ServiceNow Instance
 | **Configuration diagnosis** | "Why aren't my assignment rules working?" |
 | **Schema exploration** | "What fields does the change_request table have?" |
 | **Log analysis** | "Show me recent errors related to the CMDB" |
+| **CMDB traversal** | "What's the blast radius if this CI goes down?" |
+| **Data model exploration** | "Help me understand the path from incident to support group" |
 | **Setup assistance** | "Create a business rule that sets priority based on impact and urgency" |
 | **Platform knowledge** | "How does the ACL evaluation order work in ServiceNow?" |
 
@@ -136,6 +138,7 @@ Two skills registered via Skills Kit automation:
 | **PaToolQueryTable** | GlideRecordSecure table queries with field selection and limits |
 | **PaToolSchemaLookup** | Table/field schema inspection via sys_dictionary and sys_choice |
 | **PaToolLogAnalysis** | System log search with level/source/message/time filters |
+| **PaToolCmdbTraverse** | CMDB relationship traversal — upstream/downstream, configurable depth (max 5), relationship type filtering |
 | **PaAuditLogger** | Writes to u_pa_audit_log — intent, result, and error logging |
 | **PaSessionManager** | Session CRUD, message history, context summarization, pending actions |
 | **PaAgentLoop** | Core ReAct loop — reason/act/observe with max 8 iterations |
@@ -246,7 +249,7 @@ All records are contained and can be removed cleanly.
 - Define NASK skill configurations and system prompt
 - Build PaLlmProxy (LLM invocation wrapper with response parsing)
 - Build PaToolRegistry (tool registration, dispatch, prompt generation)
-- Build exploration tools: PaToolQueryTable, PaToolSchemaLookup, PaToolLogAnalysis
+- Build exploration tools: PaToolQueryTable, PaToolSchemaLookup, PaToolLogAnalysis, PaToolCmdbTraverse
 - Build PaAuditLogger and PaSessionManager
 - Build PaAgentLoop (core ReAct orchestrator)
 - Create Scripted REST API endpoints (chat, status, tools, history)
