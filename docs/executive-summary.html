@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ServiceNow Platform Assistant — Executive Summary</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #232732;
+    --border: #2e3345;
+    --accent: #6c8cff;
+    --accent2: #4ecdc4;
+    --accent3: #ff6b9d;
+    --accent4: #ffd93d;
+    --text: #e4e6f0;
+    --text-muted: #8b90a5;
+    --text-dim: #555a6e;
+    --success: #4ecdc4;
+    --warning: #ffd93d;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+
+  /* Top bar */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(15, 17, 23, 0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .topbar h1 {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+  }
+
+  .topbar .meta {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .badge {
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .badge.type { background: rgba(108, 140, 255, 0.15); color: var(--accent); border: 1px solid rgba(108, 140, 255, 0.3); }
+  .badge.status { background: rgba(78, 205, 196, 0.12); color: var(--accent2); border: 1px solid rgba(78, 205, 196, 0.25); }
+  .badge.date { background: rgba(255, 217, 61, 0.1); color: var(--accent4); border: 1px solid rgba(255, 217, 61, 0.2); font-size: 10px; }
+
+  /* Main content */
+  .content {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 48px 40px 80px;
+  }
+
+  /* Hero section */
+  .hero {
+    text-align: center;
+    margin-bottom: 64px;
+    padding-bottom: 48px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .hero h2 {
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: -0.8px;
+    margin-bottom: 16px;
+    background: linear-gradient(135deg, var(--text) 0%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .hero .tagline {
+    font-size: 18px;
+    color: var(--text-muted);
+    max-width: 640px;
+    margin: 0 auto 24px;
+    line-height: 1.5;
+  }
+
+  .hero .highlight {
+    display: inline-block;
+    padding: 8px 20px;
+    background: rgba(78, 205, 196, 0.1);
+    border: 1px solid rgba(78, 205, 196, 0.25);
+    border-radius: 8px;
+    font-size: 14px;
+    color: var(--accent2);
+    font-weight: 500;
+  }
+
+  /* Section headings */
+  .section {
+    margin-bottom: 56px;
+  }
+
+  .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+  }
+
+  .section h3 {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.4px;
+    margin-bottom: 20px;
+  }
+
+  .section p {
+    color: var(--text-muted);
+    font-size: 14px;
+    line-height: 1.7;
+    margin-bottom: 16px;
+  }
+
+  /* Challenge cards */
+  .challenge-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 24px;
+  }
+
+  .challenge-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .challenge-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 3px;
+    height: 100%;
+  }
+
+  .challenge-card:nth-child(1)::before { background: var(--accent3); }
+  .challenge-card:nth-child(2)::before { background: var(--accent4); }
+  .challenge-card:nth-child(3)::before { background: var(--accent); }
+  .challenge-card:nth-child(4)::before { background: var(--accent2); }
+
+  .challenge-card:hover {
+    border-color: rgba(108, 140, 255, 0.3);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  }
+
+  .challenge-card .number {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 8px;
+  }
+
+  .challenge-card h4 {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .challenge-card p {
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  /* Solution flow diagram */
+  .flow-visual {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    margin-top: 24px;
+  }
+
+  .flow-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .flow-step {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    text-align: center;
+    min-width: 140px;
+    transition: all 0.2s ease;
+  }
+
+  .flow-step:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 16px rgba(108, 140, 255, 0.1);
+  }
+
+  .flow-step .step-icon {
+    font-size: 24px;
+    margin-bottom: 8px;
+  }
+
+  .flow-step .step-label {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .flow-step .step-desc {
+    font-size: 10px;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+
+  .flow-connector {
+    color: var(--text-dim);
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+
+  .flow-caption {
+    text-align: center;
+    margin-top: 20px;
+    font-size: 12px;
+    color: var(--text-dim);
+    font-style: italic;
+  }
+
+  /* Key differentiator callout */
+  .callout {
+    background: linear-gradient(135deg, rgba(78, 205, 196, 0.08), rgba(108, 140, 255, 0.08));
+    border: 1px solid rgba(78, 205, 196, 0.2);
+    border-radius: 12px;
+    padding: 28px 32px;
+    margin: 32px 0;
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+  }
+
+  .callout .callout-icon {
+    font-size: 28px;
+    flex-shrink: 0;
+    line-height: 1;
+  }
+
+  .callout .callout-content h4 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--accent2);
+    margin-bottom: 8px;
+  }
+
+  .callout .callout-content p {
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  /* Capability cards */
+  .capability-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-top: 24px;
+  }
+
+  .capability-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    transition: all 0.2s ease;
+  }
+
+  .capability-card:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 16px rgba(108, 140, 255, 0.1);
+    transform: translateY(-1px);
+  }
+
+  .capability-card .cap-icon {
+    font-size: 20px;
+    margin-bottom: 10px;
+  }
+
+  .capability-card h4 {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .capability-card p {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .capability-card .example {
+    margin-top: 10px;
+    padding: 8px 12px;
+    background: var(--surface2);
+    border-radius: 6px;
+    font-size: 11px;
+    color: var(--accent);
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    line-height: 1.4;
+  }
+
+  /* Impact metrics */
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-top: 24px;
+  }
+
+  .metric-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 20px;
+    text-align: center;
+    transition: all 0.2s ease;
+  }
+
+  .metric-card:hover {
+    border-color: rgba(78, 205, 196, 0.3);
+    box-shadow: 0 0 20px rgba(78, 205, 196, 0.08);
+  }
+
+  .metric-card .metric-value {
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .metric-card:nth-child(1) .metric-value { color: var(--accent2); }
+  .metric-card:nth-child(2) .metric-value { color: var(--accent); }
+  .metric-card:nth-child(3) .metric-value { color: var(--accent4); }
+  .metric-card:nth-child(4) .metric-value { color: var(--accent3); }
+
+  .metric-card .metric-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+
+  .metric-card .metric-detail {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 6px;
+  }
+
+  /* Security principles */
+  .security-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 24px;
+  }
+
+  .security-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    transition: all 0.2s ease;
+  }
+
+  .security-item:hover {
+    border-color: rgba(78, 205, 196, 0.3);
+  }
+
+  .security-item .sec-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+    line-height: 1.2;
+  }
+
+  .security-item h4 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent2);
+    margin-bottom: 4px;
+  }
+
+  .security-item p {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  /* Architecture summary */
+  .arch-stack {
+    margin-top: 24px;
+  }
+
+  .arch-layer {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    margin-bottom: -1px;
+    transition: all 0.2s ease;
+  }
+
+  .arch-layer:first-child { border-radius: 10px 10px 0 0; }
+  .arch-layer:last-child { border-radius: 0 0 10px 10px; }
+
+  .arch-layer:hover { background: var(--surface2); }
+
+  .arch-layer .layer-color {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .arch-layer .layer-name {
+    font-size: 13px;
+    font-weight: 600;
+    min-width: 160px;
+  }
+
+  .arch-layer .layer-tech {
+    font-size: 11px;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    color: var(--text-muted);
+    min-width: 200px;
+  }
+
+  .arch-layer .layer-desc {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  /* Customer POV section */
+  .pov-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-top: 24px;
+  }
+
+  .pov-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    transition: all 0.2s ease;
+  }
+
+  .pov-card:hover {
+    border-color: rgba(108, 140, 255, 0.3);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  }
+
+  .pov-card .pov-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .pov-card .pov-icon {
+    font-size: 20px;
+  }
+
+  .pov-card h4 {
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .pov-card ul {
+    list-style: none;
+    padding: 0;
+  }
+
+  .pov-card ul li {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+    padding: 4px 0;
+    padding-left: 16px;
+    position: relative;
+  }
+
+  .pov-card ul li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 10px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    opacity: 0.5;
+  }
+
+  /* Deployment footprint */
+  .footprint-bar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 28px;
+    margin-top: 24px;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 20px;
+  }
+
+  .footprint-item {
+    text-align: center;
+  }
+
+  .footprint-item .fp-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+
+  .footprint-item .fp-label {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .footprint-item .fp-detail {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+
+  .divider-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--border);
+  }
+
+  /* Requirements */
+  .req-row {
+    display: flex;
+    gap: 16px;
+    margin-top: 24px;
+  }
+
+  .req-card {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+
+  .req-card h4 {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent2);
+    margin-bottom: 8px;
+  }
+
+  .req-card p {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  /* Footer */
+  .footer {
+    text-align: center;
+    padding-top: 40px;
+    margin-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+
+  .footer p {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  .footer .author {
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .content { padding: 32px 20px 60px; }
+    .hero h2 { font-size: 24px; }
+    .hero .tagline { font-size: 15px; }
+    .challenge-grid { grid-template-columns: 1fr; }
+    .capability-grid { grid-template-columns: 1fr; }
+    .metrics-grid { grid-template-columns: 1fr 1fr; }
+    .security-grid { grid-template-columns: 1fr; }
+    .pov-grid { grid-template-columns: 1fr; }
+    .flow-row { flex-direction: column; }
+    .flow-connector { transform: rotate(90deg); }
+    .footprint-bar { flex-direction: column; }
+    .divider-dot { display: none; }
+    .req-row { flex-direction: column; }
+    .arch-layer .layer-desc { display: none; }
+    .topbar { padding: 12px 20px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div class="topbar">
+  <h1>ServiceNow Platform Assistant</h1>
+  <div class="meta">
+    <span class="badge type">Executive Summary</span>
+    <span class="badge status">Phase 1 &mdash; Foundation</span>
+    <span class="badge date">March 2026</span>
+  </div>
+</div>
+
+<div class="content">
+
+  <!-- Hero -->
+  <div class="hero">
+    <h2>AI-Powered Troubleshooting That Never Leaves Your Instance</h2>
+    <p class="tagline">A conversational assistant that gives Solutions Consultants the power of AI-assisted exploration, diagnosis, and configuration &mdash; running entirely within the ServiceNow platform using the customer's own approved LLM.</p>
+    <span class="highlight">Zero data egress &bull; No external dependencies &bull; Customer LLM only</span>
+  </div>
+
+  <!-- The Problem -->
+  <div class="section">
+    <div class="section-label">The Challenge</div>
+    <h3>Why We Built This</h3>
+    <p>Solutions Consultants face a critical gap: modern AI tools are transforming how engineers work &mdash; but data privacy policies prevent using any of them on customer POC instances. Meanwhile, troubleshooting ServiceNow configurations remains manual, repetitive, and time-intensive.</p>
+
+    <div class="challenge-grid">
+      <div class="challenge-card">
+        <div class="number">Challenge 01</div>
+        <h4>AI Tools Blocked by Privacy</h4>
+        <p>SCs cannot use Claude, Copilot, ChatGPT, or any external AI when working on POC instances with customer data. Corporate data privacy policies prohibit sending customer data to external services &mdash; leaving SCs without the AI-assisted workflows every other engineer relies on.</p>
+      </div>
+      <div class="challenge-card">
+        <div class="number">Challenge 02</div>
+        <h4>Manual Instance Exploration</h4>
+        <p>Navigating ServiceNow requires extensive clicking through tables, querying logs, inspecting ACLs, and tracing business rules. Even experienced SCs spend 30&ndash;60 minutes per troubleshooting issue repeating well-known diagnostic patterns.</p>
+      </div>
+      <div class="challenge-card">
+        <div class="number">Challenge 03</div>
+        <h4>Knowledge Silos</h4>
+        <p>Platform expertise lives in the heads of senior SCs. Common issues follow predictable patterns, yet every team member must rediscover solutions independently. Onboarding new SCs takes 2&ndash;4 weeks to reach basic proficiency.</p>
+      </div>
+      <div class="challenge-card">
+        <div class="number">Challenge 04</div>
+        <h4>Configuration Complexity</h4>
+        <p>Setting up ServiceNow features requires creating numerous records across multiple tables in a specific order. Mistakes are silent and hard to diagnose &mdash; a missed assignment rule or inactive business rule can take hours to find.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- The Solution -->
+  <div class="section">
+    <div class="section-label">The Solution</div>
+    <h3>How It Works</h3>
+    <p>The Platform Assistant is a server-side ReAct agentic loop that runs entirely within the ServiceNow instance. SCs interact through a conversational chat interface &mdash; asking natural language questions that the assistant answers by querying tables, inspecting schemas, analyzing logs, and traversing the CMDB. All LLM reasoning happens via the customer's own GenAI Controller.</p>
+
+    <div class="flow-visual">
+      <div class="flow-row">
+        <div class="flow-step">
+          <div class="step-icon">&#x1f4ac;</div>
+          <div class="step-label">SC Asks</div>
+          <div class="step-desc">Natural language<br>question via chat UI</div>
+        </div>
+        <div class="flow-connector">&rarr;</div>
+        <div class="flow-step">
+          <div class="step-icon">&#x1f9e0;</div>
+          <div class="step-label">LLM Reasons</div>
+          <div class="step-desc">Via GenAI Controller<br>customer's approved model</div>
+        </div>
+        <div class="flow-connector">&rarr;</div>
+        <div class="flow-step">
+          <div class="step-icon">&#x1f527;</div>
+          <div class="step-label">Tools Execute</div>
+          <div class="step-desc">GlideRecordSecure<br>queries on-instance</div>
+        </div>
+        <div class="flow-connector">&rarr;</div>
+        <div class="flow-step">
+          <div class="step-icon">&#x1f4cb;</div>
+          <div class="step-label">Answer Returned</div>
+          <div class="step-desc">Analyzed results<br>with next steps</div>
+        </div>
+      </div>
+      <div class="flow-caption">All processing remains within the ServiceNow instance boundary &mdash; no data leaves the platform</div>
+    </div>
+
+    <div class="callout">
+      <div class="callout-icon">&#x1f511;</div>
+      <div class="callout-content">
+        <h4>The Critical Differentiator</h4>
+        <p>Unlike external AI tools, the Platform Assistant routes all LLM requests through ServiceNow's native GenAI Controller. It uses whatever model the customer has already approved &mdash; Now LLM, Azure OpenAI (BYOK), AWS Bedrock, or any other configured provider. No additional infrastructure. No data egress. No new vendor approvals.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Customer POV: How It's Used -->
+  <div class="section">
+    <div class="section-label">Customer Environment</div>
+    <h3>Fully On-Instance &mdash; Nothing External</h3>
+    <p>The Platform Assistant deploys as a lightweight set of ServiceNow-native artifacts &mdash; Script Includes, a Scripted REST API, two custom tables, and NASK skills. Everything runs using platform-standard APIs. There are no MID Server requirements, no external integrations, and no additional licensing beyond what the customer already has.</p>
+
+    <div class="pov-grid">
+      <div class="pov-card">
+        <div class="pov-header">
+          <span class="pov-icon">&#x1f3e2;</span>
+          <h4>What Stays on the Instance</h4>
+        </div>
+        <ul>
+          <li>All LLM reasoning via GenAI Controller (customer's LLM)</li>
+          <li>All data queries via GlideRecordSecure (respects ACLs)</li>
+          <li>Session state stored in custom tables</li>
+          <li>Full audit trail of every tool execution</li>
+          <li>Chat UI served as a ServiceNow SDK component</li>
+        </ul>
+      </div>
+      <div class="pov-card">
+        <div class="pov-header">
+          <span class="pov-icon">&#x1f6ab;</span>
+          <h4>What Is NOT Required</h4>
+        </div>
+        <ul>
+          <li>No external API calls or webhooks</li>
+          <li>No MID Server or integration hub connections</li>
+          <li>No additional LLM licensing (uses existing GenAI)</li>
+          <li>No data exports or external processing</li>
+          <li>No third-party plugins or marketplace apps</li>
+        </ul>
+      </div>
+      <div class="pov-card">
+        <div class="pov-header">
+          <span class="pov-icon">&#x1f680;</span>
+          <h4>POC Deployment</h4>
+        </div>
+        <ul>
+          <li>Deploy to any Yokohama Patch 4+ or Xanadu instance</li>
+          <li>Minimal footprint: ~20 records total</li>
+          <li>Clean removal &mdash; all records contained and reversible</li>
+          <li>Works immediately with customer's existing GenAI setup</li>
+          <li>No instance performance impact (standard API patterns)</li>
+        </ul>
+      </div>
+      <div class="pov-card">
+        <div class="pov-header">
+          <span class="pov-icon">&#x1f464;</span>
+          <h4>Who Uses It</h4>
+        </div>
+        <ul>
+          <li><strong>Solutions Consultants</strong> &mdash; POC setup, troubleshooting, demos</li>
+          <li><strong>Technical Consultants</strong> &mdash; Implementation debugging</li>
+          <li><strong>Platform Architects</strong> &mdash; Architecture exploration</li>
+          <li>Admin role for setup; itil role for daily usage</li>
+          <li>Scales to any number of concurrent users</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footprint-bar">
+      <div class="footprint-item">
+        <div class="fp-value">4</div>
+        <div class="fp-label">REST Endpoints</div>
+        <div class="fp-detail">chat, status, tools, history</div>
+      </div>
+      <div class="divider-dot"></div>
+      <div class="footprint-item">
+        <div class="fp-value">~14</div>
+        <div class="fp-label">Skills Kit Records</div>
+        <div class="fp-detail">LLM proxy via GenAI Controller</div>
+      </div>
+      <div class="divider-dot"></div>
+      <div class="footprint-item">
+        <div class="fp-value">8</div>
+        <div class="fp-label">Script Includes</div>
+        <div class="fp-detail">agent loop, tools, session mgmt</div>
+      </div>
+      <div class="divider-dot"></div>
+      <div class="footprint-item">
+        <div class="fp-value">2</div>
+        <div class="fp-label">Custom Tables</div>
+        <div class="fp-detail">sessions + audit log</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Capabilities -->
+  <div class="section">
+    <div class="section-label">Capabilities</div>
+    <h3>What SCs Can Do</h3>
+
+    <div class="capability-grid">
+      <div class="capability-card">
+        <div class="cap-icon">&#x1f50d;</div>
+        <h4>Natural Language Queries</h4>
+        <p>Query any ServiceNow table using plain English. No encoded queries or GlideRecord syntax needed.</p>
+        <div class="example">"Show me all P1 incidents from the last week"</div>
+      </div>
+      <div class="capability-card">
+        <div class="cap-icon">&#x1f6e0;</div>
+        <h4>Configuration Diagnosis</h4>
+        <p>Cross-references business rules, ACLs, and assignment rules to identify root causes.</p>
+        <div class="example">"Why aren't incidents auto-assigning to the right group?"</div>
+      </div>
+      <div class="capability-card">
+        <div class="cap-icon">&#x1f4d0;</div>
+        <h4>Schema Exploration</h4>
+        <p>Inspect table structures, field types, and reference relationships on the fly.</p>
+        <div class="example">"What fields does change_request have?"</div>
+      </div>
+      <div class="capability-card">
+        <div class="cap-icon">&#x1f4ca;</div>
+        <h4>Log Analysis</h4>
+        <p>Search system logs by level, source, message, and time range without navigating syslog manually.</p>
+        <div class="example">"Show me recent errors related to the CMDB"</div>
+      </div>
+      <div class="capability-card">
+        <div class="cap-icon">&#x1f310;</div>
+        <h4>CMDB Traversal</h4>
+        <p>Walk upstream and downstream relationships to understand blast radius and service dependencies.</p>
+        <div class="example">"What's the impact if this CI goes down?"</div>
+      </div>
+      <div class="capability-card">
+        <div class="cap-icon">&#x1f4a1;</div>
+        <h4>Platform Knowledge</h4>
+        <p>Answers questions about ServiceNow platform behavior, evaluation order, and best practices.</p>
+        <div class="example">"How does ACL evaluation order work?"</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Architecture at a glance -->
+  <div class="section">
+    <div class="section-label">Architecture</div>
+    <h3>Technology Stack</h3>
+    <p>A clean five-layer architecture built entirely with ServiceNow-native technologies. Each layer has a single responsibility and uses only platform-standard APIs.</p>
+
+    <div class="arch-stack">
+      <div class="arch-layer">
+        <div class="layer-color" style="background: var(--accent);"></div>
+        <div class="layer-name">Client Layer</div>
+        <div class="layer-tech">React &bull; ServiceNow SDK</div>
+        <div class="layer-desc">Chat UI component</div>
+      </div>
+      <div class="arch-layer">
+        <div class="layer-color" style="background: var(--accent2);"></div>
+        <div class="layer-name">API Layer</div>
+        <div class="layer-tech">Scripted REST API</div>
+        <div class="layer-desc">chat, status, tools, history</div>
+      </div>
+      <div class="arch-layer">
+        <div class="layer-color" style="background: var(--accent3);"></div>
+        <div class="layer-name">Orchestration</div>
+        <div class="layer-tech">PaAgentLoop &bull; ReAct pattern</div>
+        <div class="layer-desc">Reason / Act / Observe (max 8 iterations)</div>
+      </div>
+      <div class="arch-layer">
+        <div class="layer-color" style="background: var(--accent4);"></div>
+        <div class="layer-name">Tool Registry</div>
+        <div class="layer-tech">PaToolRegistry &bull; Script Includes</div>
+        <div class="layer-desc">Query, Schema, Log, CMDB tools</div>
+      </div>
+      <div class="arch-layer">
+        <div class="layer-color" style="background: rgba(108, 140, 255, 0.5);"></div>
+        <div class="layer-name">Data Layer</div>
+        <div class="layer-tech">Custom Tables &bull; GlideRecordSecure</div>
+        <div class="layer-desc">Sessions, audit log, platform tables</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Security -->
+  <div class="section">
+    <div class="section-label">Security &amp; Compliance</div>
+    <h3>Built for Customer Trust</h3>
+    <p>Security is the core value proposition, not an afterthought. Every architectural decision prioritizes data privacy and auditability.</p>
+
+    <div class="security-grid">
+      <div class="security-item">
+        <div class="sec-icon">&#x1f512;</div>
+        <div>
+          <h4>Zero Data Egress</h4>
+          <p>All data processing, LLM reasoning, and tool execution happens within the ServiceNow instance boundary. Verified by network trace &mdash; no external calls.</p>
+        </div>
+      </div>
+      <div class="security-item">
+        <div class="sec-icon">&#x1f6e1;</div>
+        <div>
+          <h4>ACL-Respecting Queries</h4>
+          <p>Every data access uses GlideRecordSecure, enforcing the authenticated user's role-based access controls. Users only see what they're authorized to see.</p>
+        </div>
+      </div>
+      <div class="security-item">
+        <div class="sec-icon">&#x1f4dd;</div>
+        <div>
+          <h4>Complete Audit Trail</h4>
+          <p>Every tool execution is logged with user, timestamp, action type, input, output, and target records. Full traceability for compliance reviews.</p>
+        </div>
+      </div>
+      <div class="security-item">
+        <div class="sec-icon">&#x2705;</div>
+        <div>
+          <h4>Confirmation-Gated Operations</h4>
+          <p>Any destructive or modifying operation requires explicit user confirmation before execution. No silent changes to customer data.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Impact -->
+  <div class="section">
+    <div class="section-label">Business Impact</div>
+    <h3>Measurable Value</h3>
+
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-value">60&ndash;75%</div>
+        <div class="metric-label">POC Setup Time Reduction</div>
+        <div class="metric-detail">4&ndash;8 hrs &rarr; 1&ndash;2 hrs per feature</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value">50&ndash;75%</div>
+        <div class="metric-label">Troubleshooting Time Saved</div>
+        <div class="metric-detail">30&ndash;60 min &rarr; 5&ndash;15 min per issue</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value">Day 1</div>
+        <div class="metric-label">SC Productivity</div>
+        <div class="metric-detail">vs. 2&ndash;4 weeks to proficiency</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value">100%</div>
+        <div class="metric-label">AI Usage on Customer POCs</div>
+        <div class="metric-detail">Up from 0% (privacy-safe)</div>
+      </div>
+    </div>
+
+    <div class="callout" style="margin-top: 24px;">
+      <div class="callout-icon">&#x1f3af;</div>
+      <div class="callout-content">
+        <h4>Strategic Advantage</h4>
+        <p>No competitor offers a privacy-safe AI assistant that works within the ServiceNow platform using the customer's own LLM. This tool encodes senior SC expertise into a repeatable, scalable resource that every team member can use from day one &mdash; on any customer instance, with zero privacy concerns.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Requirements -->
+  <div class="section">
+    <div class="section-label">Requirements</div>
+    <h3>What You Need</h3>
+
+    <div class="req-row">
+      <div class="req-card">
+        <h4>ServiceNow Version</h4>
+        <p>Yokohama Patch 4+ or Xanadu (required for NASK / GenAI Controller support)</p>
+      </div>
+      <div class="req-card">
+        <h4>Plugins</h4>
+        <p>Now Assist, Generative AI Controller, Integration Hub (standard enterprise plugins)</p>
+      </div>
+      <div class="req-card">
+        <h4>LLM Provider</h4>
+        <p>Any model configured via GenAI Controller &mdash; Now LLM, Azure BYOK, AWS Bedrock, etc.</p>
+      </div>
+      <div class="req-card">
+        <h4>Access</h4>
+        <p>Admin role for initial setup. itil or equivalent for daily usage by SCs.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <p><span class="author">ServiceNow Platform Assistant</span> &mdash; Greg Pietro &bull; Now AI Foundry &bull; March 2026</p>
+    <p style="margin-top: 4px;">All AI processing runs within the customer's ServiceNow instance. No external tools. No data egress. No exceptions.</p>
+  </div>
+
+</div>
+
+</body>
+</html>
