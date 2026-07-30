@@ -885,10 +885,224 @@ Basis: none of the 11 §2 tables actually present (`sn_aia_execution_plan`, `sn_
 Verbatim, as required: **P4b runtime proxy NOT EXECUTED — no background-script executor in the MCP toolset; runtime confirmation carried forward to build time.**
 
 ### P5 — GenAI log payloads and ACLs (LLD §8.3, §8.6)
-_Pending._
+
+**Step 1 — schema of the three brief-named tables, verbatim.**
+
+```json
+{"table": "sys_gen_ai_log_metadata", "includeFields": true, "maxFields": 200}
+```
+Result: 34 fields. No field holds prompt/response text. Token-count and perf fields only: `prompt_token_count`, `response_token_count`, `output_metadata` (string), `additional_data` (string), plus a polymorphic pointer `metadata_document` (document_id) / `metadata_documents` (glide_list → `sys_gen_ai_metadata_document`) / `metadata_table` (table_name), and `gen_ai_log_id` (reference → `sys_generative_ai_log`).
+
+```json
+{"table": "sys_gen_ai_metadata_document", "includeFields": true, "maxFields": 200}
+```
+Result: 10 fields, all housekeeping (`sys_*`, `metadata_document` document_id pointer, `metadata_table`). No payload text field at all.
+
+```json
+{"table": "sys_gen_ai_usage_log", "includeFields": true, "maxFields": 200}
+```
+Result: 20 fields — licensing/assist-count telemetry (`assists`, `trial_assists`, `license_name`, `feature`, `strategy`, `status`). No payload text field.
+
+Sampled `sys_gen_ai_log_metadata` records (`fields: ["sys_id","metadata_document","metadata_table","additional_data","output_metadata","status","source"]`, limit 5) to confirm rather than assume: `metadata_document`, `metadata_table`, `additional_data`, `source` were empty on every returned row; `output_metadata` held only a `perf_traces` JSON blob (stage timings), never prompt/response content. **None of the three brief-named tables stores the actual prompt/response payload.**
+
+**Corrected finding — the real payload table is `sys_generative_ai_log`.** Followed the `gen_ai_log_id` reference off `sys_gen_ai_log_metadata` and described it:
+
+```json
+{"table": "sys_generative_ai_log", "includeFields": true, "maxFields": 200}
+```
+Result: 44 fields, including **`prompt` (string) "Prompt"** and **`response` (string) "Response"** (plus `untranslated_prompt`, `edited_response`, `prompt_token_count`, `model_name`, `model_version`). Verified populated, not just declared, by sampling 3 records (`fields: ["sys_id","prompt","response","status","source","caller"]`, limit 3):
+
+```
+[1] prompt: {"prompt":[{"role":"user","content":[{"text":"You are an AI assistant tasked with analyzing a conversation to extract only meaningful, long-term user-specific facts within predefined categories. Your ...
+    response: {\n  "facts": []\n}
+[3] prompt: {"systemPrompt":[{"text":"Whenever the mode is show_output_to_user or Collect_input_from_user, the content should follow the resolved session language. If a session_language or explicit language prefe...
+    response: [\n  {\n    "agent": "CMDB Visibility Analyzer Agent", "agent_task": "Identify and report all CI Classes currently being discovered in the CMDB..." ...
+```
+
+**Closed — payload table and fields: `sys_generative_ai_log.prompt` and `sys_generative_ai_log.response`.** `sys_gen_ai_log_metadata` and `sys_gen_ai_metadata_document` (the two brief named for ACL inspection) hold only metadata/telemetry about a log entry, linked to the payload row via `gen_ai_log_id`.
+
+**Step 2 — ACLs, brief's exact tables plus the corrected payload table.**
+
+`sys_gen_ai_log_metadata` (`servicenow_code {"type":"acl","table":"sys_gen_ai_log_metadata","includeSource":true,"limit":50}`): 10 ACL rows returned, but `servicenow_code` showed only `name`/`operation`/`type`/`active` — no roles. Re-queried `sys_security_acl` directly (`name=sys_gen_ai_log_metadata^operation=read`, limit 20): 2 rows — one `admin_overrides:true` with empty description, one `admin_overrides:false` with description **"Allow read for records in sys_gen_ai_log_metadata, for users with roles (maint, admin)."** The description undersells the actual grant: querying `sys_security_acl_role` for that ACL's sys_id (`c72aba9143fb0210abcf84b49bb8f256`) returned **5** role rows, not 2: `sn_aia.viewer`, `sn_aia.admin`, `sn_nowassist_admin.nsa_admin`, `maint`, `admin`.
+
+`sys_gen_ai_metadata_document` (`servicenow_code` type=acl): 6 rows, all field-level wildcards (`sys_gen_ai_metadata_document.*`), no plain record-level ACL exists (confirmed: `sys_security_acl` query `name=sys_gen_ai_metadata_document^operation=read` → "No records found"). The wildcard read ACL (sys_id `1409b25543820210203884b49bb8f2f5`) has description **"Allow read for all fields in sys_gen_ai_multi_metadata, for users with role maint"** (note: description references a different table name, `sys_gen_ai_multi_metadata` — an apparent copy-paste artifact in the platform's own ACL description, recorded verbatim, not corrected). Its role rows (queried by ACL sys_id): `platform_ml_read`, `maint`.
+
+`sys_generative_ai_log` (the actual payload table — checked because it, not the brief's two tables, is what LLD §8.3 needs answered): 4 read ACL rows. Two carry roles: sys_id `5f48c850ff7022100158ffffffffff56` desc **"Deny access to sys_generative_ai_log unless user has maint role"**; sys_id `1c1bae85535221106b38ddeeff7b123c` desc **"Allow read for records in sys_generative_ai_log, for users with role maint."** Role rows across the 3 non-staging ACLs (`sys_security_acl_role` query on all 3 sys_ids): `sn_na_analytics.ai_engmt_viewer`, `admin`, `maint` (×2, deduped to one role).
+
+**Step 2 verdict (LLD §8.3).** Combined read-role set:
+| Table | Roles that can read |
+|---|---|
+| `sys_gen_ai_log_metadata` (metadata only, no payload text) | `sn_aia.viewer`, `sn_aia.admin`, `sn_nowassist_admin.nsa_admin`, `maint`, `admin` |
+| `sys_gen_ai_metadata_document` (no payload text) | `platform_ml_read`, `maint` |
+| `sys_generative_ai_log` (**actual `prompt`/`response` payload**) | `sn_na_analytics.ai_engmt_viewer`, `maint`, `admin` |
+
+A customer's non-admin AI-Agent-scoped user holds `sn_aia.viewer` / `sn_aia.admin` (**note the exact role name on this instance is dot-separated, `sn_aia.admin`/`sn_aia.viewer` — not `sn_aia_admin` as LLD §8.3 phrases it; a naming variant worth fixing in the docs, same class of issue as the `sys_log`/`syslog` mismatch in P4**). That role set is sufficient to read `sys_gen_ai_log_metadata` but **is absent from every read ACL on `sys_generative_ai_log`**, the table that actually holds `prompt`/`response`. **Answer: the `genai_log` tool's raw-payload read only works for `maint`/`admin`/`sn_na_analytics.ai_engmt_viewer` callers — a customer's `sn_aia.admin`-only user can see log metadata (timing, token counts, status) but not the prompt/response text itself**, unless a `maint` (or equivalent) grant is added.
+
+**Step 3 — capability-to-provider mapping, brief's exact query.**
+
+```json
+{"table": "sys_db_object", "query": "nameSTARTSWITHsys_one_extend", "fields": ["name","label","access"], "limit": 100}
+```
+Result: **"Found: 38 record(s)"** — under the 100 cap, no truncation. Full list (all `access` empty/public):
+
+<details>
+<summary>Verbatim — all 38 <code>sys_one_extend_*</code> tables (<code>name | label</code>)</summary>
+
+```
+sys_one_extend_metric_aggregator | Metric Aggregator
+sys_one_extend_aggregator_score_map | Aggregator Score Map
+sys_one_extend_eval_strategy | OneExtend Eval Strategy
+sys_one_extend_capability | OneExtend Capability
+sys_one_extend_definition_category | OneExtend Definition Category
+sys_one_extend_usage | OneExtend Usage
+sys_one_extend_resource_attribute_mapping | OneExtend Resource Attribute Mapping
+sys_one_extend_definition_attribute | OneExtend Capability Attribute
+sys_one_extend_batch_run | OneExtend Batch Run
+sys_one_extend_rate_limit_rules | One Extend Rate Limit Rule
+sys_one_extend_periodic_batch_run | OneExtend Periodic Batch Run
+sys_one_extend_capability_attribute_resource_lookup | OneExtend Capability Attribute Resource Lookup
+sys_one_extend_dataset_attribute_mapping | OneExtend Dataset Attribute Mapping
+sys_one_extend_eval_metric_result | OneExtend Eval Metric Result
+sys_one_extend_batch_run_task | OneExtend Batch Run Task
+sys_one_extend_capability_definition | OneExtend Capability Definition
+sys_one_extend_dataset_skill_mapping | OneExtend Dataset Skill Mapping
+sys_one_extend_rate_limit_count | One Extend Rate Limit Rule Count
+sys_one_extend_resource_edge | OneExtend Resource Edge
+sys_one_extend_rate_limit_violations | One Extend Rate Limit Rule Violations
+sys_one_extend_definition_attribute_cache_whitelist | OneExtend Capability Attribute Cache Whitelist
+sys_one_extend_eval_strategy_metric | OneExtend Eval Strategy Metric
+sys_one_extend_test_dataset | OneExtend Test Dataset
+sys_one_extend_resource_mapping | OneExtend Resource Mapping
+sys_one_extend_eval_applicability | OneExtend Eval Applicability
+sys_one_extend_dataset_attribute_value | OneExtend Dataset Attribute Value
+sys_one_extend_batch_result | OneExtend Batch Result
+sys_one_extend_eval_suggestion | OneExtend Eval Suggestion
+sys_one_extend_definition_config | OneExtend Definition Config
+sys_one_extend_eval_attribute | OneExtend Eval Attribute
+sys_one_extend_test_record | OneExtend Test Record
+sys_one_extend_truncate_strategy | OneExtend Truncate Strategy
+sys_one_extend_resource_param_value | OneExtend Resource Param Value
+sys_one_extend_translate_strategy | OneExtend Translation Strategy
+sys_one_extend_builder_capability | OneExtend Builder Capability
+sys_one_extend_builder_config | OneExtend Builder Config
+sys_one_extend_dataset_attribute | OneExtend Dataset Attribute
+sys_one_extend_attribute_group | OneExtend Attribute Group
+```
+</details>
+
+Table matching "capability/provider mapping" by label: **`sys_one_extend_capability_definition`** ("OneExtend Capability Definition"). Described it:
+
+```
+Fields (17): filter_properties, api (document_id, mandatory), postprocessor (script), preprocessor (script),
+description, api_type (string, mandatory), order, truncate_strategy (reference → sys_one_extend_truncate_strategy),
+connection (reference → sys_alias) "Connection And Credential Alias", capability (reference → sys_one_extend_capability, mandatory),
+name (mandatory), metadata (json), advanced (boolean), category (reference → sys_one_extend_definition_category)
+```
+
+Sampled 10 records (`fields: ["name","capability","api_type","api","connection"]`, `displayValue: "all"`) to confirm the mapping is live, not just structurally plausible — every row resolves a named capability to a real provider connection, e.g.:
+
+```
+capability: Error Framework AI Insights Skill | api_type: Flow Designer Subflow | connection: sn_amz_bedrock_spk.Amazon_Bedrock       | api: Flow: Amazon Bedrock Chat Completions
+capability: Error Framework AI Insights Skill | api_type: Flow Designer Subflow | connection: sn_google_bard_spk.Google_Bard_Vertex_AI | api: Flow: Google Cloud Chat Completions - Vertex AI
+capability: Error Framework AI Insights Skill | api_type: Flow Designer Subflow | connection: sn_generative_ai.Now_LLM                 | api: Flow: Now LLM Integration
+capability: Error Framework AI Insights Skill | api_type: Flow Designer Subflow | connection: sn_azure_openai.Azure_OpenAI             | api: Flow: Azure OpenAI Chat Completions
+capability: AI Agent Advisor - Agent Assignment | api_type: Flow Designer Subflow | connection: sn_generative_ai.LLM_Proxy_OEM          | api: Flow: Amazon Bedrock Chat Completions
+capability: AI Agent Advisor - Agent Assignment | api_type: Flow Designer Subflow | connection: sn_azure_openai.Azure_OpenAI            | api: Flow: Azure OpenAI Chat Completions
+```
+
+**Closed — capability mapping table: `sys_one_extend_capability_definition`.** Fields the `genai_log` tool would read for `check_config`: `capability` (which skill/agent capability), `name` (human label including provider variant), `api_type` + `api` (which integration mechanism, e.g. Flow Designer subflow), `connection` (which provider credential alias is bound — Bedrock/Vertex/Azure OpenAI/Now LLM).
 
 ### P6 — User/Data Access role storage (LLD §8.9)
-_Pending._
+
+**Step 4 — schema of the brief's two candidate tables, brief's exact query.**
+
+```json
+{"table": "sn_aia_agent", "includeFields": true, "maxFields": 200}
+```
+Result: 29 fields. The only field with "role" in its name is `role` (translated_text, "Role") — this is the agent's **persona role** text (e.g. "You are a..."), not an access-control role list. No field named/labeled user access, data access, or run-as.
+
+```json
+{"table": "sn_aia_usecase", "includeFields": true, "maxFields": 200}
+```
+Result: 17 fields. No access/role/run-as field either (`team` reference → `sn_aia_team` is the closest candidate but is a team-assignment link, not a role set).
+
+Brief's fallback m2m search, exact query:
+
+```json
+{"table": "sys_db_object", "query": "nameSTARTSWITHsn_aia^nameLIKErole", "fields": ["name","label"], "limit": 50}
+```
+Result, verbatim: **"No records found in \"sys_db_object\" matching query: nameSTARTSWITHsn_aia^nameLIKErole."** Verified this is a genuine empty result, not a bad-field-name no-op like the P4 `sys_scope_privilege` incident: `name`/`label` are confirmed-real fields on `sys_db_object` (used successfully in every other query this task and in P4). A broader unfiltered check, `nameSTARTSWITHsn_aia` alone (limit 100), returned **60** real `sn_aia_*` tables — none of the 60 names contains "role" or "access" (verbatim list available on request; scanned in full). So the fallback pattern in the brief is correctly empty — the storage is simply not under the `sn_aia_` prefix.
+
+**Broadened search — found it outside the brief's search pattern.** Queried `sys_db_object` for `nameLIKEagent_access` (not in the brief, but the natural next guess once `sn_aia_*` came up empty):
+
+```
+sys_agent_access_role_mapping | Agent Access Role Mapping | Global
+sys_agent_access_permission_set_configuration | Agent Access Permission Set Configuration | Global
+sys_agent_access_role_configuration | Agent Access Role Configuration | Global
+```
+
+All three are **Global** scope, not `sn_aia` scope — this is why a search restricted to `nameSTARTSWITHsn_aia` could never find them. Described the primary table:
+
+```
+Table: sys_agent_access_role_configuration (8 fields)
+  role_list (glide_list → sys_user_role) "Role List"
+  agent (document_id, mandatory) "Agent"
+  agent_table (table_name, mandatory) "Agent Table"
+  allow_all_session_roles (boolean) "Allow all session roles"
+  action (choice, mandatory) "Action"   — sys_choice shows exactly one value on this instance: limit_to_roles = "Limit To Roles"
+  description (string), name (string, mandatory), sys_id
+```
+`sys_agent_access_role_mapping`: 3 fields — `agent_access_config` (reference → the table above), `role` (reference → `sys_user_role`) — the exploded one-row-per-role breakout of `role_list`. `sys_agent_access_permission_set_configuration`: 3 fields — links a `sys_development_permission_set` to the same config row (a permission-set-based grant path alongside the role-list path).
+
+Queried, filtered to the two `sn_aia_*` tables actually in scope:
+
+```json
+{"table": "sys_agent_access_role_configuration", "query": "agent_tableINsn_aia_agent,sn_aia_usecase",
+ "fields": ["name","agent_table","agent","action","role_list","allow_all_session_roles"], "displayValue": "all", "limit": 20}
+```
+Result: **"Found: 20 record(s) (limit reached)"** — flagged as the round-number-at-cap pattern, verified rather than trusted: re-ran as `servicenow_aggregate` with the identical filter → **`count=159`**. The 20-row sample is a small fraction of the true set, recorded as such.
+
+<details>
+<summary>Verbatim — first 20 rows (of 159) of <code>sys_agent_access_role_configuration</code> for <code>sn_aia_agent</code>/<code>sn_aia_usecase</code>, trimmed to <code>agent_table | agent | role_list</code></summary>
+
+```
+sn_aia_usecase | Use case: CMDB Visibility Analyzer | itil, discovery_admin
+sn_aia_agent   | AI Agent: Catalog Agent | public
+sn_aia_usecase | Use case: Error Analysis and Remediation Workflow | 8015b3442f232210127c40171ea4e38d, 7046fbc42f232210127c40171ea4e3d2
+sn_aia_agent   | AI Agent: Error Analysis and Remediation Agent | 8015b3442f232210127c40171ea4e38d, 7046fbc42f232210127c40171ea4e3d2
+sn_aia_agent   | AI Agent: Guardian Settings Modifier Agent NAC | sn_na_center.nac_user, sn_na_center.nac_admin
+sn_aia_agent   | AI Agent: Guardian Settings Viewer Agent NAC | sn_na_center.nac_user, sn_na_center.nac_admin
+sn_aia_usecase | Use case: Guardian Settings NAC | sn_na_center.nac_user, sn_na_center.nac_admin
+sn_aia_usecase | Use case: Identify escalation signals | sn_uxc_gen_ai.platform_ai_proactive_escalation
+sn_aia_agent   | AI Agent: Automation Finder | sn_ac.automation_technical_user
+sn_aia_usecase | Use case: Automation Explorer | sn_ac.automation_technical_user
+sn_aia_agent   | AI Agent: Automation Table Discovery Agent | sn_ac.automation_technical_user
+sn_aia_agent   | AI Agent: Skill Configuration Agent | sn_na_center.nac_admin
+sn_aia_agent   | AI Agent: Skill Discovery Agent | sn_na_center.nac_admin
+sn_aia_usecase | Use case: Skill Management | sn_na_center.nac_admin
+sn_aia_usecase | Use case: Self Healing | (empty)
+sn_aia_agent   | AI Agent: Suggested Actions AI Agent | itil, sn_uxc_gen_ai.platform_ai_suggested_actions
+sn_aia_agent   | AI Agent: SHA Diagnostic Agent | (empty)
+sn_aia_agent   | AI Agent: SHA Triage Agent | (empty)
+sn_aia_agent   | AI Agent: Proactive Escalation AI Agent | sn_uxc_gen_ai.platform_ai_proactive_escalation
+sn_aia_agent   | AI Agent: Clone FAQ Agent | clone_admin
+```
+</details>
+
+Sampled rows with non-empty `description` (11 of the 20 above, `descriptionISNOTEMPTY` filter added) to confirm this one table structurally serves **both** halves of LLD §8.9's "User Access" / "Data Access" split — the platform's own text uses both terms against the same schema:
+
+```
+"Grants execute access to the Suggested Actions AI Agent. Roles allowed: itil ... and sn_uxc_gen_ai.platform_ai_suggested_actions ..."   [User/execute access]
+"Limit the data access to itil role"                                                                                                       [Data access]
+"Limit data access to ITIL"
+"Allowing all roles for Playbook Activity Assist"
+"Users with knowledge_manager or knowledge_admin can access this agent"
+"Role masking for generate change request plans workflow"
+```
+
+Note: the table has no separate structural field distinguishing a "User Access" row from a "Data Access" row (both use the same 8 fields, same single `action` choice value `limit_to_roles`) — the distinction is conventional, carried in free-text `description`, not enforced by schema. Studio's Agent Access role sets for a given agent/usecase are therefore not guaranteed to be exactly one row each; querying `agent`+`agent_table` for a specific record and inspecting `description` is the way to tell which access dimension a given row represents.
+
+**Closed.** Storage location: **`sys_agent_access_role_configuration`** (Global scope), keyed polymorphically via `agent` (document_id) + `agent_table` (table_name, values `sn_aia_agent` / `sn_aia_usecase` among others) — **not** a field on `sn_aia_agent`/`sn_aia_usecase` themselves, and **not** an `sn_aia_`-prefixed m2m (confirming the brief's fallback query was correctly empty, just aimed at the wrong scope prefix). Per-role breakout lives in the companion table **`sys_agent_access_role_mapping`** (`agent_access_config` reference + `role` reference → `sys_user_role`); a parallel permission-set-based grant path exists via **`sys_agent_access_permission_set_configuration`**. 159 configuration rows exist for `sn_aia_agent`/`sn_aia_usecase` combined on this instance (verified via `servicenow_aggregate`, not the capped 20-row page). This is the table the §4.2 access-alignment check must query, joined against a trigger's `run_as`/`run_as_user` role (LLD §8.9, §4.2).
 
 ## Phase 0b — Disposable probe agent
 
