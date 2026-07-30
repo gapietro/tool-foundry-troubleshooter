@@ -24,12 +24,12 @@ Phase 0 does not decide the harness, and this verdict does not pre-empt the `IMP
 
 | # | Probe | Falsifying result the spec named | What happened | Verdict |
 |---|---|---|---|---|
-| 1 | **P1** | Panel off, or no Now Assist product plugin active → **hard stop** | `panel_available: false`. No Now Assist product plugin (ITSM/HRSD/CSM/SecOps) exists or is active — only Now Assist Core, now-assist-self-service, Skill Step Plugin. No property independently disables the panel; the plugin gap alone fails the precondition | **FAILED — landed on the blocking side. CARRIED FORWARD as an instance-provisioning task**, not a design change. Phase 0b proceeded only because `servicenow_aia_execute` fires an agent through the API without the panel; that substitution is what makes E1 provisional. Must be closed before the benchmark (`DESIGN.md` R-11) |
+| 1 | **P1** | Panel off, or no Now Assist product plugin active → **hard stop** | `panel_available: false`. No Now Assist product plugin (ITSM/HRSD/CSM/SecOps) exists or is active — only Now Assist Core, now-assist-self-service, Skill Step Plugin. No property independently disables the panel; the plugin gap alone fails the precondition | **FAILED — landed on the blocking side. CARRIED FORWARD as an instance-provisioning task**, not a design change. Spec §5 pre-committed this row as a **hard stop** ("Phase 0b cannot run"); Phase 0b ran anyway because `servicenow_aia_execute` fires an agent through the API without the panel. **That is a relaxed falsification rule** — relaxed during planning, before results were known — and it is why the verdict is conditional rather than a pass. The substitution is also what makes E1 provisional. See the P1 Step 4 note. Must be closed before the benchmark (`DESIGN.md` R-11) |
 | 2 | **P2 + E2** | Fewer than **12** calls complete, by hard stop or stall, ceiling not raisable → native front door capped below the sweep; Phase 1a native build avoided | 19 calls completed | **Did not occur** |
 | 3 | **P2 + E2** | **12–14** calls complete → marginal; budget the playbook call-by-call | 19 calls completed | **Did not occur** |
 | 4 | **P2 + E2** | All **15** complete cleanly → Option A's core assumption survives; proceed to Task 1 with budget values recorded | 19 calls in one conversation (4 layer-absent + layers 1–15 each exactly once), `state=Completed`, `state_reason` empty, cause-of-death `completed`, 51s. Not capped: m2m `max_auto_executions`=20, property=25 | **PASS.** Recorded budget values: property `sn_aia.continuous_tool_execution_limit` = **25**; `max_auto_executions` dictionary default = **10** (a *different*, per-binding knob), instance distribution 477/483 rows at 10. Two qualifications carried: 19 is close to the 20 attachment cap, so a longer sweep must be re-tested not extrapolated; and this ran on the API path, not the panel |
 | 5 | **P3** | No unsupervised/auto mode for `type=script` tools → autonomous sweep impossible natively; the benchmark would measure a different product | `execution_mode` has exactly two active choices, stored values `autopilot` ("Autonomous") and `copilot` ("Supervised"); `sn_aia_tool.type` includes stored value `script`. Both modes are in live production use on script-type attachments — 361 `autopilot` / 23 `copilot` of 384 rows | **PASS.** `unsupervised_available: true`, and it is exercised in production, not merely present in a choice list |
-| 6a | **P4a** (static half) | `sn_aia_*` unreadable from a non-global scope → tool cores cannot live in our scope; LLD §6 build approach changes before Task 1 | None of the 11 §2 tables present is `access=none` (not a valid value on this version — the only choices are `public` and `package_private`) and none carries a restrictive `caller_access`. 79 standing `sys_scope_privilege` Read grants exist against 8 of them | **PASS, qualified.** `scoped_read_viable: likely`. Two qualifications on the record: all 79 precedent grants come from **first-party** scopes — **no custom `x_*` precedent** exists; and `syslog` (the real name of the LLD's `sys_log`) carries `caller_access = Caller Restriction`, a live constraint on `PaToolLogAnalysis` (`DESIGN.md` R-12) |
+| 6a | **P4a** (static half) | `sn_aia_*` unreadable from a non-global scope → tool cores cannot live in our scope; LLD §6 build approach changes before Task 1 | None of the 11 §2 tables present is `access=none` (not a valid value on this version — the only choices are `public` and `package_private`) and none carries a restrictive `caller_access`. **47 standing `sys_scope_privilege` Read grants** (among 79 privilege rows total — the other 32 are 17 Write, 14 Create, 1 Delete) exist against 8 distinct Read targets among them | **PASS, qualified.** `scoped_read_viable: likely`. Two qualifications on the record: all 79 precedent rows come from **first-party** scopes — **no custom `x_*` precedent** exists; and `syslog` (the real name of the LLD's `sys_log`) carries `caller_access = Caller Restriction`, a live constraint on `PaToolLogAnalysis` (`DESIGN.md` R-12) |
 | 6b | **P4b** (runtime half) | same row — runtime confirmation via a background script executed in an existing non-global scope | **NOT EXECUTED.** No background-script executor exists in the Foundry MCP toolset. Six active non-global scoped apps *do* exist, so the proxy would have been possible had the tooling existed. The probe tool's own reads succeeded on all five tables tried, but it ran in `Global` scope, so it does not simulate a restricted `x_pa_*` scope | **CARRIED FORWARD — not a pass.** Reason: tooling gap, not an instance limitation. Becomes a Task 1 first-build verification (`DESIGN.md` R-1) |
 | 7 | **E1** | No per-conversation identifier **and** no usable fallback → `DESIGN.md` 2.4's hard-key requirement unsatisfiable; benchmark protocol needs redesign before seeds are built | A script tool receives an undocumented global `_agentic_context_` (a JSON **string**) carrying `agent_id`, `conversation_id`, `usecase_id`, `execution_plan_id`. `conversation_id` was identical across all 19 E2 calls and matches `sn_aia_execution_plan.conversation` | **PASS, provisional.** A genuine hard per-conversation key exists; neither named fallback is needed. Provisional in two respects, both recorded rather than glossed: obtained via the **API path, not the panel** (row 1), and `_agentic_context_` is **undocumented**, so it is not contractually stable across upgrades. Re-confirm on the panel path before the benchmark |
 
@@ -41,7 +41,7 @@ Recorded here because spec §6 requires the OOB default be kept separate from an
 
 - **Current value on keynexus01:** `sn_aia.continuous_tool_execution_limit` = **25**.
 - **OOB shipped default:** **UNKNOWN.** The evidence is genuinely ambiguous and was recorded unresolved: `sys_updated_on` is bit-identical to `sys_created_on` (the signature of "never modified since install"), but `sys_updated_by` reads `admin`, not blank. The two signals point opposite ways. The `max_auto_executions` dictionary default of **10** is a *different knob* (per-binding, not instance-wide) and is not a substitute.
-- **Binding consequence:** the benchmark scorecard must record the property value each run executed under, read at run time. `benchmark/DECISION.md` must state that the OOB default is unknown and that transferability to a default-configured customer instance is therefore **unverified** — it may not treat 25 as the default. Filed as `DESIGN.md` ruling **R-4**.
+- **Binding consequence:** the benchmark scorecard must record **both** budget knobs each run executed under — the property **and** the per-binding `max_auto_executions` on every attached tool — read at run time. The binding matters as much as the property here: E2 reached 19 calls only with `max_auto_executions` set to **20**, against the instance-typical **10**, so a scorecard produced under that binding is no more transferable than one produced under a raised property ceiling. `benchmark/DECISION.md` must state that the OOB default is unknown and that transferability to a default-configured customer instance is therefore **unverified** — it may not treat 25 as the default. Filed as `DESIGN.md` ruling **R-4**.
 
 ## Phase 0a — Read-only reconnaissance
 
@@ -333,6 +333,8 @@ panel_available: false
 Failed precondition: **no Now Assist product plugin (ITSM/HRSD/CSM/SecOps) is active** — `v_plugin` shows only `Now Assist Core` / `now-assist-self-service` active, with no product-line Now Assist plugin present at all. No `sys_properties` entry independently disables the panel; the plugin gap alone is sufficient to fail the Step 3 precondition.
 
 Per the brief's Step 4 wording, **this does not stop Phase 0b.** `servicenow_aia_execute` fires an agent through the API without the panel, so E1 and E2 still run — but E1's answer becomes **provisional**, because the production path is the panel and runtime identifiers may differ between the API and panel execution paths. Resolving the missing product plugin is an instance-provisioning task, not a design change, and must be completed before the benchmark.
+
+**Named plainly: this is a relaxed falsification rule.** Spec §5 pre-committed "P1 fails → **hard stop**, Phase 0b cannot run," and Phase 0b ran anyway. That pre-commitment was relaxed **during planning, before any result was known** — the plan's Task 2 Step 4 wording (and Task 7's stated precondition) introduced the API path — not after seeing that P1 had failed, which is the failure mode the pre-commitment existed to prevent. The relaxation is sound on its merits: the API path (`servicenow_aia_execute`) does not require the panel, so E2's endurance result is unaffected by the panel's absence, and E1 was recorded **provisional** rather than closed precisely because the panel is the production path. It is nonetheless a relaxation of a rule that was fixed in advance so it could not be relaxed, and it is the reason this verdict is **CONDITIONAL** rather than a pass.
 
 ### P2 — Loop budget (DESIGN 2.2)
 
@@ -1282,18 +1284,28 @@ the exact key names inside it.
 `current` is an object but **not** a GlideRecord — both `getTableName()` and
 `getUniqueValue()` are absent.
 
-#### The script-tool contract — three corrections to LLD §4.7
+#### The script-tool contract — two corrections to LLD §4.7, and one probe defect
 
-Established by three failed executions before a clean one. All three are defects in the
-plan/LLD, not platform limitations:
+Established by three failed executions before a clean one. Items 2 and 3 are genuine gaps in
+the plan/LLD, not platform limitations. **Item 1 is not a docs defect** — the probe deviated
+from a document that was already right:
 
 1. **`input_schema` is an ARRAY, not a JSON Schema object.** Real format, confirmed against
    OOB tool `check_multisource_data`:
    `[{"name":"layer","description":"…","mandatory":false}]`.
-   Supplying a JSON-Schema object (`{"type":"object","properties":{…}}`) causes the agent to
-   stall silently — `AiAgentBaseDao: Error retrieving inputs for tool: TypeError: The object
-   is not a string`, then `AgentReActUtil: Error filtering tools config inputs: Cannot find
-   function filter in object`. The execution hangs in `In progress` and never terminates.
+   **Attribution, corrected:** LLD §2.2 (lines 62–65) and §4.7 (line 247) **already document
+   this array format, and already call it the verified live format**. The probe script supplied
+   a JSON-Schema object anyway. This one is on the probe, not the LLD, and the LLD needs no
+   change for it.
+   **The finding stands in full:** supplying a JSON-Schema object
+   (`{"type":"object","properties":{…}}`) causes the agent to stall **silently** —
+   `AiAgentBaseDao: Error retrieving inputs for tool: TypeError: The object is not a string`,
+   then `AgentReActUtil: Error filtering tools config inputs: Cannot find function filter in
+   object`. The execution hangs in `In progress` and **never terminates** — no error surfaces to
+   the caller. That the platform stalls rather than rejecting a malformed schema is a real
+   platform behaviour and the most expensive single defect found in Phase 0. Its consequence is
+   unchanged: `PaScriptToolAdapter`'s template must emit the array form so the format cannot be
+   got wrong by hand.
 2. **There is no `outputs` object.** The signature is `(function(inputs) { … return result; })(inputs)`.
    Referencing `outputs` throws `ReferenceError: "outputs" is not defined` and terminates the run.
 3. **Execution scope is `rhino.global`**, and `gs.getSessionID()` returns the literal
@@ -1399,32 +1411,59 @@ every call within a conversation** — precisely the property `PaRunAnchor` requ
 
 ### E3 — Data model confirmation (LLD §2.1)
 
-Validated against executions **we caused**, not only the 2026-07-18 archaeology.
+Validated against an execution **we caused** for two of the four tables; the other two are
+carried forward — see the stated omission below.
 
 | Table | Link field | Result on plan `ae22ed13…` |
 |---|---|---|
 | `sn_aia_execution_plan` | — | 1 row. `state`, `state_reason`, `objective`, `conversation` all readable and populated as LLD §2.1 describes |
 | `sn_aia_execution_task` | **`execution_plan`** ✅ | 27 rows. Join field is as documented |
-| `sn_aia_tools_execution` | — | **Denied over REST**, readable from inside a tool — see the asymmetry note in E1 |
+| `sn_aia_tools_execution` | **unconfirmed** | **Denied over REST**, readable from inside a tool — see the asymmetry note in E1. Join field not established on a run we caused |
+| `sn_aia_message` | **not checked** | Plan Task 10 Step 4 (read the messages, confirm the `role` vocabulary) was **not performed** — carried forward |
 
-**LLD §2.1 field-name defects on `sn_aia_execution_task`.** The real schema is:
+**Silent-miss behaviour on `sn_aia_execution_task` — corrected attribution.** This probe
+queried `state`, `task_type` and `agent`. The real schema has **`status`** (not `state`),
+**`type`** (not `task_type`), and **no `agent` field at all** — so all three requested names
+were wrong, and the query returned rows with those fields **silently absent rather than an
+error**: the same silent-miss failure mode that bit P1, P2 and P4.
 
-- **`status`**, not `state`
-- **`type`**, not `task_type`
-- **no `agent` field at all**
+**The blame was originally put on the LLD, and that was wrong.** LLD §2.1 already documents
+`type` and `status` and names no `agent` field; the string `task_type` appears nowhere in this
+repo. The wrong names came from the probe, not from the design docs. What survives — and it is
+the finding worth keeping — is the platform behaviour: **`servicenow_query` omits non-existent
+fields from its result rows instead of erroring**, so a tool built against a mistyped field name
+returns blank detail and reads as an empty result rather than a bug. `PaToolAgentTrace` must
+therefore assert field presence explicitly and must never infer "no data" from an absent field.
 
-Requesting `state`/`task_type`/`agent` returns rows with those fields silently absent rather
-than an error — the same silent-miss failure mode that bit P1, P2 and P4. `PaToolAgentTrace`
-written to the documented names would return blank task detail and look like an empty result
-rather than a bug.
-
-Useful fields the LLD does not mention, all directly relevant to the trace tool:
-**`parent`** (self-reference — this is where the task *tree* lives), `order`,
-`output` (tool output), `execution_time_ms`, `start_time`/`end_time` (latency analysis for the
-`latency_flags[]` feature), `metadata`, `og_task_id`, `task_dependencies`.
+Fields the trace tool needs, and where LLD §2.1 stands on them: `parent` (self-reference — the
+task *tree*), `order`, `output` (tool output), `metadata`, `og_task_id` and `task_dependencies`
+are **all already named in LLD §2.1** — the earlier claim that the LLD omitted them was also
+wrong. The one genuine gap is naming: the per-step timings `execution_time_ms` and
+`start_time`/`end_time` (latency analysis for the `latency_flags[]` feature) appear there only as
+the collective word "timings" and should be spelled out.
 
 **A caution for the trace tool's shape:** 19 tool calls produced **27** execution-task rows, so
 tasks are not 1:1 with tool calls. `PaToolAgentTrace` must not assume that mapping.
+
+**Stated omission — E3 covers 2 of the 4 tables `PaToolAgentTrace` is built on.** Recorded
+because it was previously a silent gap, and this project's standard is that omissions are
+stated.
+
+- **Plan Task 10 Step 4 was never performed or recorded.** That step called for reading
+  `sn_aia_message` for this execution and confirming the **role vocabulary** (LLD §2.1 records
+  `user_profile` / `user` / `agent`) against a run we caused. It was not run, and nothing in
+  this section stands in for it.
+- **`sn_aia_tools_execution`'s join field could not be confirmed** — the REST read was denied
+  (see the asymmetry note in E1), so Step 3 produced no join-field evidence.
+
+Consequence: of the four tables `PaToolAgentTrace` reads, only `sn_aia_execution_plan` and
+`sn_aia_execution_task` are validated against an execution **we caused**. `sn_aia_message` and
+`sn_aia_tools_execution` remain validated only against the 2026-07-18 archaeology. E3 gates
+nothing, so this is minor — but it is carried forward, not closed: both checks are added to
+`DESIGN.md` R-1's in-instance verification list for the next phase. Per `DESIGN.md` R-8, the
+REST denial on `sn_aia_tools_execution` proves **nothing** about its in-tool readability — it
+read **OK** via `GlideRecordSecure` from inside the probe tool — so this is an unfinished check,
+not a suspected limitation.
 
 #### `servicenow_query` returns a narrow default field set
 
@@ -1484,7 +1523,7 @@ Item numbering is `docs/LOW_LEVEL_DESIGN.md` §8's own. The same dispositions ar
 | **1** | `sn_aia_agent_tool_m2m.execution_mode` choice values; `sn_aia_tool.type` full choice list | **CLOSED (Phase 0).** `execution_mode` = 2 active choices, stored values `autopilot` ("Autonomous") / `copilot` ("Supervised"). `sn_aia_tool.type` = 14 active choices; the script one is stored value `script` ("Script"). Both execution modes in live production use on script-type attachments (361/23 of 384) |
 | **2** | Use-case activation mechanism (no `active` on `sn_aia_usecase`) | **not in Phase 0 scope** |
 | **3** | `sys_gen_ai_log_metadata` ACLs for non-admin callers; prompt/response payload location | **CLOSED (Phase 0).** Payload is in neither table the item names — it is `sys_generative_ai_log.prompt` / `.response`. Read roles: metadata table → `sn_aia.viewer`, `sn_aia.admin`, `sn_nowassist_admin.nsa_admin`, `maint`, `admin`; `sys_gen_ai_metadata_document` → `platform_ml_read`, `maint`; payload table → `sn_na_analytics.ai_engmt_viewer`, `maint`, `admin`. A customer's `sn_aia.admin`-only caller reads metadata but **not** prompt/response (capability limit filed as `DESIGN.md` R-10) |
-| **4** | Cross-scope read privileges per §2 table from our app scope | **CARRIED FORWARD.** Static half closed (no §2 table is `access=none` — not a valid value here — none carries a restrictive `caller_access`; 79 standing `sys_scope_privilege` Read grants against 8 of them, all first-party scopes, **no custom `x_*` precedent**). Runtime half untested: **no background-script executor in the MCP toolset** (P4b), and the probe tool ran in `Global` scope so its successful reads do not simulate `x_pa_*`. Plus the `syslog` `Caller Restriction` constraint. Becomes a Task 1 verification (`DESIGN.md` R-1, R-12) |
+| **4** | Cross-scope read privileges per §2 table from our app scope | **CARRIED FORWARD.** Static half closed (no §2 table is `access=none` — not a valid value here — none carries a restrictive `caller_access`; **47 standing `sys_scope_privilege` Read grants among 79 privilege rows** — 17 Write, 14 Create, 1 Delete make up the rest — against 8 distinct Read targets, all from first-party scopes, **no custom `x_*` precedent**). Runtime half untested: **no background-script executor in the MCP toolset** (P4b), and the probe tool ran in `Global` scope so its successful reads do not simulate `x_pa_*`. Plus the `syslog` `Caller Restriction` constraint. Becomes a Task 1 verification (`DESIGN.md` R-1, R-12) |
 | **5** | Native tool-script runtime execution context (anchors PaRunAnchor keying) — *benchmark-blocking per `DESIGN.md` 2.4* | **CLOSED (Phase 0).** `_agentic_context_`, an undocumented global **JSON string**, carries `agent_id`, `conversation_id`, `usecase_id`, `execution_plan_id`. `PaRunAnchor` keys on `_agentic_context_.conversation_id` (stable across all 19 E2 calls; matches `sn_aia_execution_plan.conversation`); `execution_plan_id` is a finer-grained second key. Bare names are `undefined`; `gs.getSessionID()` = literal `"SYSTEM"`. **Closure is API-path-provisional and rests on an undocumented global** — re-confirm on the panel path before the benchmark (`DESIGN.md` R-2) |
 | **6** | Capability→provider mapping table for `check_config` (`sys_one_extend*` family) | **CLOSED (Phase 0).** `sys_one_extend_capability_definition`. Fields for the tool: `capability`, `name`, `api_type`, `api`, `connection` (bound provider alias — Bedrock / Vertex / Azure OpenAI / Now LLM). Confirmed live by sampling 10 rows, not merely structurally |
 | **7** | Final app scope prefix (assigned at SDK app creation) | **not in Phase 0 scope** |
