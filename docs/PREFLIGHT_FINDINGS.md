@@ -620,11 +620,15 @@ All 14 `inactive: false`. Exact stored value meaning "script": **`script`** (lab
 
 Per Task 3 Step 3 (P2 section above), `sn_aia_agent_tool_m2m` holds 483 rows across 141 distinct `agent` display values instance-wide, with no field distinguishing OOB-shipped agents from custom/CoE-built ones. The brief's reference to "the 19 OOB agents" does not correspond to any isolable subset on this instance — that filter cannot be applied. Reporting the `execution_mode` distribution across **script-type tool attachments as a whole** instead, per corrected instruction:
 
+Exact reproducible query (verbatim MCP call, `servicenow_query`):
+
+```json
+{"table": "sn_aia_agent_tool_m2m", "query": "tool.type=script",
+ "fields": ["sys_id", "agent", "tool", "tool.type", "execution_mode", "active"],
+ "displayValue": "all", "limit": 500}
 ```
-Table: sn_aia_agent_tool_m2m
-Query: tool.type=script
-Fields: sys_id, agent, tool, tool.type, execution_mode, active
-displayValue: all, limit: 500
+
+```
 Found: 384 record(s) (no truncation — 384 < 500, so the full population)
 
 execution_mode distribution (script-type tool attachments only, 384 rows):
@@ -634,6 +638,39 @@ active: true → 384 / 384 (all 384 script-type m2m rows are active; 0 inactive)
 ```
 
 Both `sys_choice` values (`autopilot`, `copilot`) are in live production use on script-type tools — this is not a choice that exists only in the dictionary/choice list with zero real usage. `autopilot` (Autonomous/unsupervised) is the overwhelming majority: 361/384 = 94.0% of script-type tool attachments instance-wide.
+
+Durability note: the raw 384-row dump (~71K chars incl. sys_id/tool.type/active per row) is not reproduced here in full — re-running the exact query above regenerates it byte-for-byte, and the total/split above (361/23/384) is the arithmetic result of that query, verifiable by re-running it. Instead of pasting all 384 trimmed rows, only the **minority case — the 23 `Supervised` (copilot) rows** — is recorded verbatim below, trimmed to `agent | tool | execution_mode`, since these are the exception worth inspecting individually; the 361 `autopilot` rows are recorded as a count only (this is an explicit, reasoned omission, not a silent one — the count is independently re-derivable by running the query above and counting `execution_mode: Autonomous` occurrences, or by subtracting 23 from the total of 384).
+
+<details>
+<summary>Verbatim — the 23 <code>Supervised</code> (<code>execution_mode=copilot</code>) rows out of 384 script-type tool attachments, trimmed to <code>agent | tool | execution_mode</code></summary>
+
+```
+Model Version Modifier Agent | Model version Updater | Supervised
+Model Version Modifier Agent | Model version configuration Modifier | Supervised
+Data and Policy Configuration Agent | Update Data Overflow Processing | Supervised
+Data and Policy Configuration Agent | Update Data Sharing Opt Out | Supervised
+Elastic Log Analyst | Post Elastic Analysis | Supervised
+Elastic Log Analyst | Get Elastic Logs | Supervised
+SRE Elastic Log Analyzer v1 | Post Elastic Analysis to Work Notes | Supervised
+SRE Elastic Log Analyzer v1 | Get Elastic Logs | Supervised
+Architecture KB Analyzer v3 | Get KB Article Image Attachment | Supervised
+Architecture KB Analyzer v3 | Search KB for Architecture | Supervised
+Architecture KB Analyzer v2 | Search KB for Architecture | Supervised
+Architecture KB Analyzer v2 | Get KB Attachment Image | Supervised
+Architecture KB Analyzer | Search KB for Architecture | Supervised
+Architecture KB Analyzer | Get KB Attachment Image | Supervised
+Theme Builder Agents | Open Theme Builder Tool | Supervised
+Change quality assessor AI agent | Record the quality summary of the Change Request | Supervised
+Instruction Refinement AI agent | Create version | Supervised
+Change quality assessor AI agent | Set chosen Change Fields | Supervised
+Change conflict assessor AI agent | Set Change Work Note | Supervised
+Change quality assessor AI agent | Set Change Field | Supervised
+Schedule Change Request AI Agent | Schedule the change | Supervised
+Change quality assessor AI agent | Set Change Work Note | Supervised
+Change conflict assessor AI agent | Update Change request's planned start date and planned end date | Supervised
+```
+
+</details>
 
 **Step 4 — recorded result and verdict.**
 
