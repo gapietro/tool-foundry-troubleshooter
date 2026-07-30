@@ -2,6 +2,7 @@
 
 **Status:** Design only — no code built yet. Implementation will use the **ServiceNow SDK** (set up as the next step).
 **Grounding:** Every table, field, and value in §2–§5 was verified live against **keynexus01** on 2026-07-18 unless marked ⚠ VERIFY.
+**External validation:** §2.5 cross-checks the data model and method against ServiceNow's own Knowledge 2026 troubleshooting lab **CCL6230-K26 "Inside the Black Box: Troubleshooting and Debugging AI Agents at Scale"** ([lab guidebook](https://servicenow-events-or-lab-guidebo.gitbook.io/knowledge-2026/knowledge-2026/ccl6230-k26)) — incorporated 2026-07-29.
 **Companions:** PRD v2.0 · `ARCHITECTURE_DECISIONS.md` (Decision 0.5: tools-first, benchmark-gated) · `IMPLEMENTATION_PLAN.md` (Phase 1a tasks)
 
 ---
@@ -17,6 +18,8 @@
 | Auth | `admin` via macOS Keychain (Foundry MCP `servicenow_connect`) |
 | Existing inventory | 19 OOB AI Agents, 17 agentic workflows (all inactive), real execution history |
 | Reference failures on instance | `sn_aia_execution_plan` rows with `state_reason` ∈ {`execution_failed`, `security_violation`, `no_activity`} — e.g. execution `78f347b72f198310f824ac1bcfa4e3bd` (SIGNAL IT Incident Triage, terminated) |
+
+**Baseline vs. ServiceNow's own troubleshooting-lab prerequisites (K26 CCL6230, §2.5):** the lab requires Zurich Patch 8+, Now Assist AI Agents (Dec 2025 Zurich release), AI Search enabled, a Pro Plus/Enterprise license, the `sn_aia_admin` role for agentic administrators, and the **Now Assist Panel** enabled (which itself needs ≥1 Now Assist product plugin — ITSM/HRSD/CSM/SecOps — active) for testing agents in Studio. keynexus01 at Zurich Patch 10 exceeds the platform floor; panel + product-plugin state ⚠ VERIFY at build (§8.10). `sn_aia_admin` is also the role floor to keep in mind when diagnosing customer-side permission failures.
 
 **Proof the diagnostic approach works (observed):** in failed execution `78f347b7…`, the root cause is sitting in `sn_aia_message` — an agent-role message containing a script error JSON: `{"fileName":"sn_aia_usecase.ec9f54a1….context_processing_script","lineNumber":61,…}`, followed by the user-facing "Sorry, there was a problem." A trace tool that parses this pattern diagnoses the failure immediately.
 
@@ -88,6 +91,43 @@ Teams: `sn_aia_team` + `sn_aia_team_member`; agent↔usecase wiring: `sn_aia_tri
 
 `sn_aia_execution_metric`, `sn_aia_agent_execution_eval` (native LLM-as-judge evals), `sn_aia_execution_feedback`, `sn_aia_conversational_debugger_mapping`, `sn_aia_memory*`, `sn_aia_external_agent_*` (A2A).
 
+### 2.5 Cross-check: ServiceNow's official troubleshooting methodology (K26 CCL6230)
+
+ServiceNow's Knowledge 2026 lab **CCL6230-K26** ships a "Complete Troubleshooting Guidebook for AI Agents Execution Debugging" — a manual runbook that prescribes **exactly the investigation spine our tools automate**: start at `sn_aia_execution_plan`, walk `sn_aia_execution_task` chronologically to the first failed step, inspect `sn_aia_tools_execution` request/response payloads, follow `sys_gen_ai_log_metadata` → `sys_generative_ai_log` for LLM call detail, correlate `sn_aia_message` / `sys_cs_conversation` / `sys_cs_message` for conversation context, and finish with a *scoped* `sys_log` query. This is independent, official confirmation that the §2.1–§2.3 mapping is the right diagnostic surface — Agent Doctor is that runbook, automated.
+
+**Details adopted from the guidebook that we did not already have:**
+
+1. **`sys_cs_message`** (individual conversation messages — requestor / fulfiller / system) under `sys_cs_conversation` traces dialogue progression and shows where a caller disconnected or got an unexpected response. Added to the trace tool's message step (§4.1). `sys_cs_conversation` also confirms the **channel type (NAP vs. VA)** — a wiring-layer fact.
+2. **`sys_generative_ai_log`** — reached via `sys_gen_ai_log_metadata.gen_ai_log_id` — holds the full prompt/response content. This sharpens open item 3: the payload path is metadata → `gen_ai_log_id` (verify ACLs, not location).
+3. **Syslog scoping rule:** never open `sys_log` unfiltered (the lab warns it can slow or time out an instance). The sanctioned pattern (`syslog.filter`) is: Created **between** the execution window's timestamps · Level = Error/Warning · Source **contains** the scope or Script Include name · Message **contains** the execution plan sys_id or error keyword. Adopted as PaToolLogAnalysis's *mandatory* query shape (§4.4).
+4. **Quick decision guide** (symptom → first table), which maps 1:1 onto our roster:
+
+| Symptom (per the guidebook) | First table | Our tool |
+|---|---|---|
+| Agent never triggered | `sn_aia_execution_plan` (absence of a plan) | `agent_trace` (`agent`+`since` finds nothing → check triggers via `agent_config`) |
+| Conversation stopped mid-execution | `sn_aia_execution_task` | `agent_trace` (task tree + failure signature) |
+| Tool call failed / returned empty | `sn_aia_tools_execution` | `agent_trace` (tool-call step) |
+| LLM response incorrect/missing | `sys_gen_ai_log_metadata` | `genai_log` |
+| Unexpected user message | `sn_aia_message` / `sys_cs_*` | `agent_trace` (message stream) |
+| Platform/script/ACL error | `sys_log` (scoped) | `log_analysis` |
+
+**Official failure taxonomy** (the lab's "Error Symptoms and Common Causes"), mapped to our seven layers and the benchmark seeds (§7):
+
+| # | Symptom | Common causes (per lab) | Our layer | Seed coverage |
+|---|---------|------------------------|-----------|---------------|
+| T1 | Cold start — agent failed to start | Missing platform config/dependencies; **ACL-trigger misalignment** (run-as role fails User/Data Access check); invalid or expired credentials | trigger/wiring | Seed 5 (inactive wiring) + candidate seed 6 (§7) |
+| T2 | Inconsistent responses | Weak/ungrounded prompts; missing output format spec; ambiguous tool definitions | instructions, tool definitions | Seed 2; also why every seed gets 2 runs |
+| T3 | Tool errors | Misconfigured tools (script runtime errors, malformed results); unclear guidance on tool selection/timing | tool definitions | Seed 1 |
+| T4 | High latency | **Instruction bloat** (oversized prompts reprocessed every ReAct turn); **tool output bloat** (oversized outputs inflating the scratchpad); inefficient post-processing | instructions, tool definitions | candidate seed 7 (§7) |
+| T5 | Hallucinated responses | Stale/irrelevant/empty retrieval results; unclear or contradictory instructions leaving gaps | data, instructions | Seed 3 (empty lookup table) |
+| T6 | Infinite loops | No task-completion criteria; agent can't detect completion; conflicting agent-vs-workflow directives; **recursive triggers firing on the agent's own actions** | instructions, trigger/wiring | candidate seed 8 (§7) |
+
+**ACL-trigger misalignment (the lab's Lab 1 — a named silent-failure pattern):** a trigger invokes the workflow under the *initiating user's* context; if that user's role fails the agent's or workflow's **User Access** (who can discover/execute) or **Data Access** (which roles execute runtime operations) configuration, the execution terminates with a **Security Violation** — with no surface-level config error anywhere. We have already observed the matching `state_reason=security_violation` on keynexus01 (§1). Both access lists must independently accommodate the invoking user's role. Detection is specified in §4.1 (signature) and §4.2 (role comparison).
+
+**Latency triage heuristic (the lab's Lab 2):** in the decision logs, high-latency flags on **`Gen AI - AIA ReAct Engine` steps ⇒ instruction bloat** (prompt reprocessed every loop iteration — the lab's worked example: an ~11,000-word instruction with inline decision trees, 40+ hardcoded error-code mappings, and example conversations); high-latency flags on **`Tool` steps ⇒ tool output bloat** (raw retrieval chunks accumulating in the scratchpad, compounding every subsequent turn). Remediations the lab teaches — offload decision logic to Now Assist Skills, consolidate sequential searches into one parallel-executing Skill, return synthesized not raw output — become Fix Report `proposed` content for T4 diagnoses. Detection via our per-task timings + token counts is specified in §4.1.
+
+**Tool-quality bar (the lab's Lab 3):** three sequential failure points per tool call — selection (description read), invocation (input construction), interpretation (output read) — with risk multiplying per additional tool. The lab's production framework: every tool description needs three sections — **Purpose** (when and when *not* to use), **Understanding Tool Inputs** (formats accepted, how unexpected formats are handled), **Understanding Tool Outputs & Error Handling** (what success/empty/error responses look like and what the agent should do). Smart-tool principles: validate/normalize inputs at platform level (never trust the LLM to pass the right format), return structured JSON with named fields (never raw GlideRecord dumps, never an empty `{}` on failure — always a structured error with `suggested_action`), cap result counts, and consolidate tools agents always call sequentially. This cuts both ways for us: (a) our seven Agent Doctor tool descriptions are written to this framework (§5), and (b) the anti-patterns become a checklist the config tool scores customer tools against (§4.2).
+
 ---
 
 ## 3. Scoped App & Custom Tables
@@ -143,9 +183,13 @@ All tool cores are Script Includes with one contract:
 1. Plan header: state, state_reason, status, objective, run_type, execution_mode, timings, token/latency metrics, conversation, usecase/agent names
 2. Task tree: query `sn_aia_execution_task` by `execution_plan`, order by `order`; nest via `parent`; emit {order, type, status, description, time_ms, output_digest(200 chars)}
 3. Tool calls: query `sn_aia_tools_execution` by `execution_plan_id`; emit {tool.tool.name, tool.agent.name, execution_status, error_message, time_ms, request_digest, response_digest}
-4. Messages: query `sn_aia_message` by `execution_plan`, order by `message_sequence`; emit {seq, role, name, content_digest}
+4. Messages: query `sn_aia_message` by `execution_plan`, order by `message_sequence`; emit {seq, role, name, content_digest}. If `plan.conversation` is set, also emit conversation context per the K26 guidebook (§2.5): `sys_cs_conversation` channel type (NAP vs. VA) + `sys_cs_message` digests (requestor/fulfiller/system) to show dialogue progression and where the user disconnected or got an unexpected reply
 5. **Error mining:** any agent-role message whose `message` parses as JSON with `fileName`/`lineNumber` → emit as `script_errors[]` {source, line, error_name} — first-class root-cause evidence
-6. Failure signature: state=terminated + a `cancelled` orchestrator task + `ongoing` leaf = "died mid-reasoning"; attach to header as `failure_signature`
+6. Failure signatures (attach to header as `failure_signature`):
+   - state=terminated + a `cancelled` orchestrator task + `ongoing` leaf = "died mid-reasoning"
+   - `state_reason=security_violation` = **ACL-trigger misalignment** (K26 Lab 1, §2.5): the trigger's run-as user failed the agent/workflow User Access or Data Access check. Emit the next-step pointer: pull `agent_config` triggers (run_as fields) + access roles and compare — the config looks correct at surface level; only the trace reveals it
+   - `access_verification`-type task in non-success status = same family — cite it as the trace evidence
+7. **Latency flags** (K26 Lab 2 heuristic, §2.5): using per-task timings + plan metrics (`llm_p95_latency`, `tool_p95_latency`, `llm_token_avg`), emit `latency_flags[]`: slow `gen_ai` tasks with high prompt token counts → `instruction_bloat` (instructions reprocessed every ReAct turn); slow `tool` tasks or oversized `response` payloads → `tool_output_bloat` (scratchpad inflation compounding each turn)
 
 **Detail mode (`step`):** full `output` / `request` / `response` for one task or tool execution, routed through PaArtifactStore. **Prompt-level detail:** via `sn_aia_gen_ai_m2m` where `source_id` = step sys_id → `sys_gen_ai_log_metadata` (⚠ admin-only ACL likely — degrade to "prompt logs unavailable, insufficient privilege").
 
@@ -157,7 +201,9 @@ All tool cores are Script Includes with one contract:
 - **overview:** agent fields (description, role digest, strategy.name, channel, agent_type) + tool count + usecase/team wiring via `sn_aia_trigger_agent_usecase_m2m` + trigger active states
 - **instructions:** full `instructions` + `role` + `proficiency` + usecase `base_plan`/`context_processing_script` SOURCE (verified failure vector — include the script body via artifact store)
 - **tools:** for each `sn_aia_agent_tool_m2m` (by agent): m2m {name, active, execution_mode, max_auto_executions, timeout, output_transformation_strategy} + tool {name, type, description, input_schema (verbatim JSON), script body via artifact store, target_document_table}
+  - **`tool_smells[]` (K26 Lab 3 anti-pattern checklist, §2.5)** — score each attached tool and emit findings: description missing any of the three sections (Purpose / input formats / output+error contract) or a single sentence; no negative guidance (when *not* to use); script accepts one input format with no validation/normalization or fallback; returns raw record dumps (dozens of fields) or unbounded result sets (no `setLimit`); failure path returns an empty object/string instead of a structured error with a suggested action; overlapping tools the agent must call sequentially (consolidation candidates — each extra tool multiplies selection/invocation/interpretation risk)
 - **triggers:** `sn_aia_trigger_configuration` rows for linked usecases: {name, active, condition, target_table, objective_template, channel.name, trigger_strategy, run_as fields}
+  - **Access alignment check (K26 Lab 1, §2.5):** emit the agent's and workflow's **User Access** and **Data Access** role sets (⚠ VERIFY storage — Studio's "Define User Access"/"Define Data Access" panels; expected on `sn_aia_agent`/`sn_aia_usecase` or a related role m2m) alongside the trigger's `run_as`/`run_as_user` roles, and flag any role the run-as user lacks — the automated form of the lab's manual security-violation diagnosis. Both lists must independently cover the invoking user's role.
 
 ### 4.3 PaToolGenAiLog
 
@@ -171,6 +217,8 @@ All tool cores are Script Includes with one contract:
 ### 4.4 PaToolSchemaLookup / PaToolQueryTable / PaToolLogAnalysis
 
 As specified in `IMPLEMENTATION_PLAN.md` Task 8 — unchanged by instance research (`sys_dictionary`/`sys_choice`/`syslog` are standard). One addition to SchemaLookup: `sys_db_object` existence check first, so "table does not exist" is a distinct finding from "no fields readable" (cross-scope signal).
+
+**PaToolLogAnalysis query shape is mandatory-scoped** (K26 guidebook rule, §2.5 — an unfiltered `sys_log` read can slow or time out an instance): every query MUST carry a bounded time window (default: the execution plan's start/end ± 2 min when called with an execution context; else `minutes_ago`), level ≤ Warning by default, and at least one of source-contains (scope / Script Include name) or message-contains (execution plan sys_id, error keyword). The tool refuses an unscoped query with a structured error suggesting the missing condition — mirroring the platform's own `syslog.filter` discipline.
 
 ### 4.5 PaArtifactStore
 
@@ -205,7 +253,7 @@ Seven thin `sn_aia_tool` (type `script`) bodies each call `invoke()` with their 
 | # | Record | Table | Key values |
 |---|--------|-------|-----------|
 | 1 | Agent Doctor | `sn_aia_agent` | `name`="Agent Doctor", `agent_type`=internal, `channel`=`nap_and_va`, **`strategy`=`f0bff21f9f13c6108f431597d90a1c74` (ReAct — verified default)**, `role`/`instructions` from `agent-doctor-instructions.md` (playbook: seven-layer sweep, evidence rule, Fix Report markdown template, read_artifact usage) |
-| 2–8 | 7 tools | `sn_aia_tool` | `type`=script, descriptions written for tool-selection quality; `input_schema` per §4.7; script = adapter call |
+| 2–8 | 7 tools | `sn_aia_tool` | `type`=script, descriptions written to the **K26 three-section framework** (§2.5): Purpose (incl. when NOT to use) · Understanding Tool Inputs (formats + how off-format input is handled) · Understanding Tool Outputs & Error Handling (success/empty/error shapes + what to do next); `input_schema` per §4.7; script = adapter call. The adapter already satisfies the smart-tool bar: tolerant input parsing, structured JSON out, never an empty `{}` on failure |
 | 9–15 | 7 attachments | `sn_aia_agent_tool_m2m` | `active`=true, `execution_mode`=unsupervised/auto (⚠ VERIFY choice values — all tools read-only), `output_transformation_strategy`=None (raw JSON back to the reasoning loop), `display_output`=false |
 | 16 | Team | `sn_aia_team` (+`sn_aia_team_member`) | "Troubleshooter" team wrapping Agent Doctor |
 | 17 | Use case | `sn_aia_usecase` | "Diagnose AI Agent failure", `team`=16, orchestrator strategy default; **no custom `context_processing_script`** (verified failure vector — keep ours empty) |
@@ -250,15 +298,25 @@ Seed construction (each = one broken agent + one captured failing execution sys_
 
 Scoring per `IMPLEMENTATION_PLAN.md` Task 11–12: 2 runs/seed, blind, 6-point rubric, gate thresholds from ADR Decision 0.5.
 
+**Candidate seeds 6–8 (from the K26 failure taxonomy, §2.5 — stretch set, not gate-scored; build after the 5-seed gate or swap in if a core seed proves unbuildable):**
+
+| Seed | Taxonomy | Construction on instance |
+|------|----------|--------------------------|
+| 6 — ACL-trigger misalignment | T1 cold start | Trigger `active`=true but agent/workflow User Access + Data Access restricted to a role the run-as user lacks (e.g. `itil` user vs. admin-only access) → expect `state_reason=security_violation`, no surface config error. Reproduces K26 Lab 1 exactly; we already have a matching real failure on keynexus01 (§1) |
+| 7 — instruction bloat latency | T4 high latency | Agent with deliberately oversized instructions (inline decision trees, hardcoded error-code maps, example conversations) + a search tool returning raw unfiltered chunks → expect `latency_flags[]` diagnosis: instruction_bloat + tool_output_bloat, fix = offload logic to a Skill / synthesize tool output |
+| 8 — infinite loop | T6 loops | Agent with no completion criteria and directives conflicting with its workflow, or a trigger whose condition matches records the agent itself updates (recursive firing) → expect wiring/instruction diagnosis; guarded by `sn_aia.continuous_tool_execution_limit` and the 5-runs-per-15-min recursion limit so the shared instance is safe |
+
 ---
 
 ## 8. Open Items (⚠ VERIFY during build — all flagged inline above)
 
-1. `sn_aia_agent_tool_m2m.execution_mode` choice values (supervised flag) and `sn_aia_tool.type` full choice list
-2. Use-case activation mechanism (no `active` on `sn_aia_usecase` — trigger `active` and/or `sn_aia_usecase_config_override`)
-3. `sys_gen_ai_log_metadata` ACLs for non-admin callers; prompt/response payload location (`sys_gen_ai_metadata_document`)
-4. Cross-scope read privileges required per §2 table from our app scope (`sys_scope_privilege` entries)
-5. Native tool-script execution context: what conversation/execution identifiers are available to a script tool at runtime (anchors PaRunAnchor keying)
-6. Capability→provider mapping table for `check_config` (`sys_one_extend*` family)
-7. Final app scope prefix (assigned at SDK app creation)
-8. Seed 4 construction that cannot degrade the shared instance's GenAI config
+1. `sn_aia_agent_tool_m2m.execution_mode` choice values (supervised flag) and `sn_aia_tool.type` full choice list — **CLOSED (Phase 0):** `execution_mode` has exactly 2 active choices, stored values `autopilot` (label "Autonomous") and `copilot` (label "Supervised"); `sn_aia_tool.type` has 14 active choices, the script one being stored value `script` (label "Script"). Both `execution_mode` values are in live production use on script-type attachments (361 `autopilot` / 23 `copilot` of 384). Unsupervised script-tool execution is available.
+2. Use-case activation mechanism (no `active` on `sn_aia_usecase` — trigger `active` and/or `sn_aia_usecase_config_override`) — **not in Phase 0 scope**
+3. `sys_gen_ai_log_metadata` ACLs for non-admin callers; prompt/response payload location (`sys_gen_ai_metadata_document`) — **CLOSED (Phase 0):** payload is **not** in either named table; it lives in `sys_generative_ai_log.prompt` / `.response`. Read roles — `sys_gen_ai_log_metadata`: `sn_aia.viewer`, `sn_aia.admin`, `sn_nowassist_admin.nsa_admin`, `maint`, `admin`; `sys_gen_ai_metadata_document`: `platform_ml_read`, `maint`; `sys_generative_ai_log`: `sn_na_analytics.ai_engmt_viewer`, `maint`, `admin`. A customer's `sn_aia.admin`-only caller can read metadata but **not** prompt/response text. (Role name on-instance is `sn_aia.admin`, dot-separated — see §1.)
+4. Cross-scope read privileges required per §2 table from our app scope (`sys_scope_privilege` entries) — **CARRIED FORWARD:** static half closed (none of the 11 §2 tables present is `access=none` — not a valid value on this version — and none carries a restrictive `caller_access`; 79 standing `sys_scope_privilege` Read grants exist against 8 of them, all from first-party scopes, no custom `x_*` precedent). Runtime half **untested**: the P4b background-script proxy could not be executed — no background-script executor exists in the Foundry MCP toolset — and the probe tool landed in `Global` scope, so its successful reads do not simulate a restricted `x_pa_*` scope. Separately: `syslog` (the real name of §2's `sys_log`) carries `caller_access = Caller Restriction`, a live constraint on `PaToolLogAnalysis` to resolve at build time.
+5. Native tool-script execution context: what conversation/execution identifiers are available to a script tool at runtime (anchors PaRunAnchor keying) — **CLOSED (Phase 0):** a script tool receives an undocumented global `_agentic_context_`, a **JSON string** (must be `JSON.parse`d) carrying `agent_id`, `conversation_id`, `usecase_id`, `execution_plan_id`. `PaRunAnchor` keys on `_agentic_context_.conversation_id`; stable across all 19 calls of a conversation and matches `sn_aia_execution_plan.conversation`. The bare names `conversation_id`/`execution_plan_id`/`agent_id` are `undefined`; `gs.getSessionID()` returns the literal `"SYSTEM"`. Provisional in two respects: obtained via the API path, not the Now Assist panel (no product plugin active), and `_agentic_context_` is undocumented.
+6. Capability→provider mapping table for `check_config` (`sys_one_extend*` family) — **CLOSED (Phase 0):** `sys_one_extend_capability_definition` (17 fields). Read `capability`, `name`, `api_type`, `api`, `connection` (the bound provider credential alias — Bedrock / Vertex / Azure OpenAI / Now LLM). Confirmed live, not merely structural, by sampling 10 rows.
+7. Final app scope prefix (assigned at SDK app creation) — **not in Phase 0 scope**
+8. Seed 4 construction that cannot degrade the shared instance's GenAI config — **not in Phase 0 scope**
+9. Storage location of AI Agent Studio's "Define User Access" / "Define Data Access" role sets (needed for §4.2 access alignment check — expected on `sn_aia_agent`/`sn_aia_usecase` fields or a related role m2m) — **CLOSED (Phase 0):** `sys_agent_access_role_configuration` (Global scope), keyed polymorphically by `agent` (document_id) + `agent_table` (table_name). Not a field on `sn_aia_agent`/`sn_aia_usecase` and not an `sn_aia_`-prefixed m2m. Per-role breakout in `sys_agent_access_role_mapping`; parallel permission-set path via `sys_agent_access_permission_set_configuration`. 159 config rows for `sn_aia_agent`/`sn_aia_usecase`. No structural field distinguishes "User Access" from "Data Access" — the distinction is conventional, carried in free-text `description`.
+10. Now Assist Panel enabled on keynexus01 (Now Assist Admin → Experiences → Now Assist panel) — per K26 dependencies it requires ≥1 Now Assist product plugin active and is a prerequisite for testing agents in AI Agent Studio; needed before the §7 smoke test — **CARRIED FORWARD:** `panel_available: false`. No Now Assist **product** plugin (ITSM/HRSD/CSM/SecOps) exists or is active on keynexus01 — only `Now Assist Core`, `now-assist-self-service` and the Skill Step Plugin. No `sys_properties` entry independently disables the panel; the plugin gap alone fails the precondition. This is an instance-provisioning task, not a design change, and it blocks the §7 smoke test and the K26 lab prerequisites. Must be closed before the benchmark.

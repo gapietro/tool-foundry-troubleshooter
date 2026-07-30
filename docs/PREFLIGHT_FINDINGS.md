@@ -2,11 +2,46 @@
 
 **Instance:** keynexus01.service-now.com · **Run date:** 2026-07-30
 **Spec:** `docs/superpowers/specs/2026-07-30-preflight-agent-doctor-design.md`
-**Status:** in progress
+**Status:** complete — conditional
 
 ## Verdict
 
-_Filled by Task 12._
+### Overall: **CONDITIONAL GO**
+
+Phase 0 set out to falsify the Agent Doctor bet before building it. The bet survived — but not cleanly, and the spec's own rule is explicit: *"a verdict of 'proceed' requires every row above to land on the non-blocking side."* One row (**P1**) landed on the blocking side and one probe (**P4b**) could not be run at all. Neither is a design failure; both are unfinished preconditions. Hence conditional, not go.
+
+**What survived, and it is the important one.** The load-bearing assumption behind Option A — that a native Studio ReAct loop can sustain a 12–15-call autonomous investigation — was tested directly and held: 19 tool calls in one conversation, clean `Completed`, cause-of-death `completed`, 51s. The second benchmark-blocker, `DESIGN.md` 2.4's per-conversation anchor key, was also answered affirmatively. Those were the two results most capable of ending the project early. They did not.
+
+**What is conditional on it.** Two conditions must be discharged before the benchmark, and one before Task 1:
+
+1. **Before the benchmark — provision a Now Assist product plugin on keynexus01** (P1). Until then the Now Assist Panel does not exist, the LLD §7 smoke test and the K26 lab prerequisites cannot run as written, and every Phase 0b result carries an API-path qualification.
+2. **Before the benchmark — establish the OOB default of `sn_aia.continuous_tool_execution_limit`** and record per-run which value each scored run executed under (spec §6; filed as `DESIGN.md` ruling R-4). Phase 0 could **not** establish the shipped default — it is genuinely unknown.
+3. **At Task 1 — run the scoped-read runtime test that P4b could not** (`GlideRecordSecure` across the §2 table list from inside the `x_pa_*` scope), before any tool core is written against those tables.
+
+Phase 0 does not decide the harness, and this verdict does not pre-empt the `IMPLEMENTATION_PLAN.md` Task 12 gate. It removes one pre-emption that spec §8 would have allowed: E2's result means the "the loop cannot sustain the sweep" evidence does **not** enter the gate decision ahead of any scored run.
+
+### Row-by-row against the spec §5 falsification table
+
+| # | Probe | Falsifying result the spec named | What happened | Verdict |
+|---|---|---|---|---|
+| 1 | **P1** | Panel off, or no Now Assist product plugin active → **hard stop** | `panel_available: false`. No Now Assist product plugin (ITSM/HRSD/CSM/SecOps) exists or is active — only Now Assist Core, now-assist-self-service, Skill Step Plugin. No property independently disables the panel; the plugin gap alone fails the precondition | **FAILED — landed on the blocking side. CARRIED FORWARD as an instance-provisioning task**, not a design change. Phase 0b proceeded only because `servicenow_aia_execute` fires an agent through the API without the panel; that substitution is what makes E1 provisional. Must be closed before the benchmark (`DESIGN.md` R-11) |
+| 2 | **P2 + E2** | Fewer than **12** calls complete, by hard stop or stall, ceiling not raisable → native front door capped below the sweep; Phase 1a native build avoided | 19 calls completed | **Did not occur** |
+| 3 | **P2 + E2** | **12–14** calls complete → marginal; budget the playbook call-by-call | 19 calls completed | **Did not occur** |
+| 4 | **P2 + E2** | All **15** complete cleanly → Option A's core assumption survives; proceed to Task 1 with budget values recorded | 19 calls in one conversation (4 layer-absent + layers 1–15 each exactly once), `state=Completed`, `state_reason` empty, cause-of-death `completed`, 51s. Not capped: m2m `max_auto_executions`=20, property=25 | **PASS.** Recorded budget values: property `sn_aia.continuous_tool_execution_limit` = **25**; `max_auto_executions` dictionary default = **10** (a *different*, per-binding knob), instance distribution 477/483 rows at 10. Two qualifications carried: 19 is close to the 20 attachment cap, so a longer sweep must be re-tested not extrapolated; and this ran on the API path, not the panel |
+| 5 | **P3** | No unsupervised/auto mode for `type=script` tools → autonomous sweep impossible natively; the benchmark would measure a different product | `execution_mode` has exactly two active choices, stored values `autopilot` ("Autonomous") and `copilot` ("Supervised"); `sn_aia_tool.type` includes stored value `script`. Both modes are in live production use on script-type attachments — 361 `autopilot` / 23 `copilot` of 384 rows | **PASS.** `unsupervised_available: true`, and it is exercised in production, not merely present in a choice list |
+| 6a | **P4a** (static half) | `sn_aia_*` unreadable from a non-global scope → tool cores cannot live in our scope; LLD §6 build approach changes before Task 1 | None of the 11 §2 tables present is `access=none` (not a valid value on this version — the only choices are `public` and `package_private`) and none carries a restrictive `caller_access`. 79 standing `sys_scope_privilege` Read grants exist against 8 of them | **PASS, qualified.** `scoped_read_viable: likely`. Two qualifications on the record: all 79 precedent grants come from **first-party** scopes — **no custom `x_*` precedent** exists; and `syslog` (the real name of the LLD's `sys_log`) carries `caller_access = Caller Restriction`, a live constraint on `PaToolLogAnalysis` (`DESIGN.md` R-12) |
+| 6b | **P4b** (runtime half) | same row — runtime confirmation via a background script executed in an existing non-global scope | **NOT EXECUTED.** No background-script executor exists in the Foundry MCP toolset. Six active non-global scoped apps *do* exist, so the proxy would have been possible had the tooling existed. The probe tool's own reads succeeded on all five tables tried, but it ran in `Global` scope, so it does not simulate a restricted `x_pa_*` scope | **CARRIED FORWARD — not a pass.** Reason: tooling gap, not an instance limitation. Becomes a Task 1 first-build verification (`DESIGN.md` R-1) |
+| 7 | **E1** | No per-conversation identifier **and** no usable fallback → `DESIGN.md` 2.4's hard-key requirement unsatisfiable; benchmark protocol needs redesign before seeds are built | A script tool receives an undocumented global `_agentic_context_` (a JSON **string**) carrying `agent_id`, `conversation_id`, `usecase_id`, `execution_plan_id`. `conversation_id` was identical across all 19 E2 calls and matches `sn_aia_execution_plan.conversation` | **PASS, provisional.** A genuine hard per-conversation key exists; neither named fallback is needed. Provisional in two respects, both recorded rather than glossed: obtained via the **API path, not the panel** (row 1), and `_agentic_context_` is **undocumented**, so it is not contractually stable across upgrades. Re-confirm on the panel path before the benchmark |
+
+**Summary:** 4 pass (rows 4, 5, 6a, 7 — two of them qualified), 1 failed and carried forward (row 1), 1 not executed and carried forward (row 6b), 2 falsifying results did not occur (rows 2, 3). No row was silently absorbed.
+
+### Transferability statement (spec §6)
+
+Recorded here because spec §6 requires the OOB default be kept separate from any tuned value, and because Phase 0 could not supply it.
+
+- **Current value on keynexus01:** `sn_aia.continuous_tool_execution_limit` = **25**.
+- **OOB shipped default:** **UNKNOWN.** The evidence is genuinely ambiguous and was recorded unresolved: `sys_updated_on` is bit-identical to `sys_created_on` (the signature of "never modified since install"), but `sys_updated_by` reads `admin`, not blank. The two signals point opposite ways. The `max_auto_executions` dictionary default of **10** is a *different knob* (per-binding, not instance-wide) and is not a substitute.
+- **Binding consequence:** the benchmark scorecard must record the property value each run executed under, read at run time. `benchmark/DECISION.md` must state that the OOB default is unknown and that transferability to a default-configured customer instance is therefore **unverified** — it may not treat 25 as the default. Filed as `DESIGN.md` ruling **R-4**.
 
 ## Phase 0a — Read-only reconnaissance
 
@@ -1441,4 +1476,20 @@ Probe-generated `syslog` rows (`PA_PROBE`, `PA_PROBE2`, `PA_E2` markers) are als
 are ordinary log entries and age out with normal log rotation.
 
 ## LLD §8 disposition
-_Filled by Task 12._
+
+Item numbering is `docs/LOW_LEVEL_DESIGN.md` §8's own. The same dispositions are appended inline to each item in that file.
+
+| # | Item | Disposition |
+|---|---|---|
+| **1** | `sn_aia_agent_tool_m2m.execution_mode` choice values; `sn_aia_tool.type` full choice list | **CLOSED (Phase 0).** `execution_mode` = 2 active choices, stored values `autopilot` ("Autonomous") / `copilot` ("Supervised"). `sn_aia_tool.type` = 14 active choices; the script one is stored value `script` ("Script"). Both execution modes in live production use on script-type attachments (361/23 of 384) |
+| **2** | Use-case activation mechanism (no `active` on `sn_aia_usecase`) | **not in Phase 0 scope** |
+| **3** | `sys_gen_ai_log_metadata` ACLs for non-admin callers; prompt/response payload location | **CLOSED (Phase 0).** Payload is in neither table the item names — it is `sys_generative_ai_log.prompt` / `.response`. Read roles: metadata table → `sn_aia.viewer`, `sn_aia.admin`, `sn_nowassist_admin.nsa_admin`, `maint`, `admin`; `sys_gen_ai_metadata_document` → `platform_ml_read`, `maint`; payload table → `sn_na_analytics.ai_engmt_viewer`, `maint`, `admin`. A customer's `sn_aia.admin`-only caller reads metadata but **not** prompt/response (capability limit filed as `DESIGN.md` R-10) |
+| **4** | Cross-scope read privileges per §2 table from our app scope | **CARRIED FORWARD.** Static half closed (no §2 table is `access=none` — not a valid value here — none carries a restrictive `caller_access`; 79 standing `sys_scope_privilege` Read grants against 8 of them, all first-party scopes, **no custom `x_*` precedent**). Runtime half untested: **no background-script executor in the MCP toolset** (P4b), and the probe tool ran in `Global` scope so its successful reads do not simulate `x_pa_*`. Plus the `syslog` `Caller Restriction` constraint. Becomes a Task 1 verification (`DESIGN.md` R-1, R-12) |
+| **5** | Native tool-script runtime execution context (anchors PaRunAnchor keying) — *benchmark-blocking per `DESIGN.md` 2.4* | **CLOSED (Phase 0).** `_agentic_context_`, an undocumented global **JSON string**, carries `agent_id`, `conversation_id`, `usecase_id`, `execution_plan_id`. `PaRunAnchor` keys on `_agentic_context_.conversation_id` (stable across all 19 E2 calls; matches `sn_aia_execution_plan.conversation`); `execution_plan_id` is a finer-grained second key. Bare names are `undefined`; `gs.getSessionID()` = literal `"SYSTEM"`. **Closure is API-path-provisional and rests on an undocumented global** — re-confirm on the panel path before the benchmark (`DESIGN.md` R-2) |
+| **6** | Capability→provider mapping table for `check_config` (`sys_one_extend*` family) | **CLOSED (Phase 0).** `sys_one_extend_capability_definition`. Fields for the tool: `capability`, `name`, `api_type`, `api`, `connection` (bound provider alias — Bedrock / Vertex / Azure OpenAI / Now LLM). Confirmed live by sampling 10 rows, not merely structurally |
+| **7** | Final app scope prefix (assigned at SDK app creation) | **not in Phase 0 scope** |
+| **8** | Seed 4 construction that cannot degrade the shared instance's GenAI config | **not in Phase 0 scope** |
+| **9** | Storage of Studio's "Define User Access" / "Define Data Access" role sets | **CLOSED (Phase 0).** `sys_agent_access_role_configuration` (Global scope), keyed polymorphically by `agent` (document_id) + `agent_table` (table_name) — **not** a field on `sn_aia_agent`/`sn_aia_usecase`, and **not** an `sn_aia_`-prefixed m2m. Per-role breakout in `sys_agent_access_role_mapping`; parallel permission-set path via `sys_agent_access_permission_set_configuration`. 159 config rows. No structural field separates "User Access" from "Data Access" — the distinction is conventional, carried in free-text `description` |
+| **10** | Now Assist Panel enabled on keynexus01 (needs ≥1 product plugin) | **CARRIED FORWARD.** `panel_available: false` — no Now Assist product plugin exists or is active. An instance-provisioning task, not a design change. Blocks the LLD §7 smoke test and the K26 lab prerequisites as written, and qualifies every Phase 0b result as API-path evidence. Must be closed before the benchmark (`DESIGN.md` R-11) |
+
+**Tally:** 5 CLOSED (1, 3, 5, 6, 9) · 2 CARRIED FORWARD (4, 10) · 3 not in Phase 0 scope (2, 7, 8).

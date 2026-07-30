@@ -1,0 +1,124 @@
+# DESIGN.md — Harness Strategy Spar Record
+
+**Date:** 2026-07-30 · **Method:** design-spar (adversarial review, pre-build)
+**Scope:** Decision 0.5 (harness strategy) and its load-bearing subsystems. Companions: `docs/LOW_LEVEL_DESIGN.md`, `docs/IMPLEMENTATION_PLAN.md`, `docs/ARCHITECTURE_DECISIONS.md` — this file records what the spar *changed or confirmed*; the companions hold the full design.
+
+---
+
+## 1. Decision confirmed: Option A — tools-first, benchmark-gated
+
+Alternatives re-examined and rejected:
+
+- **B — custom harness first, native never.** Rejected: costs weeks before learning whether the native harness would have sufficed; sole ownership of every orchestration bug; NASK invocation is reverse-engineered and could break on a customer patch with no fallback harness.
+- **C — deterministic pipeline only (no agent).** Rejected as the *whole* product: caps diagnostic depth at pre-coded signatures, in a product whose value is finding unanticipated root causes. **Adopted as a component** — see change #1.
+
+**The real rationale for A (write this down, say it this way):** the compliance rule (no external AI on customer instances; governed LLM via GenAI Controller only) eliminates external tooling like Claude Code — it does **not** discriminate between A, B, and C, which are all in-instance and governed. What discriminates is **cost of being wrong**: A costs days and produces a scorecard that measures the actual doubt (Studio's harness is workflow-shaped — steps and supervised handoffs — not built for open-ended sense-decide-act investigation loops). Native-first is not "native is right"; it is "native is **cheap to falsify**." Under A the load-bearing component is the **benchmark**, not Agent Doctor.
+
+---
+
+## 2. Design changes from the spar
+
+### 2.1 Promote the Evidence Bundle collector to Phase 1a (harness-agnostic core)
+
+**Found:** `mode: "collect"` lived behind the custom harness's REST API — which is gate-contingent. In pure Option-A world the "Evidence Bundle floor" did not exist; the fallback was manual table archaeology (the K26 runbook by hand — the pre-product baseline).
+**Change:** a runner Script Include (working name `PaEvidenceCollector`) that executes the tool cores in fixed playbook order — trace → config → GenAI log → schema/data → wiring — anchors an `x_pa_run`, stores outputs via PaArtifactStore. No LLM, no harness. Invoked via background script / UI action by an admin.
+**This one component is also:**
+- the **doctor-down detector**: Agent Doctor silent → run collector. Bundle produced ⇒ tables readable, LLM path is the broken thing (itself a diagnosis). Collector also fails ⇒ cross-scope/ACL problem. Every outcome informative.
+- the **benchmark de-risker**: run it against each seed before scoring — separates "tools can't see the defect" from "agent can't reason to it."
+
+### 2.2 Verify + tune the platform tool budget before benchmark day
+
+**Found:** the first ceiling a 12–15-call diagnostic sweep hits is **not** the 128K context window (PaArtifactStore's 4KB excerpts/pages defuse it — ~1K tokens per call) — it is the platform's autonomous tool budget: `sn_aia.continuous_tool_execution_limit` + per-m2m `max_auto_executions`, sized for 3-tool workflow agents, not 15-call investigators. Failure mode may be a silent supervision stall, not an error.
+**Change:** verify both values on keynexus01, set `max_auto_executions` deliberately for all 7 tools, record the values in the benchmark protocol. LLD §8 verify item.
+
+### 2.3 Scorecard records cause-of-death per run
+
+**Found:** a 0-point run that died at the tool-call limit and a 0-point run that reasoned badly are *opposite* verdicts on the gate ("raise the limit and re-run" vs. "build the custom harness") — the current scorecard can't tell them apart.
+**Change:** add a terminal-cause field to every scored run: `completed | tool_limit | context | supervision_stall | security | wandered | genai_down`. Gate interpretation must consider cause-of-death distribution, not just points.
+
+### 2.4 Time-window run-anchor keying is disqualified for scored runs
+
+**Found:** PaRunAnchor's fallback ("one anchor per user per 30 min") glues benchmark run 2 (fresh conversation, 20 min later) onto run 1's `x_pa_run`: interleaved artifacts/audit, contaminated scorecard — and run 2 can `read_artifact` into run 1's evidence, breaking the blind-runs independence the doubled-run protocol exists to measure.
+**Change:** scored runs require a hard per-conversation key. LLD open item 5 (what identifiers a script tool sees at runtime) is **benchmark-blocking**. If no native per-conversation identifier exists: key on the doctor's own `sn_aia_execution_plan` sys_id (fresh per conversation) or an explicit tester-passed run token. Never time-window keying where run identity matters.
+
+### 2.5 Known ceiling, accepted: doctor/patient indistinguishability in-chat
+
+When Agent Doctor's own LLM path fails, the user sees the same generic "Sorry, there was a problem" the patient produced. The Claude-Code-style live progress feed the product wants is a property of the harness, which Option A does not own. Mitigation = 2.1 (collector as canary) + benchmark scores "failure behavior" as a gate input. A custom-harness build (if gated in) owns this UX fully.
+
+---
+
+## 3. Standing verification items elevated by this spar
+
+| Item | Was | Now |
+|---|---|---|
+| LLD §8.5 — runtime identifiers available to script tools | ⚠ VERIFY | **benchmark-blocking** (change 2.4) |
+| `sn_aia.continuous_tool_execution_limit`, `max_auto_executions` values | implicit | explicit pre-benchmark verify + tune (change 2.2) |
+| Collector runnable with zero LLM dependency | not specced | Phase 1a acceptance criterion (change 2.1) |
+
+## 4. Rulings during implementation
+
+*(Record deviations from this file here, with justification and the user's ruling.)*
+
+### Phase 0 pre-flight rulings — all dated 2026-07-30
+
+Source of evidence for every ruling below: `docs/PREFLIGHT_FINDINGS.md` (run against keynexus01, 2026-07-30). Each states the finding, then the change it forces.
+
+**R-1 — P4b runtime scoped-read proxy was not executed; §8.4's runtime half is carried forward. (2026-07-30)**
+**Found:** the spec §3 P4b proxy (a read-only background script executed *inside* an existing non-global scoped app) could not run: the Foundry MCP toolset contains **no background-script executor**. Six active non-global scoped apps do exist on the instance (`x_snc_sdktest1`, `x_snc_acme_triage`, `x_snc_bstest_42`, `x_snc_pockeysre216`, `x_snc_build_agent`, `x_snc_update_all`), so the proxy *would* have been possible had the tooling existed — this is a tooling gap, not an instance limitation. The probe tool's own `GlideRecordSecure` reads succeeded on all five tables tried, but the probe record landed in `sys_scope: Global`, so those reads do not simulate a restricted `x_pa_*` scope either.
+**Change:** LLD §8.4 is **carried forward, not closed**. The static half is closed (no §2 table is `access=none`; none carries a restrictive `caller_access`; 79 standing `sys_scope_privilege` Read grants prove the mechanism works in production — though only from first-party scopes, with **no custom `x_*` precedent**). The runtime half becomes an explicit first-build verification: the very first thing the scoped app does after `now-sdk install` is attempt `GlideRecordSecure` reads across the §2 table list from its own scope, before any tool core is written against them. `IMPLEMENTATION_PLAN.md` Task 1 must carry that check.
+
+**R-2 — `_agentic_context_.conversation_id` is a real per-conversation key; time-window anchor keying is dropped from the design entirely. (2026-07-30)**
+**Found:** a script tool receives an undocumented global `_agentic_context_` — a **JSON string**, not an object — carrying `agent_id`, `conversation_id`, `usecase_id`, `execution_plan_id`. The `conversation_id` was identical across all 19 calls of the E2 conversation and matches `sn_aia_execution_plan.conversation`. `gs.getSessionID()` returns the literal `"SYSTEM"`, so anything keyed on session ID would collide across conversations.
+**Change:** §2.4 above is superseded in its remedy, not its reasoning. §2.4 disqualified time-window keying *for scored runs* and named two fallbacks — the doctor's own `sn_aia_execution_plan` sys_id, or a tester-passed run token. **Neither fallback is needed, and time-window keying is now removed from the design entirely, not merely disqualified for scored runs.** `PaRunAnchor` keys on `_agentic_context_.conversation_id`, with `execution_plan_id` available as a second, finer-grained key. The design carries no time-window path at all, so it cannot be reached by accident.
+**Provisionality, stated because it is load-bearing:** this was obtained via the API path (`servicenow_aia_execute`), **not** the Now Assist panel, because no Now Assist product plugin is active on keynexus01 (see R-11). The panel is the production path. `_agentic_context_` is also undocumented and therefore not contractually stable across upgrades. Both facts must be re-confirmed on the panel path before the benchmark; until then this closure is API-path-provisional.
+
+**R-3 — E2 endurance passed at 19 calls; the sweep fits. The ReAct loop also executes concurrently. (2026-07-30)**
+**Found:** the probe agent executed **19 tool calls in a single conversation** (4 with no `layer` value + layers 1–15 each exactly once) against a request for 15, finishing `state=Completed` with empty `state_reason` in 51s wall clock. Cause-of-death under the §2.3 vocabulary: **`completed`**. The stop was not a cap — the m2m `max_auto_executions` was 20 and the instance property is 25.
+**Change:** the load-bearing assumption behind Option A survives, and §5 of the pre-flight spec puts this on the "all 15 complete cleanly" row: proceed to Task 1 with the budget values recorded. **What this does not mean:** it is one assumption surviving, not the benchmark being won. The Task 12 gate in `IMPLEMENTATION_PLAN.md` is unchanged, and E2 removes only the "the native loop cannot sustain a 12–15-call sweep" pre-emption that spec §8 allowed to enter the gate ahead of any scored run. That pre-emption does not apply. Two caveats travel with it: 19 is close to the 20 attachment cap, so a sweep that grows past ~15 calls must be re-tested rather than extrapolated; and this ran through the API path, not the panel.
+**Concurrency discovery (unplanned):** the 19 calls arrived in **six timestamp batches of up to 4 concurrent calls**, not 19 sequential reason-act rounds. Two consequences. (a) Latency is far better than a sequential model predicts. (b) The ordered seven-layer sweep is **less enforceable than the LLD assumed**: `AGENT_DOCTOR_ARCHITECTURE.md` §3's "playbook order is *suggested* via instructions, not enforced" is correct, but for a stronger reason — the harness issues several probes in one batch *before seeing any result*, so a probe cannot consume an earlier probe's output within a batch. Any tool whose input depends on a prior tool's finding must either be designed to tolerate that input being absent, or the dependency must be made explicit and sequential in the instructions. `PaEvidenceCollector` (§2.1) is unaffected — it runs the cores in fixed order with no LLM — which strengthens the case for it as the ordering-guaranteed path.
+
+**R-4 — Benchmark transferability is a BINDING constraint on the scorecard, not a caveat. (2026-07-30)**
+**Found:** spec §6 requires that the OOB default of `sn_aia.continuous_tool_execution_limit` be recorded separately from any value we later tune to, because a scorecard produced under a raised ceiling measures a configuration the customer does not have. **P2 could not establish the shipped default.** The property reads `25` on keynexus01, with `sys_updated_on` bit-identical to `sys_created_on` (the signature of "never modified after creation") but `sys_updated_by = admin`, not blank. Those two signals point opposite ways and were recorded unresolved rather than reconciled. The OOB default is therefore **genuinely unknown**, not "25". (The separate dictionary default of `10` for `sn_aia_agent_tool_m2m.max_auto_executions` is a *different knob* — per-binding, not instance-wide — and is not a substitute for it.)
+**Change, binding on `IMPLEMENTATION_PLAN.md` Tasks 11–12:** every scored run's scorecard row **must record the `sn_aia.continuous_tool_execution_limit` value that run executed under**, read at run time, not assumed. If that value differs from the OOB default, `benchmark/DECISION.md` must state so explicitly and say what the difference is. Because the OOB default is unknown, `benchmark/DECISION.md` must additionally state that it is unknown and that transferability to a default-configured customer instance is therefore **unverified** — it may not silently treat `25` as the default. Establishing the true shipped default (fresh instance, release notes, or ServiceNow docs) is a prerequisite for any transferability claim. Filed as a ruling now specifically so it survives the Phase 0 → Phase 1a boundary.
+
+**R-5 — Three corrections to the LLD §4.7 script-tool contract. (2026-07-30)**
+**Found:** established by three failed probe executions before a clean one. All three are defects in our own documented contract, not platform limitations.
+1. `input_schema` is an **ARRAY**, `[{"name":…,"description":…,"mandatory":…}]` — **not** a JSON Schema object. Supplying a JSON-Schema object causes a **silent non-terminating stall**: the execution hangs in `In progress` forever (`AiAgentBaseDao: TypeError: The object is not a string`, then `AgentReActUtil: Cannot find function filter in object`). This is the single most expensive defect found in Phase 0 — it fails silently.
+2. **There is no `outputs` object.** The signature is `(function(inputs) { … return result; })(inputs)`. Referencing `outputs` throws `ReferenceError: "outputs" is not defined` and terminates the run.
+3. Execution scope is **`rhino.global`**, and `gs.getSessionID()` returns the literal **`"SYSTEM"`**.
+**Change:** LLD §4.7 (`PaScriptToolAdapter`) must be corrected to these three facts before any of the 7 tool cores is written, and the adapter's own template must embody them. Correcting the LLD body is a separate, not-yet-taken decision — recorded here as the ruling that forces it.
+
+**R-6 — Three naming defects in the design docs; a tool written to the documented names fails. (2026-07-30)**
+**Found:** three separate places where the docs name something that does not exist on the instance.
+1. **`sys_log` → `syslog`.** `docs/LOW_LEVEL_DESIGN.md` (§2 area, lines ~96, ~112 and §4.4 ~221) and `docs/AGENT_DOCTOR_ARCHITECTURE.md` (lines ~63, ~87) name the system log table `sys_log`. **That table does not exist on keynexus01** — a direct `sys_db_object` query for `name=sys_log` returns zero rows. The real table is `syslog`. The docs are already internally inconsistent: LLD line ~102 and ~221 both cite `syslog.filter` as the sanctioned pattern in the same breath as the wrong name. `PaToolLogAnalysis` written to the documented name fails outright.
+2. **`sn_aia_admin` → `sn_aia.admin`.** LLD §1 (line ~22) cites the role as `sn_aia_admin`; the instance's real role is **`sn_aia.admin`** (dot-separated), alongside `sn_aia.viewer`.
+3. **`sn_aia_execution_task` field names.** LLD §2.1 names `state`, `task_type` and `agent`. The real fields are **`status`** (not `state`), **`type`** (not `task_type`), and there is **no `agent` field at all**. Requesting the wrong names returns rows with those fields silently absent rather than erroring — so `PaToolAgentTrace` would return blank task detail and look like an empty result rather than a bug.
+**Change:** all three must be corrected in `docs/LOW_LEVEL_DESIGN.md` and `docs/AGENT_DOCTOR_ARCHITECTURE.md` before the affected tools are built. **Not corrected in this pass** — the LLD body was deliberately left untouched outside §8; this ruling is the record that forces the correction as its own decision. Two related facts to fold in at the same time: `sn_aia_execution_task` also carries useful undocumented fields the trace tool wants (`parent` — the task *tree* — plus `order`, `output`, `execution_time_ms`, `start_time`/`end_time`, `metadata`, `og_task_id`, `task_dependencies`); and **execution tasks are not 1:1 with tool calls** (27 task rows for 19 tool calls), so `PaToolAgentTrace` must not assume that mapping.
+
+**R-7 — `context_processing_script` is auto-populated; LLD §5's "keep ours empty" is unachievable by omission. (2026-07-30)**
+**Found:** LLD §5 record 17 instructs "no custom `context_processing_script` (verified failure vector — keep ours empty)". Creating an `sn_aia_agent` with the field simply omitted did **not** leave it empty — the platform populated it with a default template script. `applicability_script` was likewise auto-populated, with a body ending in `return false;`. This matters because the instance's known reference failure (`78f347b7…`, LLD §1) has its root cause in a `context_processing_script` throwing at line 61 — i.e. the exact field class we intended to avoid arrives populated by default.
+**Change:** LLD §5's instruction is not implementable as written and must be restated: the field must be **explicitly cleared after creation** if an empty value is genuinely wanted, and the Foundry automation that creates the agent record set must do that clearing and verify it. "Omit the field" is not a control. Also worth folding into the design: the auto-populated script's own signature documents that `task`, `user_utterance`, `agent_id` and `context` (`pageContext`, `triggerContext`) are available at that hook — a different and better-documented surface than the script-tool runtime context of R-2.
+
+**R-8 — MCP reconnaissance understates in-instance access; REST denial is not an ACL denial. (2026-07-30)**
+**Found:** `sn_aia_tools_execution` reads **OK** via `GlideRecordSecure` from inside the running script tool, but is **denied to the same admin user over the REST API** (`servicenow_query` → "Access denied: Insufficient rights to query records"). The denial is an API-layer restriction, not a table ACL.
+**Change, methodological and binding on the remaining verification items:** an MCP/REST probe result may **not** be used as a proxy for what an in-instance tool can read. A REST denial is evidence of nothing about tool-runtime access and must be re-tested in-instance before any capability is written off. This cuts both ways: it is an argument *for* the in-instance design (the tools can see more than the recon suggested), and a caution that Phase 0's read-only reconnaissance systematically **understates** available access. Any Phase 1a decision that turns on "table X is unreadable" must cite an in-instance test, not an MCP result.
+
+**R-9 — Declared tool inputs are not reliably passed; tolerant input parsing is load-bearing, not defensive. (2026-07-30)**
+**Found:** in every probe run the agent logged `inputs: {}` — it never passed the declared `layer` value, despite an explicit instruction to pass it, a correctly declared `layer` input in the schema, and its own reasoning text asserting *"calling pa_probe_context once with layer set to \"1\""*. The model said it was passing the value and did not.
+**Change:** LLD §4.7's "tolerant input parsing" requirement is promoted from a robustness nicety to a hard correctness requirement: **every tool core must behave correctly when every declared input is absent**, and must not report an error that a diagnostician would read as a platform fault when it is simply a missing input. This is empirical, not anticipatory.
+
+**R-10 — `PaToolGenAiLog` cannot surface raw prompt/response for a non-admin caller. (2026-07-30)**
+**Found:** the prompt/response payload lives in `sys_generative_ai_log` (`prompt`, `response`), **not** in the `sys_gen_ai_log_metadata` / `sys_gen_ai_metadata_document` tables the LLD names. Its read ACLs grant only `sn_na_analytics.ai_engmt_viewer`, `maint` and `admin`. The AI-Agent role set a customer administrator actually holds — `sn_aia.admin` / `sn_aia.viewer` — is **absent from every read ACL on that table**, though it does grant read on the metadata table.
+**Change:** this is a real capability limit on 1 of the 7 Phase 1a tools, and must be specified rather than discovered at demo time. `PaToolGenAiLog` must (a) read `sys_generative_ai_log.prompt`/`.response` as its payload source, (b) **degrade explicitly** when the caller lacks the role — returning a stated "payload not readable under caller's roles; metadata only" result rather than an empty or ambiguous one — and (c) have that degradation documented in `HANDOFF.md` as a customer-side prerequisite (`maint` or equivalent grant) rather than a bug.
+
+**R-11 — No Now Assist product plugin on keynexus01: a blocking provisioning gap, and the reason several Phase 0 closures are provisional. (2026-07-30)**
+**Found:** `panel_available: false`. Only `Now Assist Core`, `now-assist-self-service` and the Skill Step Plugin are active — **no** Now Assist **product** plugin (ITSM / HRSD / CSM / SecOps) exists or is active. LLD §1 records that the Now Assist Panel requires ≥1 such plugin. No `sys_properties` entry independently disables the panel; the plugin gap alone is sufficient.
+**Change:** this is an **instance-provisioning task, not a design change**, and it is the one falsification row that landed on the blocking side. Its reach is wider than E1's provisionality: **LLD §7's smoke test and the K26 lab prerequisites both assume panel-based testing**, and neither can run as written until it is fixed. It must be closed before the benchmark, and it is the reason the Phase 0 verdict is **conditional** rather than an unqualified go. Everything Phase 0b established came through `servicenow_aia_execute` — the API path — and carries that qualification.
+
+**R-12 — `syslog` carries a restrictive `caller_access`; `PaToolLogAnalysis` needs a resolved access path. (2026-07-30)**
+**Found:** of every table examined in Phase 0, exactly one carries a non-default restrictive setting: `syslog` has `caller_access = Caller Restriction` (an explicit departure from the empty/unrestricted dictionary default). All 11 §2 `sn_aia_*`/`sys_gen_ai_*` tables are unrestricted. `syslog` is the data source for `log_analysis` / `PaToolLogAnalysis`, one of exactly 7 Phase 1a tools, and is not on any §2 deferral list.
+**Change:** cross-scope reads of `syslog` from the `x_pa_*` scope must be resolved **at build time, before `PaToolLogAnalysis` is written** — either by confirming a `sys_scope_privilege` Read grant against `syslog` is obtainable from our scope, or by adopting a documented fallback (e.g. the tool running in Global, or log evidence sourced through a different path). It is not covered by the P4 "scoped_read_viable: likely" verdict, which rests only on the 11 §2 rows.
+
+---
+
+*Next steps agreed in spar: fold changes 2.1–2.4 into `docs/IMPLEMENTATION_PLAN.md` (new collector task; scorecard field; anchor keying rule) and `docs/LOW_LEVEL_DESIGN.md` (§4.6 anchor spec, §7 protocol, §8 items). Drift review after Phase 1a build compares the built system to this record.*
