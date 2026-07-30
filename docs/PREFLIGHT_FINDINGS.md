@@ -1107,7 +1107,33 @@ Note: the table has no separate structural field distinguishing a "User Access" 
 ## Phase 0b — Disposable probe agent
 
 ### Created records
-_Pending. Every sys_id recorded here as created._
+
+Every sys_id is recorded here **as it is created**, and committed before the next
+record is created, so Task 11 cleanup is always possible even if a later step aborts.
+
+| # | Table | Name | sys_id | Created | Deleted |
+|---|-------|------|--------|---------|---------|
+| 1 | `sn_aia_tool` | `pa_probe_context` | `218f555b2f1243d0f824ac1bcfa4e39b` | 2026-07-30 11:51:10 | _pending Task 11_ |
+
+**Note on scope — record verbatim, it qualifies E1.** The created `sn_aia_tool` record
+landed in **`sys_scope: Global`** (and `sys_package: Global`), not in the `sn_aia` scope,
+despite `sn_aia_tool` itself being an `sn_aia`-scoped table. Consequence for E1: the probe
+script executes in **Global** scope, which has broad table access. Therefore E1's
+`GlideRecordSecure` read results demonstrate that a script tool *can* reach these tables,
+but they do **not** simulate a read from a restricted custom application scope
+(`x_pa_*`). The P4 cross-scope question is not closed by this probe — it remains as
+recorded in P4: static half closed, runtime half carried forward to build time.
+
+Probe tool configuration as created:
+
+- `type` = `script` (stored value confirmed in P3)
+- `active` = `true`
+- `input_schema` declares one input, `layer` (string), so E1 also reveals whether and in
+  what shape inputs reach the script — not only what globals exist.
+- `script` = the read-only context-dump body specified in the plan, amended in one respect:
+  the table list it attempts to read uses **`syslog`** and **`sys_generative_ai_log`**, the
+  real table names established by P4 and P5, rather than the non-existent `sys_log` and the
+  metadata-only `sys_gen_ai_log_metadata` named in the original plan text.
 
 ### E1 — Runtime context dump (LLD §8.5)
 _Pending._
