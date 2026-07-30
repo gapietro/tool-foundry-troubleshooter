@@ -300,7 +300,279 @@ Failed precondition: **no Now Assist product plugin (ITSM/HRSD/CSM/SecOps) is ac
 Per the brief's Step 4 wording, **this does not stop Phase 0b.** `servicenow_aia_execute` fires an agent through the API without the panel, so E1 and E2 still run — but E1's answer becomes **provisional**, because the production path is the panel and runtime identifiers may differ between the API and panel execution paths. Resolving the missing product plugin is an instance-provisioning task, not a design change, and must be completed before the benchmark.
 
 ### P2 — Loop budget (DESIGN 2.2)
-_Pending._
+
+**Step 1 — Continuous execution limit property.**
+
+```
+Table: sys_properties
+Query: nameLIKEcontinuous_tool_execution^ORnameLIKEtool_execution_limit
+Fields: name, value, description, sys_created_on, sys_updated_on, sys_updated_by
+Result: Found 1 record(s)
+
+[1] sys_id: 8611f7a4433112106c3603295bb8f219
+  name: sn_aia.continuous_tool_execution_limit
+  value: 25
+  description: Maximum limit for continuous, uninterrupted executions for the same tool.
+  sys_created_on: 2024-11-08 07:21:07
+  sys_updated_on: 2024-11-08 07:21:07
+  sys_updated_by: admin
+```
+
+Note on interpretation: `sys_updated_by` is **not** empty here — it reads `admin`, not blank — which at first glance looks like evidence of a manual change. But `sys_updated_on` is bit-for-bit identical to `sys_created_on` (`2024-11-08 07:21:07`, same to the second), which is the actual signature of "never modified after creation": ServiceNow stamps `sys_updated_by`/`sys_updated_on` at insert time too, and plugin-seeded properties are frequently inserted under the `admin` user rather than a `system` account, depending on how the install ran. Recording both facts verbatim rather than resolving them into a single verdict: (a) `sys_updated_by = admin`, not empty; (b) `sys_updated_on == sys_created_on` to the second. (b) is the stronger signal of "untouched since install." No corrective re-query was run against a different field — this is the one property record that matched, returned as-is.
+
+**Step 2 — `sn_aia_agent_tool_m2m` schema and dictionary default for `max_auto_executions`.**
+
+`servicenow_schema` (28 fields total, full list below) confirms `max_auto_executions` exists as type `integer`, labeled "Maximum auto executions" — but the schema tool's output does not surface a dictionary default value, so a direct `sys_dictionary` query was run as a follow-up to get it:
+
+```
+Table: sys_dictionary
+Query: name=sn_aia_agent_tool_m2m^element=max_auto_executions
+Result: Found 1 record(s)
+
+[1] sys_id: d8444c242f37f210f824ac1bcfa4e399
+  element: max_auto_executions
+  internal_type: integer
+  default_value: 10
+  mandatory: false
+  active: true
+  sys_created_on: 2026-03-19 16:32:09
+  sys_updated_on: 2026-03-19 16:32:09
+  sys_updated_by: system
+```
+
+`sys_updated_on == sys_created_on` here too, and `sys_updated_by = system` — consistent with an untouched, plugin-installed dictionary entry. Dictionary default: **10**.
+
+<details>
+<summary>Full field list — <code>sn_aia_agent_tool_m2m</code> (28 fields, extends <code>sys_metadata</code>, scope <code>sn_aia</code>, not extendable) — needed by Task 5 and Task 7</summary>
+
+```
+display_mode (choice) "Display Mode"
+execution_mode (choice) "Execution mode"
+agent (reference → sn_aia_agent) [mandatory] "Agent"
+pre_run (boolean) "Pre Run"
+requires_widget_transformation (boolean) "Requires Widget Transformation"
+should_display_refined_message (boolean) "Should display refined message"
+widgets (glide_list → sys_ux_widget) "Widgets"
+sys_domain (domain_id) "Domain"
+transformation_instructions (string) "Transformation instructions"
+entity (table_name) "Entity"
+entity_id (document_id) "Entity ID"
+name (string) [mandatory] "Name"
+output_transformation_strategy (choice) "Output transformation strategy"
+tool (reference → sn_aia_tool) [mandatory] "Tool"
+post_message (translated_text) "Post message"
+sys_id (GUID) "Sys ID"
+tool_attributes (json) "Tool attributes"
+inputs (json) "Inputs"
+display_output (boolean) "Display output"
+description (string) "Description"
+timeout (integer) "Timeout"
+pre_message (translated_text) "Pre message"
+requires_text_refined_message (boolean) "Requires text refined message"
+sys_overrides (reference → sn_aia_agent_tool_m2m) "Overrides"
+post_processing_script (script) "Post processing script"
+max_auto_executions (integer) "Maximum auto executions"
+active (boolean) "Active"
+document_status (choice) "Document status"
+```
+
+</details>
+
+**Step 3 — What agent/tool pairs actually use, instance-wide.**
+
+The brief's exact query (`fields: agent, tool, max_auto_executions, execution_mode, output_transformation_strategy, display_output, active`, `displayValue: all`, `limit: 200`) was run first and hit the 200-row page limit ("Found: 200 record(s) (limit reached)") — **not** an empty result, but a truncated one, which is its own kind of misleading-if-uninvestigated result per the brief's rule 5. Re-ran with `limit: 500` to get the true total:
+
+```
+Table: sn_aia_agent_tool_m2m
+Fields: agent, tool, max_auto_executions, execution_mode, output_transformation_strategy, display_output, active
+displayValue: all, limit: 500
+Result: Found 483 record(s) (no further truncation — 483 < 500)
+```
+
+This is materially different from the brief's framing of "the 19 OOB agents": the table holds **483** agent-tool mappings spanning **141 distinct `agent` display values** (including 15 rows where `agent` resolved to empty — i.e. an orphaned/broken reference, and 4 rows where `agent` is a bare sys_id string rather than a resolved name, suggesting deleted or inaccessible agent records). This instance is not limited to the 19 shipped OOB agents — it carries a much larger population of agents (custom, CoE-built, and product-shipped) with tool bindings. The distribution below is over the full instance-wide population actually present, not a filtered "OOB-only" 19-agent subset — no field on this table distinguishes OOB-shipped agents from custom ones, so that filter could not be applied without a separate join to `sn_aia_agent` scope/vendor metadata, which the brief did not request.
+
+`max_auto_executions` distribution across all 483 rows:
+
+```
+value 10  → 477 rows
+value 3   →   3 rows
+value 2   →   2 rows
+value 50  →   1 row
+```
+
+The non-default rows, by agent/tool:
+
+```
+max_auto_executions=3, agent="Incident Category Configuration AI Agent", tool="Validate and Process Categories", execution_mode=Autonomous
+max_auto_executions=3, agent="Incident Category Configuration AI Agent", tool="Bulk Category Importer", execution_mode=Autonomous
+max_auto_executions=3, agent="Incident Category Configuration AI Agent", tool="Database Manager", execution_mode=Autonomous
+max_auto_executions=2, agent="Incident Category Configuration AI Agent", tool=19d43b0f2ffe7210b488941bcfa4e35a (unresolved sys_id), execution_mode=Autonomous
+max_auto_executions=2, agent="ITSM incident resolution investigation AI agent", tool="AIA RAG Retriever", execution_mode=Autonomous
+max_auto_executions=50, agent="Smart Documents Agent", tool="Get answer from document", execution_mode=Autonomous
+```
+
+Other cross-tabs recorded for completeness: `active` — 482 `true` / 1 `false`; `execution_mode` — 459 `Autonomous` / 24 `Supervised`.
+
+<details>
+<summary>Full verbatim per-agent row counts (141 distinct <code>agent</code> display values, from the 483-row / limit:500 query)</summary>
+
+```
+(empty/unresolved agent reference) 15
+AI Search Configuration Agent 5
+AI Search XCC Agent 7
+AICT Security Analyzer Agent 2
+Additional incident context AI agent 4
+Approval Assistance Agent 5
+Architecture KB Analyzer 2
+Architecture KB Analyzer v2 2
+Architecture KB Analyzer v3 2
+Architecture KB Analyzer v4 1
+Architecture KB Analyzer v5 2
+Architecture KB Analyzer v6 1
+Automation Finder 3
+Automation Table Discovery Agent 3
+CAB Configuration Agent 2
+CI form contextual help AI agent 2
+CMDB CI creator AI agent 2
+CMDB Data Model Navigator Agent 1
+CMDB Staleness Remediation AI agent 4
+CMDB Visibility Analyzer Agent 5
+CMDB data certification and attestation manager AI agent 2
+CMDB data ownership manager AI agent 3
+CMDB health metrics manager AI agent 3
+CMDB life cycle manager AI agent 2
+CMDB lifecycle insights AI agent 3
+CMDB principal class manager AI agent 5
+CMDB search AI agent 3
+Catalog Agent 6
+Categorize ITSM incident AI agent 2
+Change CI suggestion AI agent 4
+Change Models Configuration Agent 4
+Change Request Plans AI Agent 3
+Change Risk Configuration Agent 6
+Change Schedule Configuration Agent 7
+Change Team Role Configuration Agent 5
+Change conflict assessor AI agent 10
+Change outage assistant AI agent 5
+Change quality assessor AI agent 7
+Classify service and CI AI agent 2
+Clone FAQ Agent 1
+Clone Troubleshooting Agent 1
+Configuration item summarization AI agent 1
+Create Incident AI Agent 3
+Create incident with voice AI agent 1
+Data Visualization Generation Agent 1
+Data and Policy Configuration Agent 6
+Decomposition Agent 5
+Document and visual insights AI agent 6
+Edit Model Provider Agent 5
+Elastic Log Analyst 2
+Email Generator Agent 2
+Email action and information AI agent 11
+Error Analysis and Remediation Agent 7
+Explain SLA 4
+Find catalog item AI agent 1
+Guardian Settings Modifier Agent 4
+Guardian Settings Modifier Agent NAC 4
+Guardian Settings Viewer Agent 3
+Guardian Settings Viewer Agent NAC 3
+ITSM incident resolution investigation AI agent 4
+ITSM incident resolution plan investigation AI agent 3
+Image Processor Agent 6
+Incident Category Configuration AI Agent 4
+Incident context AI agent 4
+Incident knowledge article AI agent 4
+Incident known error article AI agent 2
+Incident resolution details AI agent 4
+Incident routing configuration agent 4
+Incident trends analyzer 1
+Instruction Refinement AI agent 2
+Intent Executor Agent 3
+Intent Identification Agent 2
+Issue readiness 2
+Issue trend analysis AI agent 3
+KB content consolidation AI agent 1
+KB content creation AI agent 2
+Language Configuration Agent 2
+Link incident to problem AI agent 2
+Link major incident or problem AI Agent 3
+Manage ticket with voice AI agent 4
+Model Provider Policy Agent 1
+Model Provider Query and History Agent 4
+Model Version Modifier Agent 7
+Model Version Viewer Agent 3
+NAC Help Agent 1
+Next action recommendation AI agent 8
+Notification Agent 13
+Notification Content Agent 7
+Password reset with voice AI agent 3
+Performance analysis AI agent 2
+Playbook Activity Context Agent 1
+Playbook data gathering and processing agent 7
+Prioritize work AI agent 4
+Proactive Escalation AI Agent 2
+Problem investigator 3
+Problems investigation AI agent 2
+Recommend Service Graph Connectors AI agent 1
+Record field value prediction AI agent 10
+Record management AI agent 11
+Request Status Agent 6
+Request catalog item with voice AI agent 7
+SGC Debugger AI Agent 7
+SHA Diagnostic Agent 1
+SIGNAL Diagnosis Agent 3
+SIGNAL Resolution & Routing Agent 3
+SRE Context Test — Mock Data Gatherer v2 1
+SRE Context Test — Mock ITSM Enricher v2 1
+SRE Context Test — Mock Telemetry Collector v2 1
+SRE Context Test — SRE Analyst v2 1
+SRE Elastic Log Analyzer v1 2
+Schedule Change Request AI Agent 4
+ServiceNow Record Navigator 2
+Skill Configuration AI Agent 2
+Skill Configuration Agent 2
+Skill Discovery AI Agent 2
+Skill Discovery Agent 2
+Smart Documents Agent 1
+Standard change template proposal AI agent 3
+Standard change template recommender AI agent 3
+Submit account unlock catalog with voice AI agent 1
+Suggested Actions AI Agent 8
+Survey Analysis AI agent 2
+Survey analyzer 1
+Survey filling answer suggester 1
+Survey filling data collection AI agent 1
+Survey filling data collector 1
+Survey requirement collector 1
+Survey response suggestion AI agent 1
+Theme Builder Agents 1
+Translation Settings Agent 3
+Troubleshoot outlook issue with voice AI agent 2
+Troubleshooting Agent 4
+UI Builder Agent 17
+Update work plan AI agent 1
+Web Automation Agent 1
+Web research and recommendation AI agent 2
+Work Allocator AI Agent 2
+cfe83365ffe0c7108b82ffffffffff84 (unresolved sys_id) 1
+e1ea5d623be1b210712d6764c3e45aae (unresolved sys_id) 1
+e79ccf80333c4310c92afba19e5c7b6f (unresolved sys_id) 1
+e83f0971fb10c31015fcfee34eefdcb7 (unresolved sys_id) 1
+```
+
+</details>
+
+**Step 4 — Recorded values and verdict.**
+
+```
+oob_default: 10   (sys_dictionary default_value for max_auto_executions on sn_aia_agent_tool_m2m; sys_updated_on == sys_created_on, sys_updated_by = system → untouched since install)
+current_value: 25 (sys_properties sn_aia.continuous_tool_execution_limit; sys_updated_on == sys_created_on, but sys_updated_by = admin, not empty — see Step 1 caveat)
+oob_m2m_distribution: 477/483 rows at 10 (the dictionary default), 3 rows at 3, 2 rows at 2, 1 row at 50 — overwhelmingly clustered at the shipped default, with a handful of deliberate per-tool overrides both below (2–3) and above (50) the default; none of the 483 rows sit anywhere near the property-level ceiling of 25
+```
+
+These two numbers are **not the same knob**: `sn_aia.continuous_tool_execution_limit` (25) is an instance-wide property governing continuous/uninterrupted executions of the *same tool*, while `max_auto_executions` (dictionary default 10) is a per-agent-tool-binding field on `sn_aia_agent_tool_m2m` governing that specific tool binding's auto-execution ceiling. They differ in scope (global vs. per-binding) and in value (25 vs. 10), and neither shows unambiguous evidence of manual tuning on this instance — both have `sys_updated_on == sys_created_on`, though the property's `sys_updated_by = admin` (not blank) leaves a residual ambiguity flagged above rather than resolved.
+
+**Predicted E2 ceiling:** the operative per-tool-call ceiling for any given OOB-shaped agent-tool binding is **10** (the `max_auto_executions` dictionary default that 477/483 rows actually carry), not the property value of 25 — the property is a broader, same-tool continuous-execution safety net that sits above the per-binding ceiling and would only bind if a binding's own `max_auto_executions` were raised past it (as the one outlier at 50 does). Task 9 (E2) should expect the loop to stop at 10 auto-executions for a default-configured tool binding, with the possibility of stopping earlier if a specific binding has been configured below default (as seen on 6 of the 483 rows here), and should treat 25 as the instance-wide backstop rather than the expected per-tool stop point.
 
 ### P3 — Execution mode choices (LLD §8.1)
 _Pending._
