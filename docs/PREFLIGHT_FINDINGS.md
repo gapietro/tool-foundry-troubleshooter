@@ -1195,7 +1195,106 @@ Probe tool configuration as created:
   metadata-only `sys_gen_ai_log_metadata` named in the original plan text.
 
 ### E1 — Runtime context dump (LLD §8.5)
-_Pending._
+
+**Verdict: `per_conversation_key` = `_agentic_context_.conversation_id`. LLD §8.5 CLOSED.
+`DESIGN.md` 2.4's benchmark-blocking question is answered affirmatively.**
+
+#### The answer
+
+A script tool receives an undocumented global named **`_agentic_context_`**. It is a
+**JSON string** (`typeof` = `"string"`, so it must be `JSON.parse`d, not read as an object)
+containing exactly the identifiers `PaRunAnchor` needs:
+
+```json
+{
+  "agent_id":         "7abf5ddf0f9e87d0fc5c28f300d1b220",
+  "conversation_id":  "cbb1a1df2f1243d0f824ac1bcfa4e38e",
+  "usecase_id":       "",
+  "execution_plan_id": "17b16ddf2f1243d0f824ac1bcfa4e390"
+}
+```
+
+Corroborated two ways: the `execution_plan_id` matches the Execution ID the API returned
+for this run (`17b16ddf…`), and a separate global key
+`SYSTEM_LOCK:sys_cs_conversation:cbb1a1df2f1243d0f824ac1bcfa4e38e` carries the same
+conversation sys_id.
+
+**Consequence for the design.** `DESIGN.md` 2.4 disqualified time-window run-anchor keying
+for scored runs and named two fallbacks — the doctor's own `sn_aia_execution_plan` sys_id, or
+a tester-passed run token. Neither fallback is needed: a genuine hard per-conversation key is
+available directly. `PaRunAnchor` should key on `_agentic_context_.conversation_id`, with
+`execution_plan_id` available as a second, finer-grained key. Time-window keying can be
+dropped from the design entirely rather than merely disqualified for scored runs.
+
+**Caveat — provisional, as planned.** This was obtained via the API path
+(`servicenow_aia_execute`), not the Now Assist panel, because P1 found no Now Assist product
+plugin active. The production path is the panel. `_agentic_context_` is also undocumented,
+so it is not contractually stable across upgrades. Both facts must be re-confirmed before the
+benchmark.
+
+#### What is NOT available
+
+From an explicit `typeof` probe of 20 candidate names:
+
+| Available | Not available (`undefined`) |
+|---|---|
+| `inputs` (object), `_agentic_context_` (string), `sn_aia` (object), `current` (object), `gs` | `outputs`, `context`, `task`, `user_utterance`, `agent_id`, `execution_plan_id`, `executionPlanId`, `conversationId`, `conversation_id`, `parentSubtaskId`, `toolM2mId`, `agentId`, `vaInputs`, `vaVars`, `vaSystem`, `scratchpad` |
+
+Note the trap: the identifiers exist **only** inside `_agentic_context_`. The obvious bare
+names (`conversation_id`, `execution_plan_id`, `agent_id`) are all `undefined` despite being
+the exact key names inside it.
+
+`current` is an object but **not** a GlideRecord — both `getTableName()` and
+`getUniqueValue()` are absent.
+
+#### The script-tool contract — three corrections to LLD §4.7
+
+Established by three failed executions before a clean one. All three are defects in the
+plan/LLD, not platform limitations:
+
+1. **`input_schema` is an ARRAY, not a JSON Schema object.** Real format, confirmed against
+   OOB tool `check_multisource_data`:
+   `[{"name":"layer","description":"…","mandatory":false}]`.
+   Supplying a JSON-Schema object (`{"type":"object","properties":{…}}`) causes the agent to
+   stall silently — `AiAgentBaseDao: Error retrieving inputs for tool: TypeError: The object
+   is not a string`, then `AgentReActUtil: Error filtering tools config inputs: Cannot find
+   function filter in object`. The execution hangs in `In progress` and never terminates.
+2. **There is no `outputs` object.** The signature is `(function(inputs) { … return result; })(inputs)`.
+   Referencing `outputs` throws `ReferenceError: "outputs" is not defined` and terminates the run.
+3. **Execution scope is `rhino.global`**, and `gs.getSessionID()` returns the literal
+   `"SYSTEM"` — not a per-conversation value. Anything keyed on session ID would collide
+   across conversations.
+
+#### Cross-scope reads from the script — all five tables readable
+
+`GlideRecordSecure` reads attempted from inside the running tool:
+
+| Table | Result |
+|---|---|
+| `sn_aia_execution_plan` | OK |
+| `sn_aia_message` | OK |
+| `sn_aia_tools_execution` | OK |
+| `sys_generative_ai_log` | OK |
+| `syslog` | OK |
+
+**An important asymmetry, recorded rather than resolved.** `sn_aia_tools_execution` reads
+**OK from inside the script tool** but is **denied to the same admin user over the REST API**
+(`servicenow_query` → "Access denied: Insufficient rights to query records"). So the denial is
+an API-layer restriction, not a table ACL. Consequence: MCP-based reconnaissance systematically
+understates what an in-instance tool can read — which is an argument *for* the in-instance
+design, and a caution against using MCP probe results as a proxy for tool-runtime access.
+These reads ran in **Global** scope (see Created records), so they still do not settle P4's
+runtime half for a restricted `x_pa_*` scope.
+
+#### Agent behaviour finding — declared inputs were not passed
+
+In every run the agent logged `inputs: {}` — it never passed the `layer` value, despite an
+explicit instruction to pass the sequence number, a declared `layer` input in the schema, and
+its own reasoning text stating *"calling pa_probe_context once with layer set to \"1\""*. The
+model said it was passing the value and did not. Relevant to tool design: `PaScriptToolAdapter`
+must treat every declared input as potentially absent, which the LLD §4.7 "tolerant input
+parsing" requirement already anticipates — this is empirical confirmation that it is load-bearing,
+not defensive boilerplate.
 
 ### E2 — 15-call endurance (DESIGN 2.2, 2.3)
 _Pending._
