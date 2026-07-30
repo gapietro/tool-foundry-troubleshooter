@@ -682,7 +682,189 @@ execution_mode=autopilot
 `autopilot` is the exact literal that means unsupervised/autonomous execution on `sn_aia_agent_tool_m2m.execution_mode` — not the label "Autonomous". The tool-type literal for "script" is `script` (not the label "Script") on `sn_aia_tool.type`. Both literals are confirmed both in `sys_choice` metadata (Steps 1–2) and in live production usage on this instance (Step 3: 361 script-type m2m rows already run with `execution_mode=autopilot`). Proceed — Task 7 should write `execution_mode=autopilot` verbatim, attached to a tool whose `type=script`, when creating the probe m2m row.
 
 ### P4 — Cross-scope reachability (LLD §8.4)
-_Pending._
+
+**Why this matters:** if any §2 table is unreadable from a non-global scope, the diagnostic tool cores cannot live in their own scoped app, and LLD §6's build approach changes before Task 1. Step 1's `access`/`caller_access` values are the load-bearing data for that call.
+
+**Step 1 — table access settings, brief's exact query.**
+
+```json
+{"table": "sys_db_object",
+ "query": "nameINsn_aia_execution_plan,sn_aia_execution_task,sn_aia_tools_execution,sn_aia_message,sn_aia_agent,sn_aia_tool,sn_aia_agent_tool_m2m,sn_aia_usecase,sn_aia_trigger_configuration,sys_gen_ai_usage_log,sys_gen_ai_log_metadata,sys_log",
+ "fields": ["name", "label", "access", "caller_access", "read_access", "sys_scope"],
+ "displayValue": "all", "limit": 100}
+```
+
+Result: **"Found: 11 record(s)"** — one short of the 12 names in the query. `sys_log` did not match anything (recorded verbatim below, then investigated).
+
+| name | label | sys_scope | access | caller_access | read_access |
+|---|---|---|---|---|---|
+| sn_aia_message | Message | Now Assist AI Agents | (empty) | (empty) | true |
+| sn_aia_usecase | Use case | Now Assist AI Agents | (empty) | (empty) | true |
+| sn_aia_tools_execution | Tools Execution | Now Assist AI Agents | (empty) | (empty) | true |
+| sn_aia_agent_tool_m2m | Agent Tool | Now Assist AI Agents | (empty) | (empty) | true |
+| sn_aia_agent | AI Agent | Now Assist AI Agents | (empty) | (empty) | true |
+| sn_aia_tool | Tool | Now Assist AI Agents | (empty) | (empty) | true |
+| sn_aia_trigger_configuration | AIA Trigger Configuration | Now Assist AI Agents | (empty) | (empty) | true |
+| sn_aia_execution_task | Execution Task | Now Assist AI Agents | (empty) | (empty) | true |
+| sn_aia_execution_plan | Execution Plan | Now Assist AI Agents | (empty) | (empty) | true |
+| sys_gen_ai_log_metadata | Gen AI Log Metadata | Global | (empty) | (empty) | true |
+| sys_gen_ai_usage_log | Generative AI Usage Log | Global | (empty) | (empty) | true |
+
+**Investigating the missing `sys_log`.** Re-queried `sys_db_object` with `name=sys_log` alone: **"No records found in \"sys_db_object\" matching query: name=sys_log."** — verbatim, confirmed not a typo-of-display, the table literally does not exist under that name. Broadened to `nameLIKEsyslog^ORnameLIKEsys_log` (limit 20): returned 20 `syslog_*` extension/partition tables (e.g. `syslog_awa*`, `syslog_data_privacy*`, `syslog_cancellation*`), capped at the 20-row limit requested, but none named exactly `syslog`. Direct follow-up `name=syslog` (limit 10) resolved the real base table:
+
+```
+Table: sys_db_object, Query: name=syslog, limit 10
+Found: 1 record(s)
+[1] name: syslog | label: Log Entry | sys_scope: Global | access: (empty) | caller_access: Caller Restriction | read_access: true
+```
+
+This is the one materially different value found anywhere in Step 1: `syslog` (the base System Log table LLD §2's "sys_log" almost certainly intends) carries **`caller_access: Caller Restriction`**, not empty — a real, restrictive, non-default setting. It is a genuine choice, not a display artifact: `sys_choice` for `sys_db_object.caller_access` (queried below) has exactly two values, `1 = "Caller Tracking"` and `2 = "Caller Restriction"`, and `sys_dictionary` confirms `caller_access.default_value` is empty (`choice: "Dropdown with -- None --"`), so an *empty* value is the unrestricted default and `syslog`'s explicit "Caller Restriction" is a deliberate departure from it.
+
+Interpreting the "(empty)" values on the 11 real §2 tables: `sys_dictionary` for `sys_db_object.access` shows `default_value: public`, `choice: "Dropdown without -- None -- (must specify a default value)"` — and `sys_choice` for that element lists only two values, `public` ("All application scopes") and `package_private` ("This application scope only"); **`none` is not a valid choice for `access` on this instance/version at all.** So an empty `access` resolves to the default, `public`. Empty `caller_access` resolves to no restriction (per the dictionary default above). Applying the brief's Step 1 rule ("`access=none`, or a restrictive `caller_access`, means a scoped app cannot read it regardless of privileges granted"): **none of the 11 §2 tables is `access=none`** (impossible value on this instance) **and none carries a restrictive `caller_access`** — all 11 are effectively `access=public` / no caller restriction. The one restrictive `caller_access` found anywhere in this probe belongs to `syslog`, a table outside the §2 tool-core list.
+
+**Step 2 — cross-scope privilege precedent, brief's exact query.**
+
+```json
+{"table": "sys_scope_privilege", "query": "targetLIKEsn_aia^ORtargetLIKEsys_gen_ai",
+ "fields": ["source", "target", "operation", "status"], "displayValue": "all", "limit": 200}
+```
+
+Result, recorded verbatim: **"Found: 200 record(s) (limit reached)"** — the exact round-number-at-cap pattern flagged as a known instance surprise. Every returned row showed only `sys_id`, `operation`, `status`; **`source` and `target` never appeared in the output at all**, for any of the 200 rows. Investigated rather than accepted:
+
+- Re-ran the identical query at `limit: 5`, `displayValue: "true"` — same result, `source`/`target` still absent from every row.
+- `servicenow_schema` on `sys_scope_privilege` shows the real field names are **`source_scope`** (reference → `sys_scope`), **`target_scope`** (reference → `sys_scope`), **`target_name`** (string), **`target_type`** (string) — there is no `source` or `target` field on this table. The brief's query names fields that do not exist.
+- `servicenow_aggregate` with the brief's exact filter (`targetLIKEsn_aia^ORtargetLIKEsys_gen_ai`) returned **`count=3031`**. `servicenow_aggregate` with no filter at all on the same table also returned **`count=3031`** — identical. This confirms the filter condition silently no-op'd (unknown field name in an encoded query was ignored rather than erroring) and the brief's query, as literally written, returned an **unfiltered** first page of the whole table, not a filtered one. The "limit reached" message was real, but the 200 rows it capped were not the 200 highest-relevance matches — they were just the first 200 rows of `sys_scope_privilege` in default order.
+
+Corrected re-run using the real field names, same intent as the brief's query:
+
+```json
+{"table": "sys_scope_privilege", "query": "target_nameLIKEsn_aia^ORtarget_nameLIKEsys_gen_ai",
+ "fields": ["source_scope", "target_scope", "target_name", "operation", "status"],
+ "displayValue": "all", "limit": 200}
+```
+
+Result: **"Found: 79 record(s)"** — no truncation (79 < 200). This is precedent data, recorded in full:
+
+<details>
+<summary>Verbatim — all 79 <code>sys_scope_privilege</code> rows matching <code>target_nameLIKEsn_aia^ORtargetLIKEsys_gen_ai</code> (corrected field names), trimmed to <code>source_scope | target_name | operation | status</code></summary>
+
+```
+AI Agent Advisor | sn_aia_tool | Read | Allowed
+AI Agent Advisor | sn_aia_team_member | Read | Allowed
+AI Agent Advisor | sn_aia_tool | Create | Allowed
+AI Agent Advisor | sn_aia_agent | Create | Allowed
+AI Agent Advisor | sn_aia_agent_tool_m2m | Write | Allowed
+AI Agent Advisor | sn_aia_agent_config | Read | Allowed
+AI Agent Advisor | sn_aia_agent_config | Create | Allowed
+AI Agent Advisor | sn_aia_agent_config | Write | Allowed
+AI Agent Advisor | sn_aia_agent_tool_m2m | Read | Allowed
+AI Agent Advisor | sn_aia_agent_tool_m2m | Create | Allowed
+AI Agent Advisor | sn_aia_agent | Write | Allowed
+AI Agent Advisor | sn_aia_tool | Write | Allowed
+AI Agent Advisor | sn_aia_usecase | Read | Allowed
+AI Agent Advisor | sn_aia_agent | Read | Allowed
+Now Assist for Automation Center | sn_aia_agent | Read | Allowed
+Now Assist for Automation Center | sn_aia_usecase | Create | Allowed
+Now Assist for Automation Center | sn_aia_agent | Write | Allowed
+Now Assist for Automation Center | sn_aia_execution_task | Read | Allowed
+Now Assist for Automation Center | sn_aia_execution_plan | Read | Allowed
+Now Assist Analytics | sn_aia_execution_plan | Read | Allowed (target_scope: Knowledge Center)
+Now Assist Analytics | sn_aia_execution_plan | Read | Allowed (target_scope: Now Assist in Virtual Agent)
+Now Assist Analytics | sn_aia_execution_plan | Read | Allowed (target_scope: Now Assist Center)
+Now Assist Analytics | sn_aia_execution_plan | Read | Allowed (target_scope: Now Assist Admin Console)
+Now Assist Analytics | sn_aia_usecase | Read | Allowed
+Now Assist Analytics | sn_aia_execution_task | Read | Allowed
+Now Assist Analytics | sn_aia_agent | Read | Allowed
+Now Assist Analytics | sn_aia_agent_config | Read | Allowed
+Now Assist Analytics | sn_aia_execution_plan | Read | Allowed
+Now Assist Admin Console | sys_gen_ai_control_setting | Read | Allowed
+AI Desktop Actions Core | sn_aia_agent_tool_m2m | Write | Allowed
+AI Desktop Actions Core | sn_aia_agent_tool_m2m | Read | Allowed
+Now Assist Analytics | sys_gen_ai_log_metadata | Read | Allowed
+Now Assist Analytics | sys_gen_ai_usage_log | Read | Allowed
+Generative AI Controller | sn_aia_execution_task_ext_staging | Write | Allowed
+Generative AI Controller | sn_aia_memory_ext_staging | Write | Allowed
+Generative AI Controller | sn_aia_execution_plan_ext_staging | Create | Allowed
+Generative AI Controller | sn_aia_execution_plan_ext_staging | Read | Allowed
+Generative AI Controller | sn_aia_memory_ext_staging | Create | Allowed
+Generative AI Controller | sys_gen_ai_message_history_ext_staging | Write | Allowed
+Generative AI Controller | sn_aia_memory_ext_staging | Read | Allowed
+Generative AI Controller | sn_aia_execution_plan_ext_staging | Write | Allowed
+Generative AI Controller | sn_aia_execution_task_ext_staging | Create | Allowed
+Generative AI Controller | sn_aia_message_ext_staging | Write | Allowed
+Generative AI Controller | sn_aia_message_ext_staging | Create | Allowed
+Generative AI Controller | sn_aia_execution_task_ext_staging | Read | Allowed
+Generative AI Controller | sys_gen_ai_message_history_ext_staging | Create | Allowed
+Generative AI Controller | sn_aia_message_ext_staging | Read | Allowed
+Generative AI Controller | sys_gen_ai_message_history_ext_staging | Read | Allowed
+Generative AI Controller | sn_aia_tools_execution_ext_staging | Read | Allowed
+Generative AI Controller | sn_aia_tools_execution_ext_staging | Write | Allowed
+Generative AI Controller | sn_aia_tools_execution_ext_staging | Create | Allowed
+Now Assist Admin Console | sys_gen_ai_feature_group | Read | Allowed
+Now Assist Admin Console | sys_gen_ai_skill | Read | Allowed
+Now Assist Admin Console | sys_gen_ai_provider_routing | Read | Allowed
+Now Assist Admin Console | sys_gen_ai_routing_selection | Read | Allowed
+Now Assist Admin Console | sys_gen_ai_provider | Read | Allowed
+AI Security and Privacy | sn_aia_execution_task | Read | Allowed
+AI Security and Privacy | sn_aia_tool | Read | Allowed
+AI Security and Privacy | sn_aia_team_member | Read | Allowed
+AI Security and Privacy | sn_aia_usecase | Read | Allowed
+AI Security and Privacy | sn_aia_agent | Read | Allowed
+Now Assist Admin Console | sys_gen_ai_filter_config | Read | Allowed
+Now Assist Admin Console | sys_gen_ai_filter_config | Create | Allowed
+Now Assist Admin Console | sys_gen_ai_filter_config | Write | Allowed
+Now Assist Analytics | sys_gen_ai_feature_mapping | Read | Allowed
+Now Assist Admin Console | sys_gen_ai_filter_sample | Delete | Allowed
+Now Assist Admin Console | sys_gen_ai_filter_sample | Create | Allowed
+Now Assist Admin Console | sys_gen_ai_filter_sample | Write | Allowed
+Now Assist Admin Console | sys_gen_ai_filter | Write | Allowed
+Now Assist Admin Console | sys_gen_ai_filter_sample | Read | Allowed
+Now Assist Admin Console | sys_gen_ai_filter | Read | Allowed
+Now Assist Admin Console | sys_gen_ai_control_setting_data | Read | Allowed
+Now Assist Admin Console | sys_gen_ai_control_data | Read | Allowed
+Generative AI Controller | sys_gen_ai_feature_mapping | Read | Allowed
+Now Assist Skill Discovery and Execution | sys_gen_ai_message_history | Create | Allowed
+Now Assist Skill Discovery and Execution | sys_gen_ai_message_history | Write | Allowed
+Now Assist Skill Discovery and Execution | sys_gen_ai_message_history | Read | Allowed
+Now Assist Admin Console | sys_gen_ai_skill_applicability | Write | Allowed
+Now Assist Admin Console | sys_gen_ai_skill_applicability | Read | Allowed
+```
+
+</details>
+
+All 79 rows show `status: Allowed`. Real, standing `Read` grants exist for 8 of the 11 §2 tables (`sn_aia_tool`, `sn_aia_agent`, `sn_aia_usecase`, `sn_aia_execution_task`, `sn_aia_execution_plan`, `sn_aia_agent_tool_m2m`, `sys_gen_ai_log_metadata`, `sys_gen_ai_usage_log`) plus several `_ext_staging` companions and `sys_gen_ai_*` admin/config tables not in the §2 list. No row's `target_name` matched `sn_aia_message`, `sn_aia_tools_execution`, or `sn_aia_trigger_configuration` specifically — their absence from these 79 rows is **not** evidence against reachability (per the brief: no precedent found ≠ impossible), it only means no other scope has yet requested a cross-scope grant against those three specific tables.
+
+Caveat, stated plainly: **every `source_scope` in all 79 rows is a first-party ServiceNow/Now-Assist product scope** (AI Agent Advisor, Now Assist for Automation Center, Now Assist Analytics, Now Assist Admin Console, AI Desktop Actions Core, Generative AI Controller, AI Security and Privacy, Now Assist Skill Discovery and Execution). **None is a custom `x_*` scoped app.** This is precedent that `sys_scope_privilege` Read grants against `sn_aia_*`/`sys_gen_ai_*` targets are mechanically grantable and exercised in production — it is not precedent specifically for a custom scoped app doing so. Recorded as "no custom-scope precedent found," not as a negative verdict.
+
+**Step 3 — non-global scoped apps on this instance, brief's exact query.**
+
+```json
+{"table": "sys_scope", "query": "scope!=global^scopeSTARTSWITHx_",
+ "fields": ["name", "scope", "version", "active"], "limit": 100}
+```
+
+Result: **"Found: 6 record(s)"** (no truncation).
+
+| name | scope | version | active |
+|---|---|---|---|
+| sdkptesting1 | x_snc_sdktest1 | 0.0.1 | true |
+| Acme Incident Triage | x_snc_acme_triage | 0.0.1 | true |
+| BootstrapTest | x_snc_bstest_42 | 0.0.1 | true |
+| POCKeySREAgent | x_snc_pockeysre216 | 1.0.0 | true |
+| Build Agent Troubleshooter | x_snc_build_agent | 0.0.1 | true |
+| ServiceNow Update All | x_snc_update_all | 1.0.6 | true |
+
+Yes — **6 non-global scoped apps already exist** on this instance, all active. None of them appears among the 79 `sys_scope_privilege` source scopes in Step 2, so none has (yet) requested or been granted a cross-scope privilege against any `sn_aia_*`/`sys_gen_ai_*` target. This determines that a real scoped-app + background-script runtime test *would* have been possible here (independent of the tooling gap below) — worth knowing before the build.
+
+**Step 4 — recorded result and verdict.**
+
+```
+scoped_read_viable: likely
+```
+
+Basis: none of the 11 §2 tables actually present (`sn_aia_execution_plan`, `sn_aia_execution_task`, `sn_aia_tools_execution`, `sn_aia_message`, `sn_aia_agent`, `sn_aia_tool`, `sn_aia_agent_tool_m2m`, `sn_aia_usecase`, `sn_aia_trigger_configuration`, `sys_gen_ai_usage_log`, `sys_gen_ai_log_metadata`) is `access=none` (impossible value on this instance/version) or carries a restrictive `caller_access` (all show empty/unrestricted). Standing `sys_scope_privilege` Read grants exist against 8 of the 11 (see Step 2), demonstrating the mechanism works in production, though only from first-party scopes — no custom-scope precedent. No §2 table blocks a scoped read. The only table anywhere in this probe with a restrictive `caller_access` (`Caller Restriction`) is `syslog` — the base System Log table, reached only because the brief's literal name `sys_log` does not exist — and it sits outside the §2 tool-core list, so it does not change the verdict.
+
+Verbatim, as required: **P4b runtime proxy NOT EXECUTED — no background-script executor in the MCP toolset; runtime confirmation carried forward to build time.**
 
 ### P5 — GenAI log payloads and ACLs (LLD §8.3, §8.6)
 _Pending._
