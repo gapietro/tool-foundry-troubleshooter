@@ -1297,10 +1297,107 @@ parsing" requirement already anticipates — this is empirical confirmation that
 not defensive boilerplate.
 
 ### E2 — 15-call endurance (DESIGN 2.2, 2.3)
-_Pending._
+
+**Verdict: `endurance: pass`, decisively. 19 tool calls completed in a single conversation.
+Option A's load-bearing assumption survives.**
+
+| Measure | Value |
+|---|---|
+| Tool calls executed in one conversation | **19** (4 without a `layer` value + layers 1–15, each exactly once) |
+| Requested | 15 |
+| Plan `state` | **Completed** |
+| Plan `state_reason` | *(empty)* |
+| Cause-of-death (DESIGN 2.3 vocabulary) | **`completed`** |
+| Wall clock | 51s |
+| LLM P95 latency | 3894 ms |
+| Execution plan | `ae22ed132f5243d0f824ac1bcfa4e361` |
+| Conversation | `922221132f5243d0f824ac1bcfa4e33f` |
+
+Counted from `syslog` (19 `PA_E2` rows, all carrying the same `conversation_id`) and
+cross-checked against `sn_aia_execution_plan.state`. Both agree.
+
+**This answers the doubt `DESIGN.md` §1 names.** The concern was that Studio's harness is
+workflow-shaped — steps and supervised handoffs — and might not sustain an open-ended
+investigation loop. It sustained 19 autonomous calls and terminated cleanly. The seven-layer
+diagnostic sweep at 12–15 calls fits with margin.
+
+The stop was not attributable to any cap: `max_auto_executions` was set to 20 on the
+attachment (Task 7) and the instance property is 25 (P2). The run finished because the agent
+finished, not because it hit a ceiling. Note 19 is close to the 20 attachment cap — a longer
+sweep should re-test rather than extrapolate.
+
+#### Unplanned finding — the ReAct loop batches tool calls concurrently
+
+The 19 calls did not run as 19 sequential reason-act rounds. Timestamps cluster into six
+batches:
+
+| Time | Calls in batch |
+|---|---|
+| 19:02:59 | 4 (`layer` absent) |
+| 19:03:14 | 4 (layers 1–4) |
+| 19:03:20 | 3 (layers 5–7) |
+| 19:03:21 | 1 (layer 8) |
+| 19:03:27 | 4 (layers 9–12) |
+| 19:03:32 | 3 (layers 13–15) |
+
+Design consequences, both favourable and both unanticipated by the LLD:
+
+- **Latency is far better than a sequential model predicts** — 19 calls in 51s, not 19 × round-trip.
+- **The playbook's "seven-layer sweep in order" is not enforceable.** The harness may issue
+  several probes in one batch before seeing any result. LLD §2's ordered sweep and
+  `AGENT_DOCTOR_ARCHITECTURE.md` §3's "playbook order is *suggested* via instructions, not
+  enforced" are correct to be cautious — but the reason is stronger than assumed: it is not
+  merely that the model may reorder, it is that the harness executes concurrently, so a probe
+  cannot depend on an earlier probe's output within a batch. Any tool whose input depends on a
+  prior tool's finding must be designed for that, or the dependency must be made explicit in
+  the instructions.
+
+Layers 1–15 each appear exactly once and none is missing, so concurrency did not cost
+correctness here.
+
+#### Corroboration of E1
+
+All 19 calls logged the identical `conversation_id` from `_agentic_context_`, and it matches
+`sn_aia_execution_plan.conversation` exactly. The per-conversation key is **stable across
+every call within a conversation** — precisely the property `PaRunAnchor` requires and the one
+`DESIGN.md` 2.4 was worried about. E1's answer is confirmed by an independent 19-sample run.
 
 ### E3 — Data model confirmation (LLD §2.1)
-_Pending._
+
+Validated against executions **we caused**, not only the 2026-07-18 archaeology.
+
+| Table | Link field | Result on plan `ae22ed13…` |
+|---|---|---|
+| `sn_aia_execution_plan` | — | 1 row. `state`, `state_reason`, `objective`, `conversation` all readable and populated as LLD §2.1 describes |
+| `sn_aia_execution_task` | **`execution_plan`** ✅ | 27 rows. Join field is as documented |
+| `sn_aia_tools_execution` | — | **Denied over REST**, readable from inside a tool — see the asymmetry note in E1 |
+
+**LLD §2.1 field-name defects on `sn_aia_execution_task`.** The real schema is:
+
+- **`status`**, not `state`
+- **`type`**, not `task_type`
+- **no `agent` field at all**
+
+Requesting `state`/`task_type`/`agent` returns rows with those fields silently absent rather
+than an error — the same silent-miss failure mode that bit P1, P2 and P4. `PaToolAgentTrace`
+written to the documented names would return blank task detail and look like an empty result
+rather than a bug.
+
+Useful fields the LLD does not mention, all directly relevant to the trace tool:
+**`parent`** (self-reference — this is where the task *tree* lives), `order`,
+`output` (tool output), `execution_time_ms`, `start_time`/`end_time` (latency analysis for the
+`latency_flags[]` feature), `metadata`, `og_task_id`, `task_dependencies`.
+
+**A caution for the trace tool's shape:** 19 tool calls produced **27** execution-task rows, so
+tasks are not 1:1 with tool calls. `PaToolAgentTrace` must not assume that mapping.
+
+#### `servicenow_query` returns a narrow default field set
+
+Recorded because it nearly caused a false finding during this task. Querying
+`sn_aia_execution_plan` without an explicit `fields` list returned only `sys_id`,
+`sys_created_on`, `sys_updated_on` — which initially looked like ACL field-level restriction.
+It is not: naming the fields explicitly returns them all. Any future probe must pass an
+explicit `fields` list before concluding a field is unreadable.
 
 ### Cleanup
 _Pending._
