@@ -1115,6 +1115,27 @@ record is created, so Task 11 cleanup is always possible even if a later step ab
 |---|-------|------|--------|---------|---------|
 | 1 | `sn_aia_tool` | `pa_probe_context` | `218f555b2f1243d0f824ac1bcfa4e39b` | 2026-07-30 11:51:10 | _pending Task 11_ |
 | 2 | `sn_aia_agent` | `PA Probe Agent` | `7abf5ddf0f9e87d0fc5c28f300d1b220` | 2026-07-30 11:52:05 | _pending Task 11_ |
+| 3 | `sn_aia_agent_tool_m2m` | `PA Probe Agent - pa_probe_context` | `ccff55130fde87d0fc5c28f300d1b294` | 2026-07-30 11:52:59 | _pending Task 11_ |
+
+Attachment as created and confirmed by the platform's response:
+`execution_mode` = `autopilot` (stored back as display **Autonomous**),
+`output_transformation_strategy` = `none` (display **None**),
+`display_output` = false, `active` = true,
+`max_auto_executions` = **20** — set deliberately above the 15 that E2 requests so that
+if the loop stops short, the per-attachment cap is excluded as the cause and the stop is
+attributable to the instance-wide property (**25**, recorded in P2). 20 is also unremarkable
+for this instance: P2 observed one production attachment at 50.
+
+#### Two more plan-text literal defects, found by checking before writing
+
+Both would have created a broken or rejected record had the plan been followed literally:
+
+1. **`sn_aia_agent_tool_m2m.name` is mandatory** and the plan's Task 7 Step 6 field list
+   omits it entirely.
+2. **`output_transformation_strategy` stored value is `none` (lowercase)**, not `None`.
+   The plan specified `"None"`, which is the *display label*. This is the same
+   value-versus-label trap P3 was written to defuse for `execution_mode` — the plan applied
+   the lesson to one field and not the other.
 
 #### Unplanned finding at agent creation — `context_processing_script` is auto-populated
 
