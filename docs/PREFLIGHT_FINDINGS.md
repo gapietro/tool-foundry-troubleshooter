@@ -575,7 +575,74 @@ These two numbers are **not the same knob**: `sn_aia.continuous_tool_execution_l
 **Predicted E2 ceiling:** the operative per-tool-call ceiling for any given OOB-shaped agent-tool binding is **10** (the `max_auto_executions` dictionary default that 477/483 rows actually carry), not the property value of 25 — the property is a broader, same-tool continuous-execution safety net that sits above the per-binding ceiling and would only bind if a binding's own `max_auto_executions` were raised past it (as the one outlier at 50 does). Task 9 (E2) should expect the loop to stop at 10 auto-executions for a default-configured tool binding, with the possibility of stopping earlier if a specific binding has been configured below default (as seen on 6 of the 483 rows here), and should treat 25 as the instance-wide backstop rather than the expected per-tool stop point.
 
 ### P3 — Execution mode choices (LLD §8.1)
-_Pending._
+
+**Step 1 — `execution_mode` choice list (`sn_aia_agent_tool_m2m.execution_mode`).**
+
+```
+Table: sys_choice
+Query: name=sn_aia_agent_tool_m2m^element=execution_mode
+Fields: value, label, sequence, inactive
+Found: 2 record(s)
+
+[1] sys_id: 1c444c242f37f210f824ac1bcfa4e3e7 | sequence: 200 | inactive: false | label: Supervised | value: copilot
+[2] sys_id: d8444c242f37f210f824ac1bcfa4e3e7 | sequence: 100 | inactive: false | label: Autonomous | value: autopilot
+```
+
+Exact stored values (not labels): **`copilot`** = Supervised, **`autopilot`** = Autonomous.
+
+**Step 2 — tool `type` choice list (`sn_aia_tool.type`).**
+
+```
+Table: sys_choice
+Query: name=sn_aia_tool^element=type
+Fields: value, label, sequence, inactive
+Found: 14 record(s)
+
+[1]  sequence: 900  | inactive: false | label: Web Automation          | value: web_automation
+[2]  sequence: 1200 | inactive: false | label: Knowledge Graph         | value: knowledge_graph
+[3]  sequence: 100  | inactive: false | label: Flow Action             | value: action
+[4]  sequence: 500  | inactive: false | label: Topic                   | value: topic
+[5]  sequence: 1000 | inactive: false | label: Topic Block             | value: topic_block
+[6]  sequence: 1300 | inactive: false | label: Desktop Automation      | value: desktop_automation
+[7]  sequence: 200  | inactive: false | label: Subflow                 | value: subflow
+[8]  sequence: 600  | inactive: false | label: Catalog                 | value: catalog
+[9]  sequence: 1100 | inactive: false | label: Deep Research           | value: deep_research
+[10] sequence: 300  | inactive: false | label: Capability              | value: capability
+[11] sequence: 700  | inactive: false | label: Record Operation        | value: crud
+[12] sequence: 1100 | inactive: false | label: Search Retriever        | value: rag
+[13] sequence: 400  | inactive: false | label: Script                  | value: script
+[14] sequence: 800  | inactive: false | label: Model Context Protocol  | value: mcp
+```
+
+All 14 `inactive: false`. Exact stored value meaning "script": **`script`** (label "Script", sequence 400) — confirms LLD §5's assumption.
+
+**Step 3 — cross-check against real usage.**
+
+Per Task 3 Step 3 (P2 section above), `sn_aia_agent_tool_m2m` holds 483 rows across 141 distinct `agent` display values instance-wide, with no field distinguishing OOB-shipped agents from custom/CoE-built ones. The brief's reference to "the 19 OOB agents" does not correspond to any isolable subset on this instance — that filter cannot be applied. Reporting the `execution_mode` distribution across **script-type tool attachments as a whole** instead, per corrected instruction:
+
+```
+Table: sn_aia_agent_tool_m2m
+Query: tool.type=script
+Fields: sys_id, agent, tool, tool.type, execution_mode, active
+displayValue: all, limit: 500
+Found: 384 record(s) (no truncation — 384 < 500, so the full population)
+
+execution_mode distribution (script-type tool attachments only, 384 rows):
+  Autonomous (stored value: autopilot) → 361 rows
+  Supervised (stored value: copilot)   → 23 rows
+active: true → 384 / 384 (all 384 script-type m2m rows are active; 0 inactive)
+```
+
+Both `sys_choice` values (`autopilot`, `copilot`) are in live production use on script-type tools — this is not a choice that exists only in the dictionary/choice list with zero real usage. `autopilot` (Autonomous/unsupervised) is the overwhelming majority: 361/384 = 94.0% of script-type tool attachments instance-wide.
+
+**Step 4 — recorded result and verdict.**
+
+```
+unsupervised_available: true
+execution_mode=autopilot
+```
+
+`autopilot` is the exact literal that means unsupervised/autonomous execution on `sn_aia_agent_tool_m2m.execution_mode` — not the label "Autonomous". The tool-type literal for "script" is `script` (not the label "Script") on `sn_aia_tool.type`. Both literals are confirmed both in `sys_choice` metadata (Steps 1–2) and in live production usage on this instance (Step 3: 361 script-type m2m rows already run with `execution_mode=autopilot`). Proceed — Task 7 should write `execution_mode=autopilot` verbatim, attached to a tool whose `type=script`, when creating the probe m2m row.
 
 ### P4 — Cross-scope reachability (LLD §8.4)
 _Pending._
