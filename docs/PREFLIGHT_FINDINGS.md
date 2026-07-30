@@ -1114,6 +1114,44 @@ record is created, so Task 11 cleanup is always possible even if a later step ab
 | # | Table | Name | sys_id | Created | Deleted |
 |---|-------|------|--------|---------|---------|
 | 1 | `sn_aia_tool` | `pa_probe_context` | `218f555b2f1243d0f824ac1bcfa4e39b` | 2026-07-30 11:51:10 | _pending Task 11_ |
+| 2 | `sn_aia_agent` | `PA Probe Agent` | `7abf5ddf0f9e87d0fc5c28f300d1b220` | 2026-07-30 11:52:05 | _pending Task 11_ |
+
+#### Unplanned finding at agent creation — `context_processing_script` is auto-populated
+
+LLD §5 record 17 instructs: **"no custom `context_processing_script` (verified failure
+vector — keep ours empty)"**. Creating `sn_aia_agent` with that field simply omitted did
+**not** leave it empty. The platform populated it with a default template script:
+
+```javascript
+(function(task, user_utterance, agent_id, context) {
+    return {
+        pageContext : context?.pageContext,
+        triggerContext : context?.triggerContext
+    };
+})(task,user_utterance, agent_id, context);
+```
+
+This matters because the instance's known reference failure
+(`78f347b72f198310f824ac1bcfa4e3bd`, LLD §1) has its root cause in a
+`context_processing_script` throwing at line 61. "Keep ours empty" is therefore **not
+achievable by omission** — the field arrives populated and must be explicitly cleared if
+an empty value is genuinely wanted. LLD §5's instruction needs correcting: it describes an
+outcome the platform does not give you by default.
+
+The docstring on the auto-populated script is also useful design input in its own right: it
+documents that `task`, `user_utterance`, `agent_id`, and `context` (with `pageContext` and
+`triggerContext`) are the variables available at that hook — a different and better-documented
+surface than the script-tool runtime context E1 is probing.
+
+`applicability_script` was likewise auto-populated, with a default body ending in
+`return false;`. Recorded here because it may affect whether the agent is considered
+applicable in some invocation paths; E1 will show whether it blocks execution in practice.
+
+Also recorded: `agent_type` was submitted as `internal` and stored with display value
+**`Chat`**; `channel` was submitted as `nap_and_va` and stored as **`NAP and VA`**;
+`strategy` resolved correctly to **ReAct** (`f0bff21f9f13c6108f431597d90a1c74`, confirmed
+present in `sn_aia_strategy` before use — LLD §5's value is correct). `sys_scope` is
+**Global**, as with the tool.
 
 **Note on scope — record verbatim, it qualifies E1.** The created `sn_aia_tool` record
 landed in **`sys_scope: Global`** (and `sys_package: Global`), not in the `sn_aia` scope,
