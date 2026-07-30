@@ -1400,7 +1400,45 @@ It is not: naming the fields explicitly returns them all. Any future probe must 
 explicit `fields` list before concluding a field is unreadable.
 
 ### Cleanup
-_Pending._
+
+**All three probe records deleted from keynexus01, in reverse dependency order, and
+independently verified absent.**
+
+| Order | Table | sys_id | Delete | Verified absent |
+|---|---|---|---|---|
+| 1 | `sn_aia_agent_tool_m2m` | `ccff55130fde87d0fc5c28f300d1b294` | success | ✅ 0 rows |
+| 2 | `sn_aia_tool` | `218f555b2f1243d0f824ac1bcfa4e39b` | success | ✅ 0 rows |
+| 3 | `sn_aia_agent` | `7abf5ddf0f9e87d0fc5c28f300d1b220` | success | ✅ 0 rows |
+
+Verification was a fresh query per table (`nameLIKEPA Probe` / `nameLIKEpa_probe`), not
+reliance on the delete calls' own success messages.
+
+No team, use case, trigger, or wiring records were created — `servicenow_aia_execute` fires an
+agent directly, so the plan's Task 7 team/usecase/trigger records proved unnecessary. Nothing
+of that kind is outstanding.
+
+#### Retained by decision — execution history
+
+Per the spec, execution rows from E1/E2 are **retained**: read-only history, harmless on a dev
+instance, and a useful known-answer reference for `PaToolAgentTrace` development. They are
+recorded here so the retention is deliberate and reversible.
+
+| Execution plan | Conversation | What it is |
+|---|---|---|
+| `9510e1db2f1243d0f824ac1bcfa4e3e2` | `d010a1db2f1243d0f824ac1bcfa4e3b6` | E1 run 1 — **stalled forever in `In progress`** from the malformed JSON-Schema `input_schema`. A genuine silent-stall specimen |
+| `f9e0655f2f1243d0f824ac1bcfa4e3d8` | `39e0655f2f1243d0f824ac1bcfa4e3b7` | E1 run 2 — `terminated` by `ReferenceError: "outputs" is not defined` |
+| `72616d9f2f1243d0f824ac1bcfa4e3b2` | *(see plan)* | E1 run 3 — first clean `completed` |
+| `17b16ddf2f1243d0f824ac1bcfa4e390` | `cbb1a1df2f1243d0f824ac1bcfa4e38e` | E1 run 4 — the `_agentic_context_` dump |
+| `ae22ed132f5243d0f824ac1bcfa4e361` | `922221132f5243d0f824ac1bcfa4e33f` | **E2 — 19 calls, `Completed`** |
+
+The first two are worth keeping deliberately: they are *known-answer failure specimens* on this
+instance, with causes we established from the logs. The instance previously had one such
+reference failure (`78f347b7…`, LLD §1); it now has three, covering two additional failure
+modes — a silent non-terminating stall and a script `ReferenceError`. Both are directly useful
+for testing `PaToolAgentTrace` against failures whose root cause is already known.
+
+Probe-generated `syslog` rows (`PA_PROBE`, `PA_PROBE2`, `PA_E2` markers) are also retained; they
+are ordinary log entries and age out with normal log rotation.
 
 ## LLD §8 disposition
 _Filled by Task 12._
