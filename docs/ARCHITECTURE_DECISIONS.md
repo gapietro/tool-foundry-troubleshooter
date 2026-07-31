@@ -1,171 +1,213 @@
 # Architecture Decisions
 
-> Design rationale for the ServiceNow Platform Assistant, captured during architecture review (March 2026).
+> Design rationale for the Foundry Troubleshooter, revised July 2026 when the product was re-aimed from general platform assistance to **diagnosing Foundry-built AI Agents** and producing Fix Reports for the builder AI.
 
 ---
 
-## Layer 1: Client — React Chat UI (ServiceNow SDK)
+## Decision 0: The Mission Shapes Everything
+
+**Decision:** The Troubleshooter is a *diagnostic* agent, not a general assistant. Its terminal artifact is a **Fix Report** consumable by the builder AI (Claude Code + Foundry), not just a chat answer.
+
+**Consequences that ripple through every layer:**
+- The tool roster is agent-debugging-first (trace, config, GenAI logs) — generic platform tools (table query, schema) are supporting cast.
+- Runs are long and evidence-heavy → asynchronous execution, artifact storage, transcript truncation.
+- The output must cross the instance privacy boundary → configuration/data separation with data markers baked into the report format.
+- The reasoning is playbook-guided (systematic layer sweep), not open-ended conversation.
+
+---
+
+## Decision 0.5: Harness Strategy — Tools-First, Benchmark-Gated (July 2026)
+
+**Decision:** Build the diagnostic tools, playbook, artifact store, and audit logging as **harness-agnostic** components. Wrap them first in a **native ServiceNow AI Agent** ("Agent Doctor") via AI Agent Studio. Run the seeded-failure benchmark against it. The scorecard — not opinion — decides whether the custom harness (Layers 1–4 below) gets built, and how much of it.
+
+**Why try native first:**
+- The platform gives the harness away: ReAct-style loop, native tool calling, chat UI, session handling, and per-tool **supervised execution** (our confirmation gate, built in).
+- Our diagnostic tools drop in as Script tools; Foundry's existing use-case automation creates the agent in ~8 API calls. Days of work, not weeks.
+- ServiceNow's own field guidance confirms there is no native "agent that debugs agents" — the product gap exists regardless of harness.
+- **The methodology is officially sanctioned:** ServiceNow's Knowledge 2026 lab CCL6230-K26 ("Inside the Black Box") teaches AI Agent debugging as a *manual* runbook over exactly the tables our tools read — `sn_aia_execution_plan` → `execution_task` → `tools_execution` → `sys_gen_ai_log_metadata` → `sn_aia_message`/`sys_cs_*` → scoped `sys_log` (see LLD §2.5). Agent Doctor is that runbook automated; its failure taxonomy (cold start/ACL misalignment, tool errors, latency bloat, hallucination, loops) is now baked into the playbook and benchmark, so diagnoses land in vocabulary ServiceNow practitioners already recognize.
+
+**Why native may not be enough (documented ceilings, to be tested, not assumed):**
+- Script tools are **string-only I/O**; 128K context; no native truncation/paging — large traces are exactly where this breaks. (Partially mitigated: PaArtifactStore + a `read_artifact` script tool work in either harness.)
+- Orchestration is opaque: playbook order, the evidence rule, and Fix Report schema validity can be *suggested* in instructions but not enforced; "inconsistent behavior on identical inputs" is a documented failure pattern.
+- Loop bounds are blunt (`sn_aia.continuous_tool_execution_limit`, 5-runs-per-15-min recursion limit) vs. our governed budget with partial-result guarantee; runaway loops burn paid assists.
+- **Total circularity:** built natively, the Troubleshooter runs on the exact framework it debugs and inherits its failure modes (worker-user permission gaps, cross-scope denial). The custom harness depends only on NASK, one layer down, and keeps the Evidence Bundle floor.
+- Guidance caps agents at 5–7 tools — our roster of 7 sits exactly at the line.
+
+**The gate (see benchmark spec in the Implementation Plan):** 5 seeded-failure agents × 2 runs each, defects blind to Agent Doctor.
+- **≥ 8/10 correct root causes with usable fix output** → native agent is the front door; Phase 1b shrinks to the Evidence Bundle path and whatever the scorecard showed native can't do.
+- **5–7/10** → native stays as lightweight triage; build the custom deep-diagnosis harness.
+- **< 5/10** → full custom harness as designed below.
+
+**What this means for the rest of this document:** Layers 1–4 (client, async REST API, custom ReAct loop, PaLlmProxy/NASK) describe the **custom harness — contingent on the gate**. Layers 5–7 (tools, state, packaging) are **harness-agnostic and get built regardless**; the tool cores never know which harness called them. Every diagnostic — native or custom — anchors to an `x_snc_pa_run` record (with a `harness` field), so artifacts, audit, and benchmark scoring work identically in both worlds.
+
+---
+
+## Layer 1: Client — React Chat UI (ServiceNow SDK) *(custom harness — contingent)*
 
 **Decision:** Thin React component via ServiceNow SDK, no logic in the client.
 
 **Rationale:**
-- The UI is a dumb terminal — no LLM calls, no data processing. It sends JSON to the REST API and displays responses.
-- Chose in-browser React component over a CLI because SCs are already in ServiceNow — no context switching. Confirmation dialogs for destructive operations are natural in a UI, awkward in a terminal.
-- The ServiceNow SDK component (`x-snc-platform-assistant`) is portable across portal pages.
+- The UI is a dumb terminal — no LLM calls, no data processing. It POSTs to the REST API and polls for run progress.
+- In-browser beats CLI here: the SC is already in the instance, confirmation dialogs are natural, and the live tool-execution feed (rendered from the polled transcript) gives the Claude-Code "watch it work" experience.
+- The component (`x-snc-platform-assistant`) is portable across portal pages.
 
-**Extensibility:**
-- A CLI can be added in Phase 2-3 with **zero server-side changes** — it's just another HTTP client hitting the same REST API. Any client that can POST JSON and read responses works.
-- If the ServiceNow SDK becomes painful, we can swap to a Service Portal widget without touching anything else.
+**Extensibility:** any HTTP client works with zero server changes — including **Foundry MCP itself**, which can call `/analyze` and retrieve Fix Reports programmatically on dev instances, making the diagnose step scriptable from the builder side where policy allows.
 
 ---
 
-## Layer 2: API — Scripted REST API
+## Layer 2: API — Scripted REST API with Asynchronous Runs *(custom harness — contingent)*
 
-**Decision:** Four thin REST endpoints as the single entry point to all server-side logic.
+**Decision:** Five thin endpoints; `/analyze` is asynchronous — it enqueues a run and returns immediately.
 
-**Endpoints:**
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/chat` | POST | Triggers the agentic loop — accepts messages and confirmation responses |
-| `/status` | GET | Health check — plugin readiness, table existence |
-| `/tools` | GET | Lists available tools with descriptions |
-| `/history/{session_id}` | GET | Session message history (user-owned only) |
+| `/analyze` | POST | Create run (execution ref, agent+timeframe, or pasted logs; optional `mode: "collect"`), fire event, return `{run_id, status}` |
+| `/runs/{run_id}` | GET | Status + live transcript + Fix Report when complete (owner-only) |
+| `/runs/{run_id}/message` | POST | Follow-up question or confirmation response |
+| `/status` | GET | Deep readiness diagnostics (see Layer 4) |
+| `/tools` | GET | Tool roster |
 
-**Rationale:**
-- Thin pass-through — validates input, routes to PaAgentLoop, returns result. No business logic in this layer.
-- Chose REST over GlideAjax so any client (React UI, CLI, curl, integrations, automated tests) can use it without touching server-side code.
-- `/chat` handles both new messages AND confirmation responses via the same endpoint (optional `confirmationResponse` field). One endpoint, one flow — the client just sends different payloads. A separate `/confirm` endpoint was considered and rejected as unnecessary complexity.
+**Why async is non-negotiable:**
+- Scripted REST APIs time out around 60 seconds on most instances.
+- A real diagnostic run is 10–15 LLM iterations plus tool time — traces are big, prompts are big, and customer-side LLM latency varies from ~3s to ~20s per call. The synchronous v1.1 design (8 iterations × ~5s, "~40 seconds worst case") only worked on optimistic math and would have forced shallow diagnoses.
+- Async also *improves* UX: writing the transcript to the run record after every iteration means polling clients render live progress.
 
-**Known risk:** Scripted REST APIs have a ~60 second default timeout on most instances. Mitigated by the 8-iteration cap on the agentic loop — worst case ~40 seconds (8 LLM calls at ~5 seconds each).
+**Mechanics:** `/analyze` inserts an `x_snc_pa_run` record and fires a platform event (`x_snc_pa.run.start`) via `gs.eventQueue()`; a Script Action invokes the PaAgentLoop worker. No MID server, no scheduled-job polling latency, standard platform machinery.
 
----
-
-## Layer 3: Orchestration — PaAgentLoop (ReAct Pattern)
-
-**Decision:** Server-side ReAct loop with max 8 iterations and a destructive-op confirmation gate.
-
-**Rationale:**
-- Chose ReAct over single-shot because troubleshooting requires multi-step reasoning. "Why aren't assignment rules working?" needs 3-5 tool calls: query rules, check if active, examine conditions, check interfering business rules. Single-shot can't do this.
-- Max 8 iterations prevents runaway loops and keeps within the REST API timeout window. If hit, returns partial results rather than failing.
-- CMDB data model traversal works naturally within the loop — the LLM chains QueryTable + SchemaLookup + CmdbTraverse across iterations, following relationships hop by hop.
-
-**Confirmation flow:**
-- When the LLM wants to execute a destructive tool (update/create/delete), the loop **pauses**. It does not execute.
-- The pending action is stored in the session and a human-readable description is returned to the client: "I want to update incident INC0012345, setting priority to 1. Confirm?"
-- The user approves or rejects. If approved, the loop resumes from where it left off. If rejected, the LLM is told "user declined" and adjusts.
-- This is the core safety mechanism. No silent writes. No surprises.
-
-**Known risk:** The LLM could loop — calling the same tool with the same args repeatedly. The 8-iteration cap is the primary safeguard. Loop detection (comparing current call to previous) is a candidate for Phase 2.
+**Rejected alternative:** synchronous `/chat` (v1.1). Kept the `message` sub-resource for follow-ups within a completed run, which are short single-turn exchanges and can afford to be synchronous.
 
 ---
 
-## Layer 4: LLM Invocation — PaLlmProxy + NASK Skills
+## Layer 3: Orchestration — PaAgentLoop (Playbook-Guided ReAct) *(custom harness — contingent)*
 
-**Decision:** Use NASK Skills via `sn_gen_ai.GaiScriptedSkill`, wrapped behind PaLlmProxy as the sole abstraction.
+**Decision:** Server-side ReAct loop, max 15 iterations and a 5-minute wall-clock budget, guided by the diagnostic playbook rather than free-form.
 
-### Alternatives Considered
+**Rationale:**
+- Diagnosis is inherently multi-step: pull trace → find the deviation point → pull the implicated config → corroborate against schema/data → draft fixes. Single-shot cannot do this.
+- The playbook (in the system prompt) sequences the seven layers — trace, instructions, tools, schemas, data, GenAI stack, wiring — so the model works systematically instead of wandering. The **evidence rule** (root cause must cite trace + at least one config/schema source) is enforced in the prompt and checked by PaFixReport at report time.
+- 15 iterations + 5 minutes: async execution removed the 60-second straitjacket, but bounds still prevent runaway loops and runaway spend on the customer's LLM. On hitting either bound the loop emits its best partial diagnosis with an explicit "incomplete" flag — never a silent failure.
+
+**Confirmation flow (Phase 3 writes):**
+- When the LLM proposes a destructive tool (fix application), the loop pauses, stores the pending action on the run, sets status `awaiting_confirmation`, and surfaces a human-readable description.
+- Approval resumes the loop; rejection informs the LLM and it re-plans. No silent writes.
+- Pending actions persist on the run record; a run in `awaiting_confirmation` does not expire (unlike v1.1's 30-minute session expiry, which silently interacted badly with pending confirmations).
+
+**Known risk:** repeated identical tool calls. Mitigation: iteration + wall-clock caps now, call-signature loop detection in Phase 2.
+
+---
+
+## Layer 4: LLM Invocation — PaLlmProxy + NASK Skills *(custom harness — contingent; the native agent uses the platform's own LLM path)*
+
+**Decision:** NASK Skills via `sn_gen_ai.GaiScriptedSkill`, wrapped behind PaLlmProxy as the sole abstraction. Unchanged from v1.1 — the reasoning held.
 
 | Approach | Verdict | Reason |
 |----------|---------|--------|
-| **NASK Skills** | **Selected** | Platform-native, visible to customers in Skills Kit UI, existing automation (~24 API calls), insulates from GenAI Controller changes |
-| **AI Agent Use Cases** | Rejected | Would nest an agent inside our agent — we ARE the orchestrator (PaAgentLoop). Surrenders control of iteration limits, tool selection, and confirmation flow to ServiceNow's opaque framework |
-| **Direct GenAI Controller calls** | Rejected (for now) | Simplest to implement but no customer visibility, no abstraction from API changes, manual model/token management |
+| **NASK Skills** | **Selected** | Platform-native, customer-visible in Skills Kit UI, existing Foundry automation, insulates from GenAI Controller changes |
+| **AI Agent Use Cases** | Rejected | Nests an agent inside our agent — we ARE the orchestrator; surrenders iteration control, tool selection, confirmation flow. Also: the Troubleshooter must not be built on the exact framework it exists to debug. |
+| **Direct GenAI Controller calls** | Rejected (for now) | No customer visibility, no abstraction from API changes |
 
-### Key Design Constraint
+**Key constraint (unchanged):** `PaLlmProxy` is the **only** file that knows NASK exists. All callers use `reason()` / `summarize()`. Swapping invocation methods — including native structured-output APIs when GenAI Controller exposes them — is a single-file change.
 
-**`PaLlmProxy` must be the ONLY file that knows NASK exists.** All other components call `reason()` and `summarize()` — they never touch `GaiScriptedSkill` directly.
+### Response Contract: Strict JSON, Not Prefix Parsing
 
-This ensures switching to direct GenAI Controller calls, future Now-SDK support for NASK/AI Agents, or any other LLM invocation method is a **single-file change**.
+**Decision:** The LLM must return a single JSON object — `{"action": "tool_call", ...}`, `{"action": "answer", ...}`, or `{"action": "fix_report", ...}` — replacing v1.1's `TOOL_CALL:`/`ANSWER:` string prefixes.
 
-### Two Skills, Two Purposes
+**Rationale:** the Troubleshooter runs on *whatever model the customer configured*. Free-text prefix parsing fails differently per model. JSON-only with an explicit schema in the prompt, plus **one automatic re-prompt on parse failure** ("your last response was not valid JSON — respond again, JSON only"), is the cheapest reliability win available. `_parseResponse(raw)` stays pure string logic, fully Jest-testable: valid actions, malformed JSON, JSON in markdown fences, empty responses, trailing prose.
+
+### The Circular Dependency
+
+The Troubleshooter uses the GenAI stack to debug the GenAI stack. Defenses:
+
+1. **Deep `/status`** — plugin checks (Now Assist, GenAI Controller, `sn_aia`), capability-to-provider mappings, the Troubleshooter's own skills, one live micro-invocation, stuck-run detection. When the Troubleshooter can't reason, `/status` says why — which is often the customer's actual problem too.
+2. **Minimal own config** — the two skills use the plainest configuration, validated at install; a broken customer skill setup can't cascade into ours.
+3. **Evidence Bundle** (`mode: "collect"`) — PaRunManager runs the collection tools without any LLM and returns organized raw evidence. The floor is "expert evidence gatherer," never "dead."
+
+### Two Skills
 
 | Skill | Purpose | Temperature | Max Tokens |
 |-------|---------|-------------|------------|
-| `pa-llm-reason` | ReAct reasoning — tool selection, analysis, answers | 0.2 | 2000 |
-| `pa-llm-summarize` | Conversation compression | 0.1 | 1000 |
+| `pa-llm-reason` | Diagnostic reasoning, fix drafting | 0.2 | 2000 |
+| `pa-llm-summarize` | Transcript compression | 0.1 | 1000 |
 
-Separate skills because NASK bakes configuration at creation time, not at invocation time. We need different temperature/token settings for reasoning vs. summarization.
-
-### Response Parser
-
-`_parseResponse(raw)` is pure string parsing with no ServiceNow dependencies — fully unit-testable with Jest. Handles: valid TOOL_CALL, valid ANSWER, malformed JSON, empty responses, missing prefixes (fallback to answer).
+Separate because NASK bakes config at creation time, not invocation time.
 
 ### Known Risks
 
-- NASK skill creation requires ~24 API calls; mid-sequence failure needs manual cleanup
-- `GaiScriptedSkill` API is reverse-engineered, not publicly documented
-- Skills Kit internals have changed between ServiceNow releases
-- **Mitigation:** PaLlmProxy abstraction makes the NASK dependency swappable
+- NASK creation is ~24 API calls per skill; mid-sequence failure needs cleanup → Phase 3 installs with rollback
+- `GaiScriptedSkill` is reverse-engineered, not documented; Skills Kit internals shift between releases
+- **Mitigation:** the PaLlmProxy abstraction makes all of it swappable
 
 ---
 
-## Layer 5: Tools — PaToolRegistry + Individual Tools
+## Layer 5: Tools — PaToolRegistry + Diagnostic Tool Roster
 
-**Decision:** Centralized registry with consistent tool interface. All Phase 1 tools are read-only.
+**Decision:** Centralized registry, consistent interface, roster re-built around agent diagnosis. All Phase 1–2 tools read-only.
 
-### Registry Design
+### Registry Design (unchanged)
 
-PaToolRegistry centralizes the destructive check — it's the **single point of enforcement**. Without it, every piece of code that calls a tool would need to check "is this destructive?" independently. That's a security bug waiting to happen.
+PaToolRegistry is the **single point of destructive-check enforcement**. All tools return `{success, data}` or `{success: false, error}` — uniform shape for the LLM regardless of tool.
 
-All tools return consistent shape: `{success: boolean, data: {...}}` or `{success: false, error: "..."}`. The LLM sees uniform output regardless of which tool ran.
-
-### GlideRecordSecure Everywhere
-
-Every tool uses `GlideRecordSecure`, never `GlideRecord`. This respects the logged-in user's ACLs and role-based access. If a user doesn't have access to a table, the tool returns empty results — no error, no data leak. We don't build custom permissions; we lean on ServiceNow's.
-
-**Tradeoff:** GlideRecordSecure is slower than GlideRecord due to per-record ACL checks. For our use case (max 100 records per query), the performance hit is negligible. Security over speed.
-
-### Phase 1 Tools (All Read-Only)
+### Phase 1 Roster (read-only)
 
 | Tool | Purpose | Key Limits |
 |------|---------|-----------|
-| **PaToolQueryTable** | GlideRecordSecure queries on any table | Max 100 records, validates table exists |
-| **PaToolSchemaLookup** | Table/field schema via sys_dictionary + sys_choice | Table-level and field-level modes |
-| **PaToolLogAnalysis** | System log search with filters | Default 60 min window, max 100 entries |
-| **PaToolCmdbTraverse** | CMDB relationship traversal | Default depth 2, max depth 5, max 200 results |
+| **PaToolAgentTrace** | Step-by-step execution replay from `sn_aia_*` execution tables: per-step LLM input, tool calls, args, results, errors | Per-step detail mode; full payloads go to artifact store |
+| **PaToolAgentConfig** | Agent definition: use case, instructions, attached tools with full I/O schemas, trigger config | Read-only; resolves tool → backing script/flow |
+| **PaToolGenAiLog** | GenAI Controller request log, provider errors, token usage, capability mappings | Default 60-min window, max 100 entries |
+| **PaToolSchemaLookup** | Table/field schema via `sys_dictionary` + `sys_choice` | Table-level and field-level modes |
+| **PaToolQueryTable** | GlideRecordSecure queries — verify expected data exists | Max 100 records, validates table |
+| **PaToolLogAnalysis** | Syslog search | Default 60-min window, max 100 entries |
+| **read_artifact** (PaArtifactStore) | Paged reads of stored large outputs | Offset + length, like reading a file in chunks |
 
-Destructive tools (create/update/delete records) are planned for Phase 3, after the confirmation flow has been battle-tested with real usage.
+**Phase 2 additions:** PaToolFlowContext (flow/subflow execution behind flow-based agent tools), PaToolCmdbTraverse (relationship context when agents act on CIs — demoted from Phase 1 headline in v1.1: valuable, but not on the critical diagnostic path).
 
-### CMDB Traversal Design
+**Phase 3 additions (destructive, confirmation-gated):** targeted agent-repair writes — update instruction text, fix tool schema records, toggle use case/trigger activation. Deliberately *not* generic record CRUD: narrow verbs are easier to describe to the LLM, confirm with the user, and audit.
 
-- Default depth 2 covers 80% of use cases. Max depth 5 covers deep traversals (incident → CI → host → cluster → data center → app service).
-- 200 result cap prevents runaway queries on highly-connected CIs.
-- The LLM can chain multiple traversal calls across ReAct iterations for deeper exploration.
-- **Phase 2 enhancement:** Detect if ServiceNow Knowledge Graph API (`sn_cmdb_api` or CMDB GraphQL) is available. If yes, use it for faster traversal with cycle detection and impact-aware relationships. If no, fall back to manual `cmdb_rel_ci` walking. Universal compatibility with better performance when available.
+### The `sn_aia_*` Dependency
+
+AgentTrace/AgentConfig read reverse-engineered execution tables that can shift between ServiceNow releases. Containment: the table/field mapping lives in those two tools only (mirroring the PaLlmProxy pattern), is verified by `/status` at install, and is maintained upstream in Foundry's data-model documentation.
+
+### GlideRecordSecure Everywhere (unchanged)
+
+Every tool uses `GlideRecordSecure`. ACL-filtered empty results — not errors, not leaks. The per-record ACL cost is negligible at our query sizes (≤100 records). Security over speed.
+
+### Large Outputs: Truncate + Page
+
+A full execution trace or log dump can exceed what any prompt should carry. Every tool result passes through PaArtifactStore: results over a size threshold are stored as attachments on the run record; the transcript gets a truncated excerpt plus an artifact ref; the LLM pulls more via `read_artifact` with offsets — the same pattern coding agents use to read big files. This is what makes "feed it the execution logs" actually work instead of blowing the context window.
+
+This is also ServiceNow's own performance guidance applied to ourselves: the K26 lab (CCL6230, Lab 2) names **tool output bloat** — raw payloads accumulating in the scratchpad and reprocessed on every ReAct turn — as a primary agent latency/failure cause, and prescribes synthesized, minimal tool returns. PaArtifactStore is that principle enforced mechanically, and the same lab's three-section tool-description framework (Purpose / Inputs / Outputs & Error Handling) is the writing standard for the roster's descriptions (LLD §2.5, §5).
 
 ---
 
-## Layer 6: Data & State — PaSessionManager + PaAuditLogger
+## Layer 6: Data & State — PaRunManager + PaAuditLogger
 
-**Decision:** Two custom tables — one for conversation state, one for audit trail. Messages stored as JSON, not in a child table.
+**Decision:** Two scoped tables — `x_snc_pa_run` (diagnostic runs) and `x_snc_pa_audit` (audit trail). Transcript as JSON on the run; large artifacts as attachments.
 
-### Session Management (u_pa_session)
+### Why "runs," not "sessions"
 
-**Messages as JSON vs. child table:**
-- We always load ALL messages for a session at once (to build the LLM prompt), so one query returning a JSON field beats N queries to a child table.
-- We don't need to search across messages independently.
-- Keeps instance footprint minimal (2 tables, not 3).
-- If cross-session message search becomes needed, a child table can be added in a future phase.
+A diagnostic run has a lifecycle a chat session doesn't: `queued → running → (awaiting_confirmation) → complete | failed`, a definite terminal artifact (Fix Report or Evidence Bundle), and value as a *record* — past runs on an instance are a debugging history worth keeping per-POC.
 
-**Context summarization:**
-- After 10 messages, PaSessionManager calls `PaLlmProxy.summarize()` to compress older messages into a paragraph.
-- Stores the summary in `u_context`, keeps only the last 4 messages in `u_messages`.
-- The LLM sees: summary of earlier conversation + recent messages. This enables unbounded conversations without hitting token limits.
+### Run Management (x_snc_pa_run)
 
-**Session lifecycle:**
-- 30-minute inactivity expiry prevents stale context from polluting new questions.
-- Pending actions (destructive ops awaiting confirmation) survive across HTTP requests — the user can take time to decide.
+- **Transcript as JSON** on the run record: always loaded whole to build prompts, one query, no child table. Cross-run search isn't a requirement; if it becomes one, add a child table then.
+- **Progress visibility:** the worker updates the transcript after every iteration — this is what the polling UI renders.
+- **Context summarization:** past ~10 transcript entries, `summarize()` compresses older entries into the context field, keeping recent entries verbatim. Artifact refs survive summarization — the LLM can always page back into full evidence.
+- **No inactivity expiry for pending confirmations:** a run in `awaiting_confirmation` waits indefinitely; only `running` runs are subject to the wall-clock budget. (Fixes a v1.1 design bug where 30-minute session expiry could silently swallow a pending confirmation.)
 
-### Audit Logging (u_pa_audit_log)
-
-**Three moments, three methods:**
+### Audit Logging (x_snc_pa_audit) — unchanged in spirit
 
 | Method | When | Why |
 |--------|------|-----|
-| `logIntent(params)` | Before destructive execution | If the system crashes between intent and execution, we have a record of what was attempted |
-| `logResult(params)` | After successful execution | Records input, output, affected table/record, user confirmation |
-| `logError(params)` | After failed execution | Records what went wrong |
+| `logIntent` | Before destructive execution | Crash between intent and execution still leaves a record |
+| `logResult` | After success | Input, output, affected table/record, confirmation flag |
+| `logError` | After failure | What went wrong |
 
-The audit log is **write-only from the assistant's perspective**. It never reads its own audit log. This is purely for humans — admins, security reviewers, managers who want to know what the tool did on a customer instance.
+Write-only from the Troubleshooter's perspective; it never reads its own audit log. It exists for humans — admins and security reviewers on the customer instance.
 
-**Known risk:** The `u_messages` JSON field could grow large for very active sessions. Mitigated by summarization at 10 messages and the 30-minute session expiry.
+---
+
+## Layer 7: Packaging — Scoped Application
+
+**Decision:** Everything ships as a scoped app (`x_snc_pa`), not global-scope `u_` artifacts (a v1.1 inconsistency: it named the `x_snc_pa` namespace but specified `u_` tables).
+
+**Rationale:** the deployment target is *someone else's instance*. A scoped app makes install/uninstall a single demonstrable operation, contains all artifacts under one scope for the customer's security review, and turns "all records can be removed cleanly" from an assertion into a platform-enforced property. Install automation (incl. the NASK skill sequence) with rollback lands in Phase 3; until then, install is scripted-but-supervised.
