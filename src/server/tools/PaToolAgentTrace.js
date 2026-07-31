@@ -238,7 +238,25 @@ PaToolAgentTrace.prototype = {
                 this.MESSAGE_FIELDS,
                 this.MESSAGE_DISPLAY,
                 this.MAX_MESSAGES,
-                'message_sequence',
+                // DELIBERATE DEVIATION from LLD §4.1 step 4's "order by
+                // message_sequence", forced by real data (DESIGN.md R-15 item 6).
+                //
+                // On the gpinst01 probe run five of nine rows have an EMPTY
+                // message_sequence (the tool-result messages). Empty sorts
+                // FIRST, so sequence-primary puts those five ahead of the
+                // user's opening message — which was created 26 seconds
+                // EARLIER. The stream then reads as though the agent replied
+                // before it was asked. Since step 4's whole purpose is showing
+                // dialogue progression, that ordering actively misrepresents
+                // the run.
+                //
+                // sys_created_on is the only key populated on every row, so it
+                // leads. message_sequence breaks ties within a second (where it
+                // IS populated it orders correctly); sys_id makes the result
+                // fully deterministic, which the benchmark needs to compare
+                // runs. Timestamps travel with every message so a reader can
+                // check the ordering rather than trust it.
+                ['sys_created_on', 'message_sequence', 'sys_id'],
                 data
             )
             data.messages = this._shapeMessages(messageRead.rows)
@@ -442,7 +460,7 @@ PaToolAgentTrace.prototype = {
             if (!s) return {}
 
             var parsed = this._tryParse(s)
-            if (parsed && typeof parsed === 'object' && !(parsed instanceof Array)) {
+            if (parsed && typeof parsed === 'object' && !this._isArray(parsed)) {
                 raw = parsed
             } else if (s.charAt(0) === '{' || s.charAt(0) === '[') {
                 // Meant to be structured and is not. Say so rather than
@@ -455,7 +473,7 @@ PaToolAgentTrace.prototype = {
             }
         }
 
-        if (typeof raw !== 'object' || raw instanceof Array) return {}
+        if (typeof raw !== 'object' || this._isArray(raw)) return {}
 
         var out = {}
         var execution = this._str(raw.execution)
@@ -1065,7 +1083,7 @@ PaToolAgentTrace.prototype = {
      */
     _applyOrder: function (gr, orderBy) {
         if (!orderBy) return
-        var keys = orderBy instanceof Array ? orderBy : [orderBy]
+        var keys = this._isArray(orderBy) ? orderBy : [orderBy]
         for (var i = 0; i < keys.length; i++) {
             var k = keys[i]
             if (!k) continue
@@ -1575,6 +1593,7 @@ PaToolAgentTrace.prototype = {
                 name: m.name,
                 type: m.type_display || m.type,
                 error_type: m.error_type || null,
+                created: m.sys_created_on,
                 content_digest: this._digest(m.message, this.DIGEST_CHARS),
                 content_length: (m.message || '').length,
                 user_message_digest: this._digest(m.user_message, this.DIGEST_CHARS),
@@ -1642,7 +1661,7 @@ PaToolAgentTrace.prototype = {
             this.CS_MESSAGE_FIELDS,
             this.CS_MESSAGE_DISPLAY,
             this.MAX_CS_MESSAGES,
-            ['sequence', 'sys_created_on'],
+            ['sequence', 'sys_created_on', 'sys_id'],
             data
         )
 
@@ -1698,6 +1717,17 @@ PaToolAgentTrace.prototype = {
     // Small helpers (ES5 / Rhino only — no let/const, arrow, Set or Map)
     // =======================================================================
 
+    /**
+     * Realm-safe array check. `instanceof Array` compares against the Array
+     * constructor of the CURRENT realm, so it returns false for an array that
+     * crossed a boundary — a Java-backed list from a scoped REST
+     * `request.queryParams`, or a value from another script context. The
+     * toString form asks the value what it IS rather than where it came from.
+     */
+    _isArray: function (v) {
+        return Object.prototype.toString.call(v) === '[object Array]'
+    },
+
     _tryParse: function (s) {
         try {
             return JSON.parse(s)
@@ -1707,7 +1737,7 @@ PaToolAgentTrace.prototype = {
     },
 
     _isPlainObject: function (v) {
-        return v !== null && typeof v === 'object' && !(v instanceof Array)
+        return v !== null && typeof v === 'object' && !this._isArray(v)
     },
 
     _shallowCopy: function (o) {

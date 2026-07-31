@@ -32,7 +32,9 @@
 ```
 sn_aia_execution_plan ──┬─< sn_aia_execution_task   (parent ⇒ task tree, order ⇒ sequence)
   │                     ├─< sn_aia_tools_execution   (tool ⇒ sn_aia_agent_tool_m2m ⇒ sn_aia_tool)
-  │                     └─< sn_aia_message           (message_sequence ⇒ stream order)
+  │                     └─< sn_aia_message           (sys_created_on ⇒ stream order;
+  │                                                    message_sequence is EMPTY on many
+  │                                                    rows — see R-15 item 6)
   ├── usecase  → sn_aia_usecase
   ├── agent    → sn_aia_agent        (often EMPTY on observed rows — resolve via usecase too)
   ├── conversation → sys_cs_conversation
@@ -54,10 +56,10 @@ sn_aia_execution_plan ──┬─< sn_aia_execution_task   (parent ⇒ task tre
 
 **Reference fields carry the literal string `"undefined"`** (DESIGN.md R-15 item 4) — observed in `sn_aia_execution_plan.agent` on every `security_violation` plan, and in `related_task_table`. It is truthy, so a plain emptiness check treats it as a real sys_id. Normalise `''`/`null`/`'undefined'`/`'null'` to empty before using any reference.
 
-**`sys_cs_*` field names** (DESIGN.md R-15 items 5–6; these were only ever named by the K26 guidebook, never verified until now): `sys_cs_conversation` has **no `channel` field** — the NAP-vs-VA signal is spread across `conversation_type`, `device_type` and `provenance` — and no `name` (it is `title`). On `sys_cs_message` the text is **`payload`** (not `text`), the type is **`message_type`** (not `type`), and the sort key is **`sequence`**. Also: `sn_aia_message.message_sequence` is **empty** on tool-result rows, so it needs a secondary sort key.
+**`sys_cs_*` field names** (DESIGN.md R-15 items 5–6; these were only ever named by the K26 guidebook, never verified until now): `sys_cs_conversation` has **no `channel` field** — the NAP-vs-VA signal is spread across `conversation_type`, `device_type` and `provenance` — and no `name` (it is `title`). On `sys_cs_message` the text is **`payload`** (not `text`), the type is **`message_type`** (not `type`), and the sort key is **`sequence`**. Also: `sn_aia_message.message_sequence` is **empty** on tool-result rows — see the `sn_aia_message` entry below; it cannot lead the sort.
 
 **`sn_aia_message`** (the conversation stream):
-- `execution_plan`, `message_sequence` (sortable counter), `role` (observed: `user_profile`, `user`, `agent`), `name` (speaker label — observed: "Manager", "Orchestrator", user's name), `message`, `user_message`, `error_type`, `type`
+- `execution_plan`, `message_sequence` (counter — ⚠ **EMPTY on tool-result rows, and NOT usable as the primary sort key**: empty sorts first, which puts tool results ahead of the user's opening message. Order by `sys_created_on`, then `message_sequence`, then `sys_id`. DESIGN.md R-15 item 6), `role` (observed: `user_profile`, `user`, `agent`), `name` (speaker label — observed: "Manager", "Orchestrator", user's name), `message`, `user_message`, `error_type`, `type`
 - **Error-mining heuristic (verified):** agent-role `message` values that parse as JSON with `fileName`/`sourceName`/`lineNumber` are server-script stack errors — extract as root-cause evidence
 
 ### 2.2 Configuration side (read by PaToolAgentConfig)
@@ -192,7 +194,7 @@ All tool cores are Script Includes with one contract:
 1. Plan header: state, state_reason, status, objective, run_type, execution_mode, timings, token/latency metrics, conversation, usecase/agent names
 2. Task tree: query `sn_aia_execution_task` by `execution_plan`, order by `order`; nest via `parent`; emit {order, type, status, description, time_ms, output_digest(200 chars)}
 3. Tool calls: query `sn_aia_tools_execution` by `execution_plan_id`; emit {tool.tool.name, tool.agent.name, execution_status, error_message, time_ms, request_digest, response_digest}
-4. Messages: query `sn_aia_message` by `execution_plan`, order by `message_sequence`; emit {seq, role, name, content_digest}. If `plan.conversation` is set, also emit conversation context per the K26 guidebook (§2.5): `sys_cs_conversation` channel type (NAP vs. VA) + `sys_cs_message` digests (requestor/fulfiller/system) to show dialogue progression and where the user disconnected or got an unexpected reply
+4. Messages: query `sn_aia_message` by `execution_plan`, order by **`sys_created_on`, then `message_sequence`, then `sys_id`** (⚠ corrected 2026-07-30, DESIGN.md R-15 item 6 — `message_sequence` alone put tool results ahead of the user's opening message, which was created 26s earlier); emit {seq, created, role, name, content_digest}. If `plan.conversation` is set, also emit conversation context per the K26 guidebook (§2.5): `sys_cs_conversation` channel type (NAP vs. VA) + `sys_cs_message` digests (requestor/fulfiller/system) to show dialogue progression and where the user disconnected or got an unexpected reply
 5. **Error mining:** any agent-role message whose `message` parses as JSON with `fileName`/`lineNumber` → emit as `script_errors[]` {source, line, error_name} — first-class root-cause evidence
 6. Failure signatures (attach to header as `failure_signature`):
    - state=terminated + a `cancelled` orchestrator task + `ongoing` leaf = "died mid-reasoning"

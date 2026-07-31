@@ -371,6 +371,57 @@ describe('_shapeTasks', () => {
 })
 
 // ---------------------------------------------------------------------------
+// _applyOrder — ordering must reach the DATABASE, and needs a secondary key.
+//
+// On gpinst01 five of nine sn_aia_message rows carry an EMPTY
+// message_sequence (the tool-result messages). Sorting on that column alone
+// leaves those five in arbitrary order at the head of the stream — and the
+// message stream is the evidence LLD §4.1 step 4 uses to show dialogue
+// progression, so a nondeterministic order misrepresents what happened.
+// ---------------------------------------------------------------------------
+describe('_applyOrder', () => {
+    function recorder() {
+        const calls = []
+        return {
+            calls: calls,
+            orderBy: function (f) {
+                calls.push(['asc', f])
+            },
+            orderByDesc: function (f) {
+                calls.push(['desc', f])
+            },
+        }
+    }
+
+    test('a bare string sorts ascending', () => {
+        const gr = recorder()
+        trace._applyOrder(gr, 'sys_created_on')
+        expect(gr.calls).toEqual([['asc', 'sys_created_on']])
+    })
+
+    test('{field, desc} sorts descending — the recency fix', () => {
+        const gr = recorder()
+        trace._applyOrder(gr, { field: 'sys_created_on', desc: true })
+        expect(gr.calls).toEqual([['desc', 'sys_created_on']])
+    })
+
+    test('an array applies every key in order, primary first', () => {
+        const gr = recorder()
+        trace._applyOrder(gr, ['message_sequence', 'sys_created_on'])
+        expect(gr.calls).toEqual([
+            ['asc', 'message_sequence'],
+            ['asc', 'sys_created_on'],
+        ])
+    })
+
+    test('no ordering requested issues no sort calls', () => {
+        const gr = recorder()
+        trace._applyOrder(gr, null)
+        expect(gr.calls).toEqual([])
+    })
+})
+
+// ---------------------------------------------------------------------------
 // _deriveFailureSignatures — LLD §4.1 step 6
 // ---------------------------------------------------------------------------
 describe('_deriveFailureSignatures', () => {
@@ -645,5 +696,66 @@ describe('execution paths run end to end', () => {
     test('the step argument reports the deferral instead of being ignored', () => {
         const r = load().execute({ execution: 'plan0000000000000000000000000001', step: 'task0000000000000000000000000001' })
         expect(r.data.detail.status).toBe('not_implemented')
+    })
+})
+
+// ---------------------------------------------------------------------------
+// Ordering reaches the database, with a total order on the message stream.
+//
+// Two defects this guards, both found on gpinst01:
+//   - candidates were sorted in memory AFTER setLimit(10), so ten arbitrary
+//     rows were labelled "the ten most recent"
+//   - sn_aia_message.message_sequence is EMPTY on tool-result rows (five of
+//     nine on the probe run), so it is not a total order on its own
+// ---------------------------------------------------------------------------
+describe('ordering is applied at the database', () => {
+    const { makeGlideRecordSecure, makeGlideDateTime } = require('./_glideStub')
+
+    function run(args, tables) {
+        const GRS = makeGlideRecordSecure(tables || {})
+        const ctx = loadScriptInclude('tools/PaToolAgentTrace.js', {
+            GlideRecordSecure: GRS,
+            GlideDateTime: makeGlideDateTime(),
+        })
+        new ctx.PaToolAgentTrace().execute(args)
+        return GRS.orderCalls
+    }
+
+    test('the message stream leads on the timestamp, the only key every row has', () => {
+        const calls = run(
+            { execution: 'plan0000000000000000000000000001' },
+            { sn_aia_execution_plan: [{ sys_id: 'plan0000000000000000000000000001' }] }
+        )
+        const msg = calls.filter((c) => c[0] === 'sn_aia_message').map((c) => c[2])
+        // sequence-primary would put empty-sequence rows ahead of messages
+        // created 26 seconds earlier — see the comment at the call site.
+        expect(msg).toEqual(['sys_created_on', 'message_sequence', 'sys_id'])
+    })
+
+    test('the recent pick-list sorts newest-first in the query, not afterwards', () => {
+        const calls = run({})
+        expect(calls).toContainEqual(['sn_aia_execution_plan', 'desc', 'sys_created_on'])
+    })
+
+    test('the agent pick-list sorts newest-first in the query too', () => {
+        const calls = run(
+            { agent: 'Some Use Case' },
+            { sn_aia_usecase: [{ sys_id: 'uc000000000000000000000000000001', name: 'Some Use Case' }] }
+        )
+        expect(calls).toContainEqual(['sn_aia_execution_plan', 'desc', 'sys_created_on'])
+    })
+
+    test('the conversation stream also gets a tiebreaker', () => {
+        const calls = run(
+            { execution: 'plan0000000000000000000000000001' },
+            {
+                sn_aia_execution_plan: [
+                    { sys_id: 'plan0000000000000000000000000001', conversation: 'conv000000000000000000000000001' },
+                ],
+                sys_cs_conversation: [{ sys_id: 'conv000000000000000000000000001' }],
+            }
+        )
+        const cs = calls.filter((c) => c[0] === 'sys_cs_message').map((c) => c[2])
+        expect(cs).toEqual(['sequence', 'sys_created_on', 'sys_id'])
     })
 })

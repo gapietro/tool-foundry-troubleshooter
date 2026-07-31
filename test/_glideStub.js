@@ -39,8 +39,15 @@ function makeGlideRecordSecure(tables) {
         return condition
     }
     GlideRecordSecure.prototype.addEncodedQuery = function () {}
-    GlideRecordSecure.prototype.orderBy = function () {}
-    GlideRecordSecure.prototype.orderByDesc = function () {}
+    // Ordering must reach the DATABASE, so the stub records what was applied
+    // and to which table. Sorting after setLimit() sorts an arbitrary page.
+    GlideRecordSecure.orderCalls = []
+    GlideRecordSecure.prototype.orderBy = function (f) {
+        GlideRecordSecure.orderCalls.push([this._table, 'asc', f])
+    }
+    GlideRecordSecure.prototype.orderByDesc = function (f) {
+        GlideRecordSecure.orderCalls.push([this._table, 'desc', f])
+    }
     GlideRecordSecure.prototype.setLimit = function () {}
     GlideRecordSecure.prototype.query = function () {}
 

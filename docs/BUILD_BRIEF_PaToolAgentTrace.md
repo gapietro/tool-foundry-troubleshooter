@@ -31,7 +31,8 @@ Follow the SDK/MCP boundary in `CLAUDE.md`: **SDK owns creation** (Fluent DSL in
 - **14 of 15 tables are readable from `x_snc_troubleshoot`** via `GlideRecordSecure`, with no privilege grant. That includes every table this tool needs: `sn_aia_execution_plan`, `_execution_task`, `_tools_execution`, `_message`, `sn_aia_agent`, `sn_aia_usecase`, `sys_cs_conversation`.
 - **`syslog` is DENIED** from our scope. It needs a `sys_scope_privilege` Read grant. That blocks `PaToolLogAnalysis`, not this tool — but don't be surprised by it.
 - Verify anything yourself with `GET /api/x_snc_troubleshoot/scope_probe/reads` (`src/fluent/scope-readability.now.ts`).
-- Known-answer failure specimens exist on **keynexus01** (not gpinst01) for testing: `78f347b72f198310f824ac1bcfa4e3bd` (script error in a `context_processing_script`, root cause sitting in `sn_aia_message`), plus a silent non-terminating stall and a script `ReferenceError`.
+- Known-answer failure specimens exist on **keynexus01** for testing: `78f347b72f198310f824ac1bcfa4e3bd` (script error in a `context_processing_script`, root cause sitting in `sn_aia_message`), plus a silent non-terminating stall and a script `ReferenceError`. keynexus01 has no `now-sdk auth` entry, so none of these is reachable today.
+- **Updated 2026-07-30 (DESIGN.md R-16) — gpinst01 has a local specimen too.** Execution `c9d63a932bda8b9417a6ffbeee91bfd0` carries a real script error mined out of an agent-role message: `sn_aia_agent.601672d32b1a83d0f243fed2ce91bf3e.context_processing_script`, **line 42**, `InternalError`. It is invisible from the plan header — `state=Completed`, empty `state_reason`, all 11 tasks and all 5 tool calls `Success` — so it also serves as the standing proof that reading the header and stopping is not a diagnosis. Basic error-mining verification no longer needs keynexus01; the stall and `ReferenceError` specimens still do.
 
 ## Traps that will cost you hours — all found the hard way
 

@@ -172,8 +172,12 @@ export const scopeProbeApi = RestApi({
                 if (args[n] !== undefined && args[n] !== null && args[n] !== '') continue;
                 var v = qp[n];
                 if (v === undefined || v === null) continue;
-                // Scoped REST hands query params back as arrays.
-                args[n] = (v instanceof Array) ? v[0] : v;
+                // Scoped REST hands query params back as arrays, but they may
+                // be Java-backed and cross a realm boundary - 'instanceof Array'
+                // compares against THIS realm's Array constructor and returns
+                // false for those, passing the whole list through as the value.
+                // Ask what it is, not where it came from.
+                args[n] = (Object.prototype.toString.call(v) === '[object Array]') ? v[0] : v;
             }
         } catch (qpErr) {
             // query params unavailable; whatever came from the body still stands
