@@ -132,11 +132,15 @@ ServiceNow's Knowledge 2026 lab **CCL6230-K26** ships a "Complete Troubleshootin
 
 ## 3. Scoped App & Custom Tables
 
-**Scope:** placeholder `x_snc_pa` in prior docs — ⚠ the real scope prefix is assigned by the vendor prefix available at SDK app creation (e.g. `x_<vendor>_troubleshooter`). All names below use `x_pa_*` shorthand; finalize at SDK setup.
+**Scope: FINALIZED 2026-07-30 — `x_snc_troubleshoot`** (scopeId `13043037d3da4293904504ef30589334`), assigned at SDK app creation (commit cc871d2). This supersedes the `x_snc_pa` / `x_pa_*` placeholders used throughout the earlier design docs; see DESIGN.md **R-13**.
+
+Table names below are the real, buildable ones. **The placeholder names were not merely provisional — they were unbuildable:** a ServiceNow scoped table name must begin with its application's exact scope value. Verified on gpinst01 (2026-07-30): of 40 `x_snc_*` tables sampled from `sys_db_object`, **40 of 40** are named `<sys_scope.scope>_<name>`, with no exceptions. So `x_pa_run` cannot be created from `x_snc_troubleshoot` at all — it is not a shorthand that expands, it is a name the platform rejects.
+
+Other design docs (`PRD_ServiceNow_Platform_Assistant.md`, `ARCHITECTURE_DECISIONS.md`, `AGENT_DOCTOR_ARCHITECTURE.md`) still carry `x_snc_pa_*` / `x_pa_*` in prose. Those are historical design text; **this section is the authority for table names.** Read any `x_pa_*` elsewhere as a pointer here.
 
 **Cross-scope access (design-critical):** our scoped app reads `sn_aia_*` (scope `sn_aia`) and `sys_gen_ai_*` (global). Scoped-app table access is governed by cross-scope privileges (`sys_scope_privilege`) and per-table "Accessible from" settings. Mitigations, in order: (1) declare read privileges for the specific tables at install; (2) every tool treats an empty/denied read as an explicit finding ("cannot read X — permission/scope gap"), never a silent empty; (3) `/status`-equivalent check verifies readability of all §2 tables at install. ⚠ VERIFY per-table during build.
 
-### 3.1 `x_pa_run` (diagnostic run)
+### 3.1 `x_snc_troubleshoot_run` (diagnostic run)
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -154,11 +158,11 @@ ServiceNow's Knowledge 2026 lab **CCL6230-K26** ships a "Complete Troubleshootin
 
 Artifacts = **attachments on this record** (`GlideSysAttachment`), named `artifact-<seq>-<tool>.json`.
 
-### 3.2 `x_pa_audit`
+### 3.2 `x_snc_troubleshoot_audit`
 
 | Column | Type |
 |--------|------|
-| run | reference → x_pa_run |
+| run | reference → x_snc_troubleshoot_run |
 | user | reference → sys_user |
 | action_type | choice: `intent` \| `result` \| `error` |
 | tool_name | string |
@@ -228,8 +232,8 @@ As specified in `IMPLEMENTATION_PLAN.md` Task 8 — unchanged by instance resear
 
 ### 4.6 PaRunAnchor + PaAuditLogger
 
-- `PaRunAnchor.getOrCreate({harness, executionRef?, conversationId?})`: for native harness, key = the AIA conversation/execution driving the chat (available to script tools via ⚠ VERIFY — expected in tool script context or passed as tool input; fallback: one anchor per user per 30 min); creates `x_pa_run` with `harness=native`, `status=running`
-- `PaAuditLogger.logIntent/logResult/logError(params)` → `x_pa_audit` insert; called by the adapter around every tool execution
+- `PaRunAnchor.getOrCreate({harness, executionRef?, conversationId?})`: for native harness, key = the AIA conversation/execution driving the chat (available to script tools via ⚠ VERIFY — expected in tool script context or passed as tool input; fallback: one anchor per user per 30 min); creates `x_snc_troubleshoot_run` with `harness=native`, `status=running`
+- `PaAuditLogger.logIntent/logResult/logError(params)` → `x_snc_troubleshoot_audit` insert; called by the adapter around every tool execution
 
 ### 4.7 PaScriptToolAdapter (native harness bridge)
 
@@ -270,7 +274,7 @@ Tool roster (names as the LLM sees them): `agent_trace`, `agent_config`, `genai_
 
 | Artifact | Built via | Rationale |
 |----------|-----------|-----------|
-| Scoped app, `x_pa_run`, `x_pa_audit` tables | **SDK** (Fluent table definitions) | Versioned DDL in git, repeatable install |
+| Scoped app, `x_snc_troubleshoot_run`, `x_snc_troubleshoot_audit` tables | **SDK** (Fluent table definitions) | Versioned DDL in git, repeatable install |
 | Script Includes (§4: 6 tool cores + ArtifactStore + RunAnchor + AuditLogger + ScriptToolAdapter) | **SDK** (source-controlled server scripts) | The whole point — code in repo, deployed by CLI |
 | Jest tests (adapter parse/stringify, truncation/paging, error-mining regex) | repo-local | pure-logic tests run without instance |
 | Agent Doctor record set (§5, tables in `sn_aia` scope) | **Foundry automation** (existing use-case/record APIs) | `sn_aia_*` records are another scope's data, not our app's metadata — record-creation automation, idempotent, with delete/rollback |
@@ -292,7 +296,7 @@ Seed construction (each = one broken agent + one captured failing execution sys_
 |------|--------------------------|
 | 1 — tool schema mismatch | Script tool with `input_schema` declaring `priority` free-string; script writes to `incident.priority` (integer choice 1–5); agent instructed to set priority from words. Trigger via chat; verbose multi-step instructions to force a LARGE trace (artifact-paging stressor) |
 | 2 — ambiguous instruction | Instructions say "assign to the right group", no lookup guidance, no group tool |
-| 3 — missing data | Instructions reference lookup table `x_pa_bench_routing` (created empty) |
+| 3 — missing data | Instructions reference lookup table `x_snc_troubleshoot_bench_routing` (created empty) |
 | 4 — GenAI stack | ⚠ VERIFY safest construction: prefer a bogus `skill_config_id`/capability reference over breaking instance-wide provider config (shared instance — do NOT unmap real capabilities) |
 | 5 — inactive wiring | Use case + trigger created with `sn_aia_trigger_configuration.active`=false |
 
