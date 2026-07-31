@@ -295,6 +295,14 @@ PaArtifactStore.prototype = {
 
         var stored = this.store(runId, toolName, text)
 
+        // Paging affordances are stated ONLY when there is something to page.
+        // A page count sitting next to a null artifact_id reads, to the LLM
+        // consuming this envelope, as an instruction to make N read_artifact
+        // calls that cannot succeed — and it contradicts `degraded` and `note`
+        // in the same object. `total_length` still stands either way: the size
+        // is real and worth knowing even when the bytes are unreachable.
+        var pageable = stored.stored === true && !!stored.artifact_id
+
         var out = {
             // A truncated failure is still a failure — the flag must survive.
             success: !(result && typeof result === 'object' && result.success === false),
@@ -302,8 +310,8 @@ PaArtifactStore.prototype = {
             tool: toolName ? String(toolName) : null,
             total_length: stored.total_length,
             artifact_id: stored.artifact_id,
-            page_size: this.MAX_PAGE_CHARS,
-            pages: stored.pages || Math.ceil(stored.total_length / this.MAX_PAGE_CHARS),
+            page_size: pageable ? this.MAX_PAGE_CHARS : null,
+            pages: pageable ? stored.pages : null,
             excerpt: stored.excerpt,
             note: stored.note,
         }

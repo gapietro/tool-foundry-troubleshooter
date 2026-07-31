@@ -570,6 +570,49 @@ describe('applyThreshold', () => {
         expect(out.degraded).toBe('attachment_write_failed')
         expect(out.note).toMatch(/not available/i)
     })
+
+    test('a degraded envelope advertises NO paging affordances', () => {
+        // The envelope is read by an LLM deciding whether to call read_artifact.
+        // A page count next to a null artifact_id is an instruction to make nine
+        // calls that cannot succeed — and it contradicts `degraded` and `note`
+        // in the same object. Nothing about paging may be stated when paging is
+        // impossible. Caught in review of PR #17.
+        const world = makeAttachmentWorld({ writeReturns: null })
+        const out = newStore(world).applyThreshold('run1', { success: true, data: filler(35000) })
+
+        expect(out.pages).toBeNull()
+        expect(out.page_size).toBeNull()
+        expect(out.total_length).toBe(out.total_length) // still stated: size is real
+    })
+
+    test('every degradation reason produces the same paging-free envelope', () => {
+        const cases = [
+            ['no_run_anchor', makeAttachmentWorld(), ''],
+            ['run_not_found', makeAttachmentWorld(), 'nosuchrun'],
+            ['attachment_write_failed', makeAttachmentWorld({ writeReturns: null }), 'run1'],
+        ]
+
+        cases.forEach(([reason, world, runId]) => {
+            const out = newStore(world).applyThreshold(runId, { success: true, data: filler(35000) })
+
+            expect(out.degraded).toBe(reason)
+            expect(out.pages).toBeNull()
+            expect(out.page_size).toBeNull()
+            expect(out.artifact_id).toBeNull()
+        })
+    })
+
+    test('a successful store still carries real paging affordances', () => {
+        const world = makeAttachmentWorld()
+        const out = newStore(world).applyThreshold('run1', { success: true, data: filler(35000) })
+
+        expect(out.degraded).toBeUndefined()
+        expect(out.page_size).toBe(4000)
+        // Derived, not hardcoded: JSON-escaping the payload's newlines makes the
+        // serialised length larger than the raw 35,000 chars.
+        expect(out.pages).toBe(Math.ceil(out.total_length / 4000))
+        expect(out.pages).toBeGreaterThan(1)
+    })
 })
 
 // ---------------------------------------------------------------------------
