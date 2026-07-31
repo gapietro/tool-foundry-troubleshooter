@@ -21,9 +21,16 @@
 > **What GO does and does not mean.** It means no Phase 0 falsifier fired and the build may
 > start. It does **not** mean the benchmark is won or that nothing is outstanding. Three things
 > travel forward, none of them blocking Task 1:
-> 1. ⚠ **SUPERSEDED 2026-07-31 — see DESIGN.md R-19: the grant was tested and does NOT lift the denial.** The text below is preserved as the Phase 0 record. **`PaToolLogAnalysis` is blocked** until a `sys_scope_privilege` Read grant for `syslog` is
->    added and re-verified. Measured, not predicted (`DESIGN.md` R-12, R-1). There is no custom
->    `x_*` precedent among the 79 existing privilege rows, so this will be the first.
+> 1. ~~**`PaToolLogAnalysis` is blocked** until a `sys_scope_privilege` Read grant for `syslog` is
+>    added and re-verified.~~ ⚠ **SUPERSEDED 2026-07-31 — the prescribed remedy was carried out and
+>    it FAILED (`DESIGN.md` R-19).** The grant installs correctly (verified in `sys_scope_privilege`)
+>    and `syslog` stays denied: `caller_access = Caller Restriction` is not satisfied by a
+>    self-declared privilege — an application cannot grant itself access to a caller-restricted
+>    table. **Do not re-attempt the grant.** `PaToolLogAnalysis` is still blocked, but the real
+>    paths are an instance-admin action or a different evidence source, and the tool should degrade
+>    explicitly. The struck text is the Phase 0 prediction, preserved: it was measured, not guessed
+>    (`DESIGN.md` R-12, R-1), and it was right that `syslog` was the one exception — only wrong
+>    about the fix. There is no custom `x_*` precedent among the 79 privilege rows, and now we know why.
 > 2. **keynexus01's plugin state is unknown**, not absent — its P1 used the discredited
 >    `v_plugin` instrument and has not been re-checked with `sys_scope`.
 > 3. **Phase 0b remains API-path evidence.** E1/E2/E3 ran through `servicenow_aia_execute`, not

@@ -345,6 +345,19 @@ Superseded is arguably the more expensive of the two: an unapplied ruling leaves
 
 **Corollary worth stating:** a Change clause that documents its own deferral ("a separate, not-yet-taken decision") is a defect in the ruling, not a neutral note. R-5 deferred, nothing tracked the deferral, and it surfaced three weeks later through review. Either take the decision or file it as a work item — do not record it as pending inside the ruling and move on.
 
+**R-19b — Two corrections to R-19a's own execution: a status label is part of the claim, and the repo already had the convention I should have used. (2026-07-31)**
+
+**Found:** review of R-19a caught two sites where the supersession was announced but the superseded text still read as live. **Both were introduced by the R-19a commit itself — the commit whose stated rule was "a correction must REPLACE the text it invalidates, not sit below it."**
+
+1. **`PREFLIGHT_FINDINGS.md` verdict action 1.** I put a ⚠ banner *above* the instruction and left the instruction intact — the exact "correction beside a wrong sentence" failure R-18b named. Worse, the same commit's own text said *"an action item is an instruction, not evidence"*, and I then applied the R-6 evidence-preservation precedent to it anyway. **The repo already had the right convention and I did not use it:** `~~strikethrough~~` appears 17 times across `PREFLIGHT_FINDINGS.md` and `DESIGN.md` for exactly this purpose, including four lines further down the same file. Now struck, with the current state stated after it — the record is preserved *and* the instruction no longer reads as actionable.
+2. **LLD §8 item 4.** I patched the `syslog` sentence inside the item and left the item's **disposition label** reading `**CARRIED FORWARD**` and its body claiming `Runtime half **untested**`. Both had been false since **R-1's discharge on 2026-07-30** — the runtime half was measured a day earlier by `/scope_probe/reads` (14 of 15 readable from a genuinely restricted scope, which is precisely the measurement P4b could not obtain). So the open-items ledger was advertising an open question that two rulings had closed.
+
+**The generalizable rule, which is new:** in a *structured* record — a numbered open-items list, a verdict's action list, a status table — **the status label is part of the claim, not decoration.** Correcting an item's prose while leaving its label at `CARRIED FORWARD` / `⚠ VERIFY` / `blocked` produces a document that contradicts itself at a glance, and the label is what a reader scans. Every correction to such an item must update **both** the body and the label, and a reader scanning only labels must not be misled.
+
+**Second rule, cheaper and duller:** before inventing a notation for superseded text, check what the repo already uses. R-19a invented a banner; `~~strikethrough~~` was already the house convention in the very file being edited.
+
+**Assessment, stated plainly.** R-18's premise was too narrow, R-19's ledger walk was one-directional, and R-19a's own edits reintroduced the failure it had just named. Three consecutive processes with a blind spot on first execution — and in each case the blind spot was found by review, not by the process. The honest reading is that a rule written in the same pass as the work it governs does not get applied to that work; the pass is already committed to its own approach by the time the rule is articulated. Rules from this project should be checked against the *next* pass, deliberately, rather than assumed to bind retroactively on the one that produced them.
+
 ---
 
 *Next steps agreed in spar: fold changes 2.1–2.4 into `docs/IMPLEMENTATION_PLAN.md` (new collector task; scorecard field; anchor keying rule) and `docs/LOW_LEVEL_DESIGN.md` (§4.6 anchor spec, §7 protocol, §8 items). Drift review after Phase 1a build compares the built system to this record.*
