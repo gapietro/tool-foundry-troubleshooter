@@ -201,6 +201,21 @@ The plan's `state` is **`Completed`** with an **empty `state_reason`**. Nothing 
 
 **Change:** gpinst01 execution `c9d63a932bda8b9417a6ffbeee91bfd0` is recorded as a **local known-answer specimen** (expected diagnosis: `script_error` signature citing `context_processing_script` line 42), removing the keynexus01 dependency from basic error-mining verification. It does **not** replace the keynexus01 set — the stall and `ReferenceError` specimens remain unavailable, and keynexus01 still needs an auth entry.
 
+**R-17 — Correcting the data model (§2.1) does not correct the algorithm that consumes it (§4.1). Two consecutive review rounds caught the same drift. (2026-07-30)**
+
+**Found:** R-15 corrected six data-model facts in LLD §2.1. **§4.1 — the step-by-step algorithm the tool is built from — was left describing the old, wrong facts**, and code review found it twice running:
+
+- Round 1 caught §2.1 contradicting itself on `message_sequence`. Fixing that exposed a live ordering defect in the shipped code.
+- Round 2 caught §4.1 step 3 still specifying the `tool.tool.name` dot-walk (yields nothing — `tool` is empty on every real row) and step 4 still specifying a `sys_cs_conversation` "channel type" read (no such field).
+
+A sweep of the rest of §4.1 found **three more** the reviewer had not flagged: the Resolution rule presenting `since` as required and mandating in-memory sorting after the pick-list is cut (both contradicted by R-9 and the sort-after-`setLimit` defect); step 7 keying instruction-bloat on "high prompt token counts" when **no per-task token count exists** on `sn_aia_execution_task` — only plan-level `llm_token_avg`; and Detail mode reading as built when it is deferred.
+
+**Why this is a ruling and not five typos.** §2.1 is the reference and §4.1 is its only consumer, so a §2.1 correction that stops at §2.1 leaves the *buildable* half of the spec wrong. The five §4.1 items would each have produced a working-looking tool emitting nothing useful — unnamed tool calls, dropped channel context, a mislabelled pick-list, an untriggerable latency flag. That is this project's signature failure mode (R-11's partial-read-as-absence, R-15's blanks-not-errors), reached this time through documentation rather than data.
+
+Round 2 differed from round 1 in one important way: **both findings were documentation-only — the code was already correct**, because it had been written against real rows rather than against §4.1. That is the reverse of round 1, where the doc contradiction pointed at a live bug. Neither outcome can be assumed; both were checked against the code before anything was edited.
+
+**Change:** §4.1 is corrected on all five points, each carrying the ⚠ marker and a pointer to the ruling that forced it. **Standing rule for the remaining tool cores:** a correction to §2.x is not complete until §4.x has been re-read against it. `PaToolAgentConfig` (§4.2) and `PaToolGenAiLog` (§4.3) consume §2.2 and §2.3 the same way and will need the same sweep when their build turns up data-model surprises — which, on the evidence of this one, it will.
+
 ---
 
 *Next steps agreed in spar: fold changes 2.1–2.4 into `docs/IMPLEMENTATION_PLAN.md` (new collector task; scorecard field; anchor keying rule) and `docs/LOW_LEVEL_DESIGN.md` (§4.6 anchor spec, §7 protocol, §8 items). Drift review after Phase 1a build compares the built system to this record.*
