@@ -167,6 +167,40 @@ Stated plainly: these are **single samples per instance**. The qualitative findi
 
 **Deliberately not done:** `PRD_ServiceNow_Platform_Assistant.md`, `ARCHITECTURE_DECISIONS.md` and `AGENT_DOCTOR_ARCHITECTURE.md` still carry `x_snc_pa_*` / `x_pa_*` in prose. Mass-rewriting design-history text would create churn for no build benefit and would blur which document decides. LLD §3 carries a pointer stating it is the authority; those documents are read as design rationale, not as name sources.
 
+### Phase 1a build rulings
+
+**R-14 — Jest tests cannot live under `src/`; `IMPLEMENTATION_PLAN.md` Tasks 4 and 9 specify a path that does not build. (2026-07-30)**
+
+**Found:** the plan places Jest tests at `src/server/__tests__/*.test.js` (Task 4 for `PaArtifactStore`, Task 9 for `PaScriptToolAdapter`). `now-sdk build` lints **every** file under `src/` against the platform runtime, so a test file's `require('fs')` / `require('path')` / `require('vm')` fails the build outright: `TS213: Dependency vm is not found in package.json` plus `TS307: The fs Node.js API is not supported in now platform`. The build cannot be run at all while such a file exists, which means the failure is total rather than partial — no Script Include deploys either.
+
+**Change:** tests live in a top-level **`test/`** directory, outside the SDK source tree, with Jest `testMatch` set to `<rootDir>/test/**/*.test.js`. `IMPLEMENTATION_PLAN.md` Tasks 4 and 9 are corrected. This is a structural constraint of the SDK, not a preference: platform source and test source cannot share a tree.
+
+**R-15 — Six data-model corrections from the first build against real `sn_aia_*` rows on gpinst01. Two of them close open E3 checks; four contradict what the LLD documents. (2026-07-30)**
+
+**Found:** `PaToolAgentTrace` was driven against real execution plans on gpinst01. The field-presence assertion required by **R-6** reported each mismatch instead of returning blanks, which is how all six surfaced.
+
+1. **`sn_aia_tools_execution.execution_plan` does not exist — the join field is `execution_plan_id`, confirmed by exclusion.** R-1 left this as an open E3 check because the Phase 0 REST read was denied. The tool probes both candidates and reports which the table declares; `execution_plan` came back in `field_warnings` as absent. **E3 check CLOSED.**
+2. **`sn_aia_message.role` vocabulary confirmed as `agent` / `user_profile` / `user`** — matching LLD §2.1, now validated against a run we caused rather than 2026-07-18 archaeology. **E3 check CLOSED.**
+3. **`sn_aia_tools_execution.tool` is EMPTY on every real row.** LLD §2.1 states it references `sn_aia_agent_tool_m2m`; the field exists but is unpopulated. The binding sys_id is carried **inside the `request` JSON as `toolM2mId`**. Without a fallback, every tool call reports a null tool name — which reads as "this run called no tools" rather than "we looked in the wrong field". LLD §2.1 corrected.
+4. **Reference fields carry the literal string `"undefined"`, not an empty value.** Observed in `sn_aia_execution_plan.agent` on every `security_violation` plan, and in `related_task_table`. A truthiness check treats it as a real sys_id and renders a reference to nothing — and suppresses the "agent is empty, use the usecase" guidance exactly when it is needed. Every reference read goes through a normaliser.
+5. **`sys_cs_conversation` has no `channel` field**, so the K26 guidebook's "NAP vs VA" channel question has no single answer. The signal is spread across `conversation_type`, `device_type` and `provenance` (observed: `Interactive` / `AI Agent` / `glide`); all three are reported rather than one being presented as the channel. Also no `name` (it is `title`) and no `document_id`.
+6. **`sys_cs_message` field names:** the text is **`payload`** (not `text`), the type is **`message_type`** (not `type`), and the sort key is **`sequence`**. Separately, `sn_aia_message.message_sequence` is **empty** on tool-result rows, so a single-key sort puts them in arbitrary order — a secondary sort key is required.
+
+**Change:** `docs/LOW_LEVEL_DESIGN.md` §2.1 gains the corrections for items 3 and 4 and a pointer here. Items 5 and 6 were never documented in the LLD (the `sys_cs_*` shapes came from the K26 guidebook by name only) and are now recorded. **Methodological note:** all six were caught by the R-6 field-presence assertion. Without it each would have returned a blank, and the tool would have rendered a confident, complete-looking trace from fields that do not exist — the exact failure this project keeps warning about, committed by the tool built to detect it.
+
+**R-16 — gpinst01 has its own known-answer failure specimen, and it is invisible from the plan header. (2026-07-30)**
+
+**Found:** the build brief states that known-answer failure specimens exist only on **keynexus01**, which has no `now-sdk auth` entry. Tracing gpinst01 execution `c9d63a932bda8b9417a6ffbeee91bfd0` (the Phase 0 probe run) mined a server-script stack error out of an agent-role message: `sn_aia_agent.601672d32b1a83d0f243fed2ce91bf3e.context_processing_script`, **line 42**, `InternalError`.
+
+The plan's `state` is **`Completed`** with an **empty `state_reason`**. Nothing in the header, the task tree (11 tasks, all `Success`), or the tool calls (5, all `Success`) indicates a problem. The error exists only in the message stream.
+
+**Why this matters, in three directions:**
+- It **corroborates R-7** on a second instance: `context_processing_script` is auto-populated by the platform and is a live failure vector. R-7 said the field arrives populated whether you want it or not; this shows one of those auto-populated bodies actually throwing.
+- It **validates LLD §4.1 step 5's error-mining heuristic against a case nobody had catalogued.** The keynexus01 specimen was a known answer; this one was found.
+- It **sharpens the R-3 amendment's warning.** That ruling established that `completed` does not mean `swept`. This adds that `completed` does not mean *succeeded* — a run can throw a server-side script error and still report `state=Completed, state_reason=(empty)`. Any diagnosis that reads the plan header and stops will miss it. The seven-layer sweep is not thoroughness for its own sake; the message layer is load-bearing.
+
+**Change:** gpinst01 execution `c9d63a932bda8b9417a6ffbeee91bfd0` is recorded as a **local known-answer specimen** (expected diagnosis: `script_error` signature citing `context_processing_script` line 42), removing the keynexus01 dependency from basic error-mining verification. It does **not** replace the keynexus01 set — the stall and `ReferenceError` specimens remain unavailable, and keynexus01 still needs an auth entry.
+
 ---
 
 *Next steps agreed in spar: fold changes 2.1–2.4 into `docs/IMPLEMENTATION_PLAN.md` (new collector task; scorecard field; anchor keying rule) and `docs/LOW_LEVEL_DESIGN.md` (§4.6 anchor spec, §7 protocol, §8 items). Drift review after Phase 1a build compares the built system to this record.*

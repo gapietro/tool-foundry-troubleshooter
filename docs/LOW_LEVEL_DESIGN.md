@@ -50,6 +50,11 @@ sn_aia_execution_plan ──┬─< sn_aia_execution_task   (parent ⇒ task tre
 
 **`sn_aia_tools_execution`** (per tool call):
 - `execution_plan_id`, `tool` → **`sn_aia_agent_tool_m2m`** (NOT directly to `sn_aia_tool` — dot-walk `tool.tool.name` for the tool, `tool.agent.name` for the agent), `request` (json), `response` (json), `error_message`, `execution_status`, `execution_mode`, `run_as_user`, `execution_time_ms`
+- ⚠ **Corrected 2026-07-30 (DESIGN.md R-15) against real rows on gpinst01:** the join field is **`execution_plan_id`** and there is **no `execution_plan` field** — confirmed by exclusion, closing the E3 check R-1 left open. And **`tool` is EMPTY on every real row**: the binding sys_id is carried inside the `request` JSON as **`toolM2mId`**. A reader that trusts `tool` reports a null tool name for every call, which reads as "no tools were called" rather than "wrong field". Read `tool` first, then fall back to `request.toolM2mId`.
+
+**Reference fields carry the literal string `"undefined"`** (DESIGN.md R-15 item 4) — observed in `sn_aia_execution_plan.agent` on every `security_violation` plan, and in `related_task_table`. It is truthy, so a plain emptiness check treats it as a real sys_id. Normalise `''`/`null`/`'undefined'`/`'null'` to empty before using any reference.
+
+**`sys_cs_*` field names** (DESIGN.md R-15 items 5–6; these were only ever named by the K26 guidebook, never verified until now): `sys_cs_conversation` has **no `channel` field** — the NAP-vs-VA signal is spread across `conversation_type`, `device_type` and `provenance` — and no `name` (it is `title`). On `sys_cs_message` the text is **`payload`** (not `text`), the type is **`message_type`** (not `type`), and the sort key is **`sequence`**. Also: `sn_aia_message.message_sequence` is **empty** on tool-result rows, so it needs a secondary sort key.
 
 **`sn_aia_message`** (the conversation stream):
 - `execution_plan`, `message_sequence` (sortable counter), `role` (observed: `user_profile`, `user`, `agent`), `name` (speaker label — observed: "Manager", "Orchestrator", user's name), `message`, `user_message`, `error_type`, `type`

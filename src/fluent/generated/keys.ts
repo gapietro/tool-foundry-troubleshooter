@@ -17,6 +17,10 @@ declare global {
                         table: 'sys_script_client'
                         id: 'af760ca041894ddd9b914b5af65cb766'
                     }
+                    'pa-tool-agent-trace': {
+                        table: 'sys_script_include'
+                        id: 'e460c4021e4b44dcaf92570057d5a360'
+                    }
                     package_json: {
                         table: 'sys_module'
                         id: '296e46a72ad14ef5a7f123411966e86e'
@@ -29,6 +33,10 @@ declare global {
                         table: 'sys_ws_operation'
                         id: 'a04ccacf0888461d84eb46c0e0d14752'
                     }
+                    'scope-probe-trace': {
+                        table: 'sys_ws_operation'
+                        id: '074e8ea6df954aeb9a92cc93f586b790'
+                    }
                     'scope-probe-v1': {
                         table: 'sys_ws_version'
                         id: '75b650020ec04fd8a583813797f4e91c'
@@ -36,6 +44,10 @@ declare global {
                     src_server_script_ts: {
                         table: 'sys_module'
                         id: 'd8226c63fd0d44bea250580a81a4424c'
+                    }
+                    src_server_tools_PaToolAgentTrace_js: {
+                        table: 'sys_module'
+                        id: 'cae852b254fc45a8ac5bd32c712102be'
                     }
                 }
             }

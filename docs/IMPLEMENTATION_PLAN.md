@@ -21,6 +21,7 @@
 | Concern | Where it lives | Notes |
 |---|---|---|
 | Every platform artifact — tables, Script Includes, the AI Agent, REST APIs | **Fluent DSL in `src/fluent/*.now.ts`** | SDK owns creation. `now-sdk build` then `now-sdk install --alias gpinst01` |
+| Jest tests | **`test/*.test.js` at the repo root** | NEVER under `src/` — `now-sdk build` lints the whole source tree and a test's Node `require` breaks the build (DESIGN.md **R-14**) |
 | Script Include **bodies** (the JS the platform runs) | `src/server/*.js`, referenced by `Now.include('./<file>.js')` from the Fluent `ScriptInclude` | ES5/Rhino-safe — no `let`/`const`/arrow/`Set`/`Map`. Pattern: `.claude/context/sdk-examples/script-include.now.ts` |
 | Runtime execution, tracing, log reads | **Foundry MCP tools** | MCP owns runtime. Never create or edit via MCP anything defined in `src/fluent/` |
 | `dist/` | build output | never edit, never commit |
@@ -107,7 +108,7 @@
 **Files:**
 - Create: `src/server/PaArtifactStore.js` — the Rhino body
 - Create: `src/fluent/script-includes.now.ts` — the Fluent `ScriptInclude` declaring it (`script: Now.include('../server/PaArtifactStore.js')`). **Every Script Include in Tasks 4–9 gets a declaration here; a `.js` file alone deploys nothing.** One file for all of them keeps the `$id` set in one place
-- Create: `src/server/__tests__/PaArtifactStore.test.js`
+- Create: `test/PaArtifactStore.test.js` — **not** `src/server/__tests__/` (DESIGN.md **R-14**: `now-sdk build` lints everything under `src/`, so a test file's `require('fs')`/`require('vm')` fails the whole build)
 
 **What:** `store(runId, toolName, content)` — over-threshold (~4KB) content saved as attachment on the run record, returns `{artifact_id, excerpt, total_length}`; under threshold returns content unchanged. `read(artifactId, offset, length)` — paged retrieval (max 4KB/page). `_truncate(content, limit)` — head+tail excerpt with elision marker. This is the mitigation for the native harness's string-only I/O and 128K context: big traces live in artifacts, both harnesses page through them.
 
@@ -166,7 +167,7 @@
 **Files:**
 - Create: `src/server/adapters/PaScriptToolAdapter.js`
 - Create: `src/server/adapters/` — one thin wrapper per tool (7: agent_trace, agent_config, genai_log, schema_lookup, query_table, log_analysis, read_artifact)
-- Create: `src/server/__tests__/PaScriptToolAdapter.test.js`
+- Create: `test/PaScriptToolAdapter.test.js` — top-level `test/`, per DESIGN.md **R-14**
 
 **What:** `PaScriptToolAdapter.invoke(toolScriptInclude, inputString, context)`: parse JSON input string (tolerant — accept bare values for single-arg tools), resolve run anchor, call tool core, audit-log the execution, stringify result. Errors return `{"success":false,"error":"..."}` as a string — never throw into the orchestrator (a documented native pain point is type/shape mismatches confusing the planner). `read_artifact` wrapper exposes PaArtifactStore paging as a native tool.
 
@@ -255,7 +256,7 @@ Whatever the outcome, the scorecard's *failure notes* (where it wandered, what i
 
 ## Task 13: Jest Run + Branch/PR
 
-**What:** `npm install`; Jest config (testMatch `src/**/__tests__/*.test.js`, node env); `npm test` all green (PaArtifactStore, PaScriptToolAdapter). Push `feature/phase1a-tools-and-benchmark`, open PR summarizing Phase 1a + the benchmark result.
+**What:** `npm install`; Jest config (testMatch `test/**/*.test.js`, node env — DESIGN.md R-14); `npm test` all green (PaArtifactStore, PaScriptToolAdapter). Push `feature/phase1a-tools-and-benchmark`, open PR summarizing Phase 1a + the benchmark result.
 
 ---
 
