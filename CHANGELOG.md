@@ -11,6 +11,33 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.07.3107 — 2026-07-31
+
+Phase 1a vertical slice, **Task 4**: `PaArtifactStore` — the blocker on the whole slice. A real
+`PaToolAgentTrace` summary measures ~35KB against a 4,000-char excerpt budget, so until
+oversized output could live outside the prompt, the first tool core could not be handed to an
+agent at all.
+
+- **`src/server/PaArtifactStore.js`** — `store()` puts over-threshold content on the run record
+  as an attachment and returns a head+tail excerpt plus an `artifact_id`; `read()` pages it back
+  4KB at a time (the future `read_artifact` tool); `applyThreshold()` is the wrapper the Task 9
+  adapter will apply to every tool result, returning small results by identity.
+- **42 Jest tests**, written first. They settle arithmetic — truncation, paging, boundaries,
+  byte-identical reassembly — and per **R-8** nothing else.
+- **Live-verified on gpinst01**, which is what actually closed LLD §4.5's `⚠ VERIFY` on the
+  scoped-app attachment surface: 35,000 chars stored and paged back **byte-identical** in nine
+  reads from scope `x_snc_troubleshoot`.
+
+Two deliberate departures from the LLD sketch, both documented in §4.5: `read()` refuses any
+attachment outside `x_snc_troubleshoot_run` (it is LLM-callable and takes a caller-supplied
+sys_id), and a failed store degrades to the excerpt with a named reason rather than falling back
+to the full payload.
+
+**New SDK failure mode found and recorded as Build Rule #43:** a `\n` inside a Fluent
+`` script`…` `` template literal is consumed by TypeScript, emitting a real newline that leaves
+the platform script's string constant unterminated. Builds clean, installs clean, and fails only
+on invocation — at a line number that does not match the source.
+
 ## 2026.07.3106 — 2026-07-31
 
 Phase 1a vertical slice, **Task 2**: the two scoped tables every later task anchors to. First
