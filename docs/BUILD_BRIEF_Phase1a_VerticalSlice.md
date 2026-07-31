@@ -21,7 +21,8 @@ Build the Phase 1a vertical slice in this repo, starting at **Task 2**.
   (artifact store, run anchor, audit logger, adapter), **§5** (the Agent Doctor record set)
 - `DESIGN.md` §4 — rulings **R-1 … R-19b**, the build contract. Long, but it is where every
   expensive lesson lives.
-- `CLAUDE.md` auto-loads `.claude/context/sdk-reference.md` (40 SDK build rules). 39 golden Fluent
+- `CLAUDE.md` auto-loads `.claude/context/sdk-reference.md` (42 SDK build rules — #41/#42 were
+  added by Task 2 and both concern `Table()`). 39 golden Fluent
   examples in `.claude/context/sdk-examples/`.
 
 **Already built and working:**
