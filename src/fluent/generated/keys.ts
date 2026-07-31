@@ -49,6 +49,10 @@ declare global {
                         table: 'sys_module'
                         id: 'cae852b254fc45a8ac5bd32c712102be'
                     }
+                    'xsp-syslog-read': {
+                        table: 'sys_scope_privilege'
+                        id: '8b8a75b6d0fe4826b54854d2c38202a1'
+                    }
                 }
             }
         }
