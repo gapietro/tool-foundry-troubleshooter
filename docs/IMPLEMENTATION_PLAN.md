@@ -169,7 +169,7 @@
 - Create: `src/server/adapters/` — one thin wrapper per tool (7: agent_trace, agent_config, genai_log, schema_lookup, query_table, log_analysis, read_artifact)
 - Create: `test/PaScriptToolAdapter.test.js` — top-level `test/`, per DESIGN.md **R-14**
 
-**What:** `PaScriptToolAdapter.invoke(toolScriptInclude, inputString, context)`: parse JSON input string (tolerant — accept bare values for single-arg tools), resolve run anchor, call tool core, audit-log the execution, stringify result. Errors return `{"success":false,"error":"..."}` as a string — never throw into the orchestrator (a documented native pain point is type/shape mismatches confusing the planner). `read_artifact` wrapper exposes PaArtifactStore paging as a native tool.
+**What:** `PaScriptToolAdapter.invoke(toolScriptInclude, inputString, context)`: parse the input string tolerantly — a JSON object parses to an object, `""` becomes `{}`, and ⚠ **a bare string is passed through UNCHANGED, never wrapped as `{value: …}`** (LLD §4.7 Note 4 / §4 contract: the cores normalise raw strings themselves — `PaToolAgentTrace` maps a bare 32-char hex sys_id to `{execution: …}` and any other bare string to `{agent: …}`, so wrapping yields args with neither key and the tool silently falls back to its no-argument behaviour) — then resolve run anchor, call tool core, audit-log the execution, stringify result. Errors return `{"success":false,"error":"..."}` as a string — never throw into the orchestrator (a documented native pain point is type/shape mismatches confusing the planner). `read_artifact` wrapper exposes PaArtifactStore paging as a native tool.
 
 **Tests (pure logic):** input parsing (JSON object, bare string, malformed), output stringification, error shaping.
 

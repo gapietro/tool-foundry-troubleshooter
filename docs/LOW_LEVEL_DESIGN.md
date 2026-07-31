@@ -51,7 +51,7 @@ sn_aia_execution_plan ──┬─< sn_aia_execution_task   (parent ⇒ task tre
 - Observed failure signature: terminated run = agent task `success` → Orchestrator `cancelled` → child "AIA ReAct Engine" stuck `ongoing`
 
 **`sn_aia_tools_execution`** (per tool call):
-- `execution_plan_id`, `tool` → **`sn_aia_agent_tool_m2m`** (NOT directly to `sn_aia_tool` — dot-walk `tool.tool.name` for the tool, `tool.agent.name` for the agent), `request` (json), `response` (json), `error_message`, `execution_status`, `execution_mode`, `run_as_user`, `execution_time_ms`
+- `execution_plan_id`, `tool` → **`sn_aia_agent_tool_m2m`** (NOT directly to `sn_aia_tool`) — ⚠ **but `tool` is EMPTY on every real row, so the `tool.tool.name` / `tool.agent.name` dot-walk this bullet used to prescribe returns nothing; resolve the binding as described in the note below**, then read the m2m's display values for the tool and agent names. Also: `request` (json), `response` (json), `error_message`, `execution_status`, `execution_mode`, `run_as_user`, `execution_time_ms`
 - ⚠ **Corrected 2026-07-30 (DESIGN.md R-15) against real rows on gpinst01:** the join field is **`execution_plan_id`** and there is **no `execution_plan` field** — confirmed by exclusion, closing the E3 check R-1 left open. And **`tool` is EMPTY on every real row**: the binding sys_id is carried inside the `request` JSON as **`toolM2mId`**. A reader that trusts `tool` reports a null tool name for every call, which reads as "no tools were called" rather than "wrong field". Read `tool` first, then fall back to `request.toolM2mId`.
 
 **Reference fields carry the literal string `"undefined"`** (DESIGN.md R-15 item 4) — observed in `sn_aia_execution_plan.agent` on every `security_violation` plan, and in `related_task_table`. It is truthy, so a plain emptiness check treats it as a real sys_id. Normalise `''`/`null`/`'undefined'`/`'null'` to empty before using any reference.
@@ -82,6 +82,8 @@ sn_aia_execution_plan ──┬─< sn_aia_execution_task   (parent ⇒ task tre
 **`sn_aia_strategy`** (verified records): **ReAct `f0bff21f9f13c6108f431597d90a1c74`** (type `agent` — used by ~all OOB agents; use for Agent Doctor), Hierarchical ReAct `18a2de41ff632210309fffffffffff90`; orchestrator strategies: Base/Batch/ReActive/Unified/Swarm Planner.
 
 Teams: `sn_aia_team` + `sn_aia_team_member`.
+
+**`sys_agent_access_role_configuration`** + **`sys_agent_access_role_mapping`** (both **Global** scope, not `sn_aia_`) — the storage behind AI Agent Studio's "Define User Access" / "Define Data Access" panels, and an input to §4.2's access-alignment check. Added 2026-07-30 (R-18b): §8 item 9 closed this and §4.2 was updated, but §2.2 never listed the tables, so the data model omitted a source its own consumer reads. `sys_agent_access_role_configuration` is keyed **polymorphically** by `agent` (document_id) + `agent_table` (table_name) — same shape as the trigger m2m below — with the per-role breakout in `sys_agent_access_role_mapping` and a parallel path via `sys_agent_access_permission_set_configuration`. ⚠ **No structural field distinguishes User Access from Data Access**; the split is conventional, carried in free-text `description` (see §4.2 for what the tool may therefore claim).
 
 **`sn_aia_trigger_agent_usecase_m2m`** — ⚠ **the name is misleading; corrected 2026-07-30 against live rows (R-18).** It is **not** an agent↔usecase m2m and has **no `agent` and no `usecase` column**. Its real shape is a trigger-to-resource link, **polymorphic** in the same style as `sys_agent_access_role_configuration`: `trigger_configuration` → `sn_aia_trigger_configuration`, plus `related_resource_table` (table_name) + `related_resource_record` (document_id), plus `active`, `objective_template`, `sys_overrides`, `sys_domain`. On gpinst01 `related_resource_table` holds **either** `sn_aia_usecase` **or** `sn_aia_agent`. Code that looks for `agent`/`usecase` columns gets blanks, not an error (R-6) — filter on `related_resource_table` and read `related_resource_record`.
 
@@ -186,7 +188,11 @@ Artifacts = **attachments on this record** (`GlideSysAttachment`), named `artifa
 ## 4. Component Specifications
 
 All tool cores are Script Includes with one contract:
-`execute(args: Object) → {success: true, data: Object} | {success: false, error: String}` — pure objects in/out, no strings, no harness knowledge. All reads `GlideRecordSecure`.
+`execute(args: Object | String) → {success: true, data: Object} | {success: false, error: String}` — structured objects **out**, no harness knowledge. All reads `GlideRecordSecure`.
+
+⚠ **Every core normalises reference values before using them (R-15 item 4).** Real rows carry the literal string `"undefined"` in reference fields, which is truthy — treat `''`, `null`, `"undefined"` and `"null"` alike as empty, and emit the raw value alongside the normalised one. Stated here rather than per-tool because it applies to every core that reads a reference.
+
+⚠ **The input side accepts a raw String as well as an Object, and this is load-bearing (R-18b).** This line previously read `execute(args: Object)` … "pure objects in/out, no strings", which directly forbids what §4.7 Note 4 requires. Each core does its own tolerant normalisation — `PaToolAgentTrace` accepts an Object, a JSON string (the native script-tool runtime shape — complex inputs arrive serialised), a bare 32-char hex sys_id, a bare name, or nothing at all (**R-9**). **The adapter must pass bare strings through unchanged**; pre-wrapping them as `{value: …}` produces an args object the core cannot interpret, and it silently falls back to its no-argument behaviour instead of erroring. Output remains strictly structured.
 
 ### 4.1 PaToolAgentTrace *(core tool — owns §2.1 mapping with 4.2)*
 
@@ -195,7 +201,7 @@ All tool cores are Script Includes with one contract:
 **Resolution:** `execution` given → load plan directly. `agent` given (⚠ `since` is **optional**, not required — R-9: no argument is mandatory) → resolve the name against BOTH `sn_aia_agent` and `sn_aia_usecase` on `name`, `internal_name` and `sys_id` (observed: plan.agent is often empty, or the literal string `"undefined"` — the usecase is the reliable anchor), then query plans `usecase IN (…)^ORagent IN (…)` ordered `sys_created_on` desc **at the database** (⚠ ordering applied after `setLimit` sorts an arbitrary page and mislabels it as the most recent — R-17), return the pick-list if >1 **and trace the newest**, so one call yields usable evidence. **No arguments at all** → return the recent-plan pick-list with an explanatory note; that is a valid answer, not an error (R-9).
 
 **Summary algorithm:**
-1. Plan header: state, state_reason, status, objective, run_type, execution_mode, timings, token/latency metrics, conversation, usecase/agent names
+1. Plan header: state, state_reason, status, objective, run_type, execution_mode, timings, token/latency metrics, conversation, usecase/agent names. ⚠ **Normalise every reference field before use — `usecase`, `agent`, `team`, `conversation`, `related_task_table`/`related_task_record`** (R-15 item 4): treat `''`, `null` and the literal strings `"undefined"` / `"null"` alike as empty. Real rows carry the literal `"undefined"`, which is truthy, so an unnormalised read renders a sys_id pointing at nothing **and** suppresses the "agent is empty, use the usecase as the anchor" guidance exactly when it is needed. Emit the raw value alongside the normalised one so the reader can see which case they are in
 2. Task tree: query `sn_aia_execution_task` by `execution_plan`, order by `order`; nest via `parent`; emit {order, type, status, description, time_ms, output_digest(200 chars)}
 3. Tool calls: query `sn_aia_tools_execution` by `execution_plan_id`; resolve the binding from `tool`, ⚠ **falling back to `request.toolM2mId` when `tool` is empty — which it is on every real row** (R-15 item 3, so the `tool.tool.name` / `tool.agent.name` dot-walk this step originally specified resolves to nothing and every call renders unnamed) → `sn_aia_agent_tool_m2m`, whose display values give the tool and agent names; emit {tool_name, agent_name, binding_id_source, execution_status, error_message, time_ms, request_digest, response_digest}
 4. Messages: query `sn_aia_message` by `execution_plan`, order by **`sys_created_on`, then `message_sequence`, then `sys_id`** (⚠ corrected 2026-07-30, DESIGN.md R-15 item 6 — `message_sequence` alone put tool results ahead of the user's opening message, which was created 26s earlier); emit {seq, created, role, name, content_digest}. If `plan.conversation` is set, also emit conversation context per the K26 guidebook (§2.5): `sys_cs_conversation` channel signals — ⚠ **there is no `channel` field** (R-15 item 5); the NAP-vs-VA signal is spread across `conversation_type`, `device_type` and `provenance`, so emit all three rather than presenting one as the channel — plus `sys_cs_message` digests (⚠ the text is `payload`, the type is `message_type`, ordered by `sequence`) to show dialogue progression and where the user disconnected or got an unexpected reply
@@ -260,10 +266,11 @@ As specified in `IMPLEMENTATION_PLAN.md` Task 8. ⚠ **The "unchanged by instanc
 
 ```
 invoke(toolClassName, inputString, ctx):
-  args   = tolerantParse(inputString)   // JSON object | "" → {} | bare string → SEE NOTE 4
+  args   = tolerantParse(inputString)   // JSON object → object | "" → {}
+                                        // bare string → PASS THROUGH UNCHANGED (Note 4)
   run    = PaRunAnchor.getOrCreate({harness:"native", ...ctx})
   audit  = PaAuditLogger.logIntent(...)
-  result = new <toolClassName>().execute(args)          // object contract
+  result = new <toolClassName>().execute(args)          // Object OR String — see §4 contract
   result = PaArtifactStore.applyThreshold(run, result)  // big payloads → attachment + excerpt
   PaAuditLogger.logResult/logError(...)
   return JSON.stringify(result)          // ALWAYS a string, never throws

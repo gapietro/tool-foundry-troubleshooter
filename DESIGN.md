@@ -252,6 +252,27 @@ Round 2 differed from round 1 in one important way: **both findings were documen
 
 **Change:** §4.2's overview traversal and access-alignment check corrected, each carrying the verified query shape. **Standing rule:** any §4.x correction that specifies a *query* must be executed against live rows from the tool's real entry point before it is written down — field-existence checks do not cover it.
 
+**R-18b — Four more corrections, and the failure mode is now named: a correction placed BESIDE a wrong sentence does not correct it. (2026-07-30)**
+
+**Found (all four confirmed against the documents and the shipped code):**
+
+1. **§4's authoritative contract forbade what §4.7 required.** The §4 preamble read `execute(args: Object)` — *"pure objects in/out, **no strings**"*. R-18's §4.7 Note 4 requires the adapter to pass bare strings straight through, because the cores normalise them (`PaToolAgentTrace` maps a bare sys_id to `{execution:…}`). A contract line and a note two sections apart said opposite things, and **the contract is the higher-altitude statement** — an adapter author would follow it and wrap, producing args with neither key and a silent fall-through to no-argument behaviour. Corrected to `Object | String` with the pass-through rule stated at contract level, and the §4.7 pseudocode's `// object contract` comment fixed to match. This is the one a reader was most likely to act on, and it survived three rounds precisely because both halves looked correct in isolation.
+2. **§2.1 still prescribed the broken dot-walk as its primary sentence.** R-15 appended a ⚠ correction *below* the bullet while leaving *"dot-walk `tool.tool.name` for the tool, `tool.agent.name` for the agent"* intact as the first thing anyone reads. Now removed from the sentence itself.
+3. **`IMPLEMENTATION_PLAN.md` Task 9 never received the bare-string rule.** It still said "tolerant — accept bare values for single-arg tools", which is the ambiguity that produced the `{value: …}` wrapper in the first place. Task 9 is what the next session builds from.
+4. **§4.1 step 1 never received the reference normaliser.** §2.1 documents that reference fields carry the literal string `"undefined"`; the algorithm step that builds the header did not mention it. The shipped code does normalise (`_refValue`), so this was doc-only — but §4.1 is the spec a reimplementation would follow.
+
+**Two further gaps found by sweeping for the same patterns rather than waiting for another round:** §2.2 never listed `sys_agent_access_role_configuration` / `sys_agent_access_role_mapping`, despite §4.2 being required to read them — the data-model section omitted a source its own consumer uses. And reference normalisation was stated only in §4.1 step 1, when it applies to every core, so it moved up to the §4 preamble.
+
+**The named failure mode.** Findings 2 and 4, plus R-18a's access-check contradiction, are one pattern appearing for the third time:
+
+> **A correction appended beside a wrong sentence does not correct it.** Readers stop at the first sentence; `grep` finds the ⚠ note while a human reads the original. Every one of these was *technically documented* and *practically wrong.*
+
+**Standing rule, added to R-17/R-18:** a correction must **replace** the text it invalidates, not sit below it. Appending is acceptable only for provenance — the evidence and ruling reference — after the wrong claim itself is gone.
+
+**Second rule, from finding 1:** contract statements outrank notes. When a ruling changes behaviour that a **contract line** describes (§4's `execute()` signature, §4.7's adapter pseudocode, the Design Rules table in `IMPLEMENTATION_PLAN.md`), the contract must be edited. A note that contradicts a contract loses, however clearly it is written and however close it sits.
+
+**Assessment of the four rounds, stated plainly.** Every finding across rounds 2–4 has been in *prose*, not code: the shipped tool already did the right thing in all four cases here, because it was written against live rows. The defect rate in reasoned prose corrections has been materially worse than in executed ones — which is what R-18a's rule addressed for queries, and what these two rules address for placement and altitude.
+
 ---
 
 *Next steps agreed in spar: fold changes 2.1–2.4 into `docs/IMPLEMENTATION_PLAN.md` (new collector task; scorecard field; anchor keying rule) and `docs/LOW_LEVEL_DESIGN.md` (§4.6 anchor spec, §7 protocol, §8 items). Drift review after Phase 1a build compares the built system to this record.*
