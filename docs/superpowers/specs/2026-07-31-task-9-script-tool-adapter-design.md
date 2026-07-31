@@ -123,13 +123,16 @@ invoke(toolName, rawInput, ctx)
 | `""` or whitespace | `{}` |
 | An object | passed through unchanged |
 | A string that parses to a plain object | that object |
-| **Anything else** | **the raw string, unchanged** |
+| **Anything else** | **the original string, untouched** |
 
-The last row is LLD §4.7 Note 4 and it is the rule most likely to be "helpfully" broken by a
-future edit. Pre-wrapping a bare string as `{value: s}` produces an args object with none of the
-keys the cores read: `PaToolAgentTrace` maps a bare 32-char hex string to `{execution: …}` and any
-other bare string to `{agent: …}`, so a `{value: …}` wrapper makes it fall through to the
-recent-plan pick-list and **silently discard the caller's actual request**. No error anywhere.
+The last row is LLD §4.7 Note 4. The string is returned **original and untouched**, with no
+whitespace trimming. Trimming is used to decide whether the input is empty or can be parsed as JSON,
+but once it is decided that this is a bare string, it passes through as received. The tool core owns
+all normalisation. This rule is most likely to be "helpfully" broken by a future edit: pre-wrapping
+a bare string as `{value: s}` produces an args object with none of the keys the cores read.
+`PaToolAgentTrace` maps a bare 32-char hex string to `{execution: …}` and any other bare string to
+`{agent: …}`, so a `{value: …}` wrapper makes it fall through to the recent-plan pick-list and
+**silently discard the caller's actual request**. No error anywhere.
 
 `tolerantParse` never rejects. A `{`-leading string that fails to parse is passed through
 untouched, so `PaToolAgentTrace` emits its own `_parse_error` signal. One place decides what an

@@ -207,4 +207,30 @@ describe('PaScriptToolAdapter — input handling', () => {
         expect(out.success).toBe(false)
         expect(out.phase).toBe('serialize')
     })
+
+    test('a bare sys_id with surrounding whitespace reaches execute() unchanged (LLD §4.7 Note 4)', () => {
+        const core = fakeCore()
+        const adapter = load({ tools: { agent_trace: function () { return core } } })
+        const inputWithWhitespace = '  ' + SYS_ID + '  '
+
+        adapter.invoke('agent_trace', inputWithWhitespace, {})
+
+        expect(core.calls[0]).toBe(inputWithWhitespace)
+    })
+
+    test('a core that returns undefined still yields a String', () => {
+        const undefinedCore = {
+            PAGED_OUTPUT: true,
+            execute: function () {
+                return undefined
+            },
+        }
+        const adapter = load({ tools: { t: function () { return undefinedCore } } })
+
+        const out = invokeJson(adapter, 't', SYS_ID, {})
+
+        expect(typeof out).toBe('object')
+        expect(out.success).toBe(false)
+        expect(out.phase).toBe('serialize')
+    })
 })

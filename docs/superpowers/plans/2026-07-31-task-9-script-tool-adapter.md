@@ -659,9 +659,12 @@ PaScriptToolAdapter.prototype = {
      * makes it fall through to the recent-plan pick-list and silently discard
      * the caller's actual request. Nothing errors.
      *
-     * It never rejects: a '{'-leading string that fails to parse goes through
-     * untouched so the core emits its own _parse_error. One place decides what
-     * an input means, and it is not this one.
+     * A bare string is returned ORIGINAL AND UNTOUCHED (LLD §4.7 Note 4). Trimming
+     * is for the purpose of deciding what an input means; once the decision is made
+     * (this is a string, not JSON), it passes through as received. The tool core
+     * owns all normalisation. It never rejects: a '{'-leading string that fails to
+     * parse goes through untouched so the core emits its own _parse_error. One place
+     * decides what an input means, and it is not this one.
      */
     tolerantParse: function (rawInput) {
         if (rawInput === null || rawInput === undefined) return {}
@@ -670,7 +673,8 @@ PaScriptToolAdapter.prototype = {
 
         if (typeof rawInput !== 'string') return {}
 
-        var s = String(rawInput).replace(/^\s+|\s+$/g, '')
+        var original = String(rawInput)
+        var s = original.replace(/^\s+|\s+$/g, '')
         if (!s) return {}
 
         var parsed = null
@@ -685,7 +689,7 @@ PaScriptToolAdapter.prototype = {
             return parsed
         }
 
-        return s
+        return original
     },
 
     // =======================================================================

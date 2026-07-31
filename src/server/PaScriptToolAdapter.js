@@ -234,6 +234,12 @@ PaScriptToolAdapter.prototype = {
 
     _stringify: function (value) {
         if (typeof value === 'string') return value
+        if (value === undefined) {
+            return this._errorString(
+                'The tool returned no result. Treat this tool as unavailable for this call rather than as returning no data.',
+                'serialize'
+            )
+        }
         return JSON.stringify(value)
     },
 
