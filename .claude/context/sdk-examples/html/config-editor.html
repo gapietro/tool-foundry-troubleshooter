@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Stub: Jelly template for the ui-page Example 3 (config editor).
+  Replace with the actual editor UI when adapting to a real project — this
+  file just satisfies the Now.include() reference at build time so the
+  example compiles. Replace `x_snc_myapp_` with your project's scope.
+-->
+<j:jelly trim="false" xmlns:j="jelly:core" xmlns:g="glide">
+  <form method="post" action="x_snc_myapp_config_editor.do">
+    <input type="hidden" name="sysparm_action" value="save" />
+    <label>Config ID: <input type="text" name="sysparm_config_id" /></label>
+    <label>Config JSON: <textarea name="sysparm_config_json" rows="10" cols="60"></textarea></label>
+    <button type="submit">Save</button>
+  </form>
+</j:jelly>
