@@ -60,7 +60,7 @@ External AI is prohibited on customer instances; every LLM call Agent Doctor mak
          ▼
   sn_aia_execution_plan/_task/_tools_execution/_message · sn_aia_agent/
   _tool/_agent_tool_m2m/_usecase/_trigger_configuration · sys_gen_ai_
-  usage_log/_log_metadata (→ sys_generative_ai_log) · sys_cs_* · sys_log
+  usage_log/_log_metadata (→ sys_generative_ai_log) · sys_cs_* · syslog
 ```
 
 ## 3. Ownership boundary — what we control vs. inherit
@@ -84,7 +84,7 @@ External AI is prohibited on customer instances; every LLM call Agent Doctor mak
 | `genai_log` | PaToolGenAiLog | LLM call detail, token counts, errors, capability→provider mapping health |
 | `schema_lookup` | PaToolSchemaLookup | Table existence + field/choice schema (distinguishes "no table" from "unreadable") |
 | `query_table` | PaToolQueryTable | Data verification (≤100 rows, GlideRecordSecure) |
-| `log_analysis` | PaToolLogAnalysis | `sys_log`, **mandatory-scoped** (time window + level + source/message conditions) |
+| `log_analysis` | PaToolLogAnalysis | `syslog`, **mandatory-scoped** (time window + level + source/message conditions) — table name corrected from `sys_log` per DESIGN.md R-6; `sys_log` does not exist on these instances |
 | `read_artifact` | PaArtifactStore | Paged reads of stored large outputs (≤4KB/page) |
 
 All tool descriptions follow the K26 three-section framework (Purpose incl. when-not-to-use · Inputs · Outputs & Error Handling). All cores share one contract: `execute(args) → {success, data} | {success:false, error}`; every empty/denied read is an explicit finding, never a silent nothing.

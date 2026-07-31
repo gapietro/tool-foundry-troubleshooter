@@ -8,15 +8,17 @@
 
 ### Overall: **CONDITIONAL GO**
 
-Phase 0 set out to falsify the Agent Doctor bet before building it. The bet survived — but not cleanly, and the spec's own rule is explicit: *"a verdict of 'proceed' requires every row above to land on the non-blocking side."* One row (**P1**) landed on the blocking side and one probe (**P4b**) could not be run at all. Neither is a design failure; both are unfinished preconditions. Hence conditional, not go.
+> **RESTATED 2026-07-30 after the P1 retraction.** The verdict is **still CONDITIONAL GO**, but **not for the reason originally given**. P1's blocking result — "no Now Assist product plugin is active" — was an **instrument error** (`v_plugin` results are visibility-filtered for this caller; `sys_scope` shows the product plugins installed and active on gpinst01) and is **retracted in full**: see the retraction block at the head of § P1 and `DESIGN.md` **R-11**. **There is no plugin provisioning gap and no blocking falsification row.** What keeps the verdict conditional is the single remaining carried-forward item: **P4b, the runtime scoped-read test, which was never executed** (no background-script executor exists in the Foundry MCP toolset). That is unfinished, not failed — but it is unfinished, so this is **not** a clean pass. One further correction of scope: **keynexus01's plugin state has not been re-verified** and is *unknown*, not *absent* — the keynexus01 P1 result used the same discredited `v_plugin` instrument, and that instance is not currently connected.
+
+Phase 0 set out to falsify the Agent Doctor bet before building it. The bet survived — but not cleanly, and the spec's own rule is explicit: *"a verdict of 'proceed' requires every row above to land on the non-blocking side."* ~~One row (**P1**) landed on the blocking side and~~ **No row landed on the blocking side once P1 is retracted, but** one probe (**P4b**) could not be run at all. That is not a design failure; it is an unfinished precondition. Hence conditional, not go.
 
 **What survived, and it is the important one.** The load-bearing assumption behind Option A — that a native Studio ReAct loop can sustain a 12–15-call autonomous investigation — was tested directly and held: 19 tool calls in one conversation, clean `Completed`, cause-of-death `completed`, 51s. The second benchmark-blocker, `DESIGN.md` 2.4's per-conversation anchor key, was also answered affirmatively. Those were the two results most capable of ending the project early. They did not.
 
-**What is conditional on it.** Two conditions must be discharged before the benchmark, and one before Task 1:
+**What is conditional on it.** One condition must be discharged before Task 1, and two before the benchmark:
 
-1. **Before the benchmark — provision a Now Assist product plugin on keynexus01** (P1). Until then the Now Assist Panel does not exist, the LLD §7 smoke test and the K26 lab prerequisites cannot run as written, and every Phase 0b result carries an API-path qualification.
-2. **Before the benchmark — establish the OOB default of `sn_aia.continuous_tool_execution_limit`** and record per-run which value each scored run executed under (spec §6; filed as `DESIGN.md` ruling R-4). Phase 0 could **not** establish the shipped default — it is genuinely unknown.
-3. **At Task 1 — run the scoped-read runtime test that P4b could not** (`GlideRecordSecure` across the §2 table list from inside the `x_pa_*` scope), before any tool core is written against those tables.
+1. ~~**Before the benchmark — provision a Now Assist product plugin on keynexus01** (P1). Until then the Now Assist Panel does not exist, the LLD §7 smoke test and the K26 lab prerequisites cannot run as written, and every Phase 0b result carries an API-path qualification.~~ **WITHDRAWN 2026-07-30 — the finding behind it is retracted.** The product plugins are installed and active (verified on gpinst01 via `sys_scope`), so there is nothing to provision and the LLD §7 smoke test and K26 lab prerequisites are not blocked. Replaced by a smaller, different action: **re-verify keynexus01's plugin state with `sys_scope`** before relying on that instance, since its `v_plugin`-based result is suspect and it has not been re-checked. Note that Phase 0b's API-path qualification (`DESIGN.md` R-2, R-3) is **unaffected** — E1/E2/E3 still ran through `servicenow_aia_execute` rather than the panel and still need panel-path re-confirmation before the benchmark.
+2. **Before the benchmark — establish the OOB default of `sn_aia.continuous_tool_execution_limit`** and record per-run which value each scored run executed under (spec §6; filed as `DESIGN.md` ruling R-4). Phase 0 could **not** establish the shipped default — it is genuinely unknown. (The gpinst01 cross-instance run below supplies strong corroborating evidence for **25**, but the recording requirement stands regardless.)
+3. **At Task 1 — run the scoped-read runtime test that P4b could not** (`GlideRecordSecure` across the §2 table list from inside the `x_pa_*` scope), before any tool core is written against those tables. **This is now the only carried-forward Phase 0 item, and the sole reason the verdict is CONDITIONAL rather than GO.**
 
 Phase 0 does not decide the harness, and this verdict does not pre-empt the `IMPLEMENTATION_PLAN.md` Task 12 gate. It removes one pre-emption that spec §8 would have allowed: E2's result means the "the loop cannot sustain the sweep" evidence does **not** enter the gate decision ahead of any scored run.
 
@@ -24,7 +26,7 @@ Phase 0 does not decide the harness, and this verdict does not pre-empt the `IMP
 
 | # | Probe | Falsifying result the spec named | What happened | Verdict |
 |---|---|---|---|---|
-| 1 | **P1** | Panel off, or no Now Assist product plugin active → **hard stop** | `panel_available: false`. No Now Assist product plugin (ITSM/HRSD/CSM/SecOps) exists or is active — only Now Assist Core, now-assist-self-service, Skill Step Plugin. No property independently disables the panel; the plugin gap alone fails the precondition | **FAILED — landed on the blocking side. CARRIED FORWARD as an instance-provisioning task**, not a design change. Spec §5 pre-committed this row as a **hard stop** ("Phase 0b cannot run"); Phase 0b ran anyway because `servicenow_aia_execute` fires an agent through the API without the panel. **That is a relaxed falsification rule** — relaxed during planning, before results were known — and it is why the verdict is conditional rather than a pass. The substitution is also what makes E1 provisional. See the P1 Step 4 note. Must be closed before the benchmark (`DESIGN.md` R-11) |
+| 1 | **P1** | Panel off, or no Now Assist product plugin active → **hard stop** | ~~`panel_available: false`. No Now Assist product plugin (ITSM/HRSD/CSM/SecOps) exists or is active~~ — **RETRACTED 2026-07-30.** The product plugins **are** installed and active: `sys_scope` on gpinst01 returns `sn_itsm_aia` (9.1.1), `sn_csm_gen_ai` (13.0.3), `sn_fsm_gen_ai` (10.0.1), `sn_ex_gen_ai` (4.3.2), `sn_km_gen_ai` (30.10.3), `sn_nowassist_va`, `sn_na_center`, `sn_nowassist_admin` and ~50 more Now Assist scopes, all active (60-row limit reached). The original result came from **`v_plugin`**, whose rows are visibility-filtered for this caller — a **partial** result read as **absence** | **RETRACTED — this row does NOT land on the blocking side.** The falsifying condition did not occur. The error was one of **instrument**, not measurement: `v_plugin` is not a valid test for plugin presence here; `sys_scope` is. It is the same "empty result read as a silent nothing" trap this project's own standards forbid (`AGENT_DOCTOR_ARCHITECTURE.md` §4) and that E3 records for `servicenow_query`. Two things survive the retraction: the spec §5 hard-stop rule **was** relaxed during planning (before results were known) to let Phase 0b run through `servicenow_aia_execute`, and Phase 0b's results are consequently **API-path, not panel-path**, so `DESIGN.md` R-2/R-3 still require panel-path re-confirmation. **keynexus01 NOT re-verified** — same `v_plugin` instrument, instance not connected; its plugin state is *unknown*. See the retraction block at the head of § P1 and `DESIGN.md` R-11 (retracted in place) |
 | 2 | **P2 + E2** | Fewer than **12** calls complete, by hard stop or stall, ceiling not raisable → native front door capped below the sweep; Phase 1a native build avoided | 19 calls completed | **Did not occur** |
 | 3 | **P2 + E2** | **12–14** calls complete → marginal; budget the playbook call-by-call | 19 calls completed | **Did not occur** |
 | 4 | **P2 + E2** | All **15** complete cleanly → Option A's core assumption survives; proceed to Task 1 with budget values recorded | 19 calls in one conversation (4 layer-absent + layers 1–15 each exactly once), `state=Completed`, `state_reason` empty, cause-of-death `completed`, 51s. Not capped: m2m `max_auto_executions`=20, property=25 | **PASS.** Recorded budget values: property `sn_aia.continuous_tool_execution_limit` = **25**; `max_auto_executions` dictionary default = **10** (a *different*, per-binding knob), instance distribution 477/483 rows at 10. Two qualifications carried: 19 is close to the 20 attachment cap, so a longer sweep must be re-tested not extrapolated; and this ran on the API path, not the panel |
@@ -33,7 +35,9 @@ Phase 0 does not decide the harness, and this verdict does not pre-empt the `IMP
 | 6b | **P4b** (runtime half) | same row — runtime confirmation via a background script executed in an existing non-global scope | **NOT EXECUTED.** No background-script executor exists in the Foundry MCP toolset. Six active non-global scoped apps *do* exist, so the proxy would have been possible had the tooling existed. The probe tool's own reads succeeded on all five tables tried, but it ran in `Global` scope, so it does not simulate a restricted `x_pa_*` scope | **CARRIED FORWARD — not a pass.** Reason: tooling gap, not an instance limitation. Becomes a Task 1 first-build verification (`DESIGN.md` R-1) |
 | 7 | **E1** | No per-conversation identifier **and** no usable fallback → `DESIGN.md` 2.4's hard-key requirement unsatisfiable; benchmark protocol needs redesign before seeds are built | A script tool receives an undocumented global `_agentic_context_` (a JSON **string**) carrying `agent_id`, `conversation_id`, `usecase_id`, `execution_plan_id`. `conversation_id` was identical across all 19 E2 calls and matches `sn_aia_execution_plan.conversation` | **PASS, provisional.** A genuine hard per-conversation key exists; neither named fallback is needed. Provisional in two respects, both recorded rather than glossed: obtained via the **API path, not the panel** (row 1), and `_agentic_context_` is **undocumented**, so it is not contractually stable across upgrades. Re-confirm on the panel path before the benchmark |
 
-**Summary:** 4 pass (rows 4, 5, 6a, 7 — two of them qualified), 1 failed and carried forward (row 1), 1 not executed and carried forward (row 6b), 2 falsifying results did not occur (rows 2, 3). No row was silently absorbed.
+**Summary (restated 2026-07-30 after the P1 retraction):** 4 pass (rows 4, 5, 6a, 7 — two of them qualified), **1 retracted (row 1 — the falsifying result did not occur; the probe used the wrong instrument)**, 1 not executed and carried forward (row 6b), 2 falsifying results did not occur (rows 2, 3). **No row now lands on the blocking side; row 6b alone is carried forward.** No row was silently absorbed, and the retraction is recorded in place rather than by deletion.
+
+*Originally recorded as:* ~~4 pass (rows 4, 5, 6a, 7 — two of them qualified), 1 failed and carried forward (row 1), 1 not executed and carried forward (row 6b), 2 falsifying results did not occur (rows 2, 3).~~
 
 ### Transferability statement (spec §6)
 
@@ -46,6 +50,41 @@ Recorded here because spec §6 requires the OOB default be kept separate from an
 ## Phase 0a — Read-only reconnaissance
 
 ### P1 — Now Assist Panel and product plugin (LLD §8.10)
+
+> ## ⛔ RETRACTED 2026-07-30 — this probe's verdict is WRONG
+>
+> **The verdict recorded below (`panel_available: false`, "no Now Assist product plugin exists or is active") is retracted.** Nothing below has been deleted: the queries, the verbatim results and the reasoning are kept in full, because the record of *what was measured and how it misled* is the most useful part of this correction. Read everything below as **superseded evidence**, not as a finding.
+>
+> **What is actually true.** Verified 2026-07-30 on **gpinst01** by querying **`sys_scope`** (installed scoped applications). The query returned **60 rows and hit the row limit**, so there are likely more. Among them, all `active`:
+>
+> | Scope | Application | Version |
+> |---|---|---|
+> | `sn_itsm_aia` | IT Service Management AI agent collection | 9.1.1 |
+> | `sn_csm_gen_ai` | Now Assist for Customer Service Management (CSM) | 13.0.3 |
+> | `sn_fsm_gen_ai` | Now Assist for Field Service Management (FSM) | 10.0.1 |
+> | `sn_ex_gen_ai` | Now Assist for Employee Experience | 4.3.2 |
+> | `sn_km_gen_ai` | Now Assist in Knowledge Management | 30.10.3 |
+> | `sn_nowassist_va` | Now Assist in Virtual Agent | 19.0.10 |
+> | `sn_na_center` | Now Assist Center | 4.0.2 |
+> | `sn_nowassist_admin` | Now Assist Admin Console | 10.0.12 |
+>
+> …plus roughly **fifty more** Now Assist scopes. The Now Assist **product** plugins are installed and active. There is no provisioning gap on gpinst01.
+>
+> **Why the probe was wrong — record this, it is the important part.** Every query in Step 1 below ran against **`v_plugin`**. `v_plugin` returned only a handful of rows because **plugin visibility is restricted for this caller** — it is a filtered view, not the plugin universe. Step 1 read that **partial** result as **absence**, and Step 3 and Step 4 built a blocking verdict on top of it.
+>
+> This is **exactly the failure mode this project's own standards exist to prevent.** `AGENT_DOCTOR_ARCHITECTURE.md` §4 states the rule for every tool core: *"every empty/denied read is an explicit finding, never a silent nothing."* The same trap is recorded independently in **E3** below, where `servicenow_query` silently omits fields that do not exist, so a wrong field name returns rows that merely *look* empty rather than raising an error (see `DESIGN.md` R-6 item 3). The probe committed the error the methodology was written to catch — and it did so while the document containing that methodology was open. Notably, Step 1 below already *observed* `v_plugin` behaving unreliably (the `active=true` clause silently matching nothing because the field stores `active`/`inactive`), treated that as a query-syntax artifact, corrected the syntax, and then continued to trust the instrument. The instrument itself was the problem.
+>
+> **The correct instrument is `sys_scope`** — installed scoped applications. Now Assist product capability ships as scoped applications, and `sys_scope` is neither visibility-filtered in the way `v_plugin` is here nor dependent on the plugin naming conventions Step 1 guessed at (`sn_now_assist_itsm`, `sn_now_assist_csm`, …), none of which are the real scope names. **`v_plugin` must not be used to establish plugin presence or absence on these instances.**
+>
+> **keynexus01 is SUSPECT and has NOT been re-verified.** The keynexus01 P1 result — the one recorded below — used the same `v_plugin` instrument and is therefore unreliable for the same reason. keynexus01 **is not currently connected** and no re-check has been performed. **Do not record keynexus01 as fixed, and do not carry its `panel_available: false` forward as a fact.** Open action: **re-verify keynexus01's Now Assist product plugin state with `sys_scope`.** Until that is done, keynexus01's plugin state is *unknown*, not *absent*.
+>
+> **Downstream corrections made at the same time:** the § Verdict row for P1, the § LLD §8 disposition item 10, the § Cross-instance verification — gpinst01 plugin claim and comparison row, `docs/LOW_LEVEL_DESIGN.md` §8 item 10, and `DESIGN.md` ruling **R-11** (retracted in place, not renumbered).
+>
+> **What this retraction does *not* discharge:** every Phase 0b result (E1, E2, E3) was still obtained through `servicenow_aia_execute` — the **API path** — rather than the Now Assist Panel. Those results remain **API-path provisional** and still need panel-path re-confirmation before the benchmark (`DESIGN.md` R-2, R-3). What changes is only that no plugin gap stands in the way of running them on the panel.
+
+---
+
+*Superseded evidence follows, preserved verbatim.*
 
 **Step 1 — Plugin query.**
 
@@ -324,10 +363,10 @@ Full verbatim name/value/description list, all 159 rows, unfiltered, recorded be
 
 **Step 3 — Product plugin confirmation.** From Step 1: **no** ITSM / HRSD / CSM / SecOps Now Assist product plugin is active (none even exists as a plugin record on this instance under the expected naming). Per LLD §1 the panel requires one of these to be active.
 
-**Step 4 — Verdict.**
+**Step 4 — Verdict.** ⛔ **RETRACTED — see the retraction block at the head of this P1 section.** The verdict below rests entirely on `v_plugin`, whose results are visibility-filtered for this caller; `sys_scope` shows the product plugins active. Preserved as recorded.
 
 ```
-panel_available: false
+panel_available: false     ← RETRACTED 2026-07-30; instrument error (v_plugin), not a finding
 ```
 
 Failed precondition: **no Now Assist product plugin (ITSM/HRSD/CSM/SecOps) is active** — `v_plugin` shows only `Now Assist Core` / `now-assist-self-service` active, with no product-line Now Assist plugin present at all. No `sys_properties` entry independently disables the panel; the plugin gap alone is sufficient to fail the Step 3 precondition.
@@ -1529,9 +1568,11 @@ Item numbering is `docs/LOW_LEVEL_DESIGN.md` §8's own. The same dispositions ar
 | **7** | Final app scope prefix (assigned at SDK app creation) | **not in Phase 0 scope** |
 | **8** | Seed 4 construction that cannot degrade the shared instance's GenAI config | **not in Phase 0 scope** |
 | **9** | Storage of Studio's "Define User Access" / "Define Data Access" role sets | **CLOSED (Phase 0).** `sys_agent_access_role_configuration` (Global scope), keyed polymorphically by `agent` (document_id) + `agent_table` (table_name) — **not** a field on `sn_aia_agent`/`sn_aia_usecase`, and **not** an `sn_aia_`-prefixed m2m. Per-role breakout in `sys_agent_access_role_mapping`; parallel permission-set path via `sys_agent_access_permission_set_configuration`. 159 config rows. No structural field separates "User Access" from "Data Access" — the distinction is conventional, carried in free-text `description` |
-| **10** | Now Assist Panel enabled on keynexus01 (needs ≥1 product plugin) | **CARRIED FORWARD.** `panel_available: false` — no Now Assist product plugin exists or is active. An instance-provisioning task, not a design change. Blocks the LLD §7 smoke test and the K26 lab prerequisites as written, and qualifies every Phase 0b result as API-path evidence. Must be closed before the benchmark (`DESIGN.md` R-11) |
+| **10** | Now Assist Panel enabled on keynexus01 (needs ≥1 product plugin) | ~~**CARRIED FORWARD.** `panel_available: false` — no Now Assist product plugin exists or is active. An instance-provisioning task, not a design change. Blocks the LLD §7 smoke test and the K26 lab prerequisites as written~~ — **RETRACTED 2026-07-30.** The Phase 0 disposition rested on a `v_plugin` query whose rows are visibility-filtered for this caller; a partial result was read as absence. `sys_scope` is the correct instrument. **CLOSED for gpinst01 (2026-07-30):** the product plugins are installed and active — `sn_itsm_aia` 9.1.1, `sn_csm_gen_ai` 13.0.3, `sn_fsm_gen_ai` 10.0.1, `sn_ex_gen_ai` 4.3.2, `sn_km_gen_ai` 30.10.3, `sn_nowassist_va`, `sn_na_center`, `sn_nowassist_admin` + ~50 more Now Assist scopes (60-row limit reached). No provisioning gap; nothing here blocks the LLD §7 smoke test or the K26 lab prerequisites. **keynexus01 NOT re-verified** — same `v_plugin` instrument, instance not currently connected; state *unknown*, not *absent*. **Open action: re-verify keynexus01 with `sys_scope`.** The API-path qualification on Phase 0b results is unaffected and stands on its own (`DESIGN.md` R-2, R-3). See `DESIGN.md` R-11 (retracted in place) |
 
-**Tally:** 5 CLOSED (1, 3, 5, 6, 9) · 2 CARRIED FORWARD (4, 10) · 3 not in Phase 0 scope (2, 7, 8).
+**Tally (restated 2026-07-30 after the P1 retraction):** 6 CLOSED (1, 3, 5, 6, 9, **10** — 10 closed for gpinst01 only, with a keynexus01 re-verification action outstanding) · **1 CARRIED FORWARD (4)** · 3 not in Phase 0 scope (2, 7, 8). Total 10.
+
+*Originally recorded as:* ~~5 CLOSED (1, 3, 5, 6, 9) · 2 CARRIED FORWARD (4, 10) · 3 not in Phase 0 scope (2, 7, 8).~~
 
 ---
 
@@ -1546,7 +1587,7 @@ method; records deleted and verified absent.
 
 | Finding | keynexus01 | gpinst01 | |
 |---|---|---|---|
-| Now Assist product plugin | absent | **absent** | same |
+| Now Assist product plugin | ~~absent~~ **unknown — not re-verified** | ~~absent~~ **PRESENT and active** (`sys_scope`: `sn_itsm_aia`, `sn_csm_gen_ai`, `sn_fsm_gen_ai`, `sn_ex_gen_ai`, `sn_km_gen_ai`, `sn_nowassist_va`, `sn_na_center`, `sn_nowassist_admin`, +~50) | **row RETRACTED 2026-07-30** — both original cells came from `v_plugin`, the wrong instrument. Only gpinst01 has been re-checked with `sys_scope`; keynexus01 has not. **Not comparable.** |
 | `sn_aia.continuous_tool_execution_limit` | 25 | **25** | same |
 | `max_auto_executions` dictionary default | 10 | **10** | same |
 | …its production distribution | 477/483 at 10 | **492/497 at 10** | same |
@@ -1565,10 +1606,36 @@ a record dating to 2024-11-08. Two independent instances at the same value, both
 strong evidence that **25 is the shipped default** — which is what `DESIGN.md` R-4's
 transferability constraint needs.
 
-**It also closes off an escape route.** gpinst01 has the *same* plugin gap — Now Assist Core,
-self-service, Skill Step, record-nowassist, and **no ITSM/HRSD/CSM/SecOps product plugin**. The
-P1 precondition is not an instance-selection problem; it needs provisioning wherever the
-benchmark runs.
+**~~It also closes off an escape route.~~ RETRACTED 2026-07-30 — the claim below is FALSE.**
+
+~~gpinst01 has the *same* plugin gap — Now Assist Core, self-service, Skill Step,
+record-nowassist, and **no ITSM/HRSD/CSM/SecOps product plugin**. The P1 precondition is not an
+instance-selection problem; it needs provisioning wherever the benchmark runs.~~
+
+**What is actually true.** gpinst01 has **no plugin gap**. Re-verified 2026-07-30 with
+**`sys_scope`** (installed scoped applications), which returned 60 rows and hit the row limit —
+so likely more — including, all `active`: `sn_itsm_aia` "IT Service Management AI agent
+collection" v9.1.1 · `sn_csm_gen_ai` "Now Assist for Customer Service Management (CSM)" v13.0.3 ·
+`sn_fsm_gen_ai` "Now Assist for Field Service Management (FSM)" v10.0.1 · `sn_ex_gen_ai` "Now
+Assist for Employee Experience" v4.3.2 · `sn_km_gen_ai` "Now Assist in Knowledge Management"
+v30.10.3 · `sn_nowassist_va` "Now Assist in Virtual Agent" v19.0.10 · `sn_na_center` "Now Assist
+Center" v4.0.2 · `sn_nowassist_admin` "Now Assist Admin Console" v10.0.12 — plus roughly fifty
+more Now Assist scopes. **There is nothing to provision on gpinst01, and the P1 precondition is
+satisfied there.**
+
+**Why the original claim was false.** It inherited P1's instrument. Both the keynexus01 and the
+gpinst01 "absent" readings came from **`v_plugin`**, whose rows are visibility-filtered for this
+caller, so a **partial** result was read as **absence** — twice, which is precisely what made the
+false claim look like independent corroboration. Two wrong readings from the same broken
+instrument are one wrong reading, not two. `sys_scope` is the correct instrument for this
+question; `v_plugin` is not. Full account in the retraction block at the head of § P1 and in
+`DESIGN.md` **R-11**.
+
+**keynexus01 has NOT been re-verified.** Its reading used the same `v_plugin` instrument and is
+suspect for the same reason; the instance is not currently connected. Its Now Assist product
+plugin state is therefore **unknown**, not *absent* and not *present*. **Open action: re-verify
+keynexus01 with `sys_scope`** before any claim about it is made or relied on. This retraction
+makes no statement about keynexus01 beyond withdrawing the old one.
 
 ### E1 confirms exactly
 
