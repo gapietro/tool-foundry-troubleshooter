@@ -699,5 +699,80 @@ export const scopeProbeApi = RestApi({
     response.getStreamWriter().writeString(JSON.stringify(out));
 })(request, response);`,
         },
+
+        // -------------------------------------------------------------------
+        // TEMPORARY — deleted at Task 10 together with the other three probes.
+        //
+        // The vertical-slice brief says the probe routes come out when the Task 9
+        // adapter lands. Deferred by one task deliberately: deleting them here
+        // leaves the adapter verifiable only through an AiAgent that does not
+        // exist yet, so its first exercise would be inside Task 10, where an
+        // adapter defect and an agent-definition defect are indistinguishable.
+        //
+        // Read-only in effect: the adapter writes a run record, an audit row and
+        // possibly an artifact, all inside this app. The tools it reaches only
+        // read.
+        // -------------------------------------------------------------------
+        {
+            $id: Now.ID['scope-probe-adapter'],
+            version: 1,
+            name: 'Script Tool Adapter Probe',
+            path: '/adapter',
+            method: 'POST',
+            active: true,
+            authentication: true,
+            authorization: true,
+            shortDescription: 'TEMPORARY verification harness for PaScriptToolAdapter - remove at Task 10',
+            script: script`(function process(request, response) {
+    var out;
+
+    try {
+        var body = {};
+        try {
+            if (request.body && request.body.data) {
+                body = request.body.data;
+            }
+        } catch (bodyErr) {
+            body = {};
+        }
+
+        var tool = body.tool;
+        if (tool === undefined || tool === null || tool === '') {
+            tool = 'agent_trace';
+        }
+
+        // Passed to invoke() exactly as received. The whole point of this route
+        // is to exercise the tolerant-parse path the wrapper will feed it, so it
+        // must not normalise anything on the way in.
+        var payload = body.request;
+
+        // No identity in the context. PaRunAnchor reads the ambient
+        // _agentic_context_ itself and lets it win, which is what the real
+        // wrapper relies on; supplying a conversation id here would exercise a
+        // path the wrapper never takes.
+        var adapterOut = new PaScriptToolAdapter().invoke(String(tool), payload, {});
+
+        // invoke() returns a STRING by contract. Handing it back raw is the
+        // point: if it is ever not a string, this route is where that shows.
+        out = {
+            success: true,
+            tool: String(tool),
+            output_type: typeof adapterOut,
+            output: adapterOut
+        };
+    } catch (e) {
+        // Never touch the exception object - a cross-scope denial throws again
+        // when read and escapes the handler (DESIGN.md R-1).
+        out = {
+            success: false,
+            error: 'Adapter probe route failed outside invoke(). That should be impossible - invoke() contains its own failures - so suspect the Script Include did not resolve from this scope. Exception detail deliberately not read, see DESIGN.md R-1.'
+        };
+    }
+
+    response.setStatus(200);
+    response.setContentType('application/json');
+    response.getStreamWriter().writeString(JSON.stringify(out));
+})(request, response);`,
+        },
     ],
 })

@@ -53,13 +53,25 @@ declare global {
                         table: 'sys_script_include'
                         id: '442109ddbf1c459d919c2b04ffa9e71f'
                     }
+                    'pa-script-tool-adapter': {
+                        table: 'sys_script_include'
+                        id: '8adcc81877fb40be96f1422c18682b5b'
+                    }
                     'pa-tool-agent-trace': {
                         table: 'sys_script_include'
                         id: 'e460c4021e4b44dcaf92570057d5a360'
                     }
+                    'pa-tool-read-artifact': {
+                        table: 'sys_script_include'
+                        id: '3979cce296d748edac6f85de1d9136a5'
+                    }
                     package_json: {
                         table: 'sys_module'
                         id: '296e46a72ad14ef5a7f123411966e86e'
+                    }
+                    'scope-probe-adapter': {
+                        table: 'sys_ws_operation'
+                        id: '41e02cdf0a3f40aba13d2e4f4a71178a'
                     }
                     'scope-probe-anchor-selftest': {
                         table: 'sys_ws_operation'
@@ -97,6 +109,10 @@ declare global {
                         table: 'sys_module'
                         id: 'bb0b6de06e71450e9fbeec1f74f4fa3f'
                     }
+                    src_server_PaScriptToolAdapter_js: {
+                        table: 'sys_module'
+                        id: '5a54685b6fd04426acc3bb39714b0f4f'
+                    }
                     src_server_script_ts: {
                         table: 'sys_module'
                         id: 'd8226c63fd0d44bea250580a81a4424c'
@@ -104,6 +120,10 @@ declare global {
                     src_server_tools_PaToolAgentTrace_js: {
                         table: 'sys_module'
                         id: 'cae852b254fc45a8ac5bd32c712102be'
+                    }
+                    src_server_tools_PaToolReadArtifact_js: {
+                        table: 'sys_module'
+                        id: '023a0738182045e3aedaecd5ea2478f3'
                     }
                     'xsp-syslog-read': {
                         table: 'sys_scope_privilege'

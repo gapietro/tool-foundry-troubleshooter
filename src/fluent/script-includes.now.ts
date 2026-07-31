@@ -108,3 +108,45 @@ export const paToolAgentTrace = ScriptInclude({
     accessibleFrom: 'public',
     script: Now.include('../server/tools/PaToolAgentTrace.js'),
 })
+
+/**
+ * PaToolReadArtifact — LLD §4.5, the `read_artifact` tool core.
+ *
+ * A tool core, unlike PaArtifactStore above: it is reachable from an agent.
+ * It carries PAGED_OUTPUT so the adapter skips applyThreshold — MAX_PAGE_CHARS
+ * and THRESHOLD_CHARS are both 4000, so a full page plus its envelope always
+ * exceeds the threshold and would otherwise be stored as a new artifact.
+ *
+ * accessibleFrom 'public' for the standing reason (DESIGN.md R-5).
+ */
+export const paToolReadArtifact = ScriptInclude({
+    $id: Now.ID['pa-tool-read-artifact'],
+    name: 'PaToolReadArtifact',
+    // Build Rule #29: ONE literal, no `+` concatenation.
+    description: `Agent Doctor tool core: reads back a stored diagnostic artifact one 4KB page at a time. execute(args) accepts an artifact sys_id, a JSON object {artifact_id, offset, length}, or nothing, and delegates to PaArtifactStore.read - which refuses any attachment that is not on the diagnostic run table. Declares PAGED_OUTPUT so the script-tool adapter does not re-truncate its own pages.`,
+    active: true,
+    accessibleFrom: 'public',
+    script: Now.include('../server/tools/PaToolReadArtifact.js'),
+})
+
+/**
+ * PaScriptToolAdapter — LLD §4.7, the native harness bridge.
+ *
+ * Every AI Agent script tool is a one-line IIFE calling invoke(). This is the
+ * one Script Include that must never throw: an exception reaching the native
+ * orchestrator is a documented pain point, so invoke() returns a String on
+ * every path.
+ *
+ * accessibleFrom 'public' is not optional here — this is the FIRST thing called
+ * from rhino.global, so package_private would fail every tool call at runtime
+ * while building and installing perfectly (DESIGN.md R-5).
+ */
+export const paScriptToolAdapter = ScriptInclude({
+    $id: Now.ID['pa-script-tool-adapter'],
+    name: 'PaScriptToolAdapter',
+    // Build Rule #29: ONE literal, no `+` concatenation.
+    description: `Agent Doctor infrastructure: the bridge between an AI Agent script tool and a diagnostic tool core. invoke(toolName, request, context) resolves the tool by name against a closed registry, parses the request tolerantly - a bare string is passed through unchanged - anchors the diagnostic run, audit-logs intent and result around the call, applies the artifact threshold to oversized output, and returns a JSON string. It never throws into the orchestrator; failures come back as a structured error naming the stage that failed.`,
+    active: true,
+    accessibleFrom: 'public',
+    script: Now.include('../server/PaScriptToolAdapter.js'),
+})
