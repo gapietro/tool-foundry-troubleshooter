@@ -1,0 +1,405 @@
+# Project: tool-foundry-troubleshooter
+
+@.claude/context/sdk-reference.md
+
+> Bootstrapped with Foundry - AI Foundry's project accelerator
+
+---
+
+## AI Foundry Context
+
+This project was initialized with pre-loaded resources for Now Assist POC development.
+
+### Available Resources
+
+| Location | Contents |
+|----------|----------|
+| `.claude/context/` | Platform context and patterns |
+| `.claude/skills/` | Reusable Claude Code skills |
+
+### Context Files
+- **now-assist-platform.md** - Now Assist architecture, APIs, configuration
+- **genai-framework.md** - GenAI Controller, skill development patterns
+- **agentic-patterns.md** - Agentic framework, tool definitions, orchestration
+
+### Skills
+- **now-assist-skill-builder** - Guide for creating custom Now Assist skills
+- **tool-script-writer** - Tool description to safe ServiceNow AI Agent tool script with schemas
+
+### ServiceNow access — use the foundry MCP tools, not the shell
+For anything that talks to a ServiceNow instance (`*.service-now.com`), use the foundry MCP tools: `servicenow_connect` (`authType="keychain"` or a `profile`) then `servicenow_request` or the dedicated `servicenow_*` tools. The MCP server brokers credentials server-side, so the secret never enters a shell command, argv, env var, or tool transcript. Never read instance credentials in the shell — no `curl` with keychain-sourced auth, no `security` keychain reads. If the MCP server cannot connect, stop and report it to the user; do not work around it via the shell.
+
+This project's `.claude/settings.json` should deny `Bash(security:*)` and `Bash(/usr/bin/security:*)` — if the file is missing (e.g. the project was scaffolded via the MCP `foundry_init`, which currently copies only CLAUDE.md), create it with those two deny rules. The deny rules are best-effort hardening; the real credential boundary is the server-side MCP broker.
+
+Storing instance credentials for `servicenow_connect authType="keychain"` is done by the **user in their own terminal**, never through Claude: `security add-internet-password -s '<instance>.service-now.com' -a '<username>' -w` (omit the `-w` value to be prompted securely; the **Where** field must be the exact hostname). For non-ServiceNow hosts (GitHub, generic APIs) use dedicated CLIs (`gh auth login`) or interactive auth flows — never paste tokens into chat, `.env` files, or code.
+
+---
+
+## Building Anything (STOP AND ASK FIRST)
+
+**CRITICAL: Before building, creating, or implementing ANYTHING, you MUST ask clarifying questions.**
+
+This is NON-NEGOTIABLE. Do not skip this step even if you think you understand the request.
+
+### The Rule
+
+When the user asks you to build/create/implement something:
+
+1. **STOP** - Do not write code or generate solutions yet
+2. **ASK** - Use `AskUserQuestion` tool to clarify requirements
+3. **CONFIRM** - Wait for user answers before proceeding
+4. **THEN BUILD** - Only after clarification, proceed with implementation
+
+### What Triggers This Rule
+
+Any request that involves creating something new:
+- "Build a skill that..."
+- "Create a function to..."
+- "Implement a feature for..."
+- "Add a button that..."
+- "Write a script to..."
+- "Help me make..."
+
+### Minimum Questions to Ask
+
+Before ANY implementation, clarify at least:
+
+1. **Purpose** - What specific problem does this solve?
+2. **Users** - Who will use this and how?
+3. **Inputs** - What data/information goes in?
+4. **Outputs** - What should come out? What format?
+5. **Edge cases** - What happens when things go wrong?
+
+### Example
+
+❌ **Wrong:**
+```
+User: "Create a skill that summarizes incidents"
+Claude: [Immediately generates 200 lines of code]
+```
+
+✅ **Correct:**
+```
+User: "Create a skill that summarizes incidents"
+Claude: [Uses AskUserQuestion]
+  - What fields should be included in the summary?
+  - How long should the summary be?
+  - Who will read these summaries (agents, customers, managers)?
+  - Should it highlight priority/severity?
+User: [Answers questions]
+Claude: [Now builds to spec]
+```
+
+### Brainstorming Workflow
+
+For complex builds, invoke `/brainstorming` (if available) BEFORE implementation. This explores requirements, alternatives, and trade-offs systematically.
+
+### Skip Phrases
+
+The user may explicitly skip this by saying:
+- "Just build it" or "Skip questions"
+- "I know what I want, here are the details: [detailed spec]"
+- "Use the same pattern as X"
+
+Without explicit skip permission, **ALWAYS ASK FIRST**.
+
+---
+
+## SPARC Methodology
+
+This project follows SPARC: **S**pecification → **P**seudocode → **A**rchitecture → **R**efinement → **C**ompletion
+
+### Current Phase: Specification
+
+#### Problem Statement
+<!-- What problem are we solving? Who is affected? What's the impact? -->
+
+
+#### Success Criteria
+<!-- How do we know when we're done? What metrics matter? -->
+- [ ]
+- [ ]
+- [ ]
+
+#### Stakeholders
+<!-- Who needs to be involved or informed? -->
+
+
+#### Constraints
+<!-- Technical, timeline, resource, or policy constraints -->
+
+
+---
+
+## Technical Notes
+
+### APIs & Integrations
+<!-- Document API contracts, authentication, endpoints -->
+
+
+### Data Model
+<!-- Key tables, fields, relationships -->
+
+
+### Architecture Decisions
+<!-- Record important decisions and rationale -->
+
+| Decision | Rationale | Date |
+|----------|-----------|------|
+| | | |
+
+---
+
+## Progress Log
+
+<!-- Track progress through SPARC phases -->
+
+### Specification Phase
+- [ ] Problem statement defined
+- [ ] Success criteria documented
+- [ ] Stakeholders identified
+- [ ] Constraints documented
+
+### Pseudocode Phase
+- [ ] High-level logic outlined
+- [ ] Edge cases identified
+- [ ] Data flow documented
+
+### Architecture Phase
+- [ ] Components designed
+- [ ] Integrations mapped
+- [ ] Security reviewed
+
+### Refinement Phase
+- [ ] Code implemented
+- [ ] Tests written
+- [ ] Code reviewed
+
+### Completion Phase
+- [ ] Deployed to test
+- [ ] User acceptance
+- [ ] Documentation complete
+- [ ] Deployed to production
+
+---
+
+## Conventions
+
+### Code Style
+- **Language:** TypeScript/JavaScript for scripts, ServiceNow conventions for platform code
+- **Naming:** camelCase for variables/functions, PascalCase for classes
+- **Comments:** JSDoc for public methods, inline for complex logic
+
+### ServiceNow Patterns
+- Use Script Includes for reusable logic
+- Prefer Flow Designer over Business Rules for complex workflows
+- Use GlideRecord best practices (always check for existence, use encoded queries)
+
+### Development Workflow
+
+**CRITICAL: NEVER commit directly to main. ALL changes require a branch and PR.**
+
+This is a strict requirement with NO exceptions - not even for "small" or "config-only" changes.
+
+#### Required Steps for ALL Changes
+1. Create a feature branch from main (e.g., `feature/description` or `fix/description`)
+2. Make changes on the feature branch
+3. Commit to the feature branch (never to main)
+4. Push the branch to origin
+5. Create a Pull Request to merge into main
+6. Merge via PR when approved
+
+#### Branch Naming Convention
+- `feature/` - New functionality
+- `fix/` - Bug fixes
+- `chore/` - Config changes, cleanup, maintenance
+- `docs/` - Documentation only
+
+**DO NOT rationalize skipping this workflow for "simple" changes. The workflow applies to everything.**
+
+### Version Numbering
+
+**REQUIRED:** Increment the version number whenever code is merged to main.
+
+**Format:** `YYYY.MM.DDXX`
+
+| Segment | Description | Example |
+|---------|-------------|---------|
+| YYYY | Year | 2026 |
+| MM | Month (zero-padded) | 01 = January |
+| DDXX | Day + daily increment | 0902 = 9th day, 2nd merge |
+
+**Files to update:**
+- `package.json` - Update the "version" field
+- `README.md` - Update the version badge
+
+**When to increment:**
+- After every PR merge to main
+- Increment daily counter (XX) for multiple same-day merges
+- Reset daily counter to 01 on a new day
+
+See full version history: `CHANGELOG.md`
+
+---
+
+## Issue Tracking
+
+**CRITICAL: ALL work must be associated with a GitHub issue.**
+
+Before starting any feature, bug fix, or task, ensure a GitHub issue exists.
+
+### For Bugs/Improvements:
+1. Capture a "before" screenshot showing the issue
+2. Create the issue with screenshot and appropriate labels
+3. After fixing, capture an "after" screenshot
+4. Attach the "after" screenshot before closing
+
+### Issue Assignment
+Auto-assign to issue creator using `--assignee @me`
+
+### Labels
+| Label | When to Use |
+|-------|-------------|
+| `bug` | Something isn't working |
+| `enhancement` | New functionality or improvement |
+| `ui` / `ux` | User interface or experience changes |
+
+---
+
+## Prompting Discipline
+
+**CRITICAL: Do NOT build on insufficient information. Ask clarifying questions first.**
+
+**Use the `AskUserQuestion` tool** to gather missing details before implementation. The goal is to get clarity, not to refuse work. Only after the user declines to provide details should Claude proceed with assumptions (clearly stated).
+
+When the user provides a brief feature request (e.g., "Add a delete button"), Claude MUST use AskUserQuestion to clarify before implementation. Guessing leads to bugs.
+
+### Required Clarifications
+
+Before implementing any UI feature, ensure these are defined:
+
+| Aspect | Question to Ask |
+|--------|-----------------|
+| **Placement** | Where exactly should this appear? |
+| **Interaction** | What happens on click/hover/focus? |
+| **Confirmation** | Is a confirmation dialog needed? What text? |
+| **Error handling** | What if the operation fails? |
+| **Edge cases** | What if the list is empty? Last item? |
+| **Keyboard** | Any keyboard shortcuts needed? |
+| **Loading state** | What shows during async operations? |
+
+### When to Ask vs. When to Assume
+
+**ASK** when:
+- The request is 1-2 sentences with no specifics
+- Multiple valid implementations exist
+- User experience decisions are involved
+- Error handling isn't specified
+
+**ASSUME** (using existing patterns) when:
+- User says "like we did for X"
+- User references an existing component as the model
+- User provides detailed acceptance criteria
+- The feature is a direct copy of existing functionality
+
+### Anti-Pattern
+
+❌ "Add a delete button" → Claude builds something → User finds issues → Iteration
+
+### Correct Pattern
+
+✅ "Add a delete button" → Claude uses `AskUserQuestion` tool → User answers → Claude builds to spec
+
+Example AskUserQuestion usage:
+```
+Questions: "Where should the delete button appear?", "Is confirmation needed?"
+Options: ["Card header", "Card footer", "Hover only"], ["Yes with dialog", "No, delete immediately"]
+```
+
+---
+
+## AI-Assisted Development Workflow (Superpowers)
+
+**MANDATORY** for all development activities unless explicitly skipped.
+
+### Philosophy
+- **Test-Driven Development** - Write tests first, always
+- **Systematic over ad-hoc** - Process over guessing
+- **Complexity reduction** - Simplicity as primary goal (YAGNI, DRY)
+- **Evidence over claims** - Verify before declaring success
+
+### Standard Workflow
+
+| Command | When |
+|---------|------|
+| Design | `/brainstorming` | Before ANY code |
+| Isolation | `/using-git-worktrees` | After design approval |
+| Planning | `/writing-plans` | Before implementation |
+| Execution | `/subagent-driven-development` | During implementation |
+| Testing | `/test-driven-development` | During ALL coding |
+| **Code Review** | `/requesting-code-review` | **After each task completes** |
+| **Security Review** | Manual or subagent | **For config, hooks, credentials** |
+| **Verification** | `/verification-before-completion` | **Before ANY merge claim** |
+| Completion | `/finishing-a-development-branch` | When done |
+| Debugging | `/systematic-debugging` | When bugs occur |
+
+### Mandatory Checkpoints (Non-Negotiable)
+
+These checkpoints apply to ALL work, including "simple" config changes:
+
+| Checkpoint | When | What to Check |
+|------------|------|---------------|
+| **Code Review** | After implementation, before PR | Does it meet requirements? Any regressions? |
+| **Security Review** | For hooks, credentials, shell commands | Injection risks? Secrets exposed? Error handling? |
+| **Verification** | Before claiming "done" or merging | Actually test it works. Evidence required. |
+
+**TDD for Non-Code Changes:**
+- Config files → Define expected behavior → Implement → Verify behavior works
+- Hooks → What should trigger? → Add hook → Restart and test trigger
+- Documentation → What should be documented? → Write it → Verify accuracy
+
+**Subagent Checkpoint:**
+When 3+ independent tasks exist, use `/dispatching-parallel-agents` instead of sequential execution.
+
+### Skip Phrases
+The developer may explicitly skip steps by saying:
+- "Skip brainstorming" or "I know what I want, just build it"
+- "No worktree needed" or "Work on current branch"
+- "Skip planning" or "This is a quick fix"
+- "Skip TDD" or "No tests needed for this"
+
+**Without explicit permission, ALL steps are mandatory.**
+
+### Anti-Patterns to Avoid
+- Jumping straight to code without understanding requirements
+- Writing code before tests
+- Skipping design validation with the developer
+- Large monolithic changes instead of small incremental tasks
+- Claiming work is complete without running verification
+- **Skipping code review** because changes seem "straightforward"
+- **Skipping security review** for hooks, shell commands, or config
+- **Sequential execution** when 3+ tasks could run in parallel
+- **Merging without testing** - "it should work" is not verification
+
+---
+
+## Quick Reference
+
+### Useful Commands
+```bash
+# Run tests (if applicable)
+npm test
+
+# Lint code
+npm run lint
+```
+
+### ServiceNow Instance
+- **Instance URL:**
+- **Scope:**
+- **Update Set:**
+
+### Team Contacts
+- **Tech Lead:**
+- **Product Owner:**
+- **ServiceNow Admin:**

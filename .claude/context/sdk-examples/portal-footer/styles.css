@@ -1,0 +1,18 @@
+.foundry-footer {
+  background: #032D42;
+  color: #fff;
+  padding: 24px 0;
+  margin-top: 48px;
+}
+
+.foundry-footer .footer-links {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  gap: 16px;
+}
+
+.foundry-footer .footer-links a {
+  color: #52B8FF;
+  text-decoration: none;
+}

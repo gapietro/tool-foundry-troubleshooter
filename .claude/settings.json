@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(security:*)",
+      "Bash(/usr/bin/security:*)"
+    ]
+  }
+}

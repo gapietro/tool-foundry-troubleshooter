@@ -1,0 +1,12 @@
+<div class="incident-list">
+  <h3>Active Incidents</h3>
+  <ul ng-if="c.data.incidents.length > 0">
+    <li ng-repeat="incident in c.data.incidents">
+      <a href="?id=incident_view&sys_id={{::incident.sys_id}}">{{::incident.number}}</a>
+      — {{::incident.short_description}}
+      <span ng-if="c.data.showPriority" class="priority-tag">{{::incident.priority}}</span>
+    </li>
+  </ul>
+  <p ng-if="c.data.incidents.length === 0">No active incidents assigned to you.</p>
+  <button ng-click="c.refresh()">Refresh</button>
+</div>

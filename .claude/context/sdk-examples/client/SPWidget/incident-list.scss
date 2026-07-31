@@ -1,0 +1,15 @@
+.incident-list {
+  h3 { margin-top: 0; }
+  ul { list-style: none; padding: 0; }
+  li { padding: 8px 0; border-bottom: 1px solid #eee; }
+  .priority-tag {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 6px;
+    background: #fbbc04;
+    color: #fff;
+    border-radius: 3px;
+    font-size: 12px;
+  }
+  button { margin-top: 12px; }
+}
