@@ -954,6 +954,50 @@ Yes — **6 non-global scoped apps already exist** on this instance, all active.
 scoped_read_viable: likely
 ```
 
+> ### ✅ RUNTIME HALF NOW CLOSED — measured 2026-07-30 on gpinst01
+>
+> The static prediction above is **confirmed at runtime, and it was right about the one
+> exception.** P4b could not be run during Phase 0 (no background-script executor). Once the
+> SDK app existed, the check specified by LLD §6 — "install scoped app → run
+> `/status`-equivalent readability check" — was built as a Scripted REST API living **inside
+> `x_snc_troubleshoot`** (`src/fluent/scope-readability.now.ts`,
+> `GET /api/x_snc_troubleshoot/scope_probe/reads`) and executed. Its `GlideRecordSecure`
+> reads are therefore genuine in-scope reads, not the Global-scope reads Phase 0 had to
+> disclaim.
+>
+> **Result: 14 of 15 tables readable. Exactly one denied — `syslog`.**
+>
+> ```json
+> {"scope":"x_snc_troubleshoot","currentScope":"x_snc_troubleshoot","summary":{"ok":14,"empty":0,"denied":1,"error":0}}
+> ```
+>
+> Readable: all nine `sn_aia_*` tables · `sys_gen_ai_log_metadata` · `sys_generative_ai_log` ·
+> `sys_cs_conversation` · `sys_db_object` · `sys_dictionary`.
+> Denied: **`syslog`** — the single table P4a flagged as carrying
+> `caller_access = Caller Restriction`.
+>
+> **What this settles.** `scoped_read_viable` upgrades from *likely* to **CONFIRMED for the
+> tool cores**: every table `PaToolAgentTrace`, `PaToolAgentConfig`, `PaToolGenAiLog`,
+> `PaToolSchemaLookup` and `PaToolQueryTable` need is readable from our own scope with no
+> privilege grant. LLD §6's build approach stands unchanged.
+>
+> **What it does not settle.** `PaToolLogAnalysis` **cannot read the system log from our
+> scope** as things stand. This is no longer a predicted constraint (`DESIGN.md` R-12) but a
+> measured one, with a known remedy: an explicit `sys_scope_privilege` Read grant for
+> `syslog` from `x_snc_troubleshoot`. That grant must be added and re-verified before that
+> tool is written — and note P4a found **no custom `x_*` precedent** among the 79 existing
+> privilege rows, so this will be the first.
+>
+> **A trap worth recording, for anyone writing a scoped tool core.** The first version of this
+> probe reported nothing at all — it 500'd with
+> `Illegal access to getter method getMessage in class ScopeAccessNotGrantedException`.
+> A cross-scope denial throws `ScopeAccessNotGrantedException`, and reading `.message` off it
+> **throws a second time** inside the `catch`, escaping the handler and killing the whole
+> request. The handler must not touch the exception object at all. Any tool core that wraps a
+> cross-scope read in `try/catch` and logs the error message will fail this way — and the LLD
+> §4 contract ("every empty/denied read is an explicit finding") depends on that catch
+> working.
+
 Basis: none of the 11 §2 tables actually present (`sn_aia_execution_plan`, `sn_aia_execution_task`, `sn_aia_tools_execution`, `sn_aia_message`, `sn_aia_agent`, `sn_aia_tool`, `sn_aia_agent_tool_m2m`, `sn_aia_usecase`, `sn_aia_trigger_configuration`, `sys_gen_ai_usage_log`, `sys_gen_ai_log_metadata`) is `access=none` (impossible value on this instance/version) or carries a restrictive `caller_access` (all show empty/unrestricted). Standing `sys_scope_privilege` Read grants exist against 8 of the 11 (see Step 2), demonstrating the mechanism works in production, though only from first-party scopes — no custom-scope precedent. No §2 table blocks a scoped read.
 
 **Caveat — `likely` is qualified, not unconditional.** The only table anywhere in this probe with a restrictive `caller_access` (`Caller Restriction`) is `syslog` — the base System Log table, reached only because the brief's literal name `sys_log` does not exist on this instance. Unlike the 11 §2 tables above, `syslog` is **not** irrelevant to Phase 1a: it is the documented data source for `PaToolLogAnalysis` (`log_analysis`), one of the exactly 7 tools in the Phase 1a roster (`docs/AGENT_DOCTOR_ARCHITECTURE.md` §4 line ~87; `docs/LOW_LEVEL_DESIGN.md` §4.4 lines ~217–221 and §6 line ~263), and no §2-table deferral list excludes it. Its restrictive `caller_access` is therefore a **live constraint to resolve at build time** for that one tool (confirm a `sys_scope_privilege` grant is obtainable, or plan a fallback), separate from and not overridden by the "likely" verdict above, which rests only on the 11 actual §2 rows queried in Step 1. Additionally, the design docs' use of the name `sys_log` (which does not exist here; the real table is `syslog`) is an internal documentation inconsistency that must be fixed before `PaToolLogAnalysis` is written, or the tool will fail outright against the documented table name.
