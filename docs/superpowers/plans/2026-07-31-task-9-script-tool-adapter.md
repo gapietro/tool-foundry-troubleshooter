@@ -1211,7 +1211,7 @@ Use the foundry MCP tools — `servicenow_connect` then `servicenow_request` —
 { "tool": "agent_trace", "request": "c9d63a932bda8b9417a6ffbeee91bfd0" }
 ```
 
-Expected: `output_type` is `"string"`. Parse `output` and expect `truncated: true`, a 32-char `artifact_id`, a numeric `pages`, and a `total_length` around 35,000.
+Expected: `output_type` is `"string"`. Parse `output` and expect `truncated: true`, a 32-char `artifact_id`, a numeric `pages`, and a `total_length` around 26,847 (the measured size, not an estimate).
 
 **Record the `artifact_id` and the `total_length`.** Step 3 needs both.
 

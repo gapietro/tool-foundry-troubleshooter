@@ -709,9 +709,9 @@ export const scopeProbeApi = RestApi({
         // exist yet, so its first exercise would be inside Task 10, where an
         // adapter defect and an agent-definition defect are indistinguishable.
         //
-        // Read-only in effect: the adapter writes a run record, an audit row and
-        // possibly an artifact, all inside this app. The tools it reaches only
-        // read.
+        // Writes stay inside this app: the adapter creates a run record, an
+        // audit row and possibly an artifact, all on this app's own tables.
+        // The tools it reaches are read-only.
         // -------------------------------------------------------------------
         {
             $id: Now.ID['scope-probe-adapter'],

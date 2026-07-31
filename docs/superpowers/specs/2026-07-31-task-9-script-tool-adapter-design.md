@@ -14,11 +14,12 @@ says **one**. This design lands **two**: `agent_trace` and `read_artifact`.
 
 Two is the smallest set that makes the Task 10 panel smoke test answerable. `agent_trace` is the
 diagnosis path; `read_artifact` is how the agent retrieves a trace too large to hand to the
-reasoning loop. A real `PaToolAgentTrace` summary measures ~35,000 chars against a 4,000-char
-excerpt budget, so without paging exposed as a tool the agent receives an excerpt and an
-`artifact_id` it has no way to spend. The remaining five wrappers wait on their tool cores
-(Tasks 7 and 8); `agent_config`, `genai_log`, `schema_lookup`, `query_table` and `log_analysis`
-do not exist yet, and building a core inside Task 9 would defeat the point of the slice.
+reasoning loop. A real `PaToolAgentTrace` summary measures 26,847 chars (measured on gpinst01, not
+estimated) against a 4,000-char excerpt budget, so without paging exposed as a tool the agent
+receives an excerpt and an `artifact_id` it has no way to spend. The remaining five wrappers wait
+on their tool cores (Tasks 7 and 8); `agent_config`, `genai_log`, `schema_lookup`, `query_table`
+and `log_analysis` do not exist yet, and building a core inside Task 9 would defeat the point of
+the slice.
 
 ### Explicitly deferred, not silently narrowed
 
@@ -333,9 +334,11 @@ object `{artifact_id, offset, length}`.
 - [ ] `npm test` green, including every case in §6
 - [ ] `now-sdk build` clean
 - [ ] `now-sdk install --alias gpinst01` clean
-- [ ] `POST /scope_probe/adapter` round-trips the 35KB specimen trace byte-identically through
-      `agent_trace` → `read_artifact`
-- [ ] Audit rows present on `x_snc_troubleshoot_audit` for both calls, both linked to one run
+- [ ] `POST /scope_probe/adapter` round-trips the ~27,000-char specimen trace byte-identically
+      through `agent_trace` → `read_artifact`
+- [ ] Audit rows present on `x_snc_troubleshoot_audit` for both calls, each linked to its own
+      separate run — the probe route supplies no conversation id and a REST call has no
+      `_agentic_context_`, so each call resolves to its own isolated unkeyed run (R-2)
 - [ ] Version incremented in `package.json` and the README badge
 - [ ] Issue → branch → PR; nothing committed to `main`
 
