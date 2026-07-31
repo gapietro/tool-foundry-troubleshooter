@@ -1,7 +1,18 @@
-node_modules/
+# --- SDK-generated (now-sdk init) ---
 .DS_Store
-.env
+.now/
 dist/
-build/
+node_modules/
+target/
+*.tsbuildinfo
+.jest_cache
+
+# --- restored after now-sdk init overwrote this file ---
+# init replaced .gitignore wholesale rather than appending it, dropping the
+# entries below. .env and .snc are credential paths and must never be committed
+# (bootstrap-nowsdk step 5 calls this out explicitly).
+.env
+.snc/
 .snc
 *.log
+build/

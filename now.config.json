@@ -1,0 +1,6 @@
+{
+    "scope": "x_snc_troubleshoot",
+    "scopeId": "13043037d3da4293904504ef30589334",
+    "name": "Foundry Troubleshooter",
+    "tsconfigPath": "./src/server/tsconfig.json"
+}
