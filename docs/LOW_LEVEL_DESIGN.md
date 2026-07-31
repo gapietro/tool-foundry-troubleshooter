@@ -301,7 +301,12 @@ component is more specific than the text above, all of them decisions rather tha
    closed only on "can tell, and it is not you". Likewise `x_snc_troubleshoot_run.user` and
    `x_snc_troubleshoot_audit.user` / `confirmed_by_user` are never caller-settable — `user` is
    `gs.getUserID()`, and `confirmed_by_user` stays false until Phase 2's confirmation gate sets it
-   from the workflow that actually collects the confirmation.
+   from the workflow that actually collects the confirmation. ⚠ **Provenance is per field, not per
+   context** (round-2 finding): "the caller supplied this key" must be decided from the specific
+   identity field being used as the key, never from "an ambient context exists". `_agentic_context_`
+   parsing to `{}`, to junk, or to a `conversation_id` of the literal `"undefined"` all yield a
+   present-but-empty context, in which the key still comes from the caller — deriving the check
+   from presence alone leaves cross-user fixation open on exactly those inputs.
 
 ⚠ **Observed, unresolved:** audit rows written within one second do **not** sort reliably by
 `sys_created_on` — across two self-test runs the same three rows came back in two different orders.

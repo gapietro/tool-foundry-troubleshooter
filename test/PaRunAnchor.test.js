@@ -515,6 +515,79 @@ describe('getOrCreate — cross-user key fixation (security review, PR #21)', ()
         expect(res.created).toBe(false)
     })
 
+    test('a PARTIAL ambient context does not disable the check (round-2 review)', () => {
+        // The bypass: `keyFromCaller` was derived from "is there an ambient
+        // context" rather than "did the ambient context supply this key". An
+        // `_agentic_context_` that parses to an object with no identity fields
+        // makes `present` true while the key still comes from the caller — so
+        // the ownership filter was skipped on a caller-chosen key.
+        const { anchor, world } = load({
+            world: foreignRun().world,
+            context: '{}',
+        })
+        const res = anchor.getOrCreate({ conversationId: CONV })
+
+        expect(res.run_id).not.toBe(sysId('foreign'))
+        expect(res.key_rejected).toBe(true)
+        expect(world.calls.inserts).toHaveLength(1)
+    })
+
+    test('a junk-but-parseable context does not disable the check either', () => {
+        const { anchor } = load({
+            world: foreignRun().world,
+            context: JSON.stringify({ something_else: 'x' }),
+        })
+        expect(anchor.getOrCreate({ conversationId: CONV }).run_id).not.toBe(sysId('foreign'))
+    })
+
+    test('the literal "undefined" in the ambient conversation id does not disable it', () => {
+        // Real rows carry the literal string "undefined" (LLD §4), which
+        // normalises to empty — so the key comes from the caller even though
+        // the platform did supply a conversation_id field.
+        const { anchor } = load({
+            world: foreignRun().world,
+            context: nativeContext({ conversation_id: 'undefined' }),
+        })
+        expect(anchor.getOrCreate({ conversationId: CONV }).run_id).not.toBe(sysId('foreign'))
+    })
+
+    test('provenance is per field: a native conversation still skips the check', () => {
+        // The fix must not over-apply. When the platform DID supply the key,
+        // the ambient path stays unchecked — a false rejection there splits a
+        // native conversation, which is the failure this component prevents.
+        const { anchor } = load({
+            world: foreignRun().world,
+            context: nativeContext(),
+        })
+        const res = anchor.getOrCreate({ executionRef: sysId('caller') })
+
+        expect(res.run_id).toBe(sysId('foreign'))
+        expect(res.created).toBe(false)
+    })
+
+    test('an execution key from the caller is checked when the ambient one is empty', () => {
+        const { anchor } = load({
+            world: {
+                rows: {
+                    [RUN_TABLE]: [
+                        {
+                            sys_id: sysId('foreignplan'),
+                            execution_ref: PLAN,
+                            user: 'other.user',
+                            sys_created_on: '2026-07-31 11:00:00',
+                        },
+                    ],
+                },
+            },
+            context: nativeContext({ conversation_id: '', execution_plan_id: '' }),
+        })
+        const res = anchor.getOrCreate({ executionRef: PLAN })
+
+        expect(res.key_source).toBe('execution')
+        expect(res.run_id).not.toBe(sysId('foreignplan'))
+        expect(res.key_rejected).toBe(true)
+    })
+
     test('a run owned by the caller is adopted normally', () => {
         const { anchor } = load({
             world: {

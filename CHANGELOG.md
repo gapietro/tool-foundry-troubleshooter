@@ -83,9 +83,30 @@ lookup it would have been adopted one step after being rejected. Foreign runs ar
 than stopped on, so a second call by the same user converges on its own run instead of creating a
 new one every time.
 
-206 Jest tests pass. The self-test route now also plants a foreign-owned run and attempts both
-attacks: `refused`, `key_rejected`, `converges_on_own_run` and `spoof_ignored` all true on
-gpinst01.
+**One High finding on round 2, fixed and reproduced live.** The ownership check derived
+"did the caller supply this key" from `native.present` — but `present` only means *the global
+parsed to an object*. An `_agentic_context_` of `{}`, or one carrying junk, or one whose
+`conversation_id` is the literal string `"undefined"` (which LLD §4 normalises to empty), all
+make `present` true while the key still falls through to the caller — so the ownership filter was
+skipped on a key the caller chose, re-opening cross-user fixation. Provenance is now tracked **per
+field**: the flag is `!native.conversation_id` (or `!native.execution_plan_id`) for whichever
+value is actually being used as the key. `readNativeContext()` carries a warning that `present`
+must never be used for that decision. Four regression tests, each verified to fail against the
+unfixed code.
+
+The self-test route plants a foreign-owned run and attempts every variant. Notably
+`context_seen: true` on the partial-context step — assigning `_agentic_context_` without a `var`
+declaration does reach `PaRunAnchor` through the Rhino global object, so the vulnerable path was
+reproduced in a real runtime rather than only in a stub, and the fix holds there. `refused`,
+`key_rejected`, `converges_on_own_run` and `spoof_ignored` all true on gpinst01. 211 Jest tests
+pass.
+
+**New SDK finding, folded into Build Rule #43** (`.claude/context/sdk-reference.md`): a backtick
+*anywhere* inside a Fluent `` script`…` `` template — including inside a `//` comment — closes the
+template. Markdown-style quoting in an explanatory comment is the natural way to write one and
+silently terminates the script. It fails at build rather than at runtime, but the diagnostics
+(`TS2796`, `TS304`, `TS20`, `Failed to cast TaggedTemplateExpressionShape`) point at lines
+scattered across the file rather than at the backtick.
 
 ## 2026.07.3108 — 2026-07-31
 

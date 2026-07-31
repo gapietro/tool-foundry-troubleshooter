@@ -534,6 +534,47 @@ export const scopeProbeApi = RestApi({
         out.steps.cross_user_refusal.converges_on_own_run =
             fixate2.run_id === fixate.run_id && fixate2.created === false;
 
+        // 4c. The round-2 finding: a PARTIAL ambient context must not disable
+        //     the ownership check. An _agentic_context_ that parses to an
+        //     object with no identity fields makes present true while the key
+        //     still comes from the caller.
+        //
+        //     Assigning without a var declaration puts the name on the Rhino
+        //     global object, the same scope a script tool's globals live in, so
+        //     this also answers whether the ambient path is reachable from here
+        //     at all. If it is not, context_seen comes back false and the step
+        //     says so rather than quietly passing on the path it meant to test.
+        //
+        //     NOTE - no backticks anywhere in this comment. A backtick inside a
+        //     Fluent script template literal CLOSES the template: the build
+        //     fails with TS2796 / TS304 / "Failed to cast
+        //     TaggedTemplateExpressionShape", pointing at lines far from the
+        //     real one. Sibling of Build Rule #43, and it bit here first.
+        var partialConv = gs.generateGUID();
+        var plant2 = new GlideRecord('x_snc_troubleshoot_run');
+        plant2.initialize();
+        plant2.setValue('harness', 'native');
+        plant2.setValue('status', 'running');
+        plant2.setValue('conversation_ref', partialConv);
+        plant2.setValue('user', 'ffffffffffffffffffffffffffffffff');
+        var planted2 = plant2.insert();
+        remember(planted2);
+
+        _agentic_context_ = '{}';
+        var probe = new PaRunAnchor();
+        var contextSeen = probe.readNativeContext().present === true;
+        var partial = probe.getOrCreate({ conversationId: partialConv });
+        remember(partial.run_id);
+        _agentic_context_ = undefined;
+
+        out.steps.partial_context_bypass = {
+            context_seen: contextSeen,
+            planted_run: String(planted2),
+            returned_run: partial.run_id,
+            refused: !!partial.run_id && partial.run_id !== String(planted2),
+            key_rejected: partial.key_rejected === true
+        };
+
         // 5. Audit rows around a notional tool call.
         var logger = new PaAuditLogger();
         var intent = logger.logIntent({
@@ -628,7 +669,8 @@ export const scopeProbeApi = RestApi({
 
         var pass = sameRun && isolated && auditOk && out.steps.autonumber_ok
             && out.steps.digest.capped && refused
-            && out.steps.cross_user_refusal.converges_on_own_run && spoofOk;
+            && out.steps.cross_user_refusal.converges_on_own_run && spoofOk
+            && out.steps.partial_context_bypass.refused;
         out.verdict = pass
             ? 'PASSED: conversation key resolves to one run, unkeyed calls stay isolated, cross-user key fixation refused, audit attribution server-authoritative, payloads digested'
             : 'FAILED: see steps';

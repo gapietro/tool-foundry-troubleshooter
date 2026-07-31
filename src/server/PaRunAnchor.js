@@ -131,6 +131,12 @@ PaRunAnchor.prototype = {
      *
      * @returns {Object} normalised fields; `present` false if there was nothing
      *          usable to read.
+     *
+     * ⚠ `present` means "the global parsed to an object", NOT "the object
+     * carried identity". `{}` and `{"junk":1}` both yield `present: true` with
+     * every identity field empty. Never use it to decide whether a value came
+     * from the platform — check the field itself. Conflating the two was a
+     * High-severity ownership bypass (round-2 review, PR #21).
      */
     readNativeContext: function () {
         var empty = {
@@ -203,25 +209,35 @@ PaRunAnchor.prototype = {
         var executionRef = native.execution_plan_id || ctx.executionRef
         var agentId = native.agent_id || ctx.agentId
 
-        // Did the KEY come from the caller rather than the platform? Only that
-        // case needs the ownership check below.
-        var keyFromCaller = !native.present
-
         var harness = this._oneOf(ctx.harness, this.HARNESSES, this.DEFAULT_HARNESS)
         var mode = this._oneOf(ctx.mode, this.MODES, this.DEFAULT_MODE)
 
         // The key, chosen once and reported to the caller either way.
+        //
+        // PROVENANCE IS TRACKED PER FIELD, NOT PER CONTEXT (round-2 review,
+        // PR #21). This was `keyFromCaller = !native.present`, which asks "is
+        // there an ambient context" — but the question that decides whether the
+        // ownership check applies is "did the ambient context supply the value
+        // being used AS THE KEY". Those come apart whenever the global parses
+        // to an object whose identity fields are empty or junk: `present` is
+        // true, the key falls through to the caller's value, and the ownership
+        // filter was skipped on a key the caller chose. That is the cross-user
+        // fixation this check exists to stop, reachable with
+        // `_agentic_context_ = '{}'`.
         var keyField = null
         var keyValue = ''
         var keySource = null
+        var keyFromCaller = false
         if (conversationId) {
             keyField = 'conversation_ref'
             keyValue = conversationId
             keySource = 'conversation'
+            keyFromCaller = !native.conversation_id
         } else if (executionRef) {
             keyField = 'execution_ref'
             keyValue = executionRef
             keySource = 'execution'
+            keyFromCaller = !native.execution_plan_id
         }
 
         var base = {
