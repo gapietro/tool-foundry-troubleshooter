@@ -234,3 +234,169 @@ describe('PaScriptToolAdapter — input handling', () => {
         expect(out.phase).toBe('serialize')
     })
 })
+
+describe('PaScriptToolAdapter — pipeline', () => {
+    test('intent is logged BEFORE execute — it is the only trace of a call that hangs', () => {
+        const order = []
+        const audit = fakeAudit()
+        const core = {
+            PAGED_OUTPUT: false,
+            execute: function () {
+                order.push('execute')
+                return { success: true }
+            },
+        }
+        const wrapped = {
+            logIntent: function (p) {
+                order.push('intent')
+                return audit.logIntent(p)
+            },
+            logResult: audit.logResult,
+            logError: audit.logError,
+        }
+        const adapter = load({ tools: { agent_trace: function () { return core } }, auditLogger: wrapped })
+
+        adapter.invoke('agent_trace', SYS_ID, {})
+
+        expect(order).toEqual(['intent', 'execute'])
+    })
+
+    test('a non-paged core gets applyThreshold, with the run id and the tool name', () => {
+        const store = fakeStore()
+        const adapter = load({
+            tools: { agent_trace: function () { return fakeCore({ paged: false }) } },
+            artifactStore: store,
+        })
+
+        adapter.invoke('agent_trace', SYS_ID, {})
+
+        expect(store.calls).toEqual([{ runId: 'run1', toolName: 'agent_trace' }])
+    })
+
+    test('a PAGED_OUTPUT core is NOT thresholded — the 4000/4000 collision', () => {
+        const store = fakeStore()
+        const adapter = load({
+            tools: { read_artifact: function () { return fakeCore({ paged: true }) } },
+            artifactStore: store,
+        })
+
+        adapter.invoke('read_artifact', SYS_ID, {})
+
+        expect(store.calls).toHaveLength(0)
+    })
+
+    test('the thresholded result is what reaches both the caller and the audit row', () => {
+        const audit = fakeAudit()
+        const truncated = { success: true, truncated: true, artifact_id: 'art1' }
+        const adapter = load({
+            tools: { agent_trace: function () { return fakeCore({ result: { success: true, big: 'x' } }) } },
+            artifactStore: fakeStore(truncated),
+            auditLogger: audit,
+        })
+
+        const out = invokeJson(adapter, 'agent_trace', SYS_ID, {})
+        const resultRow = audit.calls.filter((c) => c[0] === 'result')[0]
+
+        expect(out.artifact_id).toBe('art1')
+        expect(resultRow[1].output.artifact_id).toBe('art1')
+    })
+
+    test('a degraded anchor surfaces run:{degraded,note} on the result (R-10)', () => {
+        const adapter = load({
+            tools: { agent_trace: function () { return fakeCore() } },
+            run: { run_id: null, degraded: 'glide_unavailable', note: 'No diagnostic run record could be established' },
+            artifactStore: fakeStore({ success: true, data: { ok: 1 } }),
+        })
+
+        const out = invokeJson(adapter, 'agent_trace', SYS_ID, {})
+
+        expect(out.run).toEqual({
+            degraded: 'glide_unavailable',
+            note: 'No diagnostic run record could be established',
+        })
+        expect(out.success).toBe(true)
+    })
+
+    test('a healthy anchor adds no run key — silence means durable', () => {
+        const adapter = load({
+            tools: { agent_trace: function () { return fakeCore() } },
+            artifactStore: fakeStore({ success: true, data: { ok: 1 } }),
+        })
+
+        expect(invokeJson(adapter, 'agent_trace', SYS_ID, {}).run).toBeUndefined()
+    })
+
+    test('a degraded anchor still passes an empty run id to applyThreshold, not null', () => {
+        const store = fakeStore()
+        const adapter = load({
+            tools: { agent_trace: function () { return fakeCore() } },
+            run: { run_id: null, degraded: 'glide_unavailable', note: 'n' },
+            artifactStore: store,
+        })
+
+        adapter.invoke('agent_trace', SYS_ID, {})
+
+        expect(store.calls[0].runId).toBe('')
+    })
+
+    test('a core that throws a hostile exception yields a phased envelope, never a throw (R-1)', () => {
+        const adapter = load({
+            tools: { agent_trace: function () { return fakeCore({ throws: hostileException() }) } },
+        })
+
+        const out = invokeJson(adapter, 'agent_trace', SYS_ID, {})
+
+        expect(out.success).toBe(false)
+        expect(out.phase).toBe('execute')
+        expect(out.error).toContain('agent_trace')
+    })
+
+    test('a throwing anchor is contained and reported at the anchor phase', () => {
+        const adapter = load({
+            tools: { agent_trace: function () { return fakeCore() } },
+            runAnchor: {
+                getOrCreate: function () {
+                    throw hostileException()
+                },
+            },
+        })
+
+        expect(invokeJson(adapter, 'agent_trace', SYS_ID, {}).phase).toBe('anchor')
+    })
+
+    test('a throwing audit logger does not change what the caller receives', () => {
+        const adapter = load({
+            tools: { agent_trace: function () { return fakeCore() } },
+            auditLogger: fakeAudit({ throws: hostileException() }),
+            artifactStore: fakeStore({ success: true, data: { ok: 1 } }),
+        })
+
+        const out = invokeJson(adapter, 'agent_trace', SYS_ID, {})
+
+        expect(out.success).toBe(true)
+        expect(out.data).toEqual({ ok: 1 })
+    })
+
+    test('the ctx argument reaches getOrCreate untouched', () => {
+        const anchor = fakeAnchor()
+        const adapter = load({ tools: { agent_trace: function () { return fakeCore() } }, runAnchor: anchor })
+
+        adapter.invoke('agent_trace', SYS_ID, { harness: 'native' })
+
+        expect(anchor.calls[0]).toEqual({ harness: 'native' })
+    })
+
+    test('a failure still writes an audit error row naming the tool', () => {
+        const audit = fakeAudit()
+        const adapter = load({
+            tools: { agent_trace: function () { return fakeCore({ throws: hostileException() }) } },
+            auditLogger: audit,
+        })
+
+        adapter.invoke('agent_trace', SYS_ID, {})
+        const errorRow = audit.calls.filter((c) => c[0] === 'error')[0]
+
+        expect(errorRow[1].toolName).toBe('agent_trace')
+        expect(errorRow[1].runId).toBe('run1')
+    })
+})
