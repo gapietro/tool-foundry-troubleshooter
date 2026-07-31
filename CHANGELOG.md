@@ -11,6 +11,44 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.07.3106 — 2026-07-31
+
+Phase 1a vertical slice, **Task 2**: the two scoped tables every later task anchors to. First
+Fluent artifacts in this repo that hold data rather than describe behaviour.
+
+> **Gap noted, not backfilled:** versions `2026.07.3101`–`2026.07.3105` were merged without
+> changelog entries. The history is in the git log and the PRs; reconstructing it here was out
+> of scope for this task, but the convention says every merge gets an entry.
+
+### Added
+- `src/fluent/tables.now.ts` — `x_snc_troubleshoot_run` and `x_snc_troubleshoot_audit` per
+  LLD §3.1/§3.2. Installed and verified on gpinst01: 11 and 9 declared columns respectively,
+  12 `sys_choice` rows across the 4 choice fields, `TR` auto-number counter, the cross-scope
+  `agent` reference into `sn_aia_agent`, and cascade-delete from run to audit.
+- `src/fluent/acls.now.ts` — roles `x_snc_troubleshoot.admin` / `.user` and 6 record ACLs.
+  Added after the install measurement below; **the audit table deliberately gets `read` +
+  `create` only**, making the evidence trail append-only through the ACL layer while the
+  server-side writer that fills it is unaffected.
+- SDK Build Rules **#41** and **#42** in `.claude/context/sdk-reference.md` — both found by
+  inserting a real row after a clean install, neither visible at build or install time.
+
+### Fixed
+- **`autoNumber` does not populate `number`.** It writes the `sys_number` counter and stops;
+  the column installs with an empty default, so every insert left `number` blank — and with
+  `display: 'number'`, every run record would have rendered with a blank display value. Fixed
+  with the explicit column default. **The `global.` qualifier is load-bearing:** the bare
+  `javascript:getNextObjNumberPadded();` installs identically and still yields `''`, because a
+  scoped app cannot resolve the global function unqualified and the failed evaluation degrades
+  to empty instead of throwing. Measured, then confirmed against instance convention (8 of 10
+  scoped `x_*` tables sampled use the qualified form). Build Rule #41.
+- **Custom tables install with zero ACLs and `ws_access=false`,** which denies REST and UI
+  access to everyone including admin. Caught because an admin REST insert returned
+  `Access denied: User Not Authorized`. It would not have surfaced from the code that writes
+  these rows: a server-side scoped `GlideRecord` bypasses ACLs, so Task 5's writes would have
+  worked while nobody could read a Fix Report. Build Rule #42.
+
+---
+
 ## 2026.07.3001 — 2026-07-30
 
 Reconciled the implementation plan with the SDK structure and finalized the scoped table names.

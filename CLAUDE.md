@@ -51,7 +51,7 @@ Never commit `dist/`, `.snc/`, `.now/`, or credentials.
 
 ### Critical Fluent DSL rules
 
-Full list in `.claude/context/sdk-reference.md` (40 build rules). The ones that bite most:
+Full list in `.claude/context/sdk-reference.md` (42 build rules). The ones that bite most:
 
 - Every `.now.ts` MUST start with `import '@servicenow/sdk/global'`
 - `TemplateValue`, `Duration`, `Time`, `FieldList` are globals — do NOT import them
@@ -59,6 +59,7 @@ Full list in `.claude/context/sdk-reference.md` (40 build rules). The ones that 
 - No shorthand properties (`{ x }`) or ternaries in Fluent files
 - Script tool scripts MUST be self-invoking IIFEs: `(function(inputs) { ... })(inputs);` — a missing `(inputs)` is a **runtime** error that builds and installs cleanly
 - Complex tool inputs arrive as **JSON strings** at runtime — parse defensively
+- A Fluent `Table()` installs with **no ACLs and `ws_access=false`** — REST and UI are denied for everyone including admin, while server-side scoped `GlideRecord` writes keep working, so the gap is invisible from the writing code (Rule #42). `autoNumber` likewise creates the counter but leaves `number` blank unless the column declares `default: 'javascript:global.getNextObjNumberPadded();'` — `global.`-qualified, or it silently resolves to `''` (Rule #41)
 - Never `Now.ref()` for roles/agents/scriptIds in the AI family — it emits phantom GUIDs that fail silently (Rules #21, #33). Use direct sys_id strings or `roleMap` names.
 - `now-sdk build` must succeed before `now-sdk install`
 
