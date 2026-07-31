@@ -180,29 +180,68 @@ describe('getOrCreate — creating the anchor', () => {
         expect(row.mode).toBe('diagnose')
     })
 
-    test('explicit context beats the ambient global', () => {
+    test('the ambient global beats caller-supplied IDENTITY (security review, PR #21)', () => {
+        // This test asserted the opposite until the security review. Letting a
+        // caller override the conversation id means a native tool call can name
+        // ANY conversation and be handed that conversation's run record — the
+        // R-2 merge, reintroduced through the front door, on input that is
+        // partly LLM-derived. LLD §4.6 is explicit that for the native harness
+        // the key IS `_agentic_context_.conversation_id`.
         const { anchor, world } = load({ context: nativeContext() })
+        anchor.getOrCreate({
+            conversationId: sysId('attacker'),
+            executionRef: sysId('otherplan'),
+        })
+        const row = world.calls.inserts[0].row
+
+        expect(row.conversation_ref).toBe(CONV)
+        expect(row.execution_ref).toBe(PLAN)
+    })
+
+    test('harness and mode are still caller-first — they are config, not identity', () => {
+        const { anchor, world } = load({ context: nativeContext() })
+        anchor.getOrCreate({ harness: 'custom', mode: 'collect' })
+        const row = world.calls.inserts[0].row
+
+        expect(row.harness).toBe('custom')
+        expect(row.mode).toBe('collect')
+    })
+
+    test('with no ambient context, caller-supplied identity IS used (the custom harness path)', () => {
+        // §4.6: "custom: explicit run_id". The override is a designed capability
+        // for the harness that has no ambient context — it is only the native
+        // path, where the platform supplies the truth, that must not be
+        // overridable.
+        const { anchor, world } = load({})
         anchor.getOrCreate({
             conversationId: sysId('explicit'),
             executionRef: sysId('otherplan'),
-            harness: 'custom',
-            mode: 'collect',
         })
         const row = world.calls.inserts[0].row
 
         expect(row.conversation_ref).toBe(sysId('explicit'))
         expect(row.execution_ref).toBe(sysId('otherplan'))
-        expect(row.harness).toBe('custom')
-        expect(row.mode).toBe('collect')
     })
 
-    test('a partial explicit context falls back to the global field by field', () => {
-        const { anchor, world } = load({ context: nativeContext() })
+    test('a partial ambient context is completed from the caller, field by field', () => {
+        const { anchor, world } = load({
+            context: nativeContext({ execution_plan_id: '' }),
+        })
         anchor.getOrCreate({ executionRef: sysId('otherplan') })
         const row = world.calls.inserts[0].row
 
-        expect(row.conversation_ref).toBe(CONV) // from the global
-        expect(row.execution_ref).toBe(sysId('otherplan')) // explicit
+        expect(row.conversation_ref).toBe(CONV) // from the global, authoritative
+        expect(row.execution_ref).toBe(sysId('otherplan')) // gap filled by caller
+    })
+
+    test('the run user is server-authoritative, not caller-supplied', () => {
+        // `user` is what the ownership check reads. A caller able to set it
+        // could plant a run stamped with someone else's id, turning the check
+        // into an attack surface rather than a defence.
+        const { anchor, world } = load({ context: nativeContext() })
+        anchor.getOrCreate({ userId: 'someone.else' })
+
+        expect(world.calls.inserts[0].row.user).toBe('user1')
     })
 
     test('harness defaults to native — the harness this anchor was built for', () => {
@@ -253,10 +292,12 @@ describe('getOrCreate — resolving an existing anchor', () => {
     })
 
     test('a different conversation gets a different run', () => {
-        const other = sysId('conv2')
-        const { anchor, world } = load({ context: nativeContext() })
-        const a = anchor.getOrCreate()
-        const b = anchor.getOrCreate({ conversationId: other })
+        // Driven through the no-ambient-context path, because that is now the
+        // only way a caller can name the conversation at all — with a native
+        // context present it is authoritative and cannot be overridden.
+        const { anchor, world } = load({})
+        const a = anchor.getOrCreate({ conversationId: CONV })
+        const b = anchor.getOrCreate({ conversationId: sysId('conv2') })
 
         expect(b.run_id).not.toBe(a.run_id)
         expect(world.calls.inserts).toHaveLength(2)
@@ -373,6 +414,121 @@ describe('getOrCreate — resolving an existing anchor', () => {
         })
 
         expect(anchor.getOrCreate().number).toBe('TR0001042')
+    })
+})
+
+// ---------------------------------------------------------------------------
+// Ownership — defence in depth on the one key a caller still controls
+// ---------------------------------------------------------------------------
+
+describe('getOrCreate — cross-user key fixation (security review, PR #21)', () => {
+    /** A run under CONV already owned by somebody else. */
+    function foreignRun() {
+        return {
+            world: {
+                rows: {
+                    [RUN_TABLE]: [
+                        {
+                            sys_id: sysId('foreign'),
+                            conversation_ref: CONV,
+                            user: 'other.user',
+                            sys_created_on: '2026-07-31 11:00:00',
+                        },
+                    ],
+                },
+            },
+        }
+    }
+
+    test('a caller-supplied key does NOT adopt another user run', () => {
+        const { anchor, world } = load(foreignRun())
+        const res = anchor.getOrCreate({ conversationId: CONV })
+
+        expect(res.run_id).not.toBe(sysId('foreign'))
+        expect(res.created).toBe(true)
+        expect(res.key_rejected).toBe(true)
+        expect(world.calls.inserts).toHaveLength(1)
+    })
+
+    test('the refusal is stated, not silent (R-10)', () => {
+        const { anchor } = load(foreignRun())
+        expect(anchor.getOrCreate({ conversationId: CONV }).note).toMatch(/another user/i)
+    })
+
+    test('the re-resolve after insert does not re-adopt the run it just refused', () => {
+        // The foreign run is OLDER, so it wins the post-insert ordering. Without
+        // the ownership filter on that second lookup the check would be undone
+        // one line after it fired.
+        const { anchor } = load(foreignRun())
+        expect(anchor.getOrCreate({ conversationId: CONV }).run_id).not.toBe(sysId('foreign'))
+    })
+
+    test('a second call by the same user converges on the run it made', () => {
+        // Refusing to adopt must not mean creating a new run every call —
+        // that would be the scatter bug wearing a security hat.
+        const { anchor, world } = load(foreignRun())
+        const first = anchor.getOrCreate({ conversationId: CONV })
+        const second = anchor.getOrCreate({ conversationId: CONV })
+
+        expect(second.run_id).toBe(first.run_id)
+        expect(second.created).toBe(false)
+        expect(world.calls.inserts).toHaveLength(1)
+    })
+
+    test('the ambient path is NOT ownership-checked', () => {
+        // A false rejection here would split a native conversation across
+        // several runs — the bug this component exists to prevent — and the
+        // native runtime's identity surface is unverified until Task 10.
+        const { anchor, world } = load({
+            world: foreignRun().world,
+            context: nativeContext(),
+        })
+        const res = anchor.getOrCreate()
+
+        expect(res.run_id).toBe(sysId('foreign'))
+        expect(res.created).toBe(false)
+        expect(world.calls.inserts).toHaveLength(0)
+    })
+
+    test('a run with no recorded owner is adopted — nothing to violate', () => {
+        const { anchor } = load({
+            world: {
+                rows: {
+                    [RUN_TABLE]: [{ sys_id: sysId('ownerless'), conversation_ref: CONV }],
+                },
+            },
+        })
+        const res = anchor.getOrCreate({ conversationId: CONV })
+
+        expect(res.run_id).toBe(sysId('ownerless'))
+        expect(res.created).toBe(false)
+    })
+
+    test('an unidentifiable caller is not handed an invented denial', () => {
+        // Fail OPEN on "cannot tell": a split anchor is the worse outcome, and
+        // `gs` identity is known to be odd in the script-tool runtime (R-2
+        // found getSessionID() returns the literal "SYSTEM" there).
+        const { anchor } = load({ userId: null, world: foreignRun().world })
+        const res = anchor.getOrCreate({ conversationId: CONV })
+
+        expect(res.run_id).toBe(sysId('foreign'))
+        expect(res.created).toBe(false)
+    })
+
+    test('a run owned by the caller is adopted normally', () => {
+        const { anchor } = load({
+            world: {
+                rows: {
+                    [RUN_TABLE]: [
+                        { sys_id: sysId('mine'), conversation_ref: CONV, user: 'user1' },
+                    ],
+                },
+            },
+        })
+        const res = anchor.getOrCreate({ conversationId: CONV })
+
+        expect(res.run_id).toBe(sysId('mine'))
+        expect(res.created).toBe(false)
     })
 })
 

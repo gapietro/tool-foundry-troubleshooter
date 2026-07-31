@@ -286,6 +286,23 @@ component is more specific than the text above, all of them decisions rather tha
    died because its own audit logging threw is strictly worse than one with a gap in its trail. A
    missing run anchor does not suppress the row; it lands orphaned and flagged.
 
+5. **Identity is server-authoritative; only configuration is caller-supplied** (security review on
+   PR #21, two Medium findings). The `{harness, conversationId, executionRef}` signature above
+   reads as though all three were equally caller-supplied. They are not. **The ambient
+   `_agentic_context_` wins over caller-supplied `conversationId` / `executionRef` / `agentId`
+   whenever it is present** — this section already says the native key *is*
+   `_agentic_context_.conversation_id`, and honouring a caller override would let a native tool
+   call name any conversation and receive that conversation's run record, artifacts and audit
+   trail: the R-2 merge through the front door, on partly LLM-derived input. Caller-supplied
+   identity applies only where there is no ambient context to contradict it — the custom harness
+   ("custom: explicit run_id"), tests, and the self-test route. `harness` and `mode` remain
+   caller-first because they are configuration, not identity. On that remaining path a resolved
+   run owned by a **different** user is not adopted; the check fails open on "cannot tell" and
+   closed only on "can tell, and it is not you". Likewise `x_snc_troubleshoot_run.user` and
+   `x_snc_troubleshoot_audit.user` / `confirmed_by_user` are never caller-settable — `user` is
+   `gs.getUserID()`, and `confirmed_by_user` stays false until Phase 2's confirmation gate sets it
+   from the workflow that actually collects the confirmation.
+
 ⚠ **Observed, unresolved:** audit rows written within one second do **not** sort reliably by
 `sys_created_on` — across two self-test runs the same three rows came back in two different orders.
 `sys_created_on` is second-granular and all three writes land inside it. If Task 9 or the benchmark

@@ -183,9 +183,29 @@ PaRunAnchor.prototype = {
         var ctx = this._normContext(context)
         var native = this.readNativeContext()
 
-        var conversationId = ctx.conversationId || native.conversation_id
-        var executionRef = ctx.executionRef || native.execution_plan_id
-        var agentId = ctx.agentId || native.agent_id
+        // THE AMBIENT CONTEXT WINS ON IDENTITY (security review, PR #21).
+        //
+        // This used to be `ctx.x || native.x` — caller first, unconditionally.
+        // That was a liberty, and the wrong one: LLD §4.6 says the native key
+        // *is* `_agentic_context_.conversation_id`, and the platform supplies
+        // that global itself. Letting a caller override it means a native tool
+        // call can name ANY conversation and be handed that conversation's run
+        // record — its artifacts, its audit trail — which is the R-2 merge
+        // reintroduced through the front door, and the caller's input is partly
+        // LLM-derived.
+        //
+        // So when the platform tells us who we are, it wins. Caller-supplied
+        // identity is honoured only where there is no ambient context to
+        // contradict it — the custom harness (§4.6: "custom: explicit run_id"),
+        // tests, and the self-test route. `harness` and `mode` stay
+        // caller-first: they are configuration, not identity.
+        var conversationId = native.conversation_id || ctx.conversationId
+        var executionRef = native.execution_plan_id || ctx.executionRef
+        var agentId = native.agent_id || ctx.agentId
+
+        // Did the KEY come from the caller rather than the platform? Only that
+        // case needs the ownership check below.
+        var keyFromCaller = !native.present
 
         var harness = this._oneOf(ctx.harness, this.HARNESSES, this.DEFAULT_HARNESS)
         var mode = this._oneOf(ctx.mode, this.MODES, this.DEFAULT_MODE)
@@ -220,11 +240,24 @@ PaRunAnchor.prototype = {
         // Only ever with a key. A keyless query matches every run on the
         // table, and the first row it found would silently become this
         // conversation's anchor — the exact merge R-2 exists to prevent.
+        //
+        // Ownership filtering applies ONLY when the key came from the caller.
+        // Never on the ambient path: a false rejection there would split a
+        // native conversation across several runs — the bug this component
+        // exists to prevent — and the native runtime's identity surface is not
+        // something we can verify until Task 10 (R-2 already found
+        // `gs.getSessionID()` returns the literal "SYSTEM" there).
+        var keyRejected = false
         if (keyField) {
-            var existing = this._resolve(keyField, keyValue)
-            if (existing) {
-                return this._found(base, existing, false)
+            var existing = this._resolve(keyField, keyValue, keyFromCaller)
+            keyRejected = existing.skipped > 0
+            if (existing.record) {
+                return this._withRejection(this._found(base, existing.record, false), keyRejected)
             }
+            // Nothing of ours under this key — fall through and create one,
+            // keyed the same way. The next call from THIS user resolves to it,
+            // so legitimate use still converges; only cross-user adoption is
+            // refused.
         }
 
         // --- create -----------------------------------------------------
@@ -234,7 +267,6 @@ PaRunAnchor.prototype = {
             conversationId: conversationId,
             executionRef: executionRef,
             agentId: agentId,
-            userId: ctx.userId,
         })
 
         if (!mine) return this._degraded(base, 'insert_failed')
@@ -249,10 +281,15 @@ PaRunAnchor.prototype = {
             return unkeyed
         }
 
-        // Re-resolve so a concurrent batch converges — see the header.
-        var winner = this._resolve(keyField, keyValue)
-        if (!winner) return this._found(base, mine, true)
-        return this._found(base, winner, winner.run_id === mine.run_id)
+        // Re-resolve so a concurrent batch converges — see the header. Carries
+        // the same ownership filter, or the run we just refused wins this
+        // lookup by age and gets adopted one step after being rejected.
+        var winner = this._resolve(keyField, keyValue, keyFromCaller).record
+        var out = winner
+            ? this._found(base, winner, winner.run_id === mine.run_id)
+            : this._found(base, mine, true)
+
+        return this._withRejection(out, keyRejected)
     },
 
     // =======================================================================
@@ -265,9 +302,18 @@ PaRunAnchor.prototype = {
      * second granularity and a concurrent batch lands inside one second, so
      * ordering on it alone leaves the winner up to row order.
      *
-     * @returns {Object|null} {run_id, number}
+     * @param {Boolean} [ownedOnly] skip runs belonging to another user. Set on
+     *        the caller-supplied-key path only. It must also be set on the
+     *        re-resolve after an insert, or the refused foreign run — which is
+     *        older, and therefore wins the ordering — gets adopted one line
+     *        after being rejected, and the check achieves nothing.
+     * @returns {Object} {record: {run_id, number}|null, skipped: Number} —
+     *          `skipped` counts foreign runs passed over, which is how the
+     *          caller learns the key is contested even when it did find one of
+     *          its own.
      */
-    _resolve: function (keyField, keyValue) {
+    _resolve: function (keyField, keyValue, ownedOnly) {
+        var out = { record: null, skipped: 0 }
         try {
             var gr = new GlideRecord(this.RUN_TABLE)
             gr.addQuery(keyField, keyValue)
@@ -277,12 +323,23 @@ PaRunAnchor.prototype = {
             gr.orderBy('sys_created_on')
             gr.orderBy('sys_id')
             gr.query()
-            if (!gr.next()) return null
-            return { run_id: gr.getValue('sys_id'), number: gr.getValue('number') }
+            while (gr.next()) {
+                if (ownedOnly && !this._ownedByCurrentUser(gr.getValue('user'))) {
+                    // Skipped, not stopped on: this user's own run for the same
+                    // key may be further down the list. Stopping here would
+                    // create a new run on every call and turn the ownership
+                    // check into the scatter bug it is meant to avoid.
+                    out.skipped++
+                    continue
+                }
+                out.record = { run_id: gr.getValue('sys_id'), number: gr.getValue('number') }
+                return out
+            }
+            return out
         } catch (e) {
             // R-1: `e` untouched. A failed lookup means "create one", which is
             // safe — the worst case is a duplicate run, never a merged one.
-            return null
+            return { record: null, skipped: 0 }
         }
     },
 
@@ -304,7 +361,12 @@ PaRunAnchor.prototype = {
             // and the agent stays discoverable through execution_ref anyway.
             if (this._isSysId(fields.agentId)) gr.setValue('agent', fields.agentId)
 
-            var userId = fields.userId || this._currentUser()
+            // Server-authoritative, never caller-supplied (security review, PR
+            // #21). This field is what the ownership check reads, so a caller
+            // able to set it could plant a run stamped with someone else's id —
+            // which would turn the check into an attack surface instead of a
+            // defence.
+            var userId = this._currentUser()
             if (userId) gr.setValue('user', userId)
 
             var sysId = gr.insert()
@@ -387,6 +449,34 @@ PaRunAnchor.prototype = {
         var s = String(value)
         if (s === '' || s === 'undefined' || s === 'null') return ''
         return s
+    },
+
+    /** R-10: a contested key is stated, never silently worked around. */
+    _withRejection: function (result, rejected) {
+        if (!rejected) return result
+        result.key_rejected = true
+        result.note =
+            'A run already exists under this key but belongs to another user, and was not ' +
+            'adopted — this call uses a run of its own. Diagnostic runs are never shared across ' +
+            'users: adopting one would hand over its artifacts and its audit trail.'
+        return result
+    },
+
+    /**
+     * Fails OPEN on "cannot tell", CLOSED on "can tell, and it is not you".
+     *
+     * A run with no recorded owner cannot have its ownership violated, and a
+     * caller we cannot identify must not be handed an invented denial — in
+     * both cases a false rejection costs a split anchor, which is the failure
+     * this whole component exists to prevent. The check earns its place on the
+     * one case it can actually decide: a run stamped with a different user.
+     */
+    _ownedByCurrentUser: function (runUser) {
+        var owner = this._norm(runUser)
+        if (!owner) return true
+        var me = this._currentUser()
+        if (!me) return true
+        return owner === me
     },
 
     /** Membership by scan — see the note on HARNESSES for why not a map. */

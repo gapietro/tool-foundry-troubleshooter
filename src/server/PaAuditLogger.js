@@ -144,7 +144,12 @@ PaAuditLogger.prototype = {
             if (p.userId) gr.setValue('user', p.userId)
             if (p.targetTable) gr.setValue('target_table', p.targetTable)
             if (p.targetRecord) gr.setValue('target_record', p.targetRecord)
-            gr.setValue('confirmed_by_user', p.confirmedByUser ? 'true' : 'false')
+
+            // ALWAYS false in Phase 1a, and not settable by a caller — see the
+            // note on `_normParams`. Phase 2's confirmation gate sets this from
+            // whatever workflow actually collects the confirmation, which is
+            // the only thing that can honestly assert it.
+            gr.setValue('confirmed_by_user', 'false')
 
             // Intent records what went IN; result and error record what came out.
             if (actionType === 'intent') gr.setValue('input', text)
@@ -171,6 +176,28 @@ PaAuditLogger.prototype = {
      * R-9 + R-6. Accepts `runId`/`run` and `toolName`/`tool` alike: Task 9
      * writes the caller, and a key mismatch across that boundary would show up
      * as a permanently blank column rather than as an error.
+     *
+     * WHAT IT DELIBERATELY DOES *NOT* ACCEPT — server-authoritative fields.
+     * `user` and `confirmed_by_user` are not caller-settable, and the params
+     * carrying them are ignored rather than honoured (security review on PR
+     * #21, two Medium findings):
+     *
+     *   `user` comes from `gs.getUserID()`, always. The caller here is the
+     *   Task 9 adapter, and part of what reaches the adapter is LLM-derived —
+     *   a trace payload is a plausible prompt-injection carrier, which is the
+     *   same threat model that made PaArtifactStore.read() refuse foreign
+     *   attachments. An audit trail whose *actor* field is supplied by the
+     *   thing being audited is not an audit trail.
+     *
+     *   `confirmed_by_user` is written false unconditionally. Phase 1a is
+     *   read-only, so a true value cannot be honest yet, and a forged
+     *   confirmation is worse than an absent feature. When Phase 2 adds the
+     *   confirmation gate, the workflow that actually collects the
+     *   confirmation sets it — not whoever is calling a tool.
+     *
+     * Neither override had a consumer: nothing calls this component yet except
+     * the self-test route, so removing them costs nothing today and closes the
+     * hole before Task 9 makes it reachable.
      */
     _normParams: function (raw) {
         var toolName = this._norm(raw.toolName || raw.tool || raw.tool_name)
@@ -180,7 +207,7 @@ PaAuditLogger.prototype = {
             // tool_name is this table's DISPLAY field — a blank one renders the
             // row as an unnamed entry in every list and every reference.
             toolName: this._trim(toolName || 'unknown', this.MAX_TOOL_NAME_CHARS),
-            userId: this._currentUser(raw),
+            userId: this._currentUser(),
             targetTable: this._trim(
                 this._norm(raw.targetTable || raw.target_table),
                 this.MAX_TABLE_NAME_CHARS
@@ -189,7 +216,6 @@ PaAuditLogger.prototype = {
                 this._norm(raw.targetRecord || raw.target_record),
                 this.MAX_RECORD_ID_CHARS
             ),
-            confirmedByUser: raw.confirmedByUser === true || raw.confirmed_by_user === true,
         }
     },
 
@@ -271,13 +297,13 @@ PaAuditLogger.prototype = {
         return value.length > max ? value.substring(0, max) : value
     },
 
-    _currentUser: function (raw) {
-        var explicit = this._norm(raw.userId || raw.user_id || raw.user)
-        if (explicit) return explicit
+    /** The session's user, and nothing else. See `_normParams`. */
+    _currentUser: function () {
         try {
             return this._norm(gs.getUserID())
         } catch (e) {
-            // R-1: `e` untouched.
+            // R-1: `e` untouched. A blank actor is honest; a caller-supplied
+            // one would not be.
             return ''
         }
     },

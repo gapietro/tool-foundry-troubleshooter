@@ -503,6 +503,37 @@ export const scopeProbeApi = RestApi({
             distinct: isolated
         };
 
+        // 4b. Cross-user key fixation must be refused (security review, PR #21).
+        //     A run planted under a key, owned by someone else, must not be
+        //     adopted by a caller supplying that key — otherwise naming another
+        //     session's conversation hands over its artifacts and audit trail.
+        var foreignConv = gs.generateGUID();
+        var plantGr = new GlideRecord('x_snc_troubleshoot_run');
+        plantGr.initialize();
+        plantGr.setValue('harness', 'native');
+        plantGr.setValue('status', 'running');
+        plantGr.setValue('conversation_ref', foreignConv);
+        plantGr.setValue('user', 'ffffffffffffffffffffffffffffffff');
+        var plantedId = plantGr.insert();
+        remember(plantedId);
+
+        var fixate = anchor.getOrCreate({ conversationId: foreignConv });
+        remember(fixate.run_id);
+        var refused = !!fixate.run_id && fixate.run_id !== String(plantedId);
+        out.steps.cross_user_refusal = {
+            planted_run: String(plantedId),
+            returned_run: fixate.run_id,
+            refused: refused,
+            key_rejected: fixate.key_rejected === true
+        };
+
+        // And the refusal must not become the scatter bug: a second call by
+        // the same caller has to converge on the run it just made.
+        var fixate2 = anchor.getOrCreate({ conversationId: foreignConv });
+        remember(fixate2.run_id);
+        out.steps.cross_user_refusal.converges_on_own_run =
+            fixate2.run_id === fixate.run_id && fixate2.created === false;
+
         // 5. Audit rows around a notional tool call.
         var logger = new PaAuditLogger();
         var intent = logger.logIntent({
@@ -568,9 +599,38 @@ export const scopeProbeApi = RestApi({
             capped: digestLen !== null && digestLen < 4200
         };
 
-        var pass = sameRun && isolated && auditOk && out.steps.autonumber_ok && out.steps.digest.capped;
+        // 7b. Audit attribution is server-authoritative — a caller-supplied
+        //     user or confirmation flag must be ignored, not honoured.
+        logger.logIntent({
+            runId: first.run_id,
+            toolName: 'spoof',
+            input: '{}',
+            user: 'ffffffffffffffffffffffffffffffff',
+            confirmedByUser: true
+        });
+        var spoofGr = new GlideRecord('x_snc_troubleshoot_audit');
+        spoofGr.addQuery('run', first.run_id);
+        spoofGr.addQuery('tool_name', 'spoof');
+        spoofGr.query();
+        var spoofOk = false;
+        if (spoofGr.next()) {
+            spoofOk =
+                spoofGr.getValue('user') === gs.getUserID() &&
+                spoofGr.getValue('confirmed_by_user') !== '1' &&
+                spoofGr.getValue('confirmed_by_user') !== 'true';
+            out.steps.audit_attribution = {
+                recorded_user: spoofGr.getValue('user'),
+                session_user: gs.getUserID(),
+                confirmed_by_user: spoofGr.getValue('confirmed_by_user'),
+                spoof_ignored: spoofOk
+            };
+        }
+
+        var pass = sameRun && isolated && auditOk && out.steps.autonumber_ok
+            && out.steps.digest.capped && refused
+            && out.steps.cross_user_refusal.converges_on_own_run && spoofOk;
         out.verdict = pass
-            ? 'PASSED: conversation key resolves to one run, unkeyed calls stay isolated, audit rows write and read back, payloads are digested'
+            ? 'PASSED: conversation key resolves to one run, unkeyed calls stay isolated, cross-user key fixation refused, audit attribution server-authoritative, payloads digested'
             : 'FAILED: see steps';
     } catch (e) {
         // R-1: the exception object is never read.

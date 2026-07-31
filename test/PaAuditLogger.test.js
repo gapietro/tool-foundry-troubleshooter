@@ -148,13 +148,35 @@ describe('logIntent / logResult / logError', () => {
         logger.logIntent({ runId: RUN, toolName: 't', input: '{}' })
         expect(rows(world)[0].confirmed_by_user).toBe('false')
     })
+})
 
-    test('an explicitly confirmed action records the confirmation', () => {
-        // The column exists now because an audit trail that gains it later
-        // cannot answer the question retroactively (tables.now.ts).
+// ---------------------------------------------------------------------------
+// Server-authoritative fields (security review, PR #21)
+// ---------------------------------------------------------------------------
+
+describe('audit metadata cannot be set by the caller', () => {
+    test('a caller-supplied user is ignored — attribution comes from the session', () => {
+        // The caller is the Task 9 adapter, and part of what reaches it is
+        // LLM-derived. An audit trail whose ACTOR field is supplied by the
+        // thing being audited is not an audit trail.
+        const { logger, world } = load()
+        logger.logIntent({ runId: RUN, toolName: 't', input: '{}', user: 'admin' })
+        logger.logResult({ runId: RUN, toolName: 't', output: 'x', userId: 'someone.else' })
+
+        expect(rows(world)[0].user).toBe('user1')
+        expect(rows(world)[1].user).toBe('user1')
+    })
+
+    test('a caller cannot forge a confirmation', () => {
+        // Phase 1a is read-only, so a true value cannot be honest yet — and a
+        // forged confirmation is worse than an absent feature. Phase 2's
+        // confirmation gate sets this from the workflow that collects it.
         const { logger, world } = load()
         logger.logResult({ runId: RUN, toolName: 't', output: 'ok', confirmedByUser: true })
-        expect(rows(world)[0].confirmed_by_user).toBe('true')
+        logger.logResult({ runId: RUN, toolName: 't', output: 'ok', confirmed_by_user: true })
+
+        expect(rows(world)[0].confirmed_by_user).toBe('false')
+        expect(rows(world)[1].confirmed_by_user).toBe('false')
     })
 })
 

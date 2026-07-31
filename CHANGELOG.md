@@ -48,11 +48,44 @@ is exactly such a runtime — an unguarded read is a `ReferenceError` that kills
 rows write *and read back*, `autoNumber` still populates `number` (Build Rule #41 re-check), and a
 20,008-char payload stored as 4,024. 194 Jest tests pass.
 
-Two defects were caught in review and fixed before merge: the choice-vocabulary check used an
-object as a lookup map, so a caller-supplied `harness: "constructor"` answered truthy off
+Two defects were caught in self-review and fixed before merge: the choice-vocabulary check used
+an object as a lookup map, so a caller-supplied `harness: "constructor"` answered truthy off
 `Object.prototype` and was written into the choice field; and `PaAuditLogger` parsed a
 JSON-string `params` for its fields but picked the payload off the raw string, writing a correct
 tool name beside a silently empty `input`. Both have regression tests.
+
+**Two Medium security findings on PR #21, both fixed and both verified live:**
+
+*Audit metadata is now server-authoritative.* `user` came from the caller when supplied, and
+`confirmed_by_user` was caller-settable. The caller is the Task 9 adapter, and part of what
+reaches it is LLM-derived — a trace payload is a plausible prompt-injection carrier, the same
+threat model behind `PaArtifactStore.read()` refusing foreign attachments. An audit trail whose
+*actor* field is supplied by the thing being audited is not an audit trail. `user` is now always
+`gs.getUserID()`; `confirmed_by_user` is always false, and Phase 2's gate will set it from the
+workflow that actually collects the confirmation. Neither override had a consumer.
+
+*The ambient context now wins over caller-supplied identity.* `getOrCreate` took caller values
+first, unconditionally — so a native tool call could name **any** conversation and be handed that
+conversation's run record, its artifacts and its audit trail. That is the R-2 merge reintroduced
+through the front door. LLD §4.6 already said the native key *is*
+`_agentic_context_.conversation_id`; "caller first" was a liberty, and one of the tests had
+encoded it. Caller-supplied identity is now honoured only where there is no ambient context to
+contradict it — the custom harness (§4.6: "custom: explicit run_id"), tests, and the self-test
+route. `harness` and `mode` stay caller-first: they are configuration, not identity.
+
+On that remaining caller-controlled path, a resolved run belonging to a different user is not
+adopted. The check fails **open** on "cannot tell" (no recorded owner, or an unidentifiable
+caller) and closed only on "can tell, and it is not you" — a false rejection would split an
+anchor, which is the failure this component exists to prevent, and the native runtime's identity
+surface is unverified until Task 10. It applies to the caller-supplied path only, and to the
+post-insert re-resolve as well: the refused run is *older*, so without the filter on that second
+lookup it would have been adopted one step after being rejected. Foreign runs are skipped rather
+than stopped on, so a second call by the same user converges on its own run instead of creating a
+new one every time.
+
+206 Jest tests pass. The self-test route now also plants a foreign-owned run and attempts both
+attacks: `refused`, `key_rejected`, `converges_on_own_run` and `spoof_ignored` all true on
+gpinst01.
 
 ## 2026.07.3108 — 2026-07-31
 
