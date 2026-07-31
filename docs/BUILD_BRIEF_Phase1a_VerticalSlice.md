@@ -45,7 +45,7 @@ nothing new; a working agent answers three open questions at once.
 | Task | What | Why it is in the slice |
 |---|---|---|
 | **2** | Fluent `Table()` for `x_snc_troubleshoot_run` + `_audit` (LLD §3.1/§3.2) | prerequisite for 4 and 5 |
-| **4** | `PaArtifactStore` — >4KB content to an attachment, paged reads | **hard blocker**: a real trace is **~35KB against a 4,000-char threshold**, so `PaToolAgentTrace` cannot currently be handed to an agent at all |
+| **4** ✅ | `PaArtifactStore` — >4KB content to an attachment, paged reads | ~~**hard blocker**~~ **CLEARED** (PR #17, 2026-07-31): 35,000 chars round-tripped byte-identical in nine 4KB pages from `x_snc_troubleshoot`, live on gpinst01. `PaToolAgentTrace` can now be handed to an agent |
 | **5** | `PaRunAnchor` + `PaAuditLogger` | anchors artifacts and audit per conversation |
 | **9** | `PaScriptToolAdapter` + one thin wrapper | the native-harness bridge |
 | **10** | Agent Doctor as a Fluent `AiAgent` — **`agent_trace` ONLY**, not all 7 | the point of the slice |

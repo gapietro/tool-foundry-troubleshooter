@@ -11,6 +11,16 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.07.3108 — 2026-07-31
+
+Housekeeping after Task 4. `IMPLEMENTATION_PLAN.md` and
+`BUILD_BRIEF_Phase1a_VerticalSlice.md` both still described `PaArtifactStore` as outstanding, and
+the brief still listed it as the **hard blocker** on the vertical slice — which is what the next
+session reads to decide what to build. Task 4 is marked done in both, with the measured evidence
+and the three findings worth carrying forward rather than rediscovering.
+
+Docs only. No source, no Fluent, no instance change.
+
 ## 2026.07.3107 — 2026-07-31
 
 Phase 1a vertical slice, **Task 4**: `PaArtifactStore` — the blocker on the whole slice. A real
