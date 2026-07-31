@@ -1532,3 +1532,108 @@ Item numbering is `docs/LOW_LEVEL_DESIGN.md` §8's own. The same dispositions ar
 | **10** | Now Assist Panel enabled on keynexus01 (needs ≥1 product plugin) | **CARRIED FORWARD.** `panel_available: false` — no Now Assist product plugin exists or is active. An instance-provisioning task, not a design change. Blocks the LLD §7 smoke test and the K26 lab prerequisites as written, and qualifies every Phase 0b result as API-path evidence. Must be closed before the benchmark (`DESIGN.md` R-11) |
 
 **Tally:** 5 CLOSED (1, 3, 5, 6, 9) · 2 CARRIED FORWARD (4, 10) · 3 not in Phase 0 scope (2, 7, 8).
+
+---
+
+## Cross-instance verification — gpinst01 (2026-07-30)
+
+Run after the SDK app was scaffolded to **gpinst01** (Zurich Patch 10 Hotfix 3), because
+`now-sdk auth` had no keynexus01 entry and the build targeted gpinst01 instead. Everything
+above was measured on keynexus01, so none of it was established here. Same disposable-probe
+method; records deleted and verified absent.
+
+### Every read-only finding transfers
+
+| Finding | keynexus01 | gpinst01 | |
+|---|---|---|---|
+| Now Assist product plugin | absent | **absent** | same |
+| `sn_aia.continuous_tool_execution_limit` | 25 | **25** | same |
+| `max_auto_executions` dictionary default | 10 | **10** | same |
+| …its production distribution | 477/483 at 10 | **492/497 at 10** | same |
+| `execution_mode` stored values | `autopilot` / `copilot` | **identical** | same |
+| Autonomous share of script-tool bindings | 94% (361/384) | **87% (432/497)** | same shape |
+| `sys_log` exists? | **no** | **no** | same |
+| `syslog` `caller_access` | Caller Restriction | **Caller Restriction** | same |
+| Agentic admin role name | `sn_aia.admin` | **`sn_aia.admin`** | same |
+| ReAct strategy sys_id | `f0bff21f…` | **`f0bff21f…`** | same |
+| `context_processing_script` auto-populated | yes | **yes** | same |
+
+**This resolves an ambiguity Phase 0 had to leave open.** P2 recorded the tool-call ceiling as
+tuned-vs-shipped **unknown**, because `sys_updated_by` said `admin` while the timestamps said
+untouched. gpinst01 shows **25** with the same `sys_created_on == sys_updated_on` signature, on
+a record dating to 2024-11-08. Two independent instances at the same value, both untouched, is
+strong evidence that **25 is the shipped default** — which is what `DESIGN.md` R-4's
+transferability constraint needs.
+
+**It also closes off an escape route.** gpinst01 has the *same* plugin gap — Now Assist Core,
+self-service, Skill Step, record-nowassist, and **no ITSM/HRSD/CSM/SecOps product plugin**. The
+P1 precondition is not an instance-selection problem; it needs provisioning wherever the
+benchmark runs.
+
+### E1 confirms exactly
+
+`_agentic_context_` is present, is a **string**, and carries the same four keys:
+
+```json
+{"agent_id":"601672d3…","conversation_id":"6826b6d3…","usecase_id":"","execution_plan_id":"7926bad3…"}
+```
+
+Scope `rhino.global`, `gs.getSessionID()` returns literal `SYSTEM`, all four
+`GlideRecordSecure` reads OK, `inputs: {}` again (the agent still did not pass the declared
+input). `execution_plan_id` matched the API's returned Execution ID. **The undocumented global
+behaves identically on both instances**, which materially de-risks `PaRunAnchor` — it was the
+single most fragile thing the design now rests on.
+
+The probe also **worked first try** here, versus three failed executions on keynexus01. That is
+independent confirmation that the three LLD §4.7 contract corrections (array `input_schema`, no
+`outputs` object, `rhino.global`/`SYSTEM`) are correct and general, not keynexus01 quirks.
+
+### E2 DIVERGES — and the divergence matters more than the number
+
+| | keynexus01 | gpinst01 |
+|---|---|---|
+| Tool calls executed | **19** | **5** |
+| Requested | 15 | 15 |
+| Plan `state` | Completed | **Completed** |
+| `state_reason` | *(empty)* | *(empty)* |
+| Hit a cap? | no | **no** |
+| Wall clock | 51s | 64s |
+
+The gpinst01 task tree: 1 Access Verification · 1 Agent · **4 Gen AI reasoning turns** ·
+**5 Tool** — all `Success`. `max_auto_executions` was 20 and the instance property 25, so
+nothing was capped. The agent made five calls, concluded it was finished, and reported success.
+
+**Reading this correctly matters.** This is *not* evidence that gpinst01's harness is weaker.
+Both runs terminated cleanly with no `state_reason`; neither approached a limit. What differs is
+**instruction adherence**, not capacity — the same prompt produced 19 calls on one instance and
+5 on the other.
+
+The design consequence is sharper than the raw numbers suggest:
+
+- **The binding constraint on a 12–15 call diagnostic sweep is not the loop budget.** Phase 0
+  framed the risk as "will the harness sustain the sweep." keynexus01 answered yes. gpinst01
+  shows the harness *permitting* a long sweep does not make the agent *perform* one.
+- **Premature completion is harder to detect than a cap.** A budget exhaustion surfaces as
+  `tool_limit` in the `DESIGN.md` 2.3 cause-of-death taxonomy. Stopping early after five
+  probes surfaces as **`completed`** — indistinguishable from a genuine finish. An Agent Doctor
+  that skips four of seven diagnostic layers and emits a confident Fix Report is a worse
+  failure than one that visibly runs out of budget.
+- **The benchmark needs a completeness check, not just a correctness score.** The 6-point rubric
+  scores whether the root cause was found. It should also record **how many layers were actually
+  swept**, or a run that got lucky on a shallow sweep scores the same as a thorough one.
+
+Caveat, stated plainly: **one run per instance.** This is a real qualitative finding — "completed"
+does not mean "swept" — but the 19-vs-5 figures are single samples and should not be read as a
+stable per-instance rate. The doubled-run benchmark protocol exists precisely for this.
+
+### Probe records — created and deleted
+
+| Table | Name | sys_id | Deleted |
+|---|---|---|---|
+| `sn_aia_agent_tool_m2m` | `PA GP Probe Agent - pa_gp_probe` | `3e16b69f2b9a8b9417a6ffbeee91bf0e` | ✅ verified absent |
+| `sn_aia_tool` | `pa_gp_probe` | `de06be5f2b9a8b9417a6ffbeee91bfa2` | ✅ verified absent |
+| `sn_aia_agent` | `PA GP Probe Agent` | `601672d32b1a83d0f243fed2ce91bf3e` | ✅ verified absent |
+
+Retained by decision, as on keynexus01: execution plans `7926bad32b1a83d0f243fed2ce91bf20`
+(E1) and `c9d63a932bda8b9417a6ffbeee91bfd0` (E2, the 5-call run — a known-answer specimen of
+premature completion).
