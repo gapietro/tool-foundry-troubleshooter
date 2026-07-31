@@ -238,6 +238,20 @@ Round 2 differed from round 1 in one important way: **both findings were documen
 
 **Change:** 14 corrections applied across §2.2, §2.3 and §4.2–§4.7, each marked ⚠ with the ruling that forced it. **Standing rule, widened from R-17:** §4.x is downstream of §2.x *and of §8 and every R-ruling*. A closure recorded in §8 or a ruling that names a §4 section is not complete until that section is edited — "recorded in DESIGN.md" is not the same as "in the spec the next session builds from". R-5 sat unapplied for exactly this reason.
 
+**R-18a — Two of R-18's own corrections were defective, and one reproduced the exact failure R-18 was written to prevent. (2026-07-30)**
+
+**Found:** review of the R-18 pass caught two defects introduced *by that pass*, both in §4.2:
+
+1. **The `sn_aia_trigger_agent_usecase_m2m` traversal was inverted.** R-18 correctly established that the table has no `agent`/`usecase` columns, then told implementers to *"query it by `trigger_configuration`"*. `PaToolAgentConfig` starts from an **agent** and has no trigger sys_id at that point — and keying on `trigger_configuration` also skips the agent-direct rows. Verified live: the working key is `related_resource_record` + `related_resource_table`, and **two** branches must be walked — agent-direct, and the team chain (`sn_aia_team_member.agent` → `.team` → `sn_aia_usecase.team` → usecase sys_ids). Branch 2 holds most rows (5 of 6 sampled), so walking only branch 1 reports a wired agent as unwired.
+2. **The access-alignment check contradicted itself.** R-18 established that User Access and Data Access cannot be separated structurally and had the tool emit one combined set — but left the original trailing requirement *"Both lists must independently cover the invoking user's role"* in place. Both cannot be true. Corrected by separating the two claims: the **platform** does enforce two gates and the invoking role must satisfy both; the **tool** cannot attribute a role row to a gate and must say so, rather than reporting "both lists check out".
+
+**Why this is recorded rather than quietly fixed.** Defect 1 is the **R-6 blank-not-error failure** — a query against the wrong key returning rows-with-blanks instead of an error — which is the precise failure mode R-18's §4.2 correction existed to remove. The corrected text would have caused it in a different way. Two lessons, both cheap to state and expensive to relearn:
+
+- **A documentation correction is untested code.** R-18's field-existence claims were verified against `sys_dictionary` and all held; its *traversal* claim was reasoned, not executed, and was wrong. Verifying that a column exists is not verifying that a query starting from the tool's actual entry point returns anything. R-18a's traversal was executed against live rows before being written.
+- **Removing a wrong requirement is a two-part edit.** Defect 2 came from replacing a premise while leaving the sentence that depended on it. When a correction invalidates a claim, every downstream sentence in that block has to be re-read — the contradiction sat two lines below the fix.
+
+**Change:** §4.2's overview traversal and access-alignment check corrected, each carrying the verified query shape. **Standing rule:** any §4.x correction that specifies a *query* must be executed against live rows from the tool's real entry point before it is written down — field-existence checks do not cover it.
+
 ---
 
 *Next steps agreed in spar: fold changes 2.1–2.4 into `docs/IMPLEMENTATION_PLAN.md` (new collector task; scorecard field; anchor keying rule) and `docs/LOW_LEVEL_DESIGN.md` (§4.6 anchor spec, §7 protocol, §8 items). Drift review after Phase 1a build compares the built system to this record.*
