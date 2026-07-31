@@ -273,6 +273,32 @@ Round 2 differed from round 1 in one important way: **both findings were documen
 
 **Assessment of the four rounds, stated plainly.** Every finding across rounds 2–4 has been in *prose*, not code: the shipped tool already did the right thing in all four cases here, because it was written against live rows. The defect rate in reasoned prose corrections has been materially worse than in executed ones — which is what R-18a's rule addressed for queries, and what these two rules address for placement and altitude.
 
+**R-18c — §5–§7 swept: 11 corrections, two more unapplied rulings, and the scope of the audit was underestimated for the third time. (2026-07-31)**
+
+**Found (2 flagged by review, 9 by sweeping the rest of the unswept surface):**
+
+| § | Was | Now |
+|---|---|---|
+| **5 heading** | *"created via Foundry automation, **NOT SDK**"* | **Fluent `AiAgent`** — R-13 reversed this and CLAUDE.md forbids the old path |
+| 5 rows 9–15 | `execution_mode`=`unsupervised/auto` ⚠VERIFY | **`autopilot`** — neither old value is in the choice list |
+| 5 row 17 | "no custom `context_processing_script` — keep ours empty" | **explicitly clear it after creation and verify** (R-7) |
+| 5 row 18 | trigger, `active`=true | **deferred** — conflicts with Task 10 + Build Rule #31 |
+| 5 row 19 | "trigger↔usecase↔agent" | polymorphic `related_resource_table`/`_record` |
+| 6 status | "nothing here is built yet" | app installed on gpinst01; `PaToolAgentTrace` ships |
+| 6 table | Agent Doctor via "Foundry automation" | **SDK / Fluent** (R-13) |
+| 6 table | seed agents via "Foundry automation" | **UNDECIDED** — Task 11 records it as open |
+| 6 layout | `src/instance/**` + `src/agent-doctor/**` | the real tree; tests in `test/` (R-13, R-14) |
+| 6 deploy | keynexus01 | **gpinst01** — keynexus01 has no auth entry |
+| 7 | "Benchmark Implementation **on keynexus01**" | gpinst01 primary, with the R-16 specimen; keynexus01 blocked on auth and its plugin state unverified |
+
+**Two more rulings found unapplied.** R-7 mandated that §5's `context_processing_script` cell "must be restated"; R-13 moved Agent Doctor to Fluent and §5's heading plus §6's table still instructed the opposite. Both had been *recorded* and neither *applied* — the same failure as R-5/§4.7 in R-18. **That is three unapplied rulings across three sweeps**, which makes it a process defect, not three oversights.
+
+**The §5 heading is the most serious single item in five rounds.** It did not merely contradict a ruling — it instructed a build path CLAUDE.md explicitly forbids (*"SDK owns creation"*), in the heading of the section describing the product's central artifact. Anyone building §5 as written would have created Agent Doctor via MCP record automation, exactly what R-13 was written to prevent.
+
+**Scope underestimated, third time.** R-17 framed the problem as §2→§4. R-18 found the real upstreams also included §8 and the rulings. R-18c finds that §4 was never the only *downstream* either: **§5 (record set), §6 (build approach) and §7 (benchmark) all consume §2 and the rulings the same way**, and none had been swept. Each time the fix was correct and the boundary was drawn too tightly. The boundary is now the whole document: §2–§7 have all been swept, and §8 is the ruling ledger itself.
+
+**Change:** 11 corrections across §5–§7. **Standing rule, the one that would have prevented all three unapplied rulings:** a ruling whose **Change** clause names a document section is a **work item, not a record**. It is not discharged until that section is edited, and the ruling should say so explicitly. "Recorded in DESIGN.md" has now failed three times as a substitute for "changed in the spec the next session builds from" (R-18) — and the failure repeated *after* that rule was written, because nothing checked the back-catalogue of rulings for undischarged Change clauses. Before the next tool core, every R-ruling's Change clause should be walked once and confirmed applied.
+
 ---
 
 *Next steps agreed in spar: fold changes 2.1–2.4 into `docs/IMPLEMENTATION_PLAN.md` (new collector task; scorecard field; anchor keying rule) and `docs/LOW_LEVEL_DESIGN.md` (§4.6 anchor spec, §7 protocol, §8 items). Drift review after Phase 1a build compares the built system to this record.*

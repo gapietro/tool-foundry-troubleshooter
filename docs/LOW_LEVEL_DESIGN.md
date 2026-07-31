@@ -289,17 +289,21 @@ Seven thin `sn_aia_tool` (type `script`) bodies each call `invoke()` with their 
 
 ---
 
-## 5. Agent Doctor — Native Agent Record Set (created via Foundry automation, NOT SDK)
+## 5. Agent Doctor — Native Agent Record Set (built as **Fluent DSL via the SDK**)
+
+> ⚠ **This heading previously read "(created via Foundry automation, NOT SDK)" — reversed by DESIGN.md R-13 and corrected here (R-18c).** Agent Doctor is a Fluent `AiAgent` in `src/fluent/agent-doctor.now.ts`, deployed by `now-sdk build` + `now-sdk install`. Creating it via MCP/Foundry record automation is **forbidden** by CLAUDE.md's boundary — *"SDK owns creation. Agents, tools, tables, flows — defined as Fluent DSL in `src/fluent/`"* — and R-13 records that executing the old instruction would have built the product's central artifact on the wrong side of the line the project sets for itself.
+>
+> **`IMPLEMENTATION_PLAN.md` Task 10 is the authority for HOW it is built** (mandatory `securityAcl`; inline `tools[]` entries must NOT carry `$id`, Rule #32; every tool needs a non-empty `description` or the record is silently skipped at install, Rule #34; script tools are self-invoking IIFEs, Rule #19). The table below specifies WHAT the records contain.
 
 | # | Record | Table | Key values |
 |---|--------|-------|-----------|
 | 1 | Agent Doctor | `sn_aia_agent` | `name`="Agent Doctor", `agent_type`=internal, `channel`=`nap_and_va`, **`strategy`=`f0bff21f9f13c6108f431597d90a1c74` (ReAct — verified default)**, `role`/`instructions` from `agent-doctor-instructions.md` (playbook: seven-layer sweep, evidence rule, Fix Report markdown template, read_artifact usage) |
 | 2–8 | 7 tools | `sn_aia_tool` | `type`=script, descriptions written to the **K26 three-section framework** (§2.5): Purpose (incl. when NOT to use) · Understanding Tool Inputs (formats + how off-format input is handled) · Understanding Tool Outputs & Error Handling (success/empty/error shapes + what to do next); `input_schema` per §4.7; script = adapter call. The adapter already satisfies the smart-tool bar: tolerant input parsing, structured JSON out, never an empty `{}` on failure |
-| 9–15 | 7 attachments | `sn_aia_agent_tool_m2m` | `active`=true, `execution_mode`=unsupervised/auto (⚠ VERIFY choice values — all tools read-only), `output_transformation_strategy`=None (raw JSON back to the reasoning loop), `display_output`=false |
+| 9–15 | 7 attachments | `sn_aia_agent_tool_m2m` | `active`=true, **`execution_mode`=`autopilot`** (⚠ **CLOSED** — §8 item 1: the only two valid stored values are `autopilot` (label "Autonomous") and `copilot` (label "Supervised"). This cell previously read `unsupervised/auto`, **neither of which is in the choice list**; writing it would have produced attachments with an invalid value. All 7 tools are read-only, so `autopilot` is correct and is in live production use on 361 of 384 script-type attachments). Also set `max_auto_executions` deliberately rather than accepting the dictionary default of 10 — DESIGN.md §2.2 / R-4, and record both budget knobs in the benchmark scorecard. `output_transformation_strategy`=None (raw JSON back to the reasoning loop), `display_output`=false |
 | 16 | Team | `sn_aia_team` (+`sn_aia_team_member`) | "Troubleshooter" team wrapping Agent Doctor |
-| 17 | Use case | `sn_aia_usecase` | "Diagnose AI Agent failure", `team`=16, orchestrator strategy default; **no custom `context_processing_script`** (verified failure vector — keep ours empty) |
-| 18 | Trigger | `sn_aia_trigger_configuration` | `active`=true, channel=Now Assist panel, condition/objective_template minimal |
-| 19 | Wiring | `sn_aia_trigger_agent_usecase_m2m` | trigger↔usecase↔agent |
+| 17 | Use case | `sn_aia_usecase` | "Diagnose AI Agent failure", `team`=16, orchestrator strategy default. ⚠ **`context_processing_script` must be EXPLICITLY CLEARED after creation and the clearing verified — omitting the field does NOT leave it empty** (**R-7**, whose mandated restatement of this cell had never been applied). The platform auto-populates it with a default template, and auto-populates `applicability_script` too with a body ending in `return false;` — which would suppress the agent silently. This matters because it is precisely the field class the instance's known failures live in: both the keynexus01 specimen and the gpinst01 one found by `PaToolAgentTrace` (**R-16**) are `context_processing_script` throwing. "Keep ours empty" is a post-creation action, not an omission |
+| 18 | Trigger | `sn_aia_trigger_configuration` | `active`=true, channel=Now Assist panel, condition/objective_template minimal. ⚠ **Conflicts with `IMPLEMENTATION_PLAN.md` Task 10, which specifies NO `triggerConfig` — Agent Doctor is invoked conversationally, and Build Rule #31 says `triggerConfig` on a bare `AiAgent` yields a trigger whose `usecase` is null, so it never fires.** Task 10 is the authority for the Phase 1a build: rows 18–19 are **deferred**, not part of the first install. If a trigger is wanted later it belongs on an `AiAgenticWorkflow`, and note that SDK 4.9.0 deploys triggers **inactive** for manual activation |
+| 19 | Wiring | `sn_aia_trigger_agent_usecase_m2m` | ⚠ **Not a trigger↔usecase↔agent row — the table has no `agent` and no `usecase` column** (§2.2, R-18). Write `trigger_configuration` = row 18, plus the **polymorphic** pair `related_resource_table` = `sn_aia_usecase` (or `sn_aia_agent`) and `related_resource_record` = that record's sys_id, plus `active`=true. One row per resource being wired; the m2m's own `active` gates the wiring independently of `sn_aia_trigger_configuration.active` |
 
 Tool roster (names as the LLM sees them): `agent_trace`, `agent_config`, `genai_log`, `schema_lookup`, `query_table`, `log_analysis`, `read_artifact` — exactly 7, at the platform's 5–7 guidance ceiling; nothing else gets added.
 
@@ -307,25 +311,39 @@ Tool roster (names as the LLM sees them): `agent_trace`, `agent_config`, `genai_
 
 ## 6. Build Approach with the ServiceNow SDK
 
-*(SDK setup is the next work item — this section defines what gets built with it; nothing here is built yet.)*
+*(⚠ **Status corrected 2026-07-31 (R-18c) — "nothing here is built yet" is false.** The scoped app `x_snc_troubleshoot` is built and installed on gpinst01, and `PaToolAgentTrace` (§4.1, summary mode) ships with its Fluent `ScriptInclude`, Jest tests in `test/`, and a temporary `/scope_probe/trace` verification route.)*
 
 | Artifact | Built via | Rationale |
 |----------|-----------|-----------|
 | Scoped app, `x_snc_troubleshoot_run`, `x_snc_troubleshoot_audit` tables | **SDK** (Fluent table definitions) | Versioned DDL in git, repeatable install |
 | Script Includes (§4: 6 tool cores + ArtifactStore + RunAnchor + AuditLogger + ScriptToolAdapter) | **SDK** (source-controlled server scripts) | The whole point — code in repo, deployed by CLI |
 | Jest tests (adapter parse/stringify, truncation/paging, error-mining regex) | repo-local | pure-logic tests run without instance |
-| Agent Doctor record set (§5, tables in `sn_aia` scope) | **Foundry automation** (existing use-case/record APIs) | `sn_aia_*` records are another scope's data, not our app's metadata — record-creation automation, idempotent, with delete/rollback |
-| Benchmark seed agents (§7) | **Foundry automation** | same, plus deliberate breakage steps |
+| Agent Doctor record set (§5) | **SDK** — Fluent `AiAgent` in `src/fluent/agent-doctor.now.ts` | ⚠ **Corrected (R-13, R-18c): this row previously said "Foundry automation", which CLAUDE.md forbids** — SDK owns creation of agents, tools, tables and flows. See `IMPLEMENTATION_PLAN.md` Task 10 |
+| Benchmark seed agents (§7) | ⚠ **UNDECIDED** | `IMPLEMENTATION_PLAN.md` Task 11 records this as an explicit open question — Fluent gives reproducibility for the Phase 1b re-run but would ship five broken agents inside the product app; MCP keeps them out but is not reliably reproducible. Likely a **separate scoped app**. This row previously asserted "Foundry automation" as settled; it is not |
 
-Repo layout impact: `src/instance/**` (SDK-managed app source) + `src/agent-doctor/**` (record-set definitions consumed by Foundry automation) + `benchmark/**`. Deploy target: keynexus01 via the SDK CLI using the existing admin credential.
+Repo layout (⚠ **corrected — the `src/instance/**` / `src/agent-doctor/**` tree described here never existed**; R-13 established the real structure and R-14 moved the tests out of `src/`):
+
+- `src/fluent/*.now.ts` — every platform artifact: tables, Script Includes, the `AiAgent`, REST APIs
+- `src/server/**/*.js` — Script Include bodies (ES5/Rhino), referenced via `Now.include()`
+- `test/**/*.test.js` — Jest, **outside `src/`**: `now-sdk build` lints the whole source tree and a test's `require('vm')` fails the build (R-14)
+- `benchmark/**` — seeds and scorecards
+
+**Deploy target: `gpinst01`** (`now-sdk install --alias gpinst01`). ⚠ This line previously said keynexus01, which has **no `now-sdk auth` entry** and is not currently reachable; add one with `now-sdk auth --add keynexus01` before targeting it.
 
 Order of operations after SDK setup: install scoped app → run `/status`-equivalent readability check (§3 cross-scope) → create Agent Doctor records → smoke test → build seeds → benchmark.
 
 ---
 
-## 7. Benchmark Implementation on keynexus01
+## 7. Benchmark Implementation
 
-Smoke test (before any seeds): point Agent Doctor at **existing** failed execution `78f347b72f198310f824ac1bcfa4e3bd` — expected diagnosis: script failure in the SIGNAL use case's `context_processing_script` (line 61), evidenced by the agent-role error message + terminated/`execution_failed` plan state. We know the right answer; the smoke test checks the tools surface it.
+⚠ **Instance corrected 2026-07-31 (R-18c).** This section was headed "on keynexus01". That instance has **no `now-sdk auth` entry**, is not currently reachable, and its Now Assist plugin state is **unverified** — the P1 result was produced by the same `v_plugin` instrument that R-11 retracted, so it is suspect and must be re-checked with `sys_scope` before anything is claimed about it. The built app is installed on **gpinst01**, which R-11 confirmed has the product plugins active.
+
+**Smoke test (before any seeds) — two known-answer specimens, one reachable today:**
+
+- **gpinst01 (reachable):** execution `c9d63a932bda8b9417a6ffbeee91bfd0`. Expected diagnosis: `script_error` signature citing `sn_aia_agent.601672d3….context_processing_script` **line 42**, `InternalError`. Found by `PaToolAgentTrace` (**R-16**) and *invisible from the plan header* — `state=Completed`, empty `state_reason`, all 11 tasks and all 5 tool calls `Success`. It therefore tests something stronger than "did the tool read the rows": it tests whether a diagnosis that stops at the header is caught.
+- **keynexus01 (blocked on auth):** execution `78f347b72f198310f824ac1bcfa4e3bd` — script failure in the SIGNAL use case's `context_processing_script` (line 61), evidenced by the agent-role error message plus terminated/`execution_failed`. Also the only source for the silent non-terminating stall and the `ReferenceError` specimens.
+
+We know the right answer in both cases; the smoke test checks that the tools surface it.
 
 Seed construction (each = one broken agent + one captured failing execution sys_id):
 
@@ -335,7 +353,7 @@ Seed construction (each = one broken agent + one captured failing execution sys_
 | 2 — ambiguous instruction | Instructions say "assign to the right group", no lookup guidance, no group tool |
 | 3 — missing data | Instructions reference lookup table `x_snc_troubleshoot_bench_routing` (created empty) |
 | 4 — GenAI stack | ⚠ VERIFY safest construction: prefer a bogus `skill_config_id`/capability reference over breaking instance-wide provider config (shared instance — do NOT unmap real capabilities) |
-| 5 — inactive wiring | Use case + trigger created with `sn_aia_trigger_configuration.active`=false |
+| 5 — inactive wiring | Use case + trigger created with `sn_aia_trigger_configuration.active`=false. ⚠ Note there are **two** independent activation gates (§2.2, R-18): `sn_aia_trigger_configuration.active` **and** `sn_aia_trigger_agent_usecase_m2m.active`. Set one false and leave the other true, so the seed tests whether the diagnosis names the right gate rather than just "something is inactive" |
 
 Scoring per `IMPLEMENTATION_PLAN.md` Task 11–12: 2 runs/seed, blind, 6-point rubric, gate thresholds from ADR Decision 0.5.
 
@@ -343,7 +361,7 @@ Scoring per `IMPLEMENTATION_PLAN.md` Task 11–12: 2 runs/seed, blind, 6-point r
 
 | Seed | Taxonomy | Construction on instance |
 |------|----------|--------------------------|
-| 6 — ACL-trigger misalignment | T1 cold start | Trigger `active`=true but agent/workflow User Access + Data Access restricted to a role the run-as user lacks (e.g. `itil` user vs. admin-only access) → expect `state_reason=security_violation`, no surface config error. Reproduces K26 Lab 1 exactly; we already have a matching real failure on keynexus01 (§1) |
+| 6 — ACL-trigger misalignment | T1 cold start | Trigger `active`=true but agent/workflow User Access + Data Access restricted to a role the run-as user lacks (e.g. `itil` user vs. admin-only access) → expect `state_reason=security_violation`, no surface config error. Reproduces K26 Lab 1 exactly; matching real failures exist on **both** instances — keynexus01 (§1) and gpinst01, where `PaToolAgentTrace` returned the `acl_trigger_misalignment` signature against live `state_reason=security_violation` plans (e.g. `0117b4142b600fd017a6ffbeee91bf32`) |
 | 7 — instruction bloat latency | T4 high latency | Agent with deliberately oversized instructions (inline decision trees, hardcoded error-code maps, example conversations) + a search tool returning raw unfiltered chunks → expect `latency_flags[]` diagnosis: instruction_bloat + tool_output_bloat, fix = offload logic to a Skill / synthesize tool output |
 | 8 — infinite loop | T6 loops | Agent with no completion criteria and directives conflicting with its workflow, or a trigger whose condition matches records the agent itself updates (recursive firing) → expect wiring/instruction diagnosis; guarded by `sn_aia.continuous_tool_execution_limit` and the 5-runs-per-15-min recursion limit so the shared instance is safe |
 
