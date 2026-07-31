@@ -122,5 +122,81 @@ export const scopeProbeApi = RestApi({
     response.getStreamWriter().writeString(JSON.stringify(out));
 })(request, response);`,
         },
+
+        // -------------------------------------------------------------------
+        // TEMPORARY — remove or role-gate when the Task 9 adapter lands.
+        //
+        // A Script Include cannot be driven from MCP: Phase 0 established there
+        // is no background-script executor in the Foundry MCP toolset (DESIGN.md
+        // R-1). Until PaScriptToolAdapter and the Agent Doctor AiAgent exist
+        // (IMPLEMENTATION_PLAN.md Tasks 9-10), this route is the only way to
+        // execute PaToolAgentTrace against real sn_aia_* rows and verify it
+        // reads what it claims to read.
+        //
+        // Read-only: it calls execute(), which only ever issues GlideRecordSecure
+        // reads. It is still an authenticated, authorized endpoint that returns
+        // execution-trace content, so it does not survive past Task 9.
+        // -------------------------------------------------------------------
+        {
+            $id: Now.ID['scope-probe-trace'],
+            version: 1,
+            name: 'Agent Trace Probe',
+            path: '/trace',
+            method: 'POST',
+            active: true,
+            authentication: true,
+            authorization: true,
+            shortDescription: 'TEMPORARY verification harness for PaToolAgentTrace - remove at Task 9',
+            script: script`(function process(request, response) {
+    var out;
+
+    try {
+        // Accept a JSON body, query params, or nothing at all. R-9: every
+        // declared input may be absent, and a call with no arguments must
+        // still return something useful rather than an error.
+        var args = {};
+
+        try {
+            if (request.body && request.body.data) {
+                args = request.body.data;
+            }
+        } catch (bodyErr) {
+            args = {};
+        }
+
+        try {
+            var qp = request.queryParams || {};
+            var names = ['execution', 'agent', 'since', 'step', 'detail'];
+            for (var i = 0; i < names.length; i++) {
+                var n = names[i];
+                if (args[n] !== undefined && args[n] !== null && args[n] !== '') continue;
+                var v = qp[n];
+                if (v === undefined || v === null) continue;
+                // Scoped REST hands query params back as arrays, but they may
+                // be Java-backed and cross a realm boundary - 'instanceof Array'
+                // compares against THIS realm's Array constructor and returns
+                // false for those, passing the whole list through as the value.
+                // Ask what it is, not where it came from.
+                args[n] = (Object.prototype.toString.call(v) === '[object Array]') ? v[0] : v;
+            }
+        } catch (qpErr) {
+            // query params unavailable; whatever came from the body still stands
+        }
+
+        out = new PaToolAgentTrace().execute(args);
+    } catch (e) {
+        // Never touch the exception object - a cross-scope denial throws again
+        // when read and escapes the handler (DESIGN.md R-1).
+        out = {
+            success: false,
+            error: 'Probe route failed before or during PaToolAgentTrace.execute(). Exception detail deliberately not read - see DESIGN.md R-1.'
+        };
+    }
+
+    response.setStatus(200);
+    response.setContentType('application/json');
+    response.getStreamWriter().writeString(JSON.stringify(out));
+})(request, response);`,
+        },
     ],
 })

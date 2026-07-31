@@ -167,6 +167,138 @@ Stated plainly: these are **single samples per instance**. The qualitative findi
 
 **Deliberately not done:** `PRD_ServiceNow_Platform_Assistant.md`, `ARCHITECTURE_DECISIONS.md` and `AGENT_DOCTOR_ARCHITECTURE.md` still carry `x_snc_pa_*` / `x_pa_*` in prose. Mass-rewriting design-history text would create churn for no build benefit and would blur which document decides. LLD §3 carries a pointer stating it is the authority; those documents are read as design rationale, not as name sources.
 
+### Phase 1a build rulings
+
+**R-14 — Jest tests cannot live under `src/`; `IMPLEMENTATION_PLAN.md` Tasks 4 and 9 specify a path that does not build. (2026-07-30)**
+
+**Found:** the plan places Jest tests at `src/server/__tests__/*.test.js` (Task 4 for `PaArtifactStore`, Task 9 for `PaScriptToolAdapter`). `now-sdk build` lints **every** file under `src/` against the platform runtime, so a test file's `require('fs')` / `require('path')` / `require('vm')` fails the build outright: `TS213: Dependency vm is not found in package.json` plus `TS307: The fs Node.js API is not supported in now platform`. The build cannot be run at all while such a file exists, which means the failure is total rather than partial — no Script Include deploys either.
+
+**Change:** tests live in a top-level **`test/`** directory, outside the SDK source tree, with Jest `testMatch` set to `<rootDir>/test/**/*.test.js`. `IMPLEMENTATION_PLAN.md` Tasks 4 and 9 are corrected. This is a structural constraint of the SDK, not a preference: platform source and test source cannot share a tree.
+
+**R-15 — Six data-model corrections from the first build against real `sn_aia_*` rows on gpinst01. Two of them close open E3 checks; four contradict what the LLD documents. (2026-07-30)**
+
+**Found:** `PaToolAgentTrace` was driven against real execution plans on gpinst01. The field-presence assertion required by **R-6** reported each mismatch instead of returning blanks, which is how all six surfaced.
+
+1. **`sn_aia_tools_execution.execution_plan` does not exist — the join field is `execution_plan_id`, confirmed by exclusion.** R-1 left this as an open E3 check because the Phase 0 REST read was denied. The tool probes both candidates and reports which the table declares; `execution_plan` came back in `field_warnings` as absent. **E3 check CLOSED.**
+2. **`sn_aia_message.role` vocabulary confirmed as `agent` / `user_profile` / `user`** — matching LLD §2.1, now validated against a run we caused rather than 2026-07-18 archaeology. **E3 check CLOSED.**
+3. **`sn_aia_tools_execution.tool` is EMPTY on every real row.** LLD §2.1 states it references `sn_aia_agent_tool_m2m`; the field exists but is unpopulated. The binding sys_id is carried **inside the `request` JSON as `toolM2mId`**. Without a fallback, every tool call reports a null tool name — which reads as "this run called no tools" rather than "we looked in the wrong field". LLD §2.1 corrected.
+4. **Reference fields carry the literal string `"undefined"`, not an empty value.** Observed in `sn_aia_execution_plan.agent` on every `security_violation` plan, and in `related_task_table`. A truthiness check treats it as a real sys_id and renders a reference to nothing — and suppresses the "agent is empty, use the usecase" guidance exactly when it is needed. Every reference read goes through a normaliser.
+5. **`sys_cs_conversation` has no `channel` field**, so the K26 guidebook's "NAP vs VA" channel question has no single answer. The signal is spread across `conversation_type`, `device_type` and `provenance` (observed: `Interactive` / `AI Agent` / `glide`); all three are reported rather than one being presented as the channel. Also no `name` (it is `title`) and no `document_id`.
+6. **`sys_cs_message` field names:** the text is **`payload`** (not `text`), the type is **`message_type`** (not `type`), and the sort key is **`sequence`**. Separately — and more seriously — **`sn_aia_message.message_sequence` cannot be the primary sort key at all.** It is EMPTY on tool-result rows (five of nine on the probe run), and empty sorts *first*, so LLD §4.1 step 4's specified "order by `message_sequence`" put five agent messages **ahead of the user's opening message, which was created 26 seconds earlier** — the stream read as though the agent replied before it was asked. Since step 4 exists to show dialogue progression, the specified ordering actively misrepresents the run. **The tool orders by `sys_created_on`, then `message_sequence`, then `sys_id`** (only the timestamp is populated on every row; `sys_id` makes it fully deterministic, which the benchmark needs to compare runs). This is a deliberate, measured deviation from the LLD, not an oversight; §2.1 and §4.1 are corrected. Timestamps are emitted with every message so a reader can check the ordering rather than trust it.
+
+**Change:** `docs/LOW_LEVEL_DESIGN.md` §2.1 gains the corrections for items 3 and 4 and a pointer here. Items 5 and 6 were never documented in the LLD (the `sys_cs_*` shapes came from the K26 guidebook by name only) and are now recorded. **Methodological note:** all six were caught by the R-6 field-presence assertion. Without it each would have returned a blank, and the tool would have rendered a confident, complete-looking trace from fields that do not exist — the exact failure this project keeps warning about, committed by the tool built to detect it.
+
+**R-16 — gpinst01 has its own known-answer failure specimen, and it is invisible from the plan header. (2026-07-30)**
+
+**Found:** the build brief states that known-answer failure specimens exist only on **keynexus01**, which has no `now-sdk auth` entry. Tracing gpinst01 execution `c9d63a932bda8b9417a6ffbeee91bfd0` (the Phase 0 probe run) mined a server-script stack error out of an agent-role message: `sn_aia_agent.601672d32b1a83d0f243fed2ce91bf3e.context_processing_script`, **line 42**, `InternalError`.
+
+The plan's `state` is **`Completed`** with an **empty `state_reason`**. Nothing in the header, the task tree (11 tasks, all `Success`), or the tool calls (5, all `Success`) indicates a problem. The error exists only in the message stream.
+
+**Why this matters, in three directions:**
+- It **corroborates R-7** on a second instance: `context_processing_script` is auto-populated by the platform and is a live failure vector. R-7 said the field arrives populated whether you want it or not; this shows one of those auto-populated bodies actually throwing.
+- It **validates LLD §4.1 step 5's error-mining heuristic against a case nobody had catalogued.** The keynexus01 specimen was a known answer; this one was found.
+- It **sharpens the R-3 amendment's warning.** That ruling established that `completed` does not mean `swept`. This adds that `completed` does not mean *succeeded* — a run can throw a server-side script error and still report `state=Completed, state_reason=(empty)`. Any diagnosis that reads the plan header and stops will miss it. The seven-layer sweep is not thoroughness for its own sake; the message layer is load-bearing.
+
+**Change:** gpinst01 execution `c9d63a932bda8b9417a6ffbeee91bfd0` is recorded as a **local known-answer specimen** (expected diagnosis: `script_error` signature citing `context_processing_script` line 42), removing the keynexus01 dependency from basic error-mining verification. It does **not** replace the keynexus01 set — the stall and `ReferenceError` specimens remain unavailable, and keynexus01 still needs an auth entry.
+
+**R-17 — Correcting the data model (§2.1) does not correct the algorithm that consumes it (§4.1). Two consecutive review rounds caught the same drift. (2026-07-30)**
+
+**Found:** R-15 corrected six data-model facts in LLD §2.1. **§4.1 — the step-by-step algorithm the tool is built from — was left describing the old, wrong facts**, and code review found it twice running:
+
+- Round 1 caught §2.1 contradicting itself on `message_sequence`. Fixing that exposed a live ordering defect in the shipped code.
+- Round 2 caught §4.1 step 3 still specifying the `tool.tool.name` dot-walk (yields nothing — `tool` is empty on every real row) and step 4 still specifying a `sys_cs_conversation` "channel type" read (no such field).
+
+A sweep of the rest of §4.1 found **three more** the reviewer had not flagged: the Resolution rule presenting `since` as required and mandating in-memory sorting after the pick-list is cut (both contradicted by R-9 and the sort-after-`setLimit` defect); step 7 keying instruction-bloat on "high prompt token counts" when **no per-task token count exists** on `sn_aia_execution_task` — only plan-level `llm_token_avg`; and Detail mode reading as built when it is deferred.
+
+**Why this is a ruling and not five typos.** §2.1 is the reference and §4.1 is its only consumer, so a §2.1 correction that stops at §2.1 leaves the *buildable* half of the spec wrong. The five §4.1 items would each have produced a working-looking tool emitting nothing useful — unnamed tool calls, dropped channel context, a mislabelled pick-list, an untriggerable latency flag. That is this project's signature failure mode (R-11's partial-read-as-absence, R-15's blanks-not-errors), reached this time through documentation rather than data.
+
+Round 2 differed from round 1 in one important way: **both findings were documentation-only — the code was already correct**, because it had been written against real rows rather than against §4.1. That is the reverse of round 1, where the doc contradiction pointed at a live bug. Neither outcome can be assumed; both were checked against the code before anything was edited.
+
+**Change:** §4.1 is corrected on all five points, each carrying the ⚠ marker and a pointer to the ruling that forced it. **Standing rule for the remaining tool cores:** a correction to §2.x is not complete until §4.x has been re-read against it. `PaToolAgentConfig` (§4.2) and `PaToolGenAiLog` (§4.3) consume §2.2 and §2.3 the same way and will need the same sweep when their build turns up data-model surprises — which, on the evidence of this one, it will.
+
+**R-18 — Full §2↔§4 consistency pass: 14 corrections, and the dangerous ones were not §2↔§4 at all. (2026-07-30)**
+
+**Why run it:** R-17 established that a §2.x correction is not complete until §4.x has been re-read against it, after two review rounds caught the same drift. This pass swept every §2↔§4 pair before the next tool core, instead of waiting for a third round.
+
+**Method:** every concrete claim §4.1–§4.7 makes was extracted and tested — field names against `sys_dictionary` on gpinst01 (the instrument that caught the `sys_cs_*` errors), table shapes against live rows, and readability against the `/scope_probe/reads` endpoint. Document-internal consistency was **not** treated as evidence of correctness.
+
+**The §2 field claims held up.** Every field §2.2 and §2.3 document exists: all 16 on `sn_aia_agent`, all 9 on `sn_aia_tool`, all 14 on `sn_aia_agent_tool_m2m`, all 10 on `sn_aia_usecase`, all 14 on `sn_aia_trigger_configuration`, all 12 on `sys_gen_ai_usage_log`, all 17 on `sys_gen_ai_log_metadata`. The "no `active` field on `sn_aia_usecase`" claim is also correct. §2's field-level archaeology was sound.
+
+**One §2 table shape was wrong, and it is load-bearing.** `sn_aia_trigger_agent_usecase_m2m` is described in §2.2 as "agent↔usecase wiring" and consumed by §4.2's overview section on that basis. It has **no `agent` column and no `usecase` column**. It is a trigger-to-resource link — `trigger_configuration` plus a **polymorphic** `related_resource_table` / `related_resource_record` pair, the same shape as `sys_agent_access_role_configuration`. Live rows carry `sn_aia_usecase` on five and `sn_aia_agent` on one. Code written to §4.2 would have queried non-existent columns and, per **R-6**, received blanks rather than errors — reporting an agent as having no wiring.
+
+**The premise of the pass turned out to be too narrow.** Framing it as §2↔§4 assumed §2 was the only upstream. It is not: **§8's open-item closures and the R-1…R-17 rulings are also upstream of §4, and that is where the worst drift was.** Five §4 sections contradicted a *ruling* rather than §2:
+
+- **§4.6 still specified the time-window run-anchor fallback that R-2 deleted from the design.** R-2 removed it precisely so it "cannot be reached by accident" — §2.4 had disqualified it because it interleaves two benchmark runs onto one run record and lets run 2 read run 1's artifacts, destroying the blind-run independence the doubled-run protocol exists to measure. An implementer building §4.6 as written would have rebuilt the thing the ruling deleted, and the damage would surface as a quietly contaminated scorecard. **The most serious finding of the pass.**
+- **§4.7 never received the corrections R-5 explicitly mandated** "before any of the 7 tool cores is written" — R-5 even noted that correcting the LLD body was "a separate, not-yet-taken decision", and it stayed untaken. Now applied: no `outputs` object, self-invoking IIFE with the required trailing `(inputs)`, `rhino.global` scope, `input_schema` as an ARRAY (a JSON-Schema object causes a silent never-terminating stall — the most expensive Phase 0 defect), and R-9's absent-input tolerance. Plus a **new integration hazard**: §4.7's `bare string → {value: s}` rule silently breaks the tool cores, which do their own tolerant parsing — `PaToolAgentTrace` maps a bare sys_id to `{execution:…}`, so wrapping it as `{value:…}` produces args with neither key and the tool falls back to the pick-list, discarding the caller's request. It would have shipped as a Task 9 integration bug with no error anywhere.
+- **§4.3 omitted R-10 entirely** — no payload source and, more importantly, none of the mandatory explicit degradation. R-10 called this "a real capability limit on 1 of the 7 Phase 1a tools" that "must be specified rather than discovered at demo time"; §4.3 was the place to specify it and did not.
+- **§4.4 asserted it was "unchanged by instance research (`sys_dictionary`/`sys_choice`/`syslog` are standard)".** False for `syslog`, and measured false: `/scope_probe/reads` returns 14 readable / 1 denied, the denial being `syslog` (re-confirmed 2026-07-30). R-12 requires a resolved access path before `PaToolLogAnalysis` is written, and P4a found no custom `x_*` precedent among the 79 existing privilege rows.
+- **§4.2's access-alignment check carried a wrong guess and an impossible requirement.** §8 item 9 closed the storage question — `sys_agent_access_role_configuration`, polymorphic, plus `sys_agent_access_role_mapping` — and also established that **no structural field distinguishes "User Access" from "Data Access"**; the split is conventional, carried in free-text `description`. §4.2 asked for two clean role sets, which cannot be produced. It now emits the roles with their descriptions and states that the split is heuristic.
+
+**Also corrected:** four stale `⚠ VERIFY` markers on questions §8 had already closed (`sn_aia_tool.type` choices; `execution_mode` = `autopilot`/`copilot`; the prompt/response payload location, where the "likely in metadata documents" guess was **wrong** — it is `sys_generative_ai_log.prompt`/`.response`); §4.2's instructions section reading only the **usecase** `context_processing_script` when the field exists on both and R-16's live specimen threw in the **agent's** copy; and §2.2's use-case activation question, now answered — activation is carried on `sn_aia_trigger_configuration.active` and `sn_aia_trigger_agent_usecase_m2m.active`.
+
+**Change:** 14 corrections applied across §2.2, §2.3 and §4.2–§4.7, each marked ⚠ with the ruling that forced it. **Standing rule, widened from R-17:** §4.x is downstream of §2.x *and of §8 and every R-ruling*. A closure recorded in §8 or a ruling that names a §4 section is not complete until that section is edited — "recorded in DESIGN.md" is not the same as "in the spec the next session builds from". R-5 sat unapplied for exactly this reason.
+
+**R-18a — Two of R-18's own corrections were defective, and one reproduced the exact failure R-18 was written to prevent. (2026-07-30)**
+
+**Found:** review of the R-18 pass caught two defects introduced *by that pass*, both in §4.2:
+
+1. **The `sn_aia_trigger_agent_usecase_m2m` traversal was inverted.** R-18 correctly established that the table has no `agent`/`usecase` columns, then told implementers to *"query it by `trigger_configuration`"*. `PaToolAgentConfig` starts from an **agent** and has no trigger sys_id at that point — and keying on `trigger_configuration` also skips the agent-direct rows. Verified live: the working key is `related_resource_record` + `related_resource_table`, and **two** branches must be walked — agent-direct, and the team chain (`sn_aia_team_member.agent` → `.team` → `sn_aia_usecase.team` → usecase sys_ids). Branch 2 holds most rows (5 of 6 sampled), so walking only branch 1 reports a wired agent as unwired.
+2. **The access-alignment check contradicted itself.** R-18 established that User Access and Data Access cannot be separated structurally and had the tool emit one combined set — but left the original trailing requirement *"Both lists must independently cover the invoking user's role"* in place. Both cannot be true. Corrected by separating the two claims: the **platform** does enforce two gates and the invoking role must satisfy both; the **tool** cannot attribute a role row to a gate and must say so, rather than reporting "both lists check out".
+
+**Why this is recorded rather than quietly fixed.** Defect 1 is the **R-6 blank-not-error failure** — a query against the wrong key returning rows-with-blanks instead of an error — which is the precise failure mode R-18's §4.2 correction existed to remove. The corrected text would have caused it in a different way. Two lessons, both cheap to state and expensive to relearn:
+
+- **A documentation correction is untested code.** R-18's field-existence claims were verified against `sys_dictionary` and all held; its *traversal* claim was reasoned, not executed, and was wrong. Verifying that a column exists is not verifying that a query starting from the tool's actual entry point returns anything. R-18a's traversal was executed against live rows before being written.
+- **Removing a wrong requirement is a two-part edit.** Defect 2 came from replacing a premise while leaving the sentence that depended on it. When a correction invalidates a claim, every downstream sentence in that block has to be re-read — the contradiction sat two lines below the fix.
+
+**Change:** §4.2's overview traversal and access-alignment check corrected, each carrying the verified query shape. **Standing rule:** any §4.x correction that specifies a *query* must be executed against live rows from the tool's real entry point before it is written down — field-existence checks do not cover it.
+
+**R-18b — Four more corrections, and the failure mode is now named: a correction placed BESIDE a wrong sentence does not correct it. (2026-07-30)**
+
+**Found (all four confirmed against the documents and the shipped code):**
+
+1. **§4's authoritative contract forbade what §4.7 required.** The §4 preamble read `execute(args: Object)` — *"pure objects in/out, **no strings**"*. R-18's §4.7 Note 4 requires the adapter to pass bare strings straight through, because the cores normalise them (`PaToolAgentTrace` maps a bare sys_id to `{execution:…}`). A contract line and a note two sections apart said opposite things, and **the contract is the higher-altitude statement** — an adapter author would follow it and wrap, producing args with neither key and a silent fall-through to no-argument behaviour. Corrected to `Object | String` with the pass-through rule stated at contract level, and the §4.7 pseudocode's `// object contract` comment fixed to match. This is the one a reader was most likely to act on, and it survived three rounds precisely because both halves looked correct in isolation.
+2. **§2.1 still prescribed the broken dot-walk as its primary sentence.** R-15 appended a ⚠ correction *below* the bullet while leaving *"dot-walk `tool.tool.name` for the tool, `tool.agent.name` for the agent"* intact as the first thing anyone reads. Now removed from the sentence itself.
+3. **`IMPLEMENTATION_PLAN.md` Task 9 never received the bare-string rule.** It still said "tolerant — accept bare values for single-arg tools", which is the ambiguity that produced the `{value: …}` wrapper in the first place. Task 9 is what the next session builds from.
+4. **§4.1 step 1 never received the reference normaliser.** §2.1 documents that reference fields carry the literal string `"undefined"`; the algorithm step that builds the header did not mention it. The shipped code does normalise (`_refValue`), so this was doc-only — but §4.1 is the spec a reimplementation would follow.
+
+**Two further gaps found by sweeping for the same patterns rather than waiting for another round:** §2.2 never listed `sys_agent_access_role_configuration` / `sys_agent_access_role_mapping`, despite §4.2 being required to read them — the data-model section omitted a source its own consumer uses. And reference normalisation was stated only in §4.1 step 1, when it applies to every core, so it moved up to the §4 preamble.
+
+**The named failure mode.** Findings 2 and 4, plus R-18a's access-check contradiction, are one pattern appearing for the third time:
+
+> **A correction appended beside a wrong sentence does not correct it.** Readers stop at the first sentence; `grep` finds the ⚠ note while a human reads the original. Every one of these was *technically documented* and *practically wrong.*
+
+**Standing rule, added to R-17/R-18:** a correction must **replace** the text it invalidates, not sit below it. Appending is acceptable only for provenance — the evidence and ruling reference — after the wrong claim itself is gone.
+
+**Second rule, from finding 1:** contract statements outrank notes. When a ruling changes behaviour that a **contract line** describes (§4's `execute()` signature, §4.7's adapter pseudocode, the Design Rules table in `IMPLEMENTATION_PLAN.md`), the contract must be edited. A note that contradicts a contract loses, however clearly it is written and however close it sits.
+
+**Assessment of the four rounds, stated plainly.** Every finding across rounds 2–4 has been in *prose*, not code: the shipped tool already did the right thing in all four cases here, because it was written against live rows. The defect rate in reasoned prose corrections has been materially worse than in executed ones — which is what R-18a's rule addressed for queries, and what these two rules address for placement and altitude.
+
+**R-18c — §5–§7 swept: 11 corrections, two more unapplied rulings, and the scope of the audit was underestimated for the third time. (2026-07-31)**
+
+**Found (2 flagged by review, 9 by sweeping the rest of the unswept surface):**
+
+| § | Was | Now |
+|---|---|---|
+| **5 heading** | *"created via Foundry automation, **NOT SDK**"* | **Fluent `AiAgent`** — R-13 reversed this and CLAUDE.md forbids the old path |
+| 5 rows 9–15 | `execution_mode`=`unsupervised/auto` ⚠VERIFY | **`autopilot`** — neither old value is in the choice list |
+| 5 row 17 | "no custom `context_processing_script` — keep ours empty" | **explicitly clear it after creation and verify** (R-7) |
+| 5 row 18 | trigger, `active`=true | **deferred** — conflicts with Task 10 + Build Rule #31 |
+| 5 row 19 | "trigger↔usecase↔agent" | polymorphic `related_resource_table`/`_record` |
+| 6 status | "nothing here is built yet" | app installed on gpinst01; `PaToolAgentTrace` ships |
+| 6 table | Agent Doctor via "Foundry automation" | **SDK / Fluent** (R-13) |
+| 6 table | seed agents via "Foundry automation" | **UNDECIDED** — Task 11 records it as open |
+| 6 layout | `src/instance/**` + `src/agent-doctor/**` | the real tree; tests in `test/` (R-13, R-14) |
+| 6 deploy | keynexus01 | **gpinst01** — keynexus01 has no auth entry |
+| 7 | "Benchmark Implementation **on keynexus01**" | gpinst01 primary, with the R-16 specimen; keynexus01 blocked on auth and its plugin state unverified |
+
+**Two more rulings found unapplied.** R-7 mandated that §5's `context_processing_script` cell "must be restated"; R-13 moved Agent Doctor to Fluent and §5's heading plus §6's table still instructed the opposite. Both had been *recorded* and neither *applied* — the same failure as R-5/§4.7 in R-18. **That is three unapplied rulings across three sweeps**, which makes it a process defect, not three oversights.
+
+**The §5 heading is the most serious single item in five rounds.** It did not merely contradict a ruling — it instructed a build path CLAUDE.md explicitly forbids (*"SDK owns creation"*), in the heading of the section describing the product's central artifact. Anyone building §5 as written would have created Agent Doctor via MCP record automation, exactly what R-13 was written to prevent.
+
+**Scope underestimated, third time.** R-17 framed the problem as §2→§4. R-18 found the real upstreams also included §8 and the rulings. R-18c finds that §4 was never the only *downstream* either: **§5 (record set), §6 (build approach) and §7 (benchmark) all consume §2 and the rulings the same way**, and none had been swept. Each time the fix was correct and the boundary was drawn too tightly. The boundary is now the whole document: §2–§7 have all been swept, and §8 is the ruling ledger itself.
+
+**Change:** 11 corrections across §5–§7. **Standing rule, the one that would have prevented all three unapplied rulings:** a ruling whose **Change** clause names a document section is a **work item, not a record**. It is not discharged until that section is edited, and the ruling should say so explicitly. "Recorded in DESIGN.md" has now failed three times as a substitute for "changed in the spec the next session builds from" (R-18) — and the failure repeated *after* that rule was written, because nothing checked the back-catalogue of rulings for undischarged Change clauses. Before the next tool core, every R-ruling's Change clause should be walked once and confirmed applied.
+
 ---
 
 *Next steps agreed in spar: fold changes 2.1–2.4 into `docs/IMPLEMENTATION_PLAN.md` (new collector task; scorecard field; anchor keying rule) and `docs/LOW_LEVEL_DESIGN.md` (§4.6 anchor spec, §7 protocol, §8 items). Drift review after Phase 1a build compares the built system to this record.*

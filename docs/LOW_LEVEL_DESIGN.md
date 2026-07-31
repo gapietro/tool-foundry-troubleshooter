@@ -32,7 +32,9 @@
 ```
 sn_aia_execution_plan ──┬─< sn_aia_execution_task   (parent ⇒ task tree, order ⇒ sequence)
   │                     ├─< sn_aia_tools_execution   (tool ⇒ sn_aia_agent_tool_m2m ⇒ sn_aia_tool)
-  │                     └─< sn_aia_message           (message_sequence ⇒ stream order)
+  │                     └─< sn_aia_message           (sys_created_on ⇒ stream order;
+  │                                                    message_sequence is EMPTY on many
+  │                                                    rows — see R-15 item 6)
   ├── usecase  → sn_aia_usecase
   ├── agent    → sn_aia_agent        (often EMPTY on observed rows — resolve via usecase too)
   ├── conversation → sys_cs_conversation
@@ -49,38 +51,49 @@ sn_aia_execution_plan ──┬─< sn_aia_execution_task   (parent ⇒ task tre
 - Observed failure signature: terminated run = agent task `success` → Orchestrator `cancelled` → child "AIA ReAct Engine" stuck `ongoing`
 
 **`sn_aia_tools_execution`** (per tool call):
-- `execution_plan_id`, `tool` → **`sn_aia_agent_tool_m2m`** (NOT directly to `sn_aia_tool` — dot-walk `tool.tool.name` for the tool, `tool.agent.name` for the agent), `request` (json), `response` (json), `error_message`, `execution_status`, `execution_mode`, `run_as_user`, `execution_time_ms`
+- `execution_plan_id`, `tool` → **`sn_aia_agent_tool_m2m`** (NOT directly to `sn_aia_tool`) — ⚠ **but `tool` is EMPTY on every real row, so the `tool.tool.name` / `tool.agent.name` dot-walk this bullet used to prescribe returns nothing; resolve the binding as described in the note below**, then read the m2m's display values for the tool and agent names. Also: `request` (json), `response` (json), `error_message`, `execution_status`, `execution_mode`, `run_as_user`, `execution_time_ms`
+- ⚠ **Corrected 2026-07-30 (DESIGN.md R-15) against real rows on gpinst01:** the join field is **`execution_plan_id`** and there is **no `execution_plan` field** — confirmed by exclusion, closing the E3 check R-1 left open. And **`tool` is EMPTY on every real row**: the binding sys_id is carried inside the `request` JSON as **`toolM2mId`**. A reader that trusts `tool` reports a null tool name for every call, which reads as "no tools were called" rather than "wrong field". Read `tool` first, then fall back to `request.toolM2mId`.
+
+**Reference fields carry the literal string `"undefined"`** (DESIGN.md R-15 item 4) — observed in `sn_aia_execution_plan.agent` on every `security_violation` plan, and in `related_task_table`. It is truthy, so a plain emptiness check treats it as a real sys_id. Normalise `''`/`null`/`'undefined'`/`'null'` to empty before using any reference.
+
+**`sys_cs_*` field names** (DESIGN.md R-15 items 5–6; these were only ever named by the K26 guidebook, never verified until now): `sys_cs_conversation` has **no `channel` field** — the NAP-vs-VA signal is spread across `conversation_type`, `device_type` and `provenance` — and no `name` (it is `title`). On `sys_cs_message` the text is **`payload`** (not `text`), the type is **`message_type`** (not `type`), and the sort key is **`sequence`**. Also: `sn_aia_message.message_sequence` is **empty** on tool-result rows — see the `sn_aia_message` entry below; it cannot lead the sort.
 
 **`sn_aia_message`** (the conversation stream):
-- `execution_plan`, `message_sequence` (sortable counter), `role` (observed: `user_profile`, `user`, `agent`), `name` (speaker label — observed: "Manager", "Orchestrator", user's name), `message`, `user_message`, `error_type`, `type`
+- `execution_plan`, `message_sequence` (counter — ⚠ **EMPTY on tool-result rows, and NOT usable as the primary sort key**: empty sorts first, which puts tool results ahead of the user's opening message. Order by `sys_created_on`, then `message_sequence`, then `sys_id`. DESIGN.md R-15 item 6), `role` (observed: `user_profile`, `user`, `agent`), `name` (speaker label — observed: "Manager", "Orchestrator", user's name), `message`, `user_message`, `error_type`, `type`
 - **Error-mining heuristic (verified):** agent-role `message` values that parse as JSON with `fileName`/`sourceName`/`lineNumber` are server-script stack errors — extract as root-cause evidence
 
 ### 2.2 Configuration side (read by PaToolAgentConfig)
 
 **`sn_aia_agent`** (extends `sys_metadata`): `name`, `internal_name`, `description`*, `role`, `instructions`, `proficiency`, `inputs`/`outputs` (translated_text), `strategy` → `sn_aia_strategy`, `channel` (`nap` | `nap_and_va`), `agent_type` (`internal` | `external`), `advanced_mode`, `context_processing_script`, `applicability_script`, `condition`, `compiled_handbook`
 
-**`sn_aia_tool`** (extends `sys_metadata`): `name`*, `description`* (the LLM's tool-selection signal), `type` (observed in data: `script`; schema also supports flow/action/other — ⚠ VERIFY full choice list), `script`, `input_schema` (json) — **verified live format:**
+**`sn_aia_tool`** (extends `sys_metadata`): `name`*, `description`* (the LLM's tool-selection signal), `type` (⚠ **CLOSED** — §8 item 1: 14 active choices; the script one is stored value `script`, label "Script"), `script`, `input_schema` (json) — **verified live format:**
 ```json
 [{"name": "execution_asset", "description": "Execution Asset", "mandatory": false}]
 ```
 `active`, `target_document_table`/`target_document`, `record_type`
 
-**`sn_aia_agent_tool_m2m`** (the attachment — where runtime behavior lives): `agent`*, `tool`*, `name`*, `active`, **`execution_mode`** (⚠ VERIFY choices — expected supervised vs. auto; this is the confirmation-gate flag), `max_auto_executions`, `timeout`, `inputs` (json), `output_transformation_strategy`, `display_output`, `pre_message`/`post_message`, `post_processing_script`, `tool_attributes`
+**`sn_aia_agent_tool_m2m`** (the attachment — where runtime behavior lives): `agent`*, `tool`*, `name`*, `active`, **`execution_mode`** (⚠ **CLOSED** — §8 item 1: exactly 2 active choices, stored `autopilot` = label "Autonomous" and `copilot` = label "Supervised". This is the confirmation-gate flag; unsupervised script-tool execution is available), `max_auto_executions`, `timeout`, `inputs` (json), `output_transformation_strategy`, `display_output`, `pre_message`/`post_message`, `post_processing_script`, `tool_attributes`
 
 **`sn_aia_usecase`**: `name`*, `internal_name`, `description`*, `team` → `sn_aia_team`, `strategy`, `base_plan`, `execution_mode` ("tools override"), `context_processing_script` (⚠ observed live as an actual failure source), `applicability_script`, `condition`
-— No `active` field. ⚠ VERIFY: activation is surfaced elsewhere (likely `sn_aia_trigger_configuration.active` and/or `sn_aia_usecase_config_override`); the MCP lists all 17 as "[Inactive]".
+— No `active` field. ⚠ **ANSWERED 2026-07-30 (R-18)**: activation is carried on the trigger side — `sn_aia_trigger_configuration.active` **and** `sn_aia_trigger_agent_usecase_m2m.active` (live rows on gpinst01 show both `true` and `false`). A use case is "inactive" when its trigger wiring is inactive, which is why the MCP lists them that way.
 
 **`sn_aia_trigger_configuration`** (extends `sys_metadata`): `usecase`, `active`, `condition`*, `target_table`*, `objective_template`*, `channel`* → `sys_cs_channel`, `trigger_strategy`, `run_as`/`run_as_user`/`run_as_script`, `business_rule` → `sys_script`, `trigger_flow` → `sys_hub_flow`, schedule fields (`run_period`, `run_time`, …)
 
 **`sn_aia_strategy`** (verified records): **ReAct `f0bff21f9f13c6108f431597d90a1c74`** (type `agent` — used by ~all OOB agents; use for Agent Doctor), Hierarchical ReAct `18a2de41ff632210309fffffffffff90`; orchestrator strategies: Base/Batch/ReActive/Unified/Swarm Planner.
 
-Teams: `sn_aia_team` + `sn_aia_team_member`; agent↔usecase wiring: `sn_aia_trigger_agent_usecase_m2m`.
+Teams: `sn_aia_team` + `sn_aia_team_member`.
+
+**`sys_agent_access_role_configuration`** + **`sys_agent_access_role_mapping`** (both **Global** scope, not `sn_aia_`) — the storage behind AI Agent Studio's "Define User Access" / "Define Data Access" panels, and an input to §4.2's access-alignment check. Added 2026-07-30 (R-18b): §8 item 9 closed this and §4.2 was updated, but §2.2 never listed the tables, so the data model omitted a source its own consumer reads. `sys_agent_access_role_configuration` is keyed **polymorphically** by `agent` (document_id) + `agent_table` (table_name) — same shape as the trigger m2m below — with the per-role breakout in `sys_agent_access_role_mapping` and a parallel path via `sys_agent_access_permission_set_configuration`. ⚠ **No structural field distinguishes User Access from Data Access**; the split is conventional, carried in free-text `description` (see §4.2 for what the tool may therefore claim).
+
+**`sn_aia_trigger_agent_usecase_m2m`** — ⚠ **the name is misleading; corrected 2026-07-30 against live rows (R-18).** It is **not** an agent↔usecase m2m and has **no `agent` and no `usecase` column**. Its real shape is a trigger-to-resource link, **polymorphic** in the same style as `sys_agent_access_role_configuration`: `trigger_configuration` → `sn_aia_trigger_configuration`, plus `related_resource_table` (table_name) + `related_resource_record` (document_id), plus `active`, `objective_template`, `sys_overrides`, `sys_domain`. On gpinst01 `related_resource_table` holds **either** `sn_aia_usecase` **or** `sn_aia_agent`. Code that looks for `agent`/`usecase` columns gets blanks, not an error (R-6) — filter on `related_resource_table` and read `related_resource_record`.
 
 ### 2.3 GenAI stack side (read by PaToolGenAiLog)
 
 **`sys_gen_ai_usage_log`** (global scope; assist consumption): `assists`, `trial_assists`, `status`, `execution_type`, `strategy`*, `feature` → `sys_gen_ai_feature_mapping`, `skill_config_id` → `sn_nowassist_skill_config`, `user`, `caller_scope`/`source_scope`, `document_table`/`document`
 
-**`sys_gen_ai_log_metadata`** (global; per-LLM-call detail — prompts/tokens/errors): `model_name`, `model_version`, `prompt_token_count`, `response_token_count`, `time_taken`, `started_at`/`completed_at`, `status`, `error`, `error_code`, `caller`, `definition`* → `sys_one_extend_capability_definition`, `skill_config_id`, `gen_ai_log_id` → `sys_generative_ai_log`, `conversation`, `output_metadata`, `metadata_documents` → `sys_gen_ai_metadata_document` (⚠ VERIFY: full prompt/response payload location — likely in metadata documents; table may be ACL-restricted to admin)
+**`sys_gen_ai_log_metadata`** (global; per-LLM-call detail — prompts/tokens/errors): `model_name`, `model_version`, `prompt_token_count`, `response_token_count`, `time_taken`, `started_at`/`completed_at`, `status`, `error`, `error_code`, `caller`, `definition`* → `sys_one_extend_capability_definition`, `skill_config_id`, `gen_ai_log_id` → `sys_generative_ai_log`, `conversation`, `output_metadata`, `metadata_documents` → `sys_gen_ai_metadata_document` (⚠ **CLOSED — the guess was wrong.** Per §8 item 3 and **R-10**, the prompt/response payload is **not** in the metadata documents: it lives in **`sys_generative_ai_log.prompt` / `.response`**, reached via `gen_ai_log_id`. `sys_gen_ai_log_metadata` carries **no** `prompt` or `response` column — verified against `sys_dictionary` 2026-07-30.)
+
+**`sys_generative_ai_log`** (global; the payload table) — verified 2026-07-30: it duplicates almost the whole metadata field set (`model_name`, `model_version`, `prompt_token_count`, `response_token_count`, `time_taken`, `started_at`/`completed_at`, `status`, `error`, `error_code`, `caller`, `definition`, `skill_config_id`, `conversation`, `output_metadata`, `metadata_documents`) **and adds `prompt` + `response`**. So the two-table hop is needed only for the payload — and only that hop is role-gated (R-10: read is `sn_na_analytics.ai_engmt_viewer` / `maint` / `admin`; a customer's `sn_aia.admin` cannot read it).
 
 **Linkage from an execution to its LLM calls (two paths, both verified as tables):**
 1. `sn_aia_execution_plan.gen_ai_usage_log` → usage row (aggregate assists)
@@ -175,39 +188,52 @@ Artifacts = **attachments on this record** (`GlideSysAttachment`), named `artifa
 ## 4. Component Specifications
 
 All tool cores are Script Includes with one contract:
-`execute(args: Object) → {success: true, data: Object} | {success: false, error: String}` — pure objects in/out, no strings, no harness knowledge. All reads `GlideRecordSecure`.
+`execute(args: Object | String) → {success: true, data: Object} | {success: false, error: String}` — structured objects **out**, no harness knowledge. All reads `GlideRecordSecure`.
+
+⚠ **Every core normalises reference values before using them (R-15 item 4).** Real rows carry the literal string `"undefined"` in reference fields, which is truthy — treat `''`, `null`, `"undefined"` and `"null"` alike as empty, and emit the raw value alongside the normalised one. Stated here rather than per-tool because it applies to every core that reads a reference.
+
+⚠ **The input side accepts a raw String as well as an Object, and this is load-bearing (R-18b).** This line previously read `execute(args: Object)` … "pure objects in/out, no strings", which directly forbids what §4.7 Note 4 requires. Each core does its own tolerant normalisation — `PaToolAgentTrace` accepts an Object, a JSON string (the native script-tool runtime shape — complex inputs arrive serialised), a bare 32-char hex sys_id, a bare name, or nothing at all (**R-9**). **The adapter must pass bare strings through unchanged**; pre-wrapping them as `{value: …}` produces an args object the core cannot interpret, and it silently falls back to its no-argument behaviour instead of erroring. Output remains strictly structured.
 
 ### 4.1 PaToolAgentTrace *(core tool — owns §2.1 mapping with 4.2)*
 
 **Args:** `{execution?: sys_id, agent?: name|sys_id, since?: minutes, step?: task_sys_id, detail?: bool}`
 
-**Resolution:** `execution` given → load plan directly. `agent`+`since` → resolve name against BOTH `sn_aia_agent.name` and `sn_aia_usecase.name` (observed: plan.agent is often empty; usecase is the reliable anchor), then query plans `usecase=X^ORagent=X`, `sys_created_on` desc, return pick-list if >1.
+**Resolution:** `execution` given → load plan directly. `agent` given (⚠ `since` is **optional**, not required — R-9: no argument is mandatory) → resolve the name against BOTH `sn_aia_agent` and `sn_aia_usecase` on `name`, `internal_name` and `sys_id` (observed: plan.agent is often empty, or the literal string `"undefined"` — the usecase is the reliable anchor), then query plans `usecase IN (…)^ORagent IN (…)` ordered `sys_created_on` desc **at the database** (⚠ ordering applied after `setLimit` sorts an arbitrary page and mislabels it as the most recent — R-17), return the pick-list if >1 **and trace the newest**, so one call yields usable evidence. **No arguments at all** → return the recent-plan pick-list with an explanatory note; that is a valid answer, not an error (R-9).
 
 **Summary algorithm:**
-1. Plan header: state, state_reason, status, objective, run_type, execution_mode, timings, token/latency metrics, conversation, usecase/agent names
+1. Plan header: state, state_reason, status, objective, run_type, execution_mode, timings, token/latency metrics, conversation, usecase/agent names. ⚠ **Normalise every reference field before use — `usecase`, `agent`, `team`, `conversation`, `related_task_table`/`related_task_record`** (R-15 item 4): treat `''`, `null` and the literal strings `"undefined"` / `"null"` alike as empty. Real rows carry the literal `"undefined"`, which is truthy, so an unnormalised read renders a sys_id pointing at nothing **and** suppresses the "agent is empty, use the usecase as the anchor" guidance exactly when it is needed. Emit the raw value alongside the normalised one so the reader can see which case they are in
 2. Task tree: query `sn_aia_execution_task` by `execution_plan`, order by `order`; nest via `parent`; emit {order, type, status, description, time_ms, output_digest(200 chars)}
-3. Tool calls: query `sn_aia_tools_execution` by `execution_plan_id`; emit {tool.tool.name, tool.agent.name, execution_status, error_message, time_ms, request_digest, response_digest}
-4. Messages: query `sn_aia_message` by `execution_plan`, order by `message_sequence`; emit {seq, role, name, content_digest}. If `plan.conversation` is set, also emit conversation context per the K26 guidebook (§2.5): `sys_cs_conversation` channel type (NAP vs. VA) + `sys_cs_message` digests (requestor/fulfiller/system) to show dialogue progression and where the user disconnected or got an unexpected reply
+3. Tool calls: query `sn_aia_tools_execution` by `execution_plan_id`; resolve the binding from `tool`, ⚠ **falling back to `request.toolM2mId` when `tool` is empty — which it is on every real row** (R-15 item 3, so the `tool.tool.name` / `tool.agent.name` dot-walk this step originally specified resolves to nothing and every call renders unnamed) → `sn_aia_agent_tool_m2m`, whose display values give the tool and agent names; emit {tool_name, agent_name, binding_id_source, execution_status, error_message, time_ms, request_digest, response_digest}
+4. Messages: query `sn_aia_message` by `execution_plan`, order by **`sys_created_on`, then `message_sequence`, then `sys_id`** (⚠ corrected 2026-07-30, DESIGN.md R-15 item 6 — `message_sequence` alone put tool results ahead of the user's opening message, which was created 26s earlier); emit {seq, created, role, name, content_digest}. If `plan.conversation` is set, also emit conversation context per the K26 guidebook (§2.5): `sys_cs_conversation` channel signals — ⚠ **there is no `channel` field** (R-15 item 5); the NAP-vs-VA signal is spread across `conversation_type`, `device_type` and `provenance`, so emit all three rather than presenting one as the channel — plus `sys_cs_message` digests (⚠ the text is `payload`, the type is `message_type`, ordered by `sequence`) to show dialogue progression and where the user disconnected or got an unexpected reply
 5. **Error mining:** any agent-role message whose `message` parses as JSON with `fileName`/`lineNumber` → emit as `script_errors[]` {source, line, error_name} — first-class root-cause evidence
 6. Failure signatures (attach to header as `failure_signature`):
    - state=terminated + a `cancelled` orchestrator task + `ongoing` leaf = "died mid-reasoning"
    - `state_reason=security_violation` = **ACL-trigger misalignment** (K26 Lab 1, §2.5): the trigger's run-as user failed the agent/workflow User Access or Data Access check. Emit the next-step pointer: pull `agent_config` triggers (run_as fields) + access roles and compare — the config looks correct at surface level; only the trace reveals it
    - `access_verification`-type task in non-success status = same family — cite it as the trace evidence
-7. **Latency flags** (K26 Lab 2 heuristic, §2.5): using per-task timings + plan metrics (`llm_p95_latency`, `tool_p95_latency`, `llm_token_avg`), emit `latency_flags[]`: slow `gen_ai` tasks with high prompt token counts → `instruction_bloat` (instructions reprocessed every ReAct turn); slow `tool` tasks or oversized `response` payloads → `tool_output_bloat` (scratchpad inflation compounding each turn)
+7. **Latency flags** (K26 Lab 2 heuristic, §2.5): using per-task timings + plan metrics (`llm_p95_latency`, `tool_p95_latency`, `llm_token_avg`), emit `latency_flags[]`: slow `gen_ai` tasks → `instruction_bloat` (⚠ there is **no per-task token count** on `sn_aia_execution_task` — only plan-level `llm_token_avg` exists, so tokens corroborate the call rather than trigger it — R-17) (instructions reprocessed every ReAct turn); slow `tool` tasks or oversized `response` payloads → `tool_output_bloat` (scratchpad inflation compounding each turn)
 
-**Detail mode (`step`):** full `output` / `request` / `response` for one task or tool execution, routed through PaArtifactStore. **Prompt-level detail:** via `sn_aia_gen_ai_m2m` where `source_id` = step sys_id → `sys_gen_ai_log_metadata` (⚠ admin-only ACL likely — degrade to "prompt logs unavailable, insufficient privilege").
+**Detail mode (`step`):** *(NOT YET BUILT — deferred to `IMPLEMENTATION_PLAN.md` Task 4 with PaArtifactStore; the shipped tool accepts `step` and returns an explicit `not_implemented` finding rather than ignoring it.)* Full `output` / `request` / `response` for one task or tool execution, routed through PaArtifactStore. **Prompt-level detail:** via `sn_aia_gen_ai_m2m` where `source_id` = step sys_id → `sys_gen_ai_log_metadata` (⚠ admin-only ACL likely — degrade to "prompt logs unavailable, insufficient privilege").
 
 ### 4.2 PaToolAgentConfig *(core tool)*
 
 **Args:** `{agent: name|sys_id, section?: overview|instructions|tools|triggers}`
 
 - Resolve against `sn_aia_agent` (name, internal_name, sys_id), fallback `sn_aia_usecase`
-- **overview:** agent fields (description, role digest, strategy.name, channel, agent_type) + tool count + usecase/team wiring via `sn_aia_trigger_agent_usecase_m2m` + trigger active states
-- **instructions:** full `instructions` + `role` + `proficiency` + usecase `base_plan`/`context_processing_script` SOURCE (verified failure vector — include the script body via artifact store)
-- **tools:** for each `sn_aia_agent_tool_m2m` (by agent): m2m {name, active, execution_mode, max_auto_executions, timeout, output_transformation_strategy} + tool {name, type, description, input_schema (verbatim JSON), script body via artifact store, target_document_table}
+- **overview:** agent fields (description, role digest, strategy.name, channel, agent_type) + tool count + usecase/team wiring + trigger active states.
+
+  ⚠ **Traversal direction, verified live on gpinst01 2026-07-30 (R-18a — the first version of this correction had it backwards).** This tool starts from an **agent**, so the `sn_aia_trigger_agent_usecase_m2m` lookup must be keyed on `related_resource_record`, **not** on `trigger_configuration` — you do not have a trigger sys_id at this point, and starting there also skips the agent-direct rows entirely. There are two branches and **both** must be walked, because the m2m is polymorphic (§2.2):
+
+  1. **Agent-direct:** `related_resource_record` = *agentSysId* `^related_resource_table=sn_aia_agent`
+  2. **Via the team/usecase chain:** `sn_aia_team_member` (`agent` → `sn_aia_agent`, `team` → `sn_aia_team`) → `sn_aia_usecase` where `team` = that team → then `related_resource_record` IN *(those usecase sys_ids)* `^related_resource_table=sn_aia_usecase`
+
+  Each matching row yields `trigger_configuration` → `sn_aia_trigger_configuration` for the trigger state. Report **both** the m2m's own `active` and `sn_aia_trigger_configuration.active` — either being false unwires the agent. Branch 2 is where most rows live (5 of 6 sampled), so an implementation that walks only branch 1 reports a wired agent as unwired — a blank, not an error (R-6).
+- **instructions:** full `instructions` + `role` + `proficiency` + `base_plan` + **`context_processing_script` and `applicability_script` SOURCE from BOTH `sn_aia_agent` AND `sn_aia_usecase`** (⚠ corrected — this step previously named only the usecase copy. The field exists on both, the platform **auto-populates both** whether you want it or not (**R-7**), and the live gpinst01 specimen found by the trace tool threw in the **agent's** copy, not the usecase's (**R-16**). Reading only one side misses half the failure surface. `applicability_script` matters too: auto-populated bodies end in `return false;`, which suppresses the agent silently). Include the script bodies via artifact store
+- **tools:** for each `sn_aia_agent_tool_m2m` (by agent): m2m {name, active, execution_mode (`autopilot` = Autonomous / `copilot` = Supervised — §8 item 1), max_auto_executions, timeout, output_transformation_strategy} + tool {name, type, description, input_schema (verbatim JSON), script body via artifact store, target_document_table}
   - **`tool_smells[]` (K26 Lab 3 anti-pattern checklist, §2.5)** — score each attached tool and emit findings: description missing any of the three sections (Purpose / input formats / output+error contract) or a single sentence; no negative guidance (when *not* to use); script accepts one input format with no validation/normalization or fallback; returns raw record dumps (dozens of fields) or unbounded result sets (no `setLimit`); failure path returns an empty object/string instead of a structured error with a suggested action; overlapping tools the agent must call sequentially (consolidation candidates — each extra tool multiplies selection/invocation/interpretation risk)
 - **triggers:** `sn_aia_trigger_configuration` rows for linked usecases: {name, active, condition, target_table, objective_template, channel.name, trigger_strategy, run_as fields}
-  - **Access alignment check (K26 Lab 1, §2.5):** emit the agent's and workflow's **User Access** and **Data Access** role sets (⚠ VERIFY storage — Studio's "Define User Access"/"Define Data Access" panels; expected on `sn_aia_agent`/`sn_aia_usecase` or a related role m2m) alongside the trigger's `run_as`/`run_as_user` roles, and flag any role the run-as user lacks — the automated form of the lab's manual security-violation diagnosis. Both lists must independently cover the invoking user's role.
+  - **Access alignment check (K26 Lab 1, §2.5):** emit the agent's and workflow's access role sets (⚠ **storage CLOSED, and the guess was wrong** — §8 item 9: **not** a field on `sn_aia_agent`/`sn_aia_usecase` and **not** an `sn_aia_`-prefixed m2m. It is **`sys_agent_access_role_configuration`** (Global scope), keyed **polymorphically** by `agent` (document_id) + `agent_table` (table_name), with the per-role breakout in **`sys_agent_access_role_mapping`** and a parallel path via `sys_agent_access_permission_set_configuration`. ⚠ **And the two lists cannot be separated structurally**: no field distinguishes "User Access" from "Data Access" — the distinction is conventional, carried in free-text `description`. So this check must emit the role sets **with their descriptions** and say the split is heuristic, rather than claiming two clean lists) alongside the trigger's `run_as`/`run_as_user` roles, and flag any role the run-as user lacks — the automated form of the lab's manual security-violation diagnosis.
+
+  ⚠ **What the tool may and may not claim (R-18a).** The *platform* genuinely enforces two independent gates, and the invoking user's role must satisfy **both** — that is the K26 Lab 1 semantic and it remains true. What the tool **cannot** do is say which gate a given role row belongs to, because no structural field records it. So: emit the combined role set with each row's free-text `description`, flag roles the run-as user lacks, and state that attributing a missing role to User Access versus Data Access is **heuristic and must be confirmed in Studio's panels**. The tool must not present two verified lists, and must not report "both lists check out" — it is not in a position to know that.
 
 ### 4.3 PaToolGenAiLog
 
@@ -215,12 +241,13 @@ All tool cores are Script Includes with one contract:
 
 - **usage:** `sys_gen_ai_usage_log` window → {created, status, execution_type, assists, feature.name, skill_config_id.name, caller_scope, user}
 - **llm:** `sys_gen_ai_log_metadata` window → {started_at, model_name, model_version, status, error, error_code, prompt_token_count, response_token_count, time_taken, definition.name, caller}
+- **⚠ Prompt/response payload — binding, added 2026-07-30 (this step was missing from §4.3 entirely; see R-10 and §2.3):** the payload is **not** on `sys_gen_ai_log_metadata`. Read `sys_generative_ai_log.prompt` / `.response` via `gen_ai_log_id`. That table's read ACLs grant only `sn_na_analytics.ai_engmt_viewer`, `maint` and `admin` — **a customer administrator holding `sn_aia.admin` / `sn_aia.viewer` cannot read it.** The tool MUST therefore **degrade explicitly**, returning a stated *"payload not readable under caller's roles; metadata only"* result rather than an empty or ambiguous one, and `HANDOFF.md` must carry the required grant as a customer-side prerequisite rather than a bug. This is a real capability limit on 1 of the 7 Phase 1a tools and must be specified, not discovered at demo time.
 - **for_execution:** plan.gen_ai_usage_log row + `sn_aia_gen_ai_m2m` rows where source_id IN (plan + task sys_ids) → their log_metadata summaries
-- **check_config:** `sys_one_extend_capability_definition` rows + provider mapping presence (⚠ VERIFY exact provider-mapping table — `sys_one_extend*` family — during build)
+- **check_config:** `sys_one_extend_capability_definition` rows (⚠ **CLOSED** — §8 item 6, and all five fields re-verified against `sys_dictionary` 2026-07-30: read `capability`, `name`, `api_type`, `api`, and **`connection`** — the bound provider credential alias, i.e. Bedrock / Vertex / Azure OpenAI / Now LLM. `connection` empty or unresolvable **is** the "capability not mapped to a provider" finding, which is benchmark seed 4)
 
 ### 4.4 PaToolSchemaLookup / PaToolQueryTable / PaToolLogAnalysis
 
-As specified in `IMPLEMENTATION_PLAN.md` Task 8 — unchanged by instance research (`sys_dictionary`/`sys_choice`/`syslog` are standard). One addition to SchemaLookup: `sys_db_object` existence check first, so "table does not exist" is a distinct finding from "no fields readable" (cross-scope signal).
+As specified in `IMPLEMENTATION_PLAN.md` Task 8. ⚠ **The "unchanged by instance research" claim that stood here was false for `syslog` and is withdrawn (R-18).** `sys_dictionary`, `sys_choice`, `sys_db_object` all read fine from `x_snc_troubleshoot` — but **`syslog` is DENIED from our scope**, measured, not predicted: the `/scope_probe/reads` endpoint returns 14 readable / 1 denied, and the one denial is `syslog` (re-confirmed 2026-07-30). Per **R-12** and the **R-1** discharge, a `sys_scope_privilege` Read grant for `syslog` from `x_snc_troubleshoot` must be obtained **and re-verified before `PaToolLogAnalysis` is written** — and P4a found **no custom `x_*` precedent** among the 79 existing privilege rows, so do not assume it is routine. `PaToolSchemaLookup` and `PaToolQueryTable` are unaffected. One addition to SchemaLookup: `sys_db_object` existence check first, so "table does not exist" is a distinct finding from "no fields readable" (cross-scope signal).
 
 **PaToolLogAnalysis query shape is mandatory-scoped** (K26 guidebook rule, §2.5 — an unfiltered `syslog` read can slow or time out an instance): every query MUST carry a bounded time window (default: the execution plan's start/end ± 2 min when called with an execution context; else `minutes_ago`), level ≤ Warning by default, and at least one of source-contains (scope / Script Include name) or message-contains (execution plan sys_id, error keyword). The tool refuses an unscoped query with a structured error suggesting the missing condition — mirroring the platform's own `syslog.filter` discipline.
 
@@ -232,17 +259,18 @@ As specified in `IMPLEMENTATION_PLAN.md` Task 8 — unchanged by instance resear
 
 ### 4.6 PaRunAnchor + PaAuditLogger
 
-- `PaRunAnchor.getOrCreate({harness, executionRef?, conversationId?})`: for native harness, key = the AIA conversation/execution driving the chat (available to script tools via ⚠ VERIFY — expected in tool script context or passed as tool input; fallback: one anchor per user per 30 min); creates `x_snc_troubleshoot_run` with `harness=native`, `status=running`
+- `PaRunAnchor.getOrCreate({harness, executionRef?, conversationId?})`: for native harness, key = **`_agentic_context_.conversation_id`** (⚠ **CLOSED by R-2**: a script tool receives an undocumented global `_agentic_context_` — a **JSON string**, so `JSON.parse` it — carrying `agent_id`, `conversation_id`, `usecase_id`, `execution_plan_id`. `conversation_id` was stable across all 19 calls of a conversation and matches `sn_aia_execution_plan.conversation`; `execution_plan_id` is available as a finer second key. Note `gs.getSessionID()` returns the literal `"SYSTEM"`, so anything keyed on session ID collides across conversations). ⚠ **The "one anchor per user per 30 min" fallback that stood here is DELETED, not merely discouraged** — R-2 removed time-window keying from the design entirely so it cannot be reached by accident; it interleaves two benchmark runs onto one run record and lets run 2 read run 1's artifacts, breaking the blind-run independence the doubled-run protocol exists to measure (DESIGN.md §2.4). R-2's closure is API-path-provisional: re-confirm `_agentic_context_` on the Now Assist panel path before the benchmark. Creates `x_snc_troubleshoot_run` with `harness=native`, `status=running`
 - `PaAuditLogger.logIntent/logResult/logError(params)` → `x_snc_troubleshoot_audit` insert; called by the adapter around every tool execution
 
 ### 4.7 PaScriptToolAdapter (native harness bridge)
 
 ```
 invoke(toolClassName, inputString, ctx):
-  args   = tolerantParse(inputString)   // JSON object | bare string → {value: s} | "" → {}
+  args   = tolerantParse(inputString)   // JSON object → object | "" → {}
+                                        // bare string → PASS THROUGH UNCHANGED (Note 4)
   run    = PaRunAnchor.getOrCreate({harness:"native", ...ctx})
   audit  = PaAuditLogger.logIntent(...)
-  result = new <toolClassName>().execute(args)          // object contract
+  result = new <toolClassName>().execute(args)          // Object OR String — see §4 contract
   result = PaArtifactStore.applyThreshold(run, result)  // big payloads → attachment + excerpt
   PaAuditLogger.logResult/logError(...)
   return JSON.stringify(result)          // ALWAYS a string, never throws
@@ -250,19 +278,32 @@ invoke(toolClassName, inputString, ctx):
 
 Seven thin `sn_aia_tool` (type `script`) bodies each call `invoke()` with their tool class. Input schemas use the **verified** format `[{"name","description","mandatory"}]` — one schema entry per logical arg, all strings, parsed by the adapter.
 
+**⚠ Corrections to this contract — R-5 mandated these "before any of the 7 tool cores is written" and they were never applied to this section (R-18).**
+
+1. **There is no `outputs` object.** The signature is `(function(inputs) { … return result; })(inputs);` — referencing `outputs` throws `ReferenceError: "outputs" is not defined` and terminates the run.
+2. **The tool script must be a self-invoking IIFE**, and the trailing `(inputs)` is required. Omitting it is a **runtime** error that builds and installs cleanly (SDK Build Rule #19).
+3. **Execution scope is `rhino.global`**, not the application scope — which is why the tool-core Script Includes are declared `accessibleFrom: 'public'`. `gs.getSessionID()` returns the literal `"SYSTEM"`.
+4. **Bare-string inputs: do NOT wrap them as `{value: s}`.** This section originally specified that, and it silently breaks the tool cores, which do their own tolerant parsing: `PaToolAgentTrace` maps a bare 32-char hex string to `{execution: …}` and any other bare string to `{agent: …}`. Wrapping it as `{value: …}` yields an args object with neither key, so the tool falls back to the recent-plan pick-list and the caller's actual request is silently discarded. **Pass the raw string through to `execute()`** and let the core normalise it.
+5. **`input_schema` is an ARRAY**, never a JSON-Schema object — a JSON-Schema object causes a **silent, never-terminating stall** (`In progress` forever, no error). The single most expensive defect found in Phase 0; the adapter template must enforce the array shape rather than leaving it to whoever writes the next tool.
+6. **Declared inputs may simply not arrive** (**R-9**) — the probe agent never passed a declared input in any run while its own reasoning text claimed it had. Every tool core must behave correctly with all inputs absent.
+
 ---
 
-## 5. Agent Doctor — Native Agent Record Set (created via Foundry automation, NOT SDK)
+## 5. Agent Doctor — Native Agent Record Set (built as **Fluent DSL via the SDK**)
+
+> ⚠ **This heading previously read "(created via Foundry automation, NOT SDK)" — reversed by DESIGN.md R-13 and corrected here (R-18c).** Agent Doctor is a Fluent `AiAgent` in `src/fluent/agent-doctor.now.ts`, deployed by `now-sdk build` + `now-sdk install`. Creating it via MCP/Foundry record automation is **forbidden** by CLAUDE.md's boundary — *"SDK owns creation. Agents, tools, tables, flows — defined as Fluent DSL in `src/fluent/`"* — and R-13 records that executing the old instruction would have built the product's central artifact on the wrong side of the line the project sets for itself.
+>
+> **`IMPLEMENTATION_PLAN.md` Task 10 is the authority for HOW it is built** (mandatory `securityAcl`; inline `tools[]` entries must NOT carry `$id`, Rule #32; every tool needs a non-empty `description` or the record is silently skipped at install, Rule #34; script tools are self-invoking IIFEs, Rule #19). The table below specifies WHAT the records contain.
 
 | # | Record | Table | Key values |
 |---|--------|-------|-----------|
 | 1 | Agent Doctor | `sn_aia_agent` | `name`="Agent Doctor", `agent_type`=internal, `channel`=`nap_and_va`, **`strategy`=`f0bff21f9f13c6108f431597d90a1c74` (ReAct — verified default)**, `role`/`instructions` from `agent-doctor-instructions.md` (playbook: seven-layer sweep, evidence rule, Fix Report markdown template, read_artifact usage) |
 | 2–8 | 7 tools | `sn_aia_tool` | `type`=script, descriptions written to the **K26 three-section framework** (§2.5): Purpose (incl. when NOT to use) · Understanding Tool Inputs (formats + how off-format input is handled) · Understanding Tool Outputs & Error Handling (success/empty/error shapes + what to do next); `input_schema` per §4.7; script = adapter call. The adapter already satisfies the smart-tool bar: tolerant input parsing, structured JSON out, never an empty `{}` on failure |
-| 9–15 | 7 attachments | `sn_aia_agent_tool_m2m` | `active`=true, `execution_mode`=unsupervised/auto (⚠ VERIFY choice values — all tools read-only), `output_transformation_strategy`=None (raw JSON back to the reasoning loop), `display_output`=false |
+| 9–15 | 7 attachments | `sn_aia_agent_tool_m2m` | `active`=true, **`execution_mode`=`autopilot`** (⚠ **CLOSED** — §8 item 1: the only two valid stored values are `autopilot` (label "Autonomous") and `copilot` (label "Supervised"). This cell previously read `unsupervised/auto`, **neither of which is in the choice list**; writing it would have produced attachments with an invalid value. All 7 tools are read-only, so `autopilot` is correct and is in live production use on 361 of 384 script-type attachments). Also set `max_auto_executions` deliberately rather than accepting the dictionary default of 10 — DESIGN.md §2.2 / R-4, and record both budget knobs in the benchmark scorecard. `output_transformation_strategy`=None (raw JSON back to the reasoning loop), `display_output`=false |
 | 16 | Team | `sn_aia_team` (+`sn_aia_team_member`) | "Troubleshooter" team wrapping Agent Doctor |
-| 17 | Use case | `sn_aia_usecase` | "Diagnose AI Agent failure", `team`=16, orchestrator strategy default; **no custom `context_processing_script`** (verified failure vector — keep ours empty) |
-| 18 | Trigger | `sn_aia_trigger_configuration` | `active`=true, channel=Now Assist panel, condition/objective_template minimal |
-| 19 | Wiring | `sn_aia_trigger_agent_usecase_m2m` | trigger↔usecase↔agent |
+| 17 | Use case | `sn_aia_usecase` | "Diagnose AI Agent failure", `team`=16, orchestrator strategy default. ⚠ **`context_processing_script` must be EXPLICITLY CLEARED after creation and the clearing verified — omitting the field does NOT leave it empty** (**R-7**, whose mandated restatement of this cell had never been applied). The platform auto-populates it with a default template, and auto-populates `applicability_script` too with a body ending in `return false;` — which would suppress the agent silently. This matters because it is precisely the field class the instance's known failures live in: both the keynexus01 specimen and the gpinst01 one found by `PaToolAgentTrace` (**R-16**) are `context_processing_script` throwing. "Keep ours empty" is a post-creation action, not an omission |
+| 18 | Trigger | `sn_aia_trigger_configuration` | `active`=true, channel=Now Assist panel, condition/objective_template minimal. ⚠ **Conflicts with `IMPLEMENTATION_PLAN.md` Task 10, which specifies NO `triggerConfig` — Agent Doctor is invoked conversationally, and Build Rule #31 says `triggerConfig` on a bare `AiAgent` yields a trigger whose `usecase` is null, so it never fires.** Task 10 is the authority for the Phase 1a build: rows 18–19 are **deferred**, not part of the first install. If a trigger is wanted later it belongs on an `AiAgenticWorkflow`, and note that SDK 4.9.0 deploys triggers **inactive** for manual activation |
+| 19 | Wiring | `sn_aia_trigger_agent_usecase_m2m` | ⚠ **Not a trigger↔usecase↔agent row — the table has no `agent` and no `usecase` column** (§2.2, R-18). Write `trigger_configuration` = row 18, plus the **polymorphic** pair `related_resource_table` = `sn_aia_usecase` (or `sn_aia_agent`) and `related_resource_record` = that record's sys_id, plus `active`=true. One row per resource being wired; the m2m's own `active` gates the wiring independently of `sn_aia_trigger_configuration.active` |
 
 Tool roster (names as the LLM sees them): `agent_trace`, `agent_config`, `genai_log`, `schema_lookup`, `query_table`, `log_analysis`, `read_artifact` — exactly 7, at the platform's 5–7 guidance ceiling; nothing else gets added.
 
@@ -270,25 +311,39 @@ Tool roster (names as the LLM sees them): `agent_trace`, `agent_config`, `genai_
 
 ## 6. Build Approach with the ServiceNow SDK
 
-*(SDK setup is the next work item — this section defines what gets built with it; nothing here is built yet.)*
+*(⚠ **Status corrected 2026-07-31 (R-18c) — "nothing here is built yet" is false.** The scoped app `x_snc_troubleshoot` is built and installed on gpinst01, and `PaToolAgentTrace` (§4.1, summary mode) ships with its Fluent `ScriptInclude`, Jest tests in `test/`, and a temporary `/scope_probe/trace` verification route.)*
 
 | Artifact | Built via | Rationale |
 |----------|-----------|-----------|
 | Scoped app, `x_snc_troubleshoot_run`, `x_snc_troubleshoot_audit` tables | **SDK** (Fluent table definitions) | Versioned DDL in git, repeatable install |
 | Script Includes (§4: 6 tool cores + ArtifactStore + RunAnchor + AuditLogger + ScriptToolAdapter) | **SDK** (source-controlled server scripts) | The whole point — code in repo, deployed by CLI |
 | Jest tests (adapter parse/stringify, truncation/paging, error-mining regex) | repo-local | pure-logic tests run without instance |
-| Agent Doctor record set (§5, tables in `sn_aia` scope) | **Foundry automation** (existing use-case/record APIs) | `sn_aia_*` records are another scope's data, not our app's metadata — record-creation automation, idempotent, with delete/rollback |
-| Benchmark seed agents (§7) | **Foundry automation** | same, plus deliberate breakage steps |
+| Agent Doctor record set (§5) | **SDK** — Fluent `AiAgent` in `src/fluent/agent-doctor.now.ts` | ⚠ **Corrected (R-13, R-18c): this row previously said "Foundry automation", which CLAUDE.md forbids** — SDK owns creation of agents, tools, tables and flows. See `IMPLEMENTATION_PLAN.md` Task 10 |
+| Benchmark seed agents (§7) | ⚠ **UNDECIDED** | `IMPLEMENTATION_PLAN.md` Task 11 records this as an explicit open question — Fluent gives reproducibility for the Phase 1b re-run but would ship five broken agents inside the product app; MCP keeps them out but is not reliably reproducible. Likely a **separate scoped app**. This row previously asserted "Foundry automation" as settled; it is not |
 
-Repo layout impact: `src/instance/**` (SDK-managed app source) + `src/agent-doctor/**` (record-set definitions consumed by Foundry automation) + `benchmark/**`. Deploy target: keynexus01 via the SDK CLI using the existing admin credential.
+Repo layout (⚠ **corrected — the `src/instance/**` / `src/agent-doctor/**` tree described here never existed**; R-13 established the real structure and R-14 moved the tests out of `src/`):
+
+- `src/fluent/*.now.ts` — every platform artifact: tables, Script Includes, the `AiAgent`, REST APIs
+- `src/server/**/*.js` — Script Include bodies (ES5/Rhino), referenced via `Now.include()`
+- `test/**/*.test.js` — Jest, **outside `src/`**: `now-sdk build` lints the whole source tree and a test's `require('vm')` fails the build (R-14)
+- `benchmark/**` — seeds and scorecards
+
+**Deploy target: `gpinst01`** (`now-sdk install --alias gpinst01`). ⚠ This line previously said keynexus01, which has **no `now-sdk auth` entry** and is not currently reachable; add one with `now-sdk auth --add keynexus01` before targeting it.
 
 Order of operations after SDK setup: install scoped app → run `/status`-equivalent readability check (§3 cross-scope) → create Agent Doctor records → smoke test → build seeds → benchmark.
 
 ---
 
-## 7. Benchmark Implementation on keynexus01
+## 7. Benchmark Implementation
 
-Smoke test (before any seeds): point Agent Doctor at **existing** failed execution `78f347b72f198310f824ac1bcfa4e3bd` — expected diagnosis: script failure in the SIGNAL use case's `context_processing_script` (line 61), evidenced by the agent-role error message + terminated/`execution_failed` plan state. We know the right answer; the smoke test checks the tools surface it.
+⚠ **Instance corrected 2026-07-31 (R-18c).** This section was headed "on keynexus01". That instance has **no `now-sdk auth` entry**, is not currently reachable, and its Now Assist plugin state is **unverified** — the P1 result was produced by the same `v_plugin` instrument that R-11 retracted, so it is suspect and must be re-checked with `sys_scope` before anything is claimed about it. The built app is installed on **gpinst01**, which R-11 confirmed has the product plugins active.
+
+**Smoke test (before any seeds) — two known-answer specimens, one reachable today:**
+
+- **gpinst01 (reachable):** execution `c9d63a932bda8b9417a6ffbeee91bfd0`. Expected diagnosis: `script_error` signature citing `sn_aia_agent.601672d3….context_processing_script` **line 42**, `InternalError`. Found by `PaToolAgentTrace` (**R-16**) and *invisible from the plan header* — `state=Completed`, empty `state_reason`, all 11 tasks and all 5 tool calls `Success`. It therefore tests something stronger than "did the tool read the rows": it tests whether a diagnosis that stops at the header is caught.
+- **keynexus01 (blocked on auth):** execution `78f347b72f198310f824ac1bcfa4e3bd` — script failure in the SIGNAL use case's `context_processing_script` (line 61), evidenced by the agent-role error message plus terminated/`execution_failed`. Also the only source for the silent non-terminating stall and the `ReferenceError` specimens.
+
+We know the right answer in both cases; the smoke test checks that the tools surface it.
 
 Seed construction (each = one broken agent + one captured failing execution sys_id):
 
@@ -298,7 +353,7 @@ Seed construction (each = one broken agent + one captured failing execution sys_
 | 2 — ambiguous instruction | Instructions say "assign to the right group", no lookup guidance, no group tool |
 | 3 — missing data | Instructions reference lookup table `x_snc_troubleshoot_bench_routing` (created empty) |
 | 4 — GenAI stack | ⚠ VERIFY safest construction: prefer a bogus `skill_config_id`/capability reference over breaking instance-wide provider config (shared instance — do NOT unmap real capabilities) |
-| 5 — inactive wiring | Use case + trigger created with `sn_aia_trigger_configuration.active`=false |
+| 5 — inactive wiring | Use case + trigger created with `sn_aia_trigger_configuration.active`=false. ⚠ Note there are **two** independent activation gates (§2.2, R-18): `sn_aia_trigger_configuration.active` **and** `sn_aia_trigger_agent_usecase_m2m.active`. Set one false and leave the other true, so the seed tests whether the diagnosis names the right gate rather than just "something is inactive" |
 
 Scoring per `IMPLEMENTATION_PLAN.md` Task 11–12: 2 runs/seed, blind, 6-point rubric, gate thresholds from ADR Decision 0.5.
 
@@ -306,7 +361,7 @@ Scoring per `IMPLEMENTATION_PLAN.md` Task 11–12: 2 runs/seed, blind, 6-point r
 
 | Seed | Taxonomy | Construction on instance |
 |------|----------|--------------------------|
-| 6 — ACL-trigger misalignment | T1 cold start | Trigger `active`=true but agent/workflow User Access + Data Access restricted to a role the run-as user lacks (e.g. `itil` user vs. admin-only access) → expect `state_reason=security_violation`, no surface config error. Reproduces K26 Lab 1 exactly; we already have a matching real failure on keynexus01 (§1) |
+| 6 — ACL-trigger misalignment | T1 cold start | Trigger `active`=true but agent/workflow User Access + Data Access restricted to a role the run-as user lacks (e.g. `itil` user vs. admin-only access) → expect `state_reason=security_violation`, no surface config error. Reproduces K26 Lab 1 exactly; matching real failures exist on **both** instances — keynexus01 (§1) and gpinst01, where `PaToolAgentTrace` returned the `acl_trigger_misalignment` signature against live `state_reason=security_violation` plans (e.g. `0117b4142b600fd017a6ffbeee91bf32`) |
 | 7 — instruction bloat latency | T4 high latency | Agent with deliberately oversized instructions (inline decision trees, hardcoded error-code maps, example conversations) + a search tool returning raw unfiltered chunks → expect `latency_flags[]` diagnosis: instruction_bloat + tool_output_bloat, fix = offload logic to a Skill / synthesize tool output |
 | 8 — infinite loop | T6 loops | Agent with no completion criteria and directives conflicting with its workflow, or a trigger whose condition matches records the agent itself updates (recursive firing) → expect wiring/instruction diagnosis; guarded by `sn_aia.continuous_tool_execution_limit` and the 5-runs-per-15-min recursion limit so the shared instance is safe |
 
