@@ -107,6 +107,23 @@
 
 ## Task 4: PaArtifactStore — Large Output Handling (Harness-Agnostic)
 
+**DONE — PR #17 / issue #16, merged 2026-07-31 (version `2026.07.3107`).** Shipped as
+`src/server/PaArtifactStore.js` + `test/PaArtifactStore.test.js` (42 tests) + the `ScriptInclude`
+declaration. **The hard blocker on the vertical slice is cleared:** 35,000 chars stored as an
+attachment and paged back **byte-identical** in nine 4KB reads from scope `x_snc_troubleshoot`,
+live on gpinst01 — which also closes LLD §4.5's `⚠ VERIFY` on the scoped attachment surface.
+
+Three things to carry forward rather than rediscover:
+- `read()` refuses any attachment outside `x_snc_troubleshoot_run`. It becomes the LLM-callable
+  `read_artifact` taking a caller-supplied sys_id, so without the check it is a generic "read any
+  attachment on the instance" primitive. Verified live against a real foreign attachment.
+- A failed store degrades to the excerpt with a named reason and **no paging affordances at all**
+  (`artifact_id`, `pages` and `page_size` all null) — never a fallback to the full payload. The
+  first cut emitted a phantom page count next to a null `artifact_id`; review caught it.
+- **Build Rule #43** (new): a `\n` inside a Fluent `` script`…` `` template literal is consumed by
+  TypeScript and leaves the generated script's string constant unterminated. Builds clean,
+  installs clean, fails only on invocation, at a line number that does not match the source.
+
 **Files:**
 - Create: `src/server/PaArtifactStore.js` — the Rhino body
 - Create: `src/fluent/script-includes.now.ts` — the Fluent `ScriptInclude` declaring it (`script: Now.include('../server/PaArtifactStore.js')`). **Every Script Include in Tasks 4–9 gets a declaration here; a `.js` file alone deploys nothing.** One file for all of them keeps the `$id` set in one place
