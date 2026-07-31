@@ -45,6 +45,14 @@ declare global {
                         table: 'sys_script_include'
                         id: 'fb2d4b7e7c794f8b956cc1a8eb3871f6'
                     }
+                    'pa-audit-logger': {
+                        table: 'sys_script_include'
+                        id: '2fc5b74bb9f4425b846022e1572ed294'
+                    }
+                    'pa-run-anchor': {
+                        table: 'sys_script_include'
+                        id: '442109ddbf1c459d919c2b04ffa9e71f'
+                    }
                     'pa-tool-agent-trace': {
                         table: 'sys_script_include'
                         id: 'e460c4021e4b44dcaf92570057d5a360'
@@ -52,6 +60,10 @@ declare global {
                     package_json: {
                         table: 'sys_module'
                         id: '296e46a72ad14ef5a7f123411966e86e'
+                    }
+                    'scope-probe-anchor-selftest': {
+                        table: 'sys_ws_operation'
+                        id: '89ad8ce31da841608b1514bc1644b3a7'
                     }
                     'scope-probe-api': {
                         table: 'sys_ws_definition'
@@ -76,6 +88,14 @@ declare global {
                     src_server_PaArtifactStore_js: {
                         table: 'sys_module'
                         id: 'c3643d5da7cd404581a5fc2116ee5661'
+                    }
+                    src_server_PaAuditLogger_js: {
+                        table: 'sys_module'
+                        id: 'c858e2de4e114366a52544c1f671af59'
+                    }
+                    src_server_PaRunAnchor_js: {
+                        table: 'sys_module'
+                        id: 'bb0b6de06e71450e9fbeec1f74f4fa3f'
                     }
                     src_server_script_ts: {
                         table: 'sys_module'
@@ -537,6 +557,15 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_documentation'
+                        id: '8f0b2570c0b54f74af0c194bd2ec4e87'
+                        key: {
+                            name: 'x_snc_troubleshoot_run'
+                            element: 'conversation_ref'
+                            language: 'en'
+                        }
+                    },
+                    {
                         table: 'sys_choice'
                         id: '8f969afae83946029a0d4359176869d5'
                         key: {
@@ -743,6 +772,14 @@ declare global {
                         key: {
                             name: 'x_snc_troubleshoot_run'
                             element: 'context_summary'
+                        }
+                    },
+                    {
+                        table: 'sys_dictionary'
+                        id: 'ead6c0650cdc47a8be5306011ecc031d'
+                        key: {
+                            name: 'x_snc_troubleshoot_run'
+                            element: 'conversation_ref'
                         }
                     },
                     {

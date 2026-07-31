@@ -162,6 +162,7 @@ Other design docs (`PRD_ServiceNow_Platform_Assistant.md`, `ARCHITECTURE_DECISIO
 | harness | choice: `native` \| `custom` | which harness drove this run |
 | agent | reference → sn_aia_agent | agent under diagnosis (nullable) |
 | execution_ref | string (sys_id) | sn_aia_execution_plan under diagnosis |
+| conversation_ref | string (sys_id) | ⚠ **ADDED at Task 5 (issue #20), not in the original §3.1.** The anchor key. §4.6 keys `PaRunAnchor` on `_agentic_context_.conversation_id` and this list had nowhere to store it, so `getOrCreate` could only ever **create, never get** — every tool call in one conversation would have opened its own run. `execution_ref` cannot double as the key: it holds the plan *under diagnosis*, the record being looked at, not the conversation doing the looking |
 | mode | choice: `diagnose` \| `collect` | collect = Evidence Bundle |
 | status | choice: `queued` \| `running` \| `awaiting_confirmation` \| `complete` \| `failed` | native runs go straight to `running` |
 | transcript | string (JSON, large) | array of {seq, actor, tool, args_digest, result_digest, artifact_id?, ts} |
@@ -264,6 +265,54 @@ As specified in `IMPLEMENTATION_PLAN.md` Task 8. ⚠ **The "unchanged by instanc
 
 - `PaRunAnchor.getOrCreate({harness, executionRef?, conversationId?})`: for native harness, key = **`_agentic_context_.conversation_id`** (⚠ **CLOSED by R-2**: a script tool receives an undocumented global `_agentic_context_` — a **JSON string**, so `JSON.parse` it — carrying `agent_id`, `conversation_id`, `usecase_id`, `execution_plan_id`. `conversation_id` was stable across all 19 calls of a conversation and matches `sn_aia_execution_plan.conversation`; `execution_plan_id` is available as a finer second key. Note `gs.getSessionID()` returns the literal `"SYSTEM"`, so anything keyed on session ID collides across conversations). ⚠ **The "one anchor per user per 30 min" fallback that stood here is DELETED, not merely discouraged** — R-2 removed time-window keying from the design entirely so it cannot be reached by accident; it interleaves two benchmark runs onto one run record and lets run 2 read run 1's artifacts, breaking the blind-run independence the doubled-run protocol exists to measure (DESIGN.md §2.4). R-2's closure is API-path-provisional: re-confirm `_agentic_context_` on the Now Assist panel path before the benchmark. Creates `x_snc_troubleshoot_run` with `harness=native`, `status=running`
 - `PaAuditLogger.logIntent/logResult/logError(params)` → `x_snc_troubleshoot_audit` insert; called by the adapter around every tool execution
+
+✅ **BUILT AND VERIFIED on gpinst01 (issue #20 / PR #21, 2026-07-31).** Four points where the shipped
+component is more specific than the text above, all of them decisions rather than details:
+
+1. **The key needed a column.** See the `conversation_ref` row in §3.1 — added at this task, because
+   without it the "get" half of `getOrCreate` had nothing to query on.
+2. **No key at all is a third case, and it isolates.** R-2 deleted time-window keying entirely, so a
+   call with neither a conversation id nor an execution ref has nothing to resolve on. It gets a
+   **fresh run used for that call alone**, flagged `keyed: false` with a stated reason. Two unkeyed
+   calls never share a record. This is the structural enforcement of R-2 rather than a comment
+   asking future implementers to remember it — verified live, two distinct run ids.
+3. **Concurrency converges after the insert, not before it.** R-3 measured up to 4 tool calls in one
+   timestamp batch, all racing. No atomic upsert exists here, so `getOrCreate` inserts, then
+   re-resolves the key and adopts the deterministic winner (oldest `sys_created_on`, `sys_id` as
+   tie-break — ties are the *normal* case, a batch lands inside one second). Losers' rows are left
+   in place; deleting a record another thread may be mid-write on would be the worse bug.
+4. **`PaAuditLogger` is total.** It sits in the hot path of every tool call, so every method returns
+   a result object for any input including none, and never propagates a throw — a diagnosis that
+   died because its own audit logging threw is strictly worse than one with a gap in its trail. A
+   missing run anchor does not suppress the row; it lands orphaned and flagged.
+
+5. **Identity is server-authoritative; only configuration is caller-supplied** (security review on
+   PR #21, two Medium findings). The `{harness, conversationId, executionRef}` signature above
+   reads as though all three were equally caller-supplied. They are not. **The ambient
+   `_agentic_context_` wins over caller-supplied `conversationId` / `executionRef` / `agentId`
+   whenever it is present** — this section already says the native key *is*
+   `_agentic_context_.conversation_id`, and honouring a caller override would let a native tool
+   call name any conversation and receive that conversation's run record, artifacts and audit
+   trail: the R-2 merge through the front door, on partly LLM-derived input. Caller-supplied
+   identity applies only where there is no ambient context to contradict it — the custom harness
+   ("custom: explicit run_id"), tests, and the self-test route. `harness` and `mode` remain
+   caller-first because they are configuration, not identity. On that remaining path a resolved
+   run owned by a **different** user is not adopted; the check fails open on "cannot tell" and
+   closed only on "can tell, and it is not you". Likewise `x_snc_troubleshoot_run.user` and
+   `x_snc_troubleshoot_audit.user` / `confirmed_by_user` are never caller-settable — `user` is
+   `gs.getUserID()`, and `confirmed_by_user` stays false until Phase 2's confirmation gate sets it
+   from the workflow that actually collects the confirmation. ⚠ **Provenance is per field, not per
+   context** (round-2 finding): "the caller supplied this key" must be decided from the specific
+   identity field being used as the key, never from "an ambient context exists". `_agentic_context_`
+   parsing to `{}`, to junk, or to a `conversation_id` of the literal `"undefined"` all yield a
+   present-but-empty context, in which the key still comes from the caller — deriving the check
+   from presence alone leaves cross-user fixation open on exactly those inputs.
+
+⚠ **Observed, unresolved:** audit rows written within one second do **not** sort reliably by
+`sys_created_on` — across two self-test runs the same three rows came back in two different orders.
+`sys_created_on` is second-granular and all three writes land inside it. If Task 9 or the benchmark
+needs the trail in call order, it needs an explicit sequence field; the timestamp will not supply
+one.
 
 ### 4.7 PaScriptToolAdapter (native harness bridge)
 
