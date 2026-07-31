@@ -11,6 +11,49 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.07.3109 — 2026-07-31
+
+Phase 1a vertical slice, **Task 5**: `PaRunAnchor` + `PaAuditLogger` (LLD §4.6). Every artifact
+is an attachment on a run record and every audit row references one, so this is the component
+that decides *which* record a given tool call belongs to — and the expensive way to get that
+wrong is not to fail, it is to answer with the wrong record and carry on.
+
+**A spec gap closed first.** LLD §4.6 keys the anchor on `_agentic_context_.conversation_id`, but
+§3.1's column list had nowhere to store it and `execution_ref` is spent on the execution plan
+*under diagnosis*. `getOrCreate` could therefore only ever create, never get. Added
+`conversation_ref` to `x_snc_troubleshoot_run`.
+
+**R-2 enforced structurally, not by convention.** With no conversation id and no execution ref
+there is no key, and R-2 deleted time-window keying from the design entirely. An unkeyed call now
+creates an *isolated* run used for that call alone, and says so. Two unkeyed calls never share a
+record — a merged anchor lets benchmark run 2 read run 1's artifacts and quietly destroys the
+blind-run independence the doubled-run protocol exists to measure (§2.4). The test named
+"two unkeyed calls NEVER share a run" is the guard on that.
+
+**Concurrency.** R-3 measured up to four tool calls in a single timestamp batch, all racing to
+create the anchor. There is no atomic upsert available, so convergence is bought after the fact:
+insert, then re-resolve the key and adopt the deterministic winner (oldest `sys_created_on`,
+`sys_id` as tie-break — and ties are the *normal* case, since a batch lands inside one second).
+Losing rows are left alone rather than deleted.
+
+`PaAuditLogger` is total by construction: it sits in the hot path of every tool call, so a
+logging failure must degrade the trail, never the diagnosis. It also digests payloads past 4KB,
+because `applyThreshold` has already offloaded oversized results by the time `logResult` runs and
+re-storing them here would undo that work in a different table.
+
+**Verified on gpinst01, not in a stub** (R-8) via a temporary `POST /scope_probe/anchor_selftest`
+route, which cleans up after itself: the conversation key resolves two calls to one run, unkeyed
+calls stay isolated, `readNativeContext()` survives `_agentic_context_` being absent (a REST route
+is exactly such a runtime — an unguarded read is a `ReferenceError` that kills the request), audit
+rows write *and read back*, `autoNumber` still populates `number` (Build Rule #41 re-check), and a
+20,008-char payload stored as 4,024. 194 Jest tests pass.
+
+Two defects were caught in review and fixed before merge: the choice-vocabulary check used an
+object as a lookup map, so a caller-supplied `harness: "constructor"` answered truthy off
+`Object.prototype` and was written into the choice field; and `PaAuditLogger` parsed a
+JSON-string `params` for its fields but picked the payload off the raw string, writing a correct
+tool name beside a silently empty `input`. Both have regression tests.
+
 ## 2026.07.3108 — 2026-07-31
 
 Housekeeping after Task 4. `IMPLEMENTATION_PLAN.md` and

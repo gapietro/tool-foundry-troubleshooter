@@ -400,5 +400,202 @@ export const scopeProbeApi = RestApi({
     response.getStreamWriter().writeString(JSON.stringify(out));
 })(request, response);`,
         },
+
+        // -------------------------------------------------------------------
+        // TEMPORARY — same deadline as the two routes above: remove at Task 9.
+        //
+        // Task 5's platform half. The Jest suite settles which key wins and
+        // what the digest looks like; it cannot settle whether a scoped
+        // `GlideRecord` insert into the app's own tables actually succeeds, and
+        // per R-8 a stub result is not evidence about that in either direction.
+        // Build Rules #41 and #42 were BOTH found by inserting a real row after
+        // a clean install, so this route inserts real rows.
+        //
+        // Four claims, in order of how expensive they are to get wrong:
+        //
+        //  1. Two calls with the same conversation id return ONE run. This is
+        //     the whole point of the `conversation_ref` column added at issue
+        //     #20 — without it `getOrCreate` could only ever create, and every
+        //     tool call in a conversation would open its own run.
+        //  2. Two calls with NO key return DIFFERENT runs. The R-2 guard. If
+        //     this ever fails, benchmark run 2 can read run 1's artifacts and
+        //     the scorecard is quietly measuring nothing (DESIGN.md §2.4).
+        //  3. `readNativeContext()` survives `_agentic_context_` being absent.
+        //     A REST route is a runtime where that global does not exist, so
+        //     this exercises the `typeof` guard for real — an unguarded read
+        //     is a ReferenceError that kills the request.
+        //  4. The audit rows land, and read back, against the run.
+        //
+        // Writes only to this app's own two tables, only rows it just created,
+        // and deletes them all before returning.
+        // -------------------------------------------------------------------
+        {
+            $id: Now.ID['scope-probe-anchor-selftest'],
+            version: 1,
+            name: 'Run Anchor and Audit Self-Test',
+            path: '/anchor_selftest',
+            method: 'POST',
+            active: true,
+            authentication: true,
+            authorization: true,
+            shortDescription: 'TEMPORARY verification for PaRunAnchor + PaAuditLogger - remove at Task 9',
+            script: script`(function process(request, response) {
+    var out = { test: 'PaRunAnchor + PaAuditLogger', steps: {}, verdict: 'unknown' };
+    var created = [];
+
+    function remember(id) {
+        if (id) created.push(String(id));
+    }
+
+    try {
+        try { out.scope = gs.getCurrentScopeName(); } catch (scopeErr) { out.scope = 'unavailable'; }
+
+        var anchor = new PaRunAnchor();
+
+        // 1. The global that is NOT here. A REST route has no
+        //    _agentic_context_, which is exactly the runtime that catches an
+        //    unguarded read of it.
+        var native = anchor.readNativeContext();
+        out.steps.native_context = {
+            present: native.present,
+            conversation_id: native.conversation_id,
+            survived_absent_global: true
+        };
+
+        // 2. Create, keyed on a conversation id we make up.
+        var conv = gs.generateGUID();
+        var first = anchor.getOrCreate({ conversationId: conv, executionRef: gs.generateGUID() });
+        remember(first.run_id);
+        out.steps.create = {
+            run_id: first.run_id,
+            number: first.number,
+            created: first.created,
+            keyed: first.keyed,
+            key_source: first.key_source,
+            degraded: first.degraded || null
+        };
+
+        // Build Rule #41 re-check: an empty number here means autoNumber is
+        // silently broken again and every run renders with a blank display.
+        out.steps.autonumber_ok = !!first.number;
+
+        // 3. THE CLAIM. A second call in the same conversation must resolve to
+        //    the same record, not make a new one.
+        var second = anchor.getOrCreate({ conversationId: conv });
+        remember(second.run_id);
+        var sameRun = second.run_id === first.run_id && second.created === false;
+        out.steps.resolve_same_conversation = {
+            run_id: second.run_id,
+            created: second.created,
+            matches_first: sameRun
+        };
+
+        // 4. THE GUARD. No key at all must isolate, never merge (R-2).
+        var lone1 = anchor.getOrCreate({});
+        var lone2 = anchor.getOrCreate({});
+        remember(lone1.run_id);
+        remember(lone2.run_id);
+        var isolated = !!lone1.run_id && !!lone2.run_id && lone1.run_id !== lone2.run_id;
+        out.steps.unkeyed_isolation = {
+            first: lone1.run_id,
+            second: lone2.run_id,
+            keyed: lone1.keyed,
+            distinct: isolated
+        };
+
+        // 5. Audit rows around a notional tool call.
+        var logger = new PaAuditLogger();
+        var intent = logger.logIntent({
+            runId: first.run_id,
+            toolName: 'agent_trace',
+            input: { execution: 'c9d63a932bda8b9417a6ffbeee91bfd0' },
+            targetTable: 'sn_aia_execution_plan',
+            targetRecord: 'c9d63a932bda8b9417a6ffbeee91bfd0'
+        });
+        var result = logger.logResult({
+            runId: first.run_id,
+            toolName: 'agent_trace',
+            output: { success: true, data: { steps: 11 } }
+        });
+        var failed = logger.logError({
+            runId: first.run_id,
+            toolName: 'agent_trace',
+            error: 'plan not found'
+        });
+
+        out.steps.audit_writes = {
+            intent: intent.logged,
+            result: result.logged,
+            error: failed.logged,
+            degraded: [intent.degraded || null, result.degraded || null, failed.degraded || null]
+        };
+
+        // 6. Read them back — a write that reports success and stores nothing
+        //    readable is the failure shape this project keeps meeting.
+        var auditGr = new GlideRecord('x_snc_troubleshoot_audit');
+        auditGr.addQuery('run', first.run_id);
+        auditGr.orderBy('sys_created_on');
+        auditGr.query();
+        var seen = [];
+        while (auditGr.next()) {
+            seen.push({
+                action_type: auditGr.getValue('action_type'),
+                tool_name: auditGr.getValue('tool_name'),
+                target_table: auditGr.getValue('target_table'),
+                has_payload: !!(auditGr.getValue('input') || auditGr.getValue('output'))
+            });
+        }
+        out.steps.audit_readback = { count: seen.length, rows: seen };
+
+        var auditOk = seen.length === 3;
+
+        // 7. A digest that must not become a second copy of a 35KB payload.
+        var NL = String.fromCharCode(10);
+        var bulk = '';
+        while (bulk.length < 20000) {
+            bulk += 'padding line for the digest ceiling test' + NL;
+        }
+        logger.logResult({ runId: first.run_id, toolName: 'bulk', output: bulk });
+        var digestGr = new GlideRecord('x_snc_troubleshoot_audit');
+        digestGr.addQuery('run', first.run_id);
+        digestGr.addQuery('tool_name', 'bulk');
+        digestGr.query();
+        var digestLen = null;
+        if (digestGr.next()) digestLen = digestGr.getValue('output').length;
+        out.steps.digest = {
+            original_length: bulk.length,
+            stored_length: digestLen,
+            capped: digestLen !== null && digestLen < 4200
+        };
+
+        var pass = sameRun && isolated && auditOk && out.steps.autonumber_ok && out.steps.digest.capped;
+        out.verdict = pass
+            ? 'PASSED: conversation key resolves to one run, unkeyed calls stay isolated, audit rows write and read back, payloads are digested'
+            : 'FAILED: see steps';
+    } catch (e) {
+        // R-1: the exception object is never read.
+        out.verdict = 'FAILED: self-test threw. Exception detail deliberately not read - see DESIGN.md R-1.';
+    }
+
+    // 8. Leave nothing behind. Audit rows cascade with the run.
+    try {
+        var deleted = 0;
+        for (var i = 0; i < created.length; i++) {
+            var cleanup = new GlideRecord('x_snc_troubleshoot_run');
+            if (cleanup.get(created[i])) {
+                cleanup.deleteRecord();
+                deleted++;
+            }
+        }
+        out.cleanup = 'deleted ' + deleted + ' run records';
+    } catch (cleanupErr) {
+        out.cleanup = 'cleanup failed - runs may need manual deletion: ' + created.join(',');
+    }
+
+    response.setStatus(200);
+    response.setContentType('application/json');
+    response.getStreamWriter().writeString(JSON.stringify(out));
+})(request, response);`,
+        },
     ],
 })

@@ -139,6 +139,39 @@ Three things to carry forward rather than rediscover:
 
 ## Task 5: PaAuditLogger + PaRunAnchor
 
+**DONE — PR #21 / issue #20, merged 2026-07-31 (version `2026.07.3109`).** Shipped as
+`src/server/PaRunAnchor.js` + `src/server/PaAuditLogger.js` + 73 tests + the two `ScriptInclude`
+declarations. Verified live on gpinst01 via a temporary `POST /scope_probe/anchor_selftest`
+route (delete it with the other two at Task 9).
+
+**A spec gap had to be closed before any code was written.** LLD §4.6 keys the anchor on
+`_agentic_context_.conversation_id`, and §3.1's column list had **nowhere to store it** —
+`execution_ref` is spent on the execution plan *under diagnosis*, which is the record being
+looked at, not the conversation doing the looking. `getOrCreate` could therefore only ever
+create, never get, and every tool call in a conversation would have opened its own run.
+`conversation_ref` (string, 32) was added to `x_snc_troubleshoot_run`.
+
+Four things to carry forward rather than rediscover:
+- **The unkeyed path is the R-2 guard, and it is load-bearing.** With no conversation id and no
+  execution ref there is no key at all. An unkeyed call creates an **isolated** run used for that
+  call alone. Two unkeyed calls never share a record — a merged anchor lets benchmark run 2 read
+  run 1's artifacts and destroys the blind-run independence the doubled-run protocol exists to
+  measure (DESIGN.md §2.4). Do not "optimise" this into reuse.
+- **Concurrency is handled after the fact, because it cannot be handled before.** R-3 measured up
+  to 4 tool calls in one timestamp batch, all racing to create the anchor, and there is no atomic
+  upsert here. So: insert, then re-resolve the key and adopt the deterministic winner (oldest
+  `sys_created_on`, `sys_id` as tie-break — ties are the *normal* case, since a batch lands inside
+  one second). Losers' rows are left in place; deleting a record another thread may be mid-write
+  on is where the real bug would be.
+- **`PaAuditLogger` never throws.** It sits in the hot path of every tool call, so a logging
+  failure degrades the trail, not the diagnosis. A missing run anchor does **not** suppress the
+  row either — an orphaned audit row beats no audit row at the moment the system is already
+  failing.
+- **Audit rows written in the same second do not sort reliably by `sys_created_on`** (observed
+  across two self-test runs: intent/result/error came back in a different order each time). If
+  Task 9 or the benchmark needs the trail in call order, it needs an explicit sequence — the
+  timestamp will not supply one.
+
 **Files:**
 - Create: `src/server/PaAuditLogger.js` — `logIntent/logResult/logError` → `x_snc_troubleshoot_audit`
 - Create: `src/server/PaRunAnchor.js` — `getOrCreate(context)` → run record for the current conversation (native: keyed on the AIA execution/conversation id; custom: explicit run_id). Anchors artifacts + audit for both harnesses.

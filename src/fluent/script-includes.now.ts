@@ -41,6 +41,52 @@ export const paArtifactStore = ScriptInclude({
 })
 
 /**
+ * PaRunAnchor — LLD §4.6, the run record every diagnostic hangs off.
+ *
+ * Infrastructure like PaArtifactStore, not a tool core. It resolves or creates
+ * the `x_snc_troubleshoot_run` for the current conversation, which is what
+ * gives artifacts something to attach to and audit rows something to reference.
+ *
+ * `accessibleFrom: 'public'` for the standing reason (DESIGN.md R-5): a script
+ * tool runs in `rhino.global`, so the Task 9 adapter calls in from outside this
+ * scope. package_private builds and installs cleanly, then fails at runtime.
+ *
+ * This one WRITES to x_snc_troubleshoot_run, and to nothing else.
+ */
+export const paRunAnchor = ScriptInclude({
+    $id: Now.ID['pa-run-anchor'],
+    name: 'PaRunAnchor',
+    // Build Rule #29: ONE literal, no `+` concatenation.
+    description: `Agent Doctor infrastructure: resolves or creates the diagnostic run record that anchors artifacts and audit for the current conversation. getOrCreate(context) keys on the native harness _agentic_context_.conversation_id, falling back to the execution plan id, and creates an isolated single-call run when neither is available - anchors are never shared on a time window, because merging two runs lets the second read the first evidence. readNativeContext() parses the _agentic_context_ JSON string defensively.`,
+    active: true,
+    accessibleFrom: 'public',
+    script: Now.include('../server/PaRunAnchor.js'),
+})
+
+/**
+ * PaAuditLogger — LLD §4.6 / §3.2, the tool-execution audit trail.
+ *
+ * Called by the Task 9 adapter immediately before and after every tool
+ * execution. The intent row is written BEFORE the tool runs, which is what
+ * makes it the only surviving evidence when a tool never returns at all — the
+ * silent never-terminating stall of R-5 leaves no result and no error row.
+ *
+ * `accessibleFrom: 'public'` for the same rhino.global reason as the others.
+ * Writes to x_snc_troubleshoot_audit and nowhere else, and cannot throw: it
+ * sits in the hot path of every tool call, so a failure here degrades the audit
+ * trail rather than the diagnosis.
+ */
+export const paAuditLogger = ScriptInclude({
+    $id: Now.ID['pa-audit-logger'],
+    name: 'PaAuditLogger',
+    // Build Rule #29: ONE literal.
+    description: `Agent Doctor infrastructure: writes the tool-execution audit trail to x_snc_troubleshoot_audit. logIntent before a tool runs - the only evidence that survives a tool which never returns - then logResult or logError after. Payloads are digested head and tail past 4KB so the audit table does not become a second copy of what the artifact store just offloaded. Never throws: a logging failure degrades the trail, not the diagnosis.`,
+    active: true,
+    accessibleFrom: 'public',
+    script: Now.include('../server/PaAuditLogger.js'),
+})
+
+/**
  * PaToolAgentTrace — LLD §4.1, the first Agent Doctor tool core.
  *
  * accessibleFrom is 'public' deliberately. DESIGN.md R-5 established that an AI

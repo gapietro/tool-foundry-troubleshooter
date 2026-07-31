@@ -152,6 +152,30 @@ export const x_snc_troubleshoot_run = Table({
             maxLength: 32,
         }),
 
+        // THE ANCHOR KEY (added at Task 5, issue #20).
+        //
+        // LLD §4.6 has PaRunAnchor key on `_agentic_context_.conversation_id`,
+        // but §3.1's column list had nowhere to put it — so `getOrCreate` could
+        // only ever CREATE, never get, and every tool call in one conversation
+        // would have opened its own run. `execution_ref` cannot double as the
+        // key: §3.1 spends it on the execution plan under diagnosis, which is
+        // the record being *looked at*, not the conversation doing the looking.
+        //
+        // Plain string, not a reference: the conversation may be a
+        // `sys_cs_conversation` row, or may not exist as a row this scope can
+        // see at all, and a dangling reference field reads as empty — the same
+        // reasoning as `execution_ref` above.
+        //
+        // R-2 is why this is the conversation and not something coarser: the
+        // deleted "one anchor per user per 30 minutes" fallback would merge two
+        // benchmark runs onto one record, letting run 2 read run 1's artifacts
+        // and quietly destroying the blind-run independence the doubled-run
+        // protocol exists to measure (DESIGN.md §2.4).
+        conversation_ref: StringColumn({
+            label: 'Conversation',
+            maxLength: 32,
+        }),
+
         mode: ChoiceColumn({
             label: 'Mode',
             choices: {

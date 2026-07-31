@@ -31,9 +31,14 @@ Build the Phase 1a vertical slice in this repo, starting at **Task 2**.
 - `src/fluent/scope-readability.now.ts` — `GET /api/x_snc_troubleshoot/scope_probe/reads`
 - `src/server/tools/PaToolAgentTrace.js` + `src/fluent/script-includes.now.ts` — the first tool
   core, **summary mode only**, verified against real `sn_aia_*` rows
-- `test/` — Jest, 76 tests, `npm test`
-- A **temporary** `POST /scope_probe/trace` route — the only way to drive a tool core today.
-  **Delete it when Task 9's adapter lands.**
+- `src/server/PaArtifactStore.js` — >4KB output to an attachment, paged reads (Task 4)
+- `src/server/PaRunAnchor.js` + `src/server/PaAuditLogger.js` — the run record every artifact and
+  audit row hangs off, and the trail around every tool call (Task 5)
+- `test/` — Jest, 194 tests, `npm test`
+- **Three temporary routes**, all on the same deadline — **delete them when Task 9's adapter
+  lands**: `POST /scope_probe/trace` (the only way to drive a tool core today),
+  `POST /scope_probe/artifact_selftest`, and `POST /scope_probe/anchor_selftest`. The two
+  self-tests are re-runnable after any deploy and clean up what they create.
 
 ## What to build, in this order
 
@@ -46,7 +51,7 @@ nothing new; a working agent answers three open questions at once.
 |---|---|---|
 | **2** | Fluent `Table()` for `x_snc_troubleshoot_run` + `_audit` (LLD §3.1/§3.2) | prerequisite for 4 and 5 |
 | **4** ✅ | `PaArtifactStore` — >4KB content to an attachment, paged reads | ~~**hard blocker**~~ **CLEARED** (PR #17, 2026-07-31): 35,000 chars round-tripped byte-identical in nine 4KB pages from `x_snc_troubleshoot`, live on gpinst01. `PaToolAgentTrace` can now be handed to an agent |
-| **5** | `PaRunAnchor` + `PaAuditLogger` | anchors artifacts and audit per conversation |
+| **5** ✅ | `PaRunAnchor` + `PaAuditLogger` | ~~anchors artifacts and audit per conversation~~ **DONE** (PR #21, 2026-07-31): conversation key resolves every call of a conversation to one run, unkeyed calls stay isolated per R-2, audit rows write and read back — verified live on gpinst01 |
 | **9** | `PaScriptToolAdapter` + one thin wrapper | the native-harness bridge |
 | **10** | Agent Doctor as a Fluent `AiAgent` — **`agent_trace` ONLY**, not all 7 | the point of the slice |
 | — | **Panel smoke test** against the known-answer specimen | answers R-2, R-3 and the 35KB question in one run |
