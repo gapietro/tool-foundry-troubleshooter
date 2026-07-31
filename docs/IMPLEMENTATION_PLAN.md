@@ -54,6 +54,8 @@
 - Modify: `package.json` — set `version` to the CLAUDE.md convention (`YYYY.MM.DDXX`) so it stops disagreeing with the README badge; add `jest` devDependency and a `test` script alongside the SDK's existing `build`/`deploy`/`transform`/`types` scripts
 - Create: `CHANGELOG.md` (referenced by CLAUDE.md, does not yet exist) — entries for v2.0 re-aim, tools-first/benchmark-gated strategy, and Phase 0
 
+**Cross-scope readability check (R-1 — this task must carry it).** Before any tool core is written against `sn_aia_*`, the app verifies from its OWN scope what it can actually read. **DONE:** `src/fluent/scope-readability.now.ts` → `GET /api/x_snc_troubleshoot/scope_probe/reads`. Result, re-confirmed 2026-07-31: **14 of 15 readable with no grant; exactly one denied — `syslog`** (see R-19 and Task 8). Uses `GlideRecordSecure` so it measures what the cores will experience, and distinguishes `ok` / `empty` / `DENIED` because LLD §4 requires every empty-or-denied read to be an explicit finding.
+
 **Commit:** `chore: align version with convention, add changelog and jest`
 
 ---
@@ -156,7 +158,7 @@
 - Create: `src/server/tools/PaToolGenAiLog.js` — GenAI request logs (timestamp, capability, provider, model, status, error, tokens; default 60-min window, errors_only default) + `check_config` mode (capability→provider mappings, credential existence)
 - Create: `src/server/tools/PaToolSchemaLookup.js` — table-level (sys_dictionary) and field-level (+ sys_choice) modes; validates table exists
 - Create: `src/server/tools/PaToolQueryTable.js` — GlideRecordSecure query: table, encoded query, fields, limit (default 20, max 100); validates via GlideTableDescriptor
-- Create: `src/server/tools/PaToolLogAnalysis.js` — syslog: level/source/message filters, minutes_ago (default 60), limit (default 50, max 100). **Mandatory-scoped** per the K26 guidebook (LLD §4.4): refuses unscoped queries (unfiltered `syslog` reads can slow/time out an instance; table name corrected from `sys_log` per DESIGN.md R-6) with a structured error naming the missing condition; when given an execution context, defaults the window to the plan's start/end ± 2 min and message-contains the plan sys_id
+- Create: `src/server/tools/PaToolLogAnalysis.js` — ⚠ **BLOCKED at the data source; read R-19 before writing this.** The `syslog` cross-scope grant was declared as Fluent (`src/fluent/cross-scope-privileges.now.ts`), installs correctly with `source_scope=x_snc_troubleshoot`, `operation=read`, `status=allowed` — **and does not lift the denial.** `syslog` carries `caller_access = Caller Restriction`, which a self-declared privilege does not satisfy. This needs an instance-admin action or a different evidence path; it is a **customer-side prerequisite**, not a code bug. Recommended shape: ship the tool and have it **degrade explicitly** (same pattern R-10 mandates for `PaToolGenAiLog`), so a diagnosis says "platform logs unavailable from this scope" rather than silently omitting the log layer. syslog: level/source/message filters, minutes_ago (default 60), limit (default 50, max 100). **Mandatory-scoped** per the K26 guidebook (LLD §4.4): refuses unscoped queries (unfiltered `syslog` reads can slow/time out an instance; table name corrected from `sys_log` per DESIGN.md R-6) with a structured error naming the missing condition; when given an execution context, defaults the window to the plan's start/end ± 2 min and message-contains the plan sys_id
 
 **Commit:** `feat: add GenAI log, schema, query, and syslog diagnostic tools`
 
@@ -234,13 +236,20 @@ The five seeds cover four of the six symptoms in ServiceNow's official K26 failu
 
 **Scoring per run (6 points):** root-cause layer correct (2) · fix target correct (2) · evidence cites trace + config/schema (1) · fix output usable by the builder AI without manual editing (1). Also record: iterations/tool calls, assists consumed, wall-clock, and failure behavior (graceful partial vs. wandering/stuck).
 
+**⚠ Two further per-run requirements, both binding and both previously unapplied (discharged 2026-07-31 — see R-19):**
+
+1. **Completeness, not only correctness (R-3 amendment).** Record **how many of the seven diagnostic layers were actually swept**. The 6-point rubric scores only whether the root cause was found, so *a lucky shallow run scores identically to a thorough one*. This is not hypothetical: the same probe agent executed 19 tool calls on keynexus01 and **5** on gpinst01 against an identical request for 15, and both finished `state=Completed` with empty `state_reason`. Budget exhaustion surfaces as `tool_limit` in the §2.3 cause-of-death vocabulary; **stopping early surfaces as `completed`, indistinguishable from a genuine finish** — which makes premature completion the more dangerous failure and the one the scorecard must be able to see.
+2. **Both budget knobs, read at run time (R-4).** Every scored row records the instance property **`sn_aia.continuous_tool_execution_limit`** *and* the per-binding **`sn_aia_agent_tool_m2m.max_auto_executions`** for each attached tool — read, not assumed. The binding is not the lesser knob: E2's 19-call result was reachable only because the probe's `max_auto_executions` was 20 against an instance-typical 10 (477 of 483 production rows sit at the dictionary default). A scorecard produced at 20 measures a configuration a default-configured customer does not have, exactly as a raised property ceiling would. If either value differs from the instance-typical or dictionary default, `benchmark/DECISION.md` must say so and say what the difference is.
+
 **Commit:** `feat: add seeded-failure benchmark suite and scoring protocol`
 
 ---
 
 ## Task 12: Run the Benchmark → DECISION GATE
 
-**What:** Execute the 10 runs against Agent Doctor on the dev instance; fill `benchmark/scorecard-agent-doctor.md`; write `benchmark/DECISION.md` applying the gate from ADR Decision 0.5:
+**What:** Execute the 10 runs against Agent Doctor on the dev instance; fill `benchmark/scorecard-agent-doctor.md`; write `benchmark/DECISION.md` applying the gate from ADR Decision 0.5.
+
+**⚠ `benchmark/DECISION.md` MUST state that the shipped OOB default of `sn_aia.continuous_tool_execution_limit` is UNKNOWN (R-4, discharged 2026-07-31).** P2 could not establish it: the property reads `25` on keynexus01 with `sys_updated_on` bit-identical to `sys_created_on` (the signature of never-modified) but `sys_updated_by = admin`, not blank — two signals pointing opposite ways, recorded unresolved. **DECISION.md may not silently treat `25` as the default**, and must state that transferability to a default-configured customer instance is therefore **unverified**. Establishing the true shipped default (fresh instance, release notes, or ServiceNow docs) is a prerequisite for any transferability claim. Gate table:
 
 | Scorecard | Decision |
 |-----------|----------|
