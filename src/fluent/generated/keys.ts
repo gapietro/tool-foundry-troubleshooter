@@ -41,6 +41,10 @@ declare global {
                         table: 'sys_script_client'
                         id: 'af760ca041894ddd9b914b5af65cb766'
                     }
+                    'pa-artifact-store': {
+                        table: 'sys_script_include'
+                        id: 'fb2d4b7e7c794f8b956cc1a8eb3871f6'
+                    }
                     'pa-tool-agent-trace': {
                         table: 'sys_script_include'
                         id: 'e460c4021e4b44dcaf92570057d5a360'
@@ -53,6 +57,10 @@ declare global {
                         table: 'sys_ws_definition'
                         id: '29747bd00742435e8884e7311ef6a7df'
                     }
+                    'scope-probe-artifact-selftest': {
+                        table: 'sys_ws_operation'
+                        id: '1fc74db242f84cc79c489e4a72c6ec35'
+                    }
                     'scope-probe-reads': {
                         table: 'sys_ws_operation'
                         id: 'a04ccacf0888461d84eb46c0e0d14752'
@@ -64,6 +72,10 @@ declare global {
                     'scope-probe-v1': {
                         table: 'sys_ws_version'
                         id: '75b650020ec04fd8a583813797f4e91c'
+                    }
+                    src_server_PaArtifactStore_js: {
+                        table: 'sys_module'
+                        id: 'c3643d5da7cd404581a5fc2116ee5661'
                     }
                     src_server_script_ts: {
                         table: 'sys_module'

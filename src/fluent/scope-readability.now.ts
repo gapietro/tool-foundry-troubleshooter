@@ -198,5 +198,207 @@ export const scopeProbeApi = RestApi({
     response.getStreamWriter().writeString(JSON.stringify(out));
 })(request, response);`,
         },
+
+        // -------------------------------------------------------------------
+        // TEMPORARY — same deadline as /trace above: remove at Task 9.
+        //
+        // LLD §4.5 carried `⚠ VERIFY: scoped-app attachment write API surface`.
+        // DESIGN.md R-8 is blunt about what does NOT clear that flag: a mocked
+        // result is not evidence about platform behaviour in either direction,
+        // and Build Rules #41 and #42 were both found only by touching real
+        // records after a clean install. So the Jest suite settles the
+        // arithmetic and this route settles the platform.
+        //
+        // It is a genuine round trip, not a smoke test: insert a run, store a
+        // 35,000-char payload (the measured size of a real PaToolAgentTrace
+        // summary — the number that made this component a blocker), confirm the
+        // sys_attachment row, page the content back out through read(), and
+        // compare the reassembled string to the original byte for byte. It then
+        // deletes what it created, so it leaves no residue and can be re-run
+        // after any deploy.
+        //
+        // This one WRITES, unlike every other route here. It writes only to the
+        // app's own run table and only to rows it just created, and it is
+        // authenticated + authorized. It still does not survive past Task 9.
+        // -------------------------------------------------------------------
+        {
+            $id: Now.ID['scope-probe-artifact-selftest'],
+            version: 1,
+            name: 'Artifact Store Self-Test',
+            path: '/artifact_selftest',
+            method: 'POST',
+            active: true,
+            authentication: true,
+            authorization: true,
+            shortDescription: 'TEMPORARY round-trip verification for PaArtifactStore - remove at Task 9',
+            script: script`(function process(request, response) {
+    var out = { test: 'PaArtifactStore round trip', steps: {}, verdict: 'unknown' };
+
+    function checksum(s) {
+        var h = 0;
+        for (var j = 0; j < s.length; j++) {
+            h = (h * 31 + s.charCodeAt(j)) % 2147483647;
+        }
+        return h;
+    }
+
+    var runId = '';
+    var artifactId = '';
+
+    try {
+        try { out.scope = gs.getCurrentScopeName(); } catch (scopeErr) { out.scope = 'unavailable'; }
+
+        // 1. A payload the size of the thing that made this a blocker.
+        //
+        // NOTE the String.fromCharCode(10) instead of a backslash-n escape.
+        // Inside a Fluent script template literal, TypeScript consumes the
+        // escape and emits a REAL newline into the generated script, splitting
+        // the string constant across two lines. That builds and installs
+        // cleanly and fails only when the route is called
+        // ("Unterminated string constant") - measured here, 2026-07-31.
+        var NL = String.fromCharCode(10);
+        var payload = '';
+        var n = 0;
+        while (payload.length < 35000) {
+            payload += 'line' + n + ':abcdefghijklmnopqrstuvwxyz' + NL;
+            n++;
+        }
+        payload = payload.substring(0, 35000);
+        out.steps.payload = { length: payload.length, checksum: checksum(payload) };
+
+        // 2. A real run record. Also re-checks Build Rule #41: if the number
+        //    column comes back empty, autoNumber is silently broken again.
+        var runGr = new GlideRecord('x_snc_troubleshoot_run');
+        runGr.initialize();
+        runGr.setValue('harness', 'native');
+        runGr.setValue('mode', 'collect');
+        runGr.setValue('status', 'running');
+        runId = runGr.insert();
+        if (!runId) {
+            out.steps.run = { created: false };
+            out.verdict = 'FAILED: could not insert a run record';
+            response.setStatus(200);
+            response.setContentType('application/json');
+            response.getStreamWriter().writeString(JSON.stringify(out));
+            return;
+        }
+        out.steps.run = { created: true, sys_id: String(runId), number: runGr.getValue('number') };
+
+        // 3. store()
+        var store = new PaArtifactStore();
+        var stored = store.store(runId, 'selftest', payload);
+        artifactId = stored.artifact_id ? String(stored.artifact_id) : '';
+        out.steps.store = {
+            stored: stored.stored === true,
+            artifact_id: artifactId,
+            file_name: stored.file_name || null,
+            total_length: stored.total_length,
+            pages: stored.pages || null,
+            excerpt_length: stored.excerpt ? stored.excerpt.length : 0,
+            excerpt_has_elision: stored.excerpt ? stored.excerpt.indexOf('[elided ') > -1 : false,
+            degraded: stored.degraded || null,
+            returned_full_payload: stored.content !== undefined
+        };
+
+        if (!stored.stored || !artifactId) {
+            out.verdict = 'FAILED: store() did not produce an attachment (degraded: ' + (stored.degraded || 'none') + ')';
+        } else {
+            // 4. The attachment as the platform sees it.
+            var att = new GlideRecord('sys_attachment');
+            if (att.get(artifactId)) {
+                out.steps.attachment = {
+                    found: true,
+                    table_name: att.getValue('table_name'),
+                    table_sys_id: att.getValue('table_sys_id'),
+                    file_name: att.getValue('file_name'),
+                    content_type: att.getValue('content_type'),
+                    size_bytes: att.getValue('size_bytes')
+                };
+            } else {
+                out.steps.attachment = { found: false };
+            }
+
+            // 5. Page it back out and reassemble.
+            var assembled = '';
+            var offset = 0;
+            var pagesRead = 0;
+            var pageLengths = [];
+            var readError = null;
+
+            for (;;) {
+                var page = store.read(artifactId, offset, 4000);
+                if (!page.success) {
+                    readError = page.error;
+                    break;
+                }
+                assembled += page.data.content;
+                pageLengths.push(page.data.length);
+                pagesRead++;
+                if (page.data.eof) break;
+                offset = page.data.next_offset;
+                if (pagesRead > 50) {
+                    readError = 'paging did not terminate within 50 pages';
+                    break;
+                }
+            }
+
+            out.steps.read = {
+                pages_read: pagesRead,
+                page_lengths: pageLengths,
+                assembled_length: assembled.length,
+                assembled_checksum: checksum(assembled),
+                error: readError
+            };
+
+            // 6. The claim this whole component rests on.
+            var identical = assembled === payload;
+            out.steps.roundtrip = {
+                byte_identical: identical,
+                length_match: assembled.length === payload.length,
+                checksum_match: checksum(assembled) === checksum(payload)
+            };
+
+            // 7. The security guard, exercised against a real foreign attachment.
+            var foreign = new GlideRecord('sys_attachment');
+            foreign.addQuery('table_name', '!=', 'x_snc_troubleshoot_run');
+            foreign.setLimit(1);
+            foreign.query();
+            if (foreign.next()) {
+                var refused = store.read(foreign.getUniqueValue(), 0, 100);
+                out.steps.foreign_table_guard = {
+                    tested_against: foreign.getValue('table_name'),
+                    refused: refused.success === false,
+                    error: refused.error || null
+                };
+            } else {
+                out.steps.foreign_table_guard = { tested_against: null, refused: null };
+            }
+
+            out.verdict = identical
+                ? 'PASSED: 35,000 chars stored as an attachment and paged back byte-identical from scope x_snc_troubleshoot'
+                : 'FAILED: reassembled content does not match the original';
+        }
+    } catch (e) {
+        // R-1: the exception object is never read.
+        out.verdict = 'FAILED: self-test threw. Exception detail deliberately not read - see DESIGN.md R-1.';
+    }
+
+    // 8. Leave nothing behind.
+    try {
+        if (artifactId) new GlideSysAttachment().deleteAttachment(artifactId);
+        if (runId) {
+            var cleanup = new GlideRecord('x_snc_troubleshoot_run');
+            if (cleanup.get(runId)) cleanup.deleteRecord();
+        }
+        out.cleanup = 'run record and attachment deleted';
+    } catch (cleanupErr) {
+        out.cleanup = 'cleanup failed - run ' + runId + ' may need manual deletion';
+    }
+
+    response.setStatus(200);
+    response.setContentType('application/json');
+    response.getStreamWriter().writeString(JSON.stringify(out));
+})(request, response);`,
+        },
     ],
 })

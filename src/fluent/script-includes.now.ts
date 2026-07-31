@@ -13,6 +13,34 @@ import '@servicenow/sdk/global'
 import { ScriptInclude } from '@servicenow/sdk/core'
 
 /**
+ * PaArtifactStore — LLD §4.5, large tool output handling.
+ *
+ * Not a tool core: the store is infrastructure the cores and the Task 9 adapter
+ * lean on. It is declared first because it is what makes the cores usable at
+ * all — a real PaToolAgentTrace summary is ~35KB against a 4,000-char excerpt
+ * budget, so without artifact paging the trace tool cannot be handed to an
+ * agent.
+ *
+ * accessibleFrom 'public' for the same reason as PaToolAgentTrace below: an AI
+ * Agent script tool runs in `rhino.global`, not in x_snc_troubleshoot, so the
+ * adapter calls in from outside the app scope (DESIGN.md R-5). package_private
+ * would build and install cleanly, then fail at runtime.
+ *
+ * Note this one WRITES (an attachment on x_snc_troubleshoot_run) where the
+ * cores are read-only. It writes nowhere else, and `read()` refuses any
+ * attachment that is not on the run table — see the header of the .js.
+ */
+export const paArtifactStore = ScriptInclude({
+    $id: Now.ID['pa-artifact-store'],
+    name: 'PaArtifactStore',
+    // Build Rule #29: ONE literal, no `+` concatenation.
+    description: `Agent Doctor infrastructure: stores over-threshold tool output as an attachment on the diagnostic run record and serves it back in 4KB pages. store(runId, toolName, content) returns an excerpt plus an artifact_id; read(artifactId, offset, length) pages through it; applyThreshold(runId, result, toolName) is the wrapper the script-tool adapter applies to every tool result. Degrades to an excerpt with a stated reason if the attachment cannot be written - never returns the full oversized payload.`,
+    active: true,
+    accessibleFrom: 'public',
+    script: Now.include('../server/PaArtifactStore.js'),
+})
+
+/**
  * PaToolAgentTrace — LLD §4.1, the first Agent Doctor tool core.
  *
  * accessibleFrom is 'public' deliberately. DESIGN.md R-5 established that an AI
