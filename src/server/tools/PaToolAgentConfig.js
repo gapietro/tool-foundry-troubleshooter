@@ -1544,8 +1544,9 @@ PaToolAgentConfig.prototype = {
      *
      * @returns {Object} {complete, denied: [table, ...], statuses}
      */
-    _traversalIntegrity: function (ctx) {
+    _traversalIntegrity: function (ctx, data) {
         var denied = []
+        var truncated = []
         var statuses = ctx.trigger_read_statuses || []
 
         for (var i = 0; i < statuses.length; i++) {
@@ -1556,9 +1557,23 @@ PaToolAgentConfig.prototype = {
         if (ctx.team_read_status === 'DENIED') denied.push('sn_aia_team_member')
         if (ctx.usecase_read_status === 'DENIED') denied.push('sn_aia_usecase')
 
+        // A TRUNCATED input is as damaging here as a denied one, and the first
+        // version of this function checked only denials — so it reported
+        // "complete" over a use-case list that had been cut at 20. Branch 2
+        // keys solely on that list, so wiring on the omitted use cases is never
+        // queried, and the result then reads as an authoritative absence.
+        var truncations = (data && data.truncations) || {}
+        var sources = ['sn_aia_team_member', 'sn_aia_usecase', 'sn_aia_trigger_agent_usecase_m2m']
+        for (i = 0; i < sources.length; i++) {
+            if (truncations[sources[i]]) {
+                truncated.push(sources[i] + ' (at ' + truncations[sources[i]] + ')')
+            }
+        }
+
         return {
-            complete: denied.length === 0,
+            complete: denied.length === 0 && truncated.length === 0,
             denied: denied,
+            truncated: truncated,
             m2m_read_statuses: statuses,
             team_member_read_status: ctx.team_read_status || 'not_read',
             usecase_read_status: ctx.usecase_read_status || 'not_read',
@@ -1618,7 +1633,7 @@ PaToolAgentConfig.prototype = {
         // configuration finding is the exact partial-read-as-absence failure
         // this project keeps legislating against (R-6, R-11), committed by the
         // tool built to detect it.
-        var integrity = this._traversalIntegrity(ctx)
+        var integrity = this._traversalIntegrity(ctx, data)
 
         if (!links.length && integrity.complete) {
             findings.push({
@@ -1646,13 +1661,18 @@ PaToolAgentConfig.prototype = {
                 subject: 'sn_aia_trigger_agent_usecase_m2m',
                 detail:
                     'No trigger link was found, but the traversal was INCOMPLETE — ' +
-                    integrity.denied.join(', ') +
-                    ' could not be read from this scope. The wiring state is UNKNOWN, not absent. Do not ' +
-                    'diagnose this agent as unwired on the strength of this result.',
-                next_step:
-                    'Re-run with a role that can read ' +
-                    integrity.denied.join(' and ') +
-                    ', or check the wiring in AI Agent Studio directly.',
+                    (integrity.denied.length ? 'denied: ' + integrity.denied.join(', ') + '. ' : '') +
+                    (integrity.truncated.length
+                        ? 'truncated: ' + integrity.truncated.join(', ') + '. '
+                        : '') +
+                    'The wiring state is UNKNOWN, not absent. Do not diagnose this agent as unwired on ' +
+                    'the strength of this result.',
+                next_step: integrity.denied.length
+                    ? 'Re-run with a role that can read ' +
+                      integrity.denied.join(' and ') +
+                      ', or check the wiring in AI Agent Studio directly.'
+                    : 'Narrow the query so the truncated read fits inside its ceiling, or check the ' +
+                      'wiring in AI Agent Studio directly.',
             })
         } else if (!integrity.complete) {
             findings.push({
@@ -1661,8 +1681,11 @@ PaToolAgentConfig.prototype = {
                 subject: 'sn_aia_trigger_agent_usecase_m2m',
                 detail:
                     'Trigger links were found, but the traversal was incomplete — ' +
-                    integrity.denied.join(', ') +
-                    ' could not be read. There may be further wiring this result does not show.',
+                    (integrity.denied.length ? 'denied: ' + integrity.denied.join(', ') + '. ' : '') +
+                    (integrity.truncated.length
+                        ? 'truncated: ' + integrity.truncated.join(', ') + '. '
+                        : '') +
+                    'There may be further wiring this result does not show.',
                 next_step: 'Treat the link list below as a lower bound rather than the complete set.',
             })
         }
@@ -1970,7 +1993,21 @@ PaToolAgentConfig.prototype = {
                 // One unreadable identity does not invalidate the ones that WERE
                 // read. Discarding their results would throw away a real missing
                 // -role finding because a different user could not be checked.
-                uncomparableUsers.push(userId)
+                uncomparableUsers.push({ user: userId, reason: 'sys_user_has_role not readable' })
+                continue
+            }
+            if (held.truncated_at) {
+                // A PARTIAL role set cannot support a "this identity lacks X"
+                // claim: the roles it actually holds may be among the ones not
+                // read, and the output of that mistake is a false security-
+                // violation diagnosis.
+                uncomparableUsers.push({
+                    user: userId,
+                    reason:
+                        'holds more than ' +
+                        held.truncated_at +
+                        ' role assignments, so the set read is partial and cannot show what is missing',
+                })
                 continue
             }
             comparedUsers.push(userId)
@@ -2001,6 +2038,7 @@ PaToolAgentConfig.prototype = {
 
         out.users_compared = comparedUsers.length
         out.users_not_comparable = uncomparableUsers.length
+        out.not_comparable = uncomparableUsers
 
         // An empty required set makes every comparison vacuously true. Reporting
         // that as "completed — every identity holds every role" is a clean bill
@@ -2032,10 +2070,11 @@ PaToolAgentConfig.prototype = {
         if (!comparedUsers.length) {
             out.comparison_status = 'not_possible'
             out.comparison_note =
-                'sys_user_has_role is not readable from this scope for any of the ' +
+                'No static run-as user could be compared (' +
                 userIds.length +
-                ' static run-as user(s), so no comparison could be made. The role set above is still what ' +
-                'the agent requires.'
+                ' examined). Reasons: ' +
+                this._reasonSummary(uncomparableUsers) +
+                '. The role set above is still what the agent requires.'
             return out
         }
 
@@ -2053,11 +2092,29 @@ PaToolAgentConfig.prototype = {
                 comparedUsers.length +
                 ' of ' +
                 userIds.length +
-                ' static run-as user(s) were comparable; sys_user_has_role was not readable for the other ' +
+                ' static run-as user(s) were comparable; the other ' +
                 uncomparableUsers.length +
-                '. An empty missing_roles here does NOT mean every identity checks out, because ' +
+                ' could not be (' +
+                this._reasonSummary(uncomparableUsers) +
+                '). An empty missing_roles here does NOT mean every identity checks out, because ' +
                 uncomparableUsers.length +
                 ' were never checked. This does not certify either access gate — see caveat.'
+            return out
+        }
+
+        if (out.role_rows_truncated_at) {
+            // The requirement set is a lower bound, so "holds every required
+            // role" is unprovable — an identity can hold everything that was
+            // read and still lack one that was not.
+            out.comparison_status = 'partial'
+            out.comparison_note =
+                (missing.length
+                    ? 'At least one static run-as identity is missing a required role — see missing_roles. '
+                    : 'Every static run-as identity holds every role in the requirement set that was read. ') +
+                'But that set is INCOMPLETE: access configuration rows were truncated at ' +
+                out.role_rows_truncated_at +
+                ', so an identity reported as holding every required role may still lack one that was ' +
+                'never read. Do not read this as an access all-clear.'
             return out
         }
 
@@ -2149,6 +2206,28 @@ PaToolAgentConfig.prototype = {
         return out
     },
 
+    /** Distinct reasons an identity could not be compared, with counts. */
+    _reasonSummary: function (entries) {
+        var counts = {}
+        var order = []
+        var i
+
+        for (i = 0; i < entries.length; i++) {
+            var reason = entries[i].reason
+            if (counts[reason] === undefined) {
+                counts[reason] = 0
+                order.push(reason)
+            }
+            counts[reason]++
+        }
+
+        var parts = []
+        for (i = 0; i < order.length; i++) {
+            parts.push(counts[order[i]] + ' × ' + order[i])
+        }
+        return parts.length ? parts.join('; ') : 'none recorded'
+    },
+
     /** A bare sys_id is unreadable to a diagnostician. Degrade to it silently is fine. */
     _roleName: function (sysId, data) {
         var k = this._k()
@@ -2184,7 +2263,21 @@ PaToolAgentConfig.prototype = {
      */
     _evidenceBasis: function (data, ctx) {
         var c = ctx || {}
+        var k = this._k()
+
+        // Every bound that was hit, surfaced whether or not the section that
+        // hit it thought to mention it. Four review rounds produced four silent
+        // caps in this file alone; the fix that stops the fifth is structural,
+        // not another remembered call site (DESIGN.md R-24).
+        var truncations = data.truncations || {}
+        var truncationNote = k.anyTruncation(data)
+            ? 'One or more reads hit their ceiling — see truncations. Any count or absence derived from ' +
+              'those tables is a LOWER BOUND, not a complete answer.'
+            : null
+
         return {
+            truncations: truncations,
+            truncation_note: truncationNote,
             statement:
                 'Every count below is the number of rows actually read. A zero with read status "ok"/"empty" ' +
                 'is a genuine absence; a zero with "DENIED" is a permission gap and says nothing about the ' +
