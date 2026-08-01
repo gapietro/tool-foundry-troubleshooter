@@ -163,8 +163,32 @@ function makeQueryingGlideRecordSecure(tables, options) {
         var rows = (tables[this._table] || []).filter(function (row) {
             return filters.every(function (f) {
                 var actual = row[f.field] === undefined || row[f.field] === null ? '' : String(row[f.field])
-                if (f.op === 'IN') return String(f.value).split(',').indexOf(actual) !== -1
-                return actual === String(f.value)
+                var expected = String(f.value)
+                switch (f.op) {
+                    case 'IN':
+                        return expected.split(',').indexOf(actual) !== -1
+                    case 'NOT IN':
+                        return expected.split(',').indexOf(actual) === -1
+                    case '!=':
+                        return actual !== expected
+                    // Windowed reads compare timestamps as strings, which is
+                    // what the platform's own ordering does for glide_date_time
+                    // in 'YYYY-MM-DD HH:MM:SS' form.
+                    case '>=':
+                        return actual >= expected
+                    case '<=':
+                        return actual <= expected
+                    case '>':
+                        return actual > expected
+                    case '<':
+                        return actual < expected
+                    case 'LIKE':
+                        return actual.indexOf(expected) !== -1
+                    case 'STARTSWITH':
+                        return actual.indexOf(expected) === 0
+                    default:
+                        return actual === expected
+                }
             })
         })
         calls.queries.push({ table: this._table, filters: filters.slice(0) })

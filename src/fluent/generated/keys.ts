@@ -73,6 +73,10 @@ declare global {
                         table: 'sys_script_include'
                         id: 'e460c4021e4b44dcaf92570057d5a360'
                     }
+                    'pa-tool-genai-log': {
+                        table: 'sys_script_include'
+                        id: 'ad804b6ddf49450395f1f2cb395dc0bb'
+                    }
                     'pa-tool-read-artifact': {
                         table: 'sys_script_include'
                         id: '3979cce296d748edac6f85de1d9136a5'
@@ -148,6 +152,10 @@ declare global {
                     src_server_tools_PaToolAgentTrace_js: {
                         table: 'sys_module'
                         id: 'cae852b254fc45a8ac5bd32c712102be'
+                    }
+                    src_server_tools_PaToolGenAiLog_js: {
+                        table: 'sys_module'
+                        id: 'be8964c645b44148bc5ab79b5c8c38bc'
                     }
                     src_server_tools_PaToolReadArtifact_js: {
                         table: 'sys_module'

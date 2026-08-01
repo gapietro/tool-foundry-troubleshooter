@@ -136,6 +136,34 @@ export const paToolAgentConfig = ScriptInclude({
 })
 
 /**
+ * PaToolGenAiLog — LLD §4.3, the GenAI-stack tool core (diagnostic layer 6).
+ *
+ * Two things in the .js are worth knowing before editing it.
+ *
+ * check_config does NOT flag an empty `connection`. LLD §4.3 used to say it
+ * should, and that sentence is refuted (DESIGN.md R-22): 318 of 2026 rows on
+ * gpinst01 have it empty, including shipped OOB definitions, and the column is
+ * mandatory=false. A tool built to the struck sentence reports 318 healthy
+ * capabilities as broken. It checks the three MANDATORY bindings instead.
+ *
+ * And the prompt/response payload is role-gated (R-10) — it lives on
+ * sys_generative_ai_log, whose read ACLs exclude the sn_aia.* role set a
+ * customer administrator holds. A denial there is EXPECTED and comes back as a
+ * stated degradation, never as an empty result that reads as "no prompt".
+ *
+ * accessibleFrom 'public' for the standing reason (DESIGN.md R-5). Read-only.
+ */
+export const paToolGenAiLog = ScriptInclude({
+    $id: Now.ID['pa-tool-genai-log'],
+    name: 'PaToolGenAiLog',
+    // Build Rule #29: ONE literal, no `+` concatenation.
+    description: `Agent Doctor tool core: the GenAI stack layer. execute(args) takes a mode - usage for assist consumption, llm for per-call model metadata over a time window, for_execution to join an execution plan and its tasks to their LLM calls through sn_aia_gen_ai_m2m, or check_config to audit capability definitions. check_config flags missing or unresolvable values in the three mandatory bindings capability, api_type and api, and reports an empty connection as normal state rather than a defect. An api that cannot be resolved is classified as dangling only when the target table was actually readable; a non-table api_type or an unreadable target is reported as unverifiable. Prompt and response payloads are fetched only on request and degrade with a stated reason when the caller lacks the roles. Read-only, GlideRecordSecure throughout.`,
+    active: true,
+    accessibleFrom: 'public',
+    script: Now.include('../server/tools/PaToolGenAiLog.js'),
+})
+
+/**
  * PaToolAgentTrace — LLD §4.1, the first Agent Doctor tool core.
  *
  * accessibleFrom is 'public' deliberately. DESIGN.md R-5 established that an AI
