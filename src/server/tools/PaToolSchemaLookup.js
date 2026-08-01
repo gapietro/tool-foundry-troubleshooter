@@ -136,7 +136,7 @@ PaToolSchemaLookup.prototype = {
                 data.field = this._oneField(a.field, fields, a.table, data)
             } else {
                 data.fields = fields
-                data.truncated_at = k.anyTruncation(data) ? this.MAX_FIELDS : null
+                data.truncated_at = fields.capped_at || (k.anyTruncation(data) ? this.MAX_FIELDS : null)
             }
 
             phase = 'derive_findings'
@@ -429,7 +429,14 @@ PaToolSchemaLookup.prototype = {
                     inherited: h > 0,
                 })
 
-                if (out.length >= this.MAX_FIELDS) return out
+                // IN-MEMORY CAP: an accumulation ceiling across the whole
+                // hierarchy walk, not any single read's limit - so it cannot
+                // take the kit's measured value and is declared here instead.
+                // It still must not be silent.
+                if (out.length >= this.MAX_FIELDS) {
+                    out.capped_at = this.MAX_FIELDS
+                    return out
+                }
             }
         }
 

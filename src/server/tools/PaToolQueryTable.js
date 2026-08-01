@@ -156,7 +156,7 @@ PaToolQueryTable.prototype = {
             data.rows = this._shapeRows(read.rows, fields)
             data.row_count = data.rows.length
             data.limit_applied = limit
-            data.truncated_at = data.rows.length >= limit ? limit : null
+            data.truncated_at = read.truncated_at || null
 
             if (read.status === 'DENIED') {
                 data.status = 'denied'
