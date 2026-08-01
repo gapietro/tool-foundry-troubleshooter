@@ -5,6 +5,38 @@ declare global {
         namespace Internal {
             interface Keys extends KeysRegistry {
                 explicit: {
+                    'acl-routing-create': {
+                        table: 'sys_security_acl'
+                        id: '961563574ea245ed888519e4480e86c2'
+                    }
+                    'acl-routing-delete': {
+                        table: 'sys_security_acl'
+                        id: 'c7c9282b7cc643128a0cdb6c4d5ceb2e'
+                    }
+                    'acl-routing-read': {
+                        table: 'sys_security_acl'
+                        id: 'aa89d1ccbb1143a5837129431aca7ebe'
+                    }
+                    'acl-routing-write': {
+                        table: 'sys_security_acl'
+                        id: '7e47af8cea584e6d89b1e56b18c4e338'
+                    }
+                    'acl-ticket-create': {
+                        table: 'sys_security_acl'
+                        id: 'd3524ca20db441f8abf6107a3b429978'
+                    }
+                    'acl-ticket-delete': {
+                        table: 'sys_security_acl'
+                        id: '498d32bfab09485998ea7bcb32f516ad'
+                    }
+                    'acl-ticket-read': {
+                        table: 'sys_security_acl'
+                        id: 'b69fe52ccfbe41ecb584f27e088639bd'
+                    }
+                    'acl-ticket-write': {
+                        table: 'sys_security_acl'
+                        id: '1bc350584bc540b5b571300063ff9d67'
+                    }
                     bom_json: {
                         table: 'sys_module'
                         id: 'ad714b275f324ba79ba057c420861e08'
@@ -55,6 +87,10 @@ declare global {
                         table: 'sn_aia_agent'
                         id: '8bac1f84f3a1481487fe8dd219295914'
                     }
+                    'seed-04-capability-parent': {
+                        table: 'sys_one_extend_capability'
+                        id: '92ff62af516741769c437feb88c80ef3'
+                    }
                     'seed-05-acl': {
                         table: 'sys_security_acl'
                         id: 'cc49a414f14247a68d3db8196a983abc'
@@ -74,6 +110,7 @@ declare global {
                     src_server_script_ts: {
                         table: 'sys_module'
                         id: '30055670e07444bd993faecf66d51bc8'
+                        deleted: true
                     }
                 }
                 composite: [
@@ -85,11 +122,38 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_security_acl_role'
+                        id: '0b8c9015bdd04bb783edb5613c65ce93'
+                        key: {
+                            sys_security_acl: '498d32bfab09485998ea7bcb32f516ad'
+                            sys_user_role: {
+                                id: '84f6a6a4de3d49218e8d4891a24b4510'
+                                key: {
+                                    name: 'x_snc_tsbench.bench'
+                                }
+                            }
+                        }
+                    },
+                    {
                         table: 'sys_one_extend_capability_definition'
                         id: '0efd9496eb9345b7a293bf8e23ecccf0'
+                        deleted: true
                         key: {
                             capability: 'x_snc_tsbench_unmapped_capability'
                             api: 'NULL'
+                        }
+                    },
+                    {
+                        table: 'sys_security_acl_role'
+                        id: '10770b6d03dc4883a7826fc9b09209a8'
+                        key: {
+                            sys_security_acl: '961563574ea245ed888519e4480e86c2'
+                            sys_user_role: {
+                                id: '84f6a6a4de3d49218e8d4891a24b4510'
+                                key: {
+                                    name: 'x_snc_tsbench.bench'
+                                }
+                            }
                         }
                     },
                     {
@@ -130,6 +194,19 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_security_acl_role'
+                        id: '24248fec035940888762ff368beab3b9'
+                        key: {
+                            sys_security_acl: 'b69fe52ccfbe41ecb584f27e088639bd'
+                            sys_user_role: {
+                                id: '84f6a6a4de3d49218e8d4891a24b4510'
+                                key: {
+                                    name: 'x_snc_tsbench.bench'
+                                }
+                            }
+                        }
+                    },
+                    {
                         table: 'sys_documentation'
                         id: '351ae5edc98d437b846b693c4ba6203f'
                         key: {
@@ -151,6 +228,19 @@ declare global {
                         id: '37d6957bb5cd4bda96fc9a93de494eac'
                         key: {
                             name: 'summarise_ticket'
+                        }
+                    },
+                    {
+                        table: 'sys_security_acl_role'
+                        id: '37eabc8a345a46af88559fde3e5ae924'
+                        key: {
+                            sys_security_acl: '7e47af8cea584e6d89b1e56b18c4e338'
+                            sys_user_role: {
+                                id: '84f6a6a4de3d49218e8d4891a24b4510'
+                                key: {
+                                    name: 'x_snc_tsbench.bench'
+                                }
+                            }
                         }
                     },
                     {
@@ -216,6 +306,23 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_one_extend_capability_definition'
+                        id: '51f17cef664b452b8c868d09d2e2257b'
+                        deleted: true
+                        key: {
+                            capability: 'seed-04-capability-parent'
+                            api: '936e514a53b3b110f028ddeeff7b128c'
+                        }
+                    },
+                    {
+                        table: 'sys_one_extend_capability_definition'
+                        id: '5664bfc88b444f8ba6259f1e329c075d'
+                        key: {
+                            capability: '92ff62af516741769c437feb88c80ef3'
+                            api: '936e514a53b3b110f028ddeeff7b128c'
+                        }
+                    },
+                    {
                         table: 'sn_aia_team_member'
                         id: '5900beb798ad4118aeee1109857e234a'
                         key: {
@@ -243,11 +350,37 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_security_acl_role'
+                        id: '6cb9c7d62206400b98b4f12629fd612e'
+                        key: {
+                            sys_security_acl: '1bc350584bc540b5b571300063ff9d67'
+                            sys_user_role: {
+                                id: '84f6a6a4de3d49218e8d4891a24b4510'
+                                key: {
+                                    name: 'x_snc_tsbench.bench'
+                                }
+                            }
+                        }
+                    },
+                    {
                         table: 'sn_aia_version'
                         id: '6df8348de94a40869de668d409733c21'
                         key: {
                             target_id: '0bbf1b00cce848838cc675986233120b'
                             version_name: 'V1'
+                        }
+                    },
+                    {
+                        table: 'sys_security_acl_role'
+                        id: '6f9d660c210b40018512749fa9120860'
+                        key: {
+                            sys_security_acl: 'd3524ca20db441f8abf6107a3b429978'
+                            sys_user_role: {
+                                id: '84f6a6a4de3d49218e8d4891a24b4510'
+                                key: {
+                                    name: 'x_snc_tsbench.bench'
+                                }
+                            }
                         }
                     },
                     {
@@ -265,8 +398,22 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_security_acl_role'
+                        id: '79f91075e42840f6bf3167d155857db3'
+                        key: {
+                            sys_security_acl: 'aa89d1ccbb1143a5837129431aca7ebe'
+                            sys_user_role: {
+                                id: '84f6a6a4de3d49218e8d4891a24b4510'
+                                key: {
+                                    name: 'x_snc_tsbench.bench'
+                                }
+                            }
+                        }
+                    },
+                    {
                         table: 'sys_dictionary'
                         id: '836b623ac1d94e14a8a06d965958de1c'
+                        deleted: true
                         key: {
                             name: 'x_snc_tsbench_ticket'
                             element: 'escalation_count'
@@ -289,6 +436,13 @@ declare global {
                             value: '5'
                             language: 'en'
                             dependent_value: 'NULL'
+                        }
+                    },
+                    {
+                        table: 'sys_user_role'
+                        id: '84f6a6a4de3d49218e8d4891a24b4510'
+                        key: {
+                            name: 'x_snc_tsbench.bench'
                         }
                     },
                     {
@@ -348,6 +502,7 @@ declare global {
                     {
                         table: 'sys_documentation'
                         id: 'b3c3b9f09c974e5692d3c51083cc518b'
+                        deleted: true
                         key: {
                             name: 'x_snc_tsbench_ticket'
                             element: 'escalation_count'
@@ -374,6 +529,19 @@ declare global {
                                 }
                             }
                             related_resource_record: 'af15173b98ce46c3a5f35a9f7160e888'
+                        }
+                    },
+                    {
+                        table: 'sys_security_acl_role'
+                        id: 'bf8ade91a1674f92b37b81353cbe8c45'
+                        key: {
+                            sys_security_acl: 'c7c9282b7cc643128a0cdb6c4d5ceb2e'
+                            sys_user_role: {
+                                id: '84f6a6a4de3d49218e8d4891a24b4510'
+                                key: {
+                                    name: 'x_snc_tsbench.bench'
+                                }
+                            }
                         }
                     },
                     {

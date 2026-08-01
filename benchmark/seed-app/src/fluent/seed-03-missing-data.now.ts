@@ -21,6 +21,15 @@ export const x_snc_tsbench_routing = Table({
     name: 'x_snc_tsbench_routing',
     label: 'Bench Routing Rule',
     display: 'category',
+
+    // Build Rule #42, and here it is load-bearing for the MEASUREMENT, not just
+    // for convenience. A layer-5 sweep using GlideRecordSecure against a table
+    // with no read ACL returns zero rows whether the table is empty or merely
+    // unreadable - which would make this seed's "the table is empty" defect
+    // indistinguishable from an access denial by the very tool meant to find it.
+    // The ACLs in seed-tables-acl.now.ts are the other half; both are required.
+    allowWebServiceAccess: true,
+
     schema: {
         category: StringColumn({ label: 'Category', maxLength: 80 }),
         assignment_group: StringColumn({ label: 'Assignment group', maxLength: 80 }),
@@ -61,14 +70,26 @@ The routing table is the only authority on which group handles which category. N
             executionMode: 'autopilot',
             active: true,
             recordType: 'custom',
+            // rules_in_table is COUNTED, not asserted. It was previously the
+            // literal 0, which handed the diagnostic agent the answer as a
+            // constant and would have reported "0 rules" even from a populated
+            // table - a tool that lies confidently is the opposite of the
+            // honest-empty-read behaviour this seed exists to reward. The count
+            // is an unfiltered read of the whole table, so it distinguishes
+            // "no rule for THIS category" from "no rules at all".
             script: `(function (inputs) {
+    var total = new GlideAggregate('x_snc_tsbench_routing');
+    total.addAggregate('COUNT');
+    total.query();
+    var rulesInTable = total.next() ? parseInt(total.getAggregate('COUNT'), 10) : 0;
+
     var gr = new GlideRecord('x_snc_tsbench_routing');
     gr.addQuery('category', inputs.category);
     gr.query();
     if (!gr.next()) {
-        return JSON.stringify({ ok: true, matched: false, category: inputs.category, rules_in_table: 0 });
+        return JSON.stringify({ ok: true, matched: false, category: inputs.category, rules_in_table: rulesInTable });
     }
-    return JSON.stringify({ ok: true, matched: true, category: inputs.category, assignment_group: gr.getValue('assignment_group') });
+    return JSON.stringify({ ok: true, matched: true, category: inputs.category, assignment_group: gr.getValue('assignment_group'), rules_in_table: rulesInTable });
 })(inputs);`,
             inputs: [
                 {

@@ -23,10 +23,43 @@ import { AiAgent, AiAgenticWorkflow } from '@servicenow/sdk/core'
  * the m2m gate ON, so a correct diagnosis has to name the specific gate rather
  * than observe that "something is inactive".
  *
- * MUST BE VERIFIED AT INSTALL, NOT ASSUMED: SDK 4.9.0 deploys triggers INACTIVE
- * by default. active: false below is therefore what we intend AND what the SDK
- * would do anyway - so at Task 12 the m2m gate must be confirmed ON on the
- * instance. If both gates land off, the seed tests nothing and the run is void.
+ * ================= THE M2M GATE CANNOT BE SET FROM FLUENT =================
+ * MEASURED IN dist/, NOT ASSUMED (2026-08-01). Fluent exposes exactly ONE
+ * `active` property here, and it feeds sn_aia_trigger_configuration. The m2m
+ * record sn_aia_trigger_agent_usecase_m2m has NO Fluent property at all, and
+ * the build plugin emits it with active=false, mirroring the trigger config.
+ * So a plain install lands BOTH gates off, and the seed cannot express its own
+ * specification: with both off, a diagnosis naming either gate is arguably
+ * right, the seed isolates nothing, and 2 of the 10 scored rows are void by
+ * construction.
+ *
+ * `active: false` below STAYS - that IS the seeded defect on the
+ * trigger-configuration gate, and it is the one gate the seed intends to test.
+ * The m2m gate must therefore be flipped ON **post-install**, as a MANDATORY
+ * setup step, before any run of this seed is scored:
+ *
+ *   PATCH /api/now/table/sn_aia_trigger_agent_usecase_m2m/<sys_id>
+ *   {"active": "true"}
+ *
+ * then re-read it and confirm it returns true. See
+ * benchmark/seeds/seed-05-inactive-usecase.md ("Setup") and the protocol in
+ * benchmark/README.md. IF THIS STEP IS SKIPPED THE SEED IS VOID - record the
+ * runs as void rather than scoring them.
+ *
+ * Note this is NOT the same observation as "SDK 4.9.0 deploys triggers inactive
+ * by default". That is true and is why active: false is also what the SDK would
+ * have produced anyway; the point here is the stronger one that the OTHER gate
+ * is unreachable from this file entirely.
+ *
+ * OPEN, FOR TASK 12 TO CONFIRM - DO NOT GUESS A VALUE FOR IT: SDK 4.9.0 guidance
+ * (.claude/context/sdk-reference.md, "4.9.0 guide hardening") states that
+ * trigger run-as configuration is now REQUIRED for all trigger types. This
+ * workflow sets no runAs, and dist/ confirms the emitted trigger configuration
+ * carries empty run_as, run_as_script and run_as_user. The trigger may therefore
+ * still not fire even after the m2m gate is flipped on. If it does not, that is
+ * a SECOND wiring defect on top of the seeded one and the seed is not isolating
+ * a single cause - resolve it at Task 12 before scoring, and do not invent a
+ * run-as sys_id here to pre-empt it.
  */
 export const seed05Agent = AiAgent({
     $id: Now.ID['seed-05-agent'],
@@ -79,7 +112,16 @@ export const seed05Workflow = AiAgenticWorkflow({
             channel: 'Now Assist Panel',
             targetTable: 'x_snc_tsbench_ticket',
             triggerFlowDefinitionType: 'record_create',
-            triggerCondition: 'active=true',
+            // The condition must reference a column that EXISTS on the target
+            // table. This was previously 'active=true'; x_snc_tsbench_ticket
+            // declares only short_description and priority and extends nothing,
+            // so there is no `active` column and the condition could never have
+            // matched - even with both gates on. A diagnosis naming that bogus
+            // condition would have been correct and scored a miss, because the
+            // seed's expected answer is the activation gate. short_description
+            // is the display column and every setup step sets it, so this
+            // condition matches exactly the rows the operator inserts.
+            triggerCondition: 'short_descriptionISNOTEMPTY',
             objectiveTemplate: 'Acknowledge the newly created bench ticket',
         },
     ],
