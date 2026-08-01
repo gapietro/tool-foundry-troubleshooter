@@ -83,22 +83,40 @@ describe('the Fluent agent carries the instructions verbatim', () => {
     it('declares no triggerConfig', () => {
         // Build Rule #31: triggerConfig on a bare AiAgent yields a trigger whose
         // usecase is null. It never fires, and nothing reports that it did not.
+        //
+        // A bare substring check cannot tell "the property is declared" from
+        // "the property is discussed" - and this file's job includes
+        // discussing it (the rule-citation comments above name the hazards
+        // they warn about, on purpose). So strip comments first, then assert
+        // against the stripped source, anchored to what actually matters: a
+        // declared property key, not the word appearing anywhere at all.
         const fluent = fs.readFileSync(
             path.join(__dirname, '..', 'src', 'fluent', 'agent-doctor.now.ts'),
             'utf8'
         )
-        expect(fluent).not.toContain('triggerConfig')
+        const code = fluent
+            .replace(/\/\*\*[\s\S]*?\*\//g, '') // strip block comments
+            .replace(/\/\/.*$/gm, '') // strip line comments
+        expect(code).not.toMatch(/^\s*triggerConfig\s*:/m)
     })
 
     it('uses no Now.ref anywhere', () => {
         // Build Rules #21 and #33: Now.ref in the AI family emits a random
         // build-time GUID with no lookup key retained, so it installs verbatim
         // pointing at nothing. Silent at build, install, and in the logs.
+        //
+        // Same reasoning as the triggerConfig guard above: a bare substring
+        // check cannot tell "Now.ref is called" from "Now.ref is discussed in
+        // a comment warning against it" - so strip comments first, then
+        // assert against the stripped source, anchored to an actual call.
         const fluent = fs.readFileSync(
             path.join(__dirname, '..', 'src', 'fluent', 'agent-doctor.now.ts'),
             'utf8'
         )
-        expect(fluent).not.toContain('Now.ref')
+        const code = fluent
+            .replace(/\/\*\*[\s\S]*?\*\//g, '') // strip block comments
+            .replace(/\/\/.*$/gm, '') // strip line comments
+        expect(code).not.toMatch(/Now\.ref\s*\(/)
     })
 
     it('ends both wrapper IIFEs with the required (inputs) invocation', () => {

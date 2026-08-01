@@ -44,8 +44,8 @@ import { AiAgent } from '@servicenow/sdk/core'
  * #21  securityAcl is MANDATORY (TS210 without it). 'Any authenticated user'
  *      maps to snc_internal correctly; 'Specific role' INSERTs duplicate
  *      sys_security_acl_role rows on every redeploy.
- * #31  No trigger configuration on a bare AiAgent — it yields a null usecase
- *      and never fires, with no diagnostic signal. Agent Doctor is invoked
+ * #31  No triggerConfig on a bare AiAgent — it yields a null usecase and never
+ *      fires, with no diagnostic signal. Agent Doctor is invoked
  *      conversationally. LLD §5 rows 18-19 are deferred.
  * #32  Inline tools[] entries carry NO $id — the SDK generates their record
  *      IDs and ScriptToolDetails rejects $id at typecheck.
