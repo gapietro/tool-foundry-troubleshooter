@@ -1,0 +1,6 @@
+{
+    "scope": "x_snc_tsbench",
+    "scopeId": "9e497c000e78403ba99d1b763d9c8655",
+    "name": "TS Bench Seeds",
+    "tsconfigPath": "./src/server/tsconfig.json"
+}

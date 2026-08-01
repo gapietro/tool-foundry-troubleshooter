@@ -11,6 +11,214 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0101 — 2026-08-01
+
+Phase 1a vertical slice, **Task 11 remediation**: a scoped re-review of the benchmark suite found
+that its GenAI seed was built on a **refuted premise**, plus four residuals. Build-only — **no
+`now-sdk install`, no seed executions triggered**. Verified in `benchmark/seed-app/dist/`, not by a
+passing build.
+
+**Seed 4's defect was not a defect (new ruling R-22).** The seed's failure mode was an empty
+`connection` on its own `sys_one_extend_capability_definition`, on R-18's Phase 0 reading that
+`connection` *is* the provider binding. R-18 drew that from a **10-row sample**. Measured against
+the whole table on gpinst01, read-only: the table holds **2026 rows**, **318 of them (15.7%)** have
+`connection` empty — shipped OOB Now Assist definitions among them — and `sys_dictionary` marks
+`connection` **`mandatory=false`** while `capability`, `api_type` and `api` are all
+`mandatory=true`. An empty `connection` is a normal, supported state. Worse, the previous fix wave
+had *hardened every other field* to make `connection` "the only gap", which turned the seed into a
+structural clone of a working OOB definition differing only in an optional field — a specimen that
+would most likely not have failed at all. A benchmark row that measures nothing scores as a miss
+and is indistinguishable from one that measures something.
+
+**This is the project's own signature failure mode, occurring inside the instrument built to catch
+it.** R-11 retracted a `v_plugin` finding for reading a truncated result as absence; R-6 records the
+same shape. R-18 read 10 rows of 2026 and generalised, the inference closed LLD §8 item 8, and it
+then *survived a full adversarial fix wave* that asserted a false denominator ("all 12 rows") three
+times. It was caught only by re-measuring the denominator. **A count without its denominator is not
+a measurement** — recorded as a standing reporting rule in R-22, binding on rulings as well as code.
+
+**Seed 4 re-targeted at a mandatory binding.** `api` now holds
+`00000000000000000000000000000000` against `api_type=sys_hub_flow` — the definition names a
+provider integration Flow that exists nowhere. Justified on the same denominator: `api` is
+`mandatory=true` and `internal_type=document_id`, so it carries **no referential integrity** and
+installs verbatim; **1 of 2026 rows (0.05%)** has an empty `api` and **1 of 2026 (0.05%)** a
+dangling one, making it ~300× rarer than an empty `connection`. The all-zeros value is deliberately
+unmistakable — a plausible random GUID would read as real drift. `connection` stays empty as a
+**documented decoy**: a "no connection bound" diagnosis now scores the correct layer with a **0**
+fix target, and the decoy hit is recorded in `notes`. The rejected alternative, a dangling
+`capability` reference, remains the documented install-refusal **fallback** with its own signature
+(*capability not found*).
+
+**LLD §8 item 8 split, R-21 annotated.** Safety **closed** — it never depended on R-18; the seed
+adds records rather than unmapping anything, and the dangling sys_id cannot collide with a live
+flow. Efficacy **re-opened** until a Task 12 run produces the failure: the new construction is a
+stronger inference, but it is still an inference from table statistics, and this item was already
+closed once on exactly that. §8 item 6 carries the sample-size correction at the point R-18's
+reading originated.
+
+**Four residuals.**
+
+- **Two seed 1 summary lines still named a fix target their own body invalidates** — the spec's
+  header table and the Fluent header both read "the tool input schema", which the body already
+  established is not expressible (Fluent script-tool inputs have no `type` property). Both now name
+  the word-typed contract.
+- **Seed 1's evidence criterion would have mis-scored a correct run** — it said the trace shows
+  `priority_stored` **empty**, but an integer column given a non-numeric string typically settles at
+  **`0`**. Reworded to score the *mismatch* rather than a literal value, with `priority_stored ==
+  "critical"` called out as a refutation of the seed rather than a miss by the agent.
+- **The scorecard stated only the top gate band proportionally** — 8 valid runs with 4 passes had no
+  band. All three bands are now given as proportions of the valid-run denominator (≥80% / ≥50% / 
+  <50%), with inclusive edges, per-denominator pass counts and that worked example.
+- **A general Fluent hazard filed as [#34](https://github.com/gapietro/tool-foundry-troubleshooter/issues/34)** — `Now.ID['key']` inside a `Record()` **data**
+  field builds clean and emits the **literal key name**, not a sys_id, corrupting both the column
+  and the record's composite identity key in `generated/keys.ts`. Same silent-phantom family as
+  Build Rules #21 and #33; proposed for promotion to a numbered rule in `sdk-reference.md`.
+
+**`dist/` evidence for the seed 4 change:**
+
+```xml
+<!-- sys_one_extend_capability_definition_904c0485….xml -->
+<api>00000000000000000000000000000000</api>
+<api_type>sys_hub_flow</api_type>
+<capability>92ff62af516741769c437feb88c80ef3</capability>   <!-- the parent record's real sys_id -->
+<connection/>                                                <!-- the decoy, not the defect -->
+```
+
+Noted while verifying: this record's identity key in `generated/keys.ts` is the **composite
+`{capability, api}`**, so changing `api` mints a new sys_id and marks the old entry `deleted: true`
+rather than updating in place — which matters because repointing `api` is exactly what *fixing* this
+seed means. Recorded in the Fluent header.
+
+## 2026.07.3112 — 2026-07-31
+
+Phase 1a vertical slice, **Task 11**: the seeded-failure benchmark suite — the measuring
+instrument DESIGN.md §1 calls the load-bearing component of the whole harness strategy:
+*"Under A the load-bearing component is the **benchmark**, not Agent Doctor."* Five
+deliberately-broken AI Agents, the run protocol, and the scorecard that will score Agent
+Doctor against them. Build-only — **no `now-sdk install`, no seed executions triggered**.
+
+**The seed-location decision, resolved (new ruling R-21).** `IMPLEMENTATION_PLAN.md` had
+carried an explicit "OPEN — decide before Task 11, not during it" gate against R-13 since
+2026-07-30: where do five deliberately-broken agents live? Both obvious answers failed on a
+requirement the other satisfied — Fluent inside `src/fluent/` (the product app) gives
+reproducibility for Phase 1b's re-run but ships five broken agents inside
+`x_snc_troubleshoot`, the scope every customer installs; MCP/Foundry record automation keeps
+them out of the product app but violates CLAUDE.md's port-to-Fluent rule and is not reliably
+reproducible months later, which is exactly when Phase 1b needs it. Resolved with a **separate
+scoped fixture app**, `benchmark/seed-app/`, scope `x_snc_tsbench`, five seeds authored as
+Fluent DSL (`src/fluent/seed-0{1..5}-*.now.ts`) — reproducibility from the first option,
+app-separation from the second, at the accepted cost of a second scope and a second install
+target. What made scaffolding it low-risk without an install: `now-sdk init` contacts the
+instance during scaffolding but creates no record there — a `sys_scope` query for
+`scope=x_snc_tsbench` returned zero rows against an instance where the same query for other
+scopes returned nine. Full rationale and the rejected-options table in
+`benchmark/DECISION-seed-location.md`.
+
+**The five seeds**, one per gate-scored layer, each a Fluent `AiAgent` (seed 5 an
+`AiAgenticWorkflow`) built to fail for exactly one documented reason:
+
+- **Seed 01 — tool schema mismatch** (layer 3, `tool_schema`). ~~`set_ticket_priority` declares
+  `priority` as a free string~~ ~~and the write silently coerces to empty.~~ **Corrected
+  2026-08-01:** Fluent script-tool inputs have **no `type` property**, so nothing is "declared as
+  a free string" and the emitted `input_schema` is shape-identical to the *correct* seeds' — the
+  word-typed contract lives in the tool description and the script's unguarded `setValue`. And a
+  non-numeric string on an integer column typically settles at **`0`**, not empty; the seed spec no
+  longer scores on a literal stored value, only on the mismatch. `x_snc_tsbench_ticket.priority` is
+  an integer choice 1-5 and `gr.update()` still reports success. Also built to produce a LARGE
+  trace, deliberately stressing Task 9's artifact-paging path.
+- **Seed 02 — ambiguous instruction** (layer 2, `instruction`). "Assign it to the right group"
+  with no group-lookup tool, no routing table, and no group list in the instructions — the
+  agent must invent an answer or stall.
+- **Seed 03 — missing data** (layer 5, `data`). The lookup table exists and the tool queries it
+  correctly, but the table is empty — the seed that separates "the data is absent" from "the
+  read failed," the R-6/R-11 failure mode this project keeps legislating against. Its table is
+  named `x_snc_tsbench_routing`, not the LLD §7's original `x_snc_troubleshoot_bench_routing`,
+  because a scoped table name must begin with its own app's exact scope value (R-13's 40-of-40
+  finding) — a build-time rejection, not shorthand awaiting expansion.
+- **Seed 04 — GenAI capability not mapped to a provider** (layer 6, `genai_stack`). A new
+  capability definition owned by the fixture app rather than unmapping a real one — the
+  shared-instance-safe construction. ~~with `connection` left empty — the construction R-18
+  narrowed this item to. Closes LLD §8 item 8 **build-proven, not yet runtime-proven**.~~
+  **REFUTED and re-targeted 2026-08-01 (R-22)** — an empty `connection` is a normal state
+  (318 of 2026 rows, `mandatory=false`); the defect is now a dangling **mandatory** `api`.
+  LLD §8 item 8 is split: safety closed, efficacy re-opened until Task 12.
+- **Seed 05 — use case exists but is inactive** (layer 7, `wiring`). Everything is correct and
+  published except `sn_aia_trigger_configuration.active=false`, with the sibling gate
+  `sn_aia_trigger_agent_usecase_m2m.active` deliberately left `true` — so the diagnosis has to
+  name the right gate, not just "something is inactive."
+
+**Protocol, scorecard, and decision record** — `benchmark/README.md` (replaces the placeholder
+wholesale), `benchmark/scorecard-template.md`, `benchmark/DECISION-seed-location.md`: smoke
+test against a known-answer gpinst01 specimen invisible from its plan header, then 2 runs per
+seed across all 5 seeds in fresh conversations (10 scored rows), keyed on
+`_agentic_context_.conversation_id` rather than a time window — DESIGN.md §2.4 disqualifies
+time-window keying outright, since `PaRunAnchor`'s 30-minute fallback would glue a second
+blind run onto the first run's anchor and let it read the first run's evidence. The scorecard's
+six-point rubric is joined by four further columns, each discharging a specific ruling:
+`layers_swept` and `layers_available` (R-3's amendment plus the new `layers_available`
+column from R-21, extending "finished vs. did not look" to a third state, "could not look" —
+`swept 1/7, available 1/7` and `swept 1/7, available 7/7` are the same total score and opposite
+verdicts), `cause_of_death` (§2.3 — a 0-point budget death and a 0-point reasoning death are
+opposite verdicts on the gate), and `continuous_tool_execution_limit` /
+`max_auto_executions`, read fresh per run rather than assumed (R-4 / #30 — E2's 19-call result
+was reachable only because that probe's `max_auto_executions` was 20 against an
+instance-typical 10).
+
+**The finding that came out of building the scorecard, not from a probe.** Checking the
+seeds' expected layers against what Agent Doctor can actually sweep surfaced that it has tools
+for **layer 1 only** — `agent_trace` and `read_artifact` (paging, not a layer), the deliberate
+Task 10 vertical-slice scope. All five gate-scored seeds target layers 2-7. A scored run
+executed today therefore returns near-0/10 **by construction**, and Task 12's gate table reads
+that as `< 5/10 → full custom harness as designed` — the most expensive decision in the
+project, reached from a missing-tools gap rather than from anything measured about the native
+harness. Recorded as DESIGN.md **R-21** and filed as its own blocker, **issue #32**: Task 12's
+scored protocol is blocked on Tasks 7-8 (the remaining five tool cores), independent of this
+ruling, since discharging R-21 here does not build those tools.
+
+**What was deliberately not attempted here.** DESIGN.md §2.1's `PaEvidenceCollector` — the
+benchmark's pre-scoring de-risker, meant to separate "tools cannot see the defect" from "agent
+cannot reason to it" before scoring starts — is not built and not in the Phase 1a task list.
+Recording the substitution (a manual pass invoking the tool cores directly against each seed)
+matters more than the substitution itself: an unbuilt de-risker everyone assumes ran is how a
+benchmark produces scores nobody can interpret.
+
+**Doc reconciliation.** `IMPLEMENTATION_PLAN.md` Task 11, `docs/LOW_LEVEL_DESIGN.md` §7 (the seed
+rows — including the corrected `x_snc_tsbench_routing` table name) and ~~§8 item 8 (closed,
+build-proven)~~ **§8 item 8 (that closure is withdrawn — see R-22 in 2026.08.0101)**, and
+DESIGN.md R-21 all updated in this branch to match what was actually built.
+~~§7 instance correction to gpinst01 (R-18c).~~ **That claim was false and is withdrawn:** §7's
+instance correction was made on an earlier branch and this branch made no instance correction at
+all.
+
+**Fix wave following whole-branch review.** The seeds were broken on purpose, but four of them were
+broken in ways their specs did not claim, and two instruments could not measure what they existed
+to measure. Verified in `benchmark/seed-app/dist/`, not by a passing build:
+
+- **Seed 5 was void as built** — both activation gates emitted `false`. Fluent has no property for
+  the `sn_aia_trigger_agent_usecase_m2m` gate, so the seed could not express its own specification.
+  The gate is now a mandatory post-install PATCH, documented in the seed spec, the protocol and LLD §7.
+- **Seed 4 would have failed at layer 3, not layer 6** — the `OneExtendUtil` envelope was a flat
+  name-keyed object rather than an `executionRequests` array keyed by capability sys_id, so it could
+  never have reached the empty `connection`. Envelope corrected and the invocation sys_id moved to
+  the house `REPLACE_WITH_..._SYS_ID` placeholder — both still stand. ~~Capability record completed
+  so `connection` is the only missing binding.~~ **That hardening was aimed at the wrong field and
+  is superseded by R-22 (below).**
+- **Build Rule #42 had made three seeds' setup steps impossible** — `dist/` carried six ACLs, all
+  `operation=execute`, and zero record ACLs, with `ws_access=false` on both fixture tables. Adds
+  `seed-tables-acl.now.ts`. On seed 3 the read ACL is part of the instrument: a `GlideRecordSecure`
+  sweep cannot distinguish an empty table from an unreadable one.
+- **Seed 1's stated mechanism was false** — the column emitted `internal_type=choice`
+  (string-backed) and would have stored `'critical'` verbatim; now `IntegerColumn`. Its evidence
+  path also read the in-memory record after `update()` rather than re-querying.
+- **Seed 5's trigger condition referenced a column that does not exist** (`active=true` on a table
+  with no `active` field), so it could never have matched even with both gates on.
+- **The scorecard could not produce the number the gate consumes** — it scored /6 while the gate
+  counts runs. Adds `passes_gate` with its rule derived from the gate's wording, a void-run state
+  with a denominator rule and an 8-valid-run floor, a partial band on `fix_target_correct`, the
+  two-step `layers_swept` derivation (the documented one-step query matched nothing), and the
+  canonical tool→layer map (the roster is seven tools, not seven layers).
+- Every seed spec's defect section is now marked **predicted, not observed — confirm at Task 12**.
+
 ## 2026.07.3111 — 2026-07-31
 
 Phase 1a vertical slice, **Task 10**: Agent Doctor as a Fluent `AiAgent`
