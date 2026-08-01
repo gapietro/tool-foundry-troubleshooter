@@ -308,6 +308,62 @@ describe('trigger traversal (R-18a)', () => {
         expect(result.data.notes.join(' ')).toMatch(/NOT evidence that no such trigger is wired/)
     })
 
+    it('does NOT report an agent as unwired when the m2m read was denied', () => {
+        // The partial-read-as-absence failure, committed by the traversal built
+        // to avoid it: an empty link list means "no wiring" only if the reads
+        // behind it succeeded. Otherwise it means "unknown", and calling that a
+        // high-severity configuration finding is a confident wrong diagnosis.
+        const { result } = run({ agent: 'Seed Agent', section: 'triggers' }, world(), {
+            denied: ['sn_aia_trigger_agent_usecase_m2m'],
+        })
+        const findings = result.data.triggers.wiring_findings.map((f) => f.finding)
+
+        expect(findings).not.toContain('no_trigger_wiring')
+        expect(findings).toContain('trigger_wiring_unreadable')
+        expect(result.data.triggers.traversal_integrity.complete).toBe(false)
+        expect(result.data.triggers.traversal_integrity.denied).toContain(
+            'sn_aia_trigger_agent_usecase_m2m'
+        )
+    })
+
+    it('does NOT report an agent as unwired when the team chain feeding branch 2 was denied', () => {
+        // One hop upstream of the reported defect, and identical in effect:
+        // branch 2's INPUT is the use case list. Deny sn_aia_team_member and
+        // the list is empty, so the branch queries an impossible value and
+        // returns empty - an absence manufactured upstream.
+        const { result } = run({ agent: 'Seed Agent', section: 'triggers' }, world(), {
+            denied: ['sn_aia_team_member'],
+        })
+        const findings = result.data.triggers.wiring_findings.map((f) => f.finding)
+
+        expect(findings).not.toContain('no_trigger_wiring')
+        expect(findings).toContain('trigger_wiring_unreadable')
+        expect(result.data.triggers.traversal_integrity.denied).toContain('sn_aia_team_member')
+    })
+
+    it('flags a partial traversal even when some links were found', () => {
+        const { result } = run(
+            { agent: 'Seed Agent', section: 'triggers' },
+            world({
+                sn_aia_trigger_agent_usecase_m2m: [
+                    {
+                        sys_id: 'l1',
+                        trigger_configuration: 'trg1',
+                        related_resource_table: 'sn_aia_agent',
+                        related_resource_record: AGENT,
+                        active: 'true',
+                    },
+                ],
+                sn_aia_trigger_configuration: [{ sys_id: 'trg1', name: 'T', active: 'true' }],
+            }),
+            { denied: ['sn_aia_team_member'] }
+        )
+
+        expect(result.data.triggers.wiring_findings.map((f) => f.finding)).toContain(
+            'trigger_traversal_partial'
+        )
+    })
+
     it('reports an agent with no links as unwired, stating both branches were walked', () => {
         const { result } = run({ agent: 'Seed Agent', section: 'triggers' }, world())
 
@@ -481,6 +537,147 @@ describe('access alignment (R-18a — what the tool may claim)', () => {
         expect(access.role_rows[0].roles_are_required).toBe(true)
         expect(access.required_role_count).toBe(1)
         expect(access.missing_roles[0].roles[0].name).toBe('itil')
+    })
+
+    it('keeps the findings it computed when ANOTHER run-as user cannot be read', () => {
+        // The reported defect, exercised directly. The table-level stub cannot
+        // deny one user's roles and not another's, so the read kit is wrapped
+        // to fail exactly the second user's sys_user_has_role query - which is
+        // the only shape that reaches the partial branch.
+        const tables = world({
+            sn_aia_trigger_agent_usecase_m2m: [
+                {
+                    sys_id: 'l1',
+                    trigger_configuration: 'trg1',
+                    related_resource_table: 'sn_aia_agent',
+                    related_resource_record: AGENT,
+                    active: 'true',
+                },
+                {
+                    sys_id: 'l2',
+                    trigger_configuration: 'trg2',
+                    related_resource_table: 'sn_aia_agent',
+                    related_resource_record: AGENT,
+                    active: 'true',
+                },
+            ],
+            sn_aia_trigger_configuration: [
+                { sys_id: 'trg1', name: 'A', active: 'true', run_as_user: 'user1' },
+                { sys_id: 'trg2', name: 'B', active: 'true', run_as_user: 'user2' },
+            ],
+            sys_agent_access_role_configuration: [
+                { sys_id: 'acc1', agent: AGENT, agent_table: 'sn_aia_agent', role_list: 'role_itil' },
+            ],
+            sys_user_role: [{ sys_id: 'role_itil', name: 'itil' }],
+            sys_user_has_role: [],
+        })
+
+        const GlideRecordSecure = makeQueryingGlideRecordSecure(tables)
+        const kitCtx = loadScriptInclude('PaToolReadKit.js', { GlideRecordSecure: GlideRecordSecure })
+        const kit = new kitCtx.PaToolReadKit()
+
+        const realReadRows = kit.readRows
+        let userReads = 0
+        kit.readRows = function (table, queryFn, fields, display, limit, orderBy, data) {
+            if (table === 'sys_user_has_role') {
+                userReads++
+                if (userReads === 2) {
+                    this.noteRead(data, table, 'DENIED')
+                    return { table: table, status: 'DENIED', rows: [], missing_fields: [] }
+                }
+            }
+            return realReadRows.call(this, table, queryFn, fields, display, limit, orderBy, data)
+        }
+
+        const ctx = loadScriptInclude('tools/PaToolAgentConfig.js', {
+            GlideRecordSecure: GlideRecordSecure,
+            PaToolReadKit: function () {
+                return kit
+            },
+        })
+        const core = new ctx.PaToolAgentConfig({ readKit: kit })
+        const access = core.execute({ agent: 'Seed Agent', section: 'triggers' }).data.triggers
+            .access_alignment
+
+        expect(access.comparison_status).toBe('partial')
+        expect(access.users_compared).toBe(1)
+        expect(access.users_not_comparable).toBe(1)
+        // The finding computed for the readable user survives.
+        expect(access.missing_roles).toHaveLength(1)
+        expect(access.missing_roles[0].roles[0].name).toBe('itil')
+        // And an empty result on this path must not read as a pass.
+        expect(access.comparison_note).toMatch(/were never checked|not readable for the other/)
+    })
+
+    it('compares every run-as user when all of them are readable', () => {
+        const { result } = run(
+            { agent: 'Seed Agent', section: 'triggers' },
+            world({
+                sn_aia_trigger_agent_usecase_m2m: [
+                    {
+                        sys_id: 'l1',
+                        trigger_configuration: 'trg1',
+                        related_resource_table: 'sn_aia_agent',
+                        related_resource_record: AGENT,
+                        active: 'true',
+                    },
+                    {
+                        sys_id: 'l2',
+                        trigger_configuration: 'trg2',
+                        related_resource_table: 'sn_aia_agent',
+                        related_resource_record: AGENT,
+                        active: 'true',
+                    },
+                ],
+                sn_aia_trigger_configuration: [
+                    { sys_id: 'trg1', name: 'A', active: 'true', run_as_user: 'user1' },
+                    { sys_id: 'trg2', name: 'B', active: 'true', run_as_user: 'user2' },
+                ],
+                sys_agent_access_role_configuration: [
+                    { sys_id: 'acc1', agent: AGENT, agent_table: 'sn_aia_agent', role_list: 'role_itil' },
+                ],
+                sys_user_role: [{ sys_id: 'role_itil', name: 'itil' }],
+                // user1 reads and holds nothing; user2 is unreadable. The stub
+                // denies per TABLE, so deny nothing and give user1 no roles -
+                // the denial case is covered by the sibling test below.
+                sys_user_has_role: [],
+            })
+        )
+        const access = result.data.triggers.access_alignment
+
+        expect(access.users_compared).toBe(2)
+        expect(access.missing_roles.length).toBeGreaterThan(0)
+        expect(access.comparison_status).toBe('completed')
+    })
+
+    it('reports a partial comparison rather than discarding it, and says an empty result is not a pass', () => {
+        const { result } = run(
+            { agent: 'Seed Agent', section: 'triggers' },
+            world({
+                sn_aia_trigger_agent_usecase_m2m: [
+                    {
+                        sys_id: 'l1',
+                        trigger_configuration: 'trg1',
+                        related_resource_table: 'sn_aia_agent',
+                        related_resource_record: AGENT,
+                        active: 'true',
+                    },
+                ],
+                sn_aia_trigger_configuration: [
+                    { sys_id: 'trg1', name: 'A', active: 'true', run_as_user: 'user1' },
+                ],
+                sys_agent_access_role_configuration: [
+                    { sys_id: 'acc1', agent: AGENT, agent_table: 'sn_aia_agent', role_list: 'role_itil' },
+                ],
+                sys_user_role: [{ sys_id: 'role_itil', name: 'itil' }],
+            }),
+            { denied: ['sys_user_has_role'] }
+        )
+        const access = result.data.triggers.access_alignment
+
+        expect(access.comparison_status).toBe('not_possible')
+        expect(access.users_compared).toBe(0)
+        expect(access.users_not_comparable).toBe(1)
     })
 
     it('reports the comparison as not possible rather than passing when run-as roles cannot be read', () => {
