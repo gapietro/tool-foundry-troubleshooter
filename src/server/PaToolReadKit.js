@@ -62,6 +62,9 @@ PaToolReadKit.prototype = {
     newData: function (toolName, version) {
         var data = {
             reads: {},
+            // Success statuses asserted by a path that did not read rows, kept
+            // so a rejected claim is visible rather than merely absent (R-25).
+            read_status_rejected: {},
             // Every read that hit its ceiling, recorded centrally. See
             // readRows: a core cannot forget to check this, because
             // evidence_basis surfaces it whether the core looks or not.
@@ -141,7 +144,7 @@ PaToolReadKit.prototype = {
             result.status = 'DENIED'
         }
 
-        this.noteRead(data, table, result.status)
+        this.noteRead(data, table, result.status, true)
         this.noteTruncation(data, table, result.truncated_at)
         this.noteFieldWarnings(data, table, result.missing_fields)
         return result
@@ -167,7 +170,7 @@ PaToolReadKit.prototype = {
             result.status = 'DENIED'
         }
 
-        this.noteRead(data, table, result.status)
+        this.noteRead(data, table, result.status, true)
         this.noteFieldWarnings(data, table, result.missing_fields)
         return result
     },
@@ -301,10 +304,33 @@ PaToolReadKit.prototype = {
      * this project keeps getting wrong (R-11: a partial result read as absence).
      *
      * Strength: unknown < empty < ok, with DENIED overriding everything.
+     *
+     * ---------------------------------------------------------------------
+     * ONLY A ROW READ MAY ASSERT A SUCCESS STATUS (R-25)
+     * ---------------------------------------------------------------------
+     * `ok` means "the read succeeded and rows were present" and `empty` means
+     * "it succeeded and there were none". Both are claims about DATA, and only
+     * a path that actually fetched rows is in a position to make one. A field
+     * probe wrote `ok` from a schema question for six review rounds, and
+     * because this function only ever upgrades, no later read could correct it.
+     *
+     * So `fromRowRead` is required for a success status, and it is passed by
+     * exactly two callers: readRows and readOne. Anything else may record only
+     * the negative outcomes — DENIED and unknown — which are facts about
+     * ACCESS rather than about data, and which any path can legitimately
+     * observe. A rejected assertion is recorded rather than dropped, so the
+     * attempt is visible instead of silently absent.
+     *
+     * @param {Boolean} [fromRowRead] true only from a path that fetched rows
      */
-    noteRead: function (data, table, status) {
+    noteRead: function (data, table, status, fromRowRead) {
         if (!data || !data.reads) return
         var prior = data.reads[table]
+
+        if ((status === 'ok' || status === 'empty') && !fromRowRead) {
+            if (data.read_status_rejected) data.read_status_rejected[table] = status
+            return
+        }
 
         if (prior === 'DENIED') return
         if (status === 'DENIED' || !prior) {

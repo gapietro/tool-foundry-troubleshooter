@@ -359,8 +359,8 @@ describe('PaToolReadKit.noteRead', () => {
         const kit = kitWith(makeGlideRecordSecure({}))
         const data = kit.newData()
 
-        kit.noteRead(data, 'sn_aia_agent', 'empty')
-        kit.noteRead(data, 'sn_aia_agent', 'ok')
+        kit.noteRead(data, 'sn_aia_agent', 'empty', true)
+        kit.noteRead(data, 'sn_aia_agent', 'ok', true)
 
         expect(data.reads.sn_aia_agent).toBe('ok')
     })
@@ -374,12 +374,12 @@ describe('PaToolReadKit.noteRead', () => {
 
         const a = kit.newData()
         kit.noteRead(a, 't', 'unknown')
-        kit.noteRead(a, 't', 'ok')
+        kit.noteRead(a, 't', 'ok', true)
         expect(a.reads.t).toBe('ok')
 
         const b = kit.newData()
         kit.noteRead(b, 't', 'unknown')
-        kit.noteRead(b, 't', 'empty')
+        kit.noteRead(b, 't', 'empty', true)
         expect(b.reads.t).toBe('empty')
     })
 
@@ -387,7 +387,7 @@ describe('PaToolReadKit.noteRead', () => {
         const kit = kitWith(makeGlideRecordSecure({}))
         const data = kit.newData()
 
-        kit.noteRead(data, 't', 'ok')
+        kit.noteRead(data, 't', 'ok', true)
         kit.noteRead(data, 't', 'unknown')
         expect(data.reads.t).toBe('ok')
     })
@@ -399,6 +399,57 @@ describe('PaToolReadKit.noteRead', () => {
         kit.noteRead(data, 't', 'DENIED')
         kit.noteRead(data, 't', 'unknown')
         expect(data.reads.t).toBe('DENIED')
+    })
+})
+
+describe('only a row read may assert a success status (R-25)', () => {
+    it('refuses ok from a caller that did not read rows, and records the attempt', () => {
+        // A field probe wrote `ok` from a schema question for six review
+        // rounds. Because noteRead only upgrades, no later read could correct
+        // it - the table stayed reported as readable-with-data on the strength
+        // of a question that fetched nothing.
+        const kit = kitWith(makeGlideRecordSecure({}))
+        const data = kit.newData()
+
+        kit.noteRead(data, 't', 'ok')
+
+        expect(data.reads.t).toBeUndefined()
+        // Rejected, not dropped: the attempt stays visible.
+        expect(data.read_status_rejected.t).toBe('ok')
+    })
+
+    it('refuses empty on the same grounds', () => {
+        const kit = kitWith(makeGlideRecordSecure({}))
+        const data = kit.newData()
+
+        kit.noteRead(data, 't', 'empty')
+
+        expect(data.reads.t).toBeUndefined()
+        expect(data.read_status_rejected.t).toBe('empty')
+    })
+
+    it('still accepts the negative outcomes from any caller', () => {
+        // DENIED and unknown are facts about ACCESS, not about data, and any
+        // path can legitimately observe them.
+        const kit = kitWith(makeGlideRecordSecure({}))
+        const denied = kit.newData()
+        const unknown = kit.newData()
+
+        kit.noteRead(denied, 't', 'DENIED')
+        kit.noteRead(unknown, 't', 'unknown')
+
+        expect(denied.reads.t).toBe('DENIED')
+        expect(unknown.reads.t).toBe('unknown')
+    })
+
+    it('accepts a success status from a real read', () => {
+        const kit = kitWith(makeGlideRecordSecure({ t: [{ sys_id: '1' }] }))
+        const data = kit.newData()
+
+        kit.readRows('t', null, ['sys_id'], [], 10, null, data)
+
+        expect(data.reads.t).toBe('ok')
+        expect(data.read_status_rejected).toEqual({})
     })
 })
 
