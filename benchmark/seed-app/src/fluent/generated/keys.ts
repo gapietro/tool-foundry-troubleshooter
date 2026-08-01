@@ -317,6 +317,7 @@ declare global {
                     {
                         table: 'sys_one_extend_capability_definition'
                         id: '5664bfc88b444f8ba6259f1e329c075d'
+                        deleted: true
                         key: {
                             capability: '92ff62af516741769c437feb88c80ef3'
                             api: '936e514a53b3b110f028ddeeff7b128c'
@@ -458,6 +459,14 @@ declare global {
                         key: {
                             target_id: 'cd050d48e810411d9f113fd530694fe6'
                             version_name: 'V1'
+                        }
+                    },
+                    {
+                        table: 'sys_one_extend_capability_definition'
+                        id: '904c0485699a4a73a124446a7231c563'
+                        key: {
+                            capability: '92ff62af516741769c437feb88c80ef3'
+                            api: '00000000000000000000000000000000'
                         }
                     },
                     {

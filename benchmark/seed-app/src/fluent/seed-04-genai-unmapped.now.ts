@@ -5,16 +5,16 @@ import { AiAgent, Record } from '@servicenow/sdk/core'
  * SEED 4 - GenAI capability not mapped to a provider.
  * Expected layer: genai_stack. Expected fix target: capability mapping.
  *
- * THE DEFECT, ON PURPOSE: a capability definition whose connection - the bound
- * provider credential alias - is EMPTY. R-18 established that connection is
- * exactly that binding, so an empty one IS the "capability not mapped to a
- * provider" finding this seed needs to produce.
+ * THE DEFECT, ON PURPOSE: a capability definition whose `api` - the MANDATORY
+ * pointer at the provider integration subflow that actually runs the call -
+ * holds an all-zeros sys_id that resolves to no sys_hub_flow record at all.
+ * The capability is real and reachable; the provider behind it is not.
  *
  * SHARED-INSTANCE SAFETY, which is why this seed is shaped this way.
  * LLD 7 carries an explicit warning: do NOT unmap real capabilities. gpinst01
  * is shared. This seed therefore creates its OWN capability definition rather
  * than breaking an existing one. Nothing real is unmapped and no other tenant
- * of the instance is affected. This closes LLD section 8 item 8.
+ * of the instance is affected.
  *
  * INSTALL RISK, not reached by Task 11: sys_one_extend_capability_definition
  * is a GLOBAL table, and a scoped app writing into one may be refused at
@@ -22,23 +22,46 @@ import { AiAgent, Record } from '@servicenow/sdk/core'
  * the fallback is the bogus-capability-reference construction described in the
  * seed spec.
  *
- * ============ ONE MISSING BINDING, NOT THREE (corrected 2026-08-01) ==========
- * The seed's entire value is that `connection` is the ONLY thing missing. As
- * originally written it was not: dist/ showed api_type=generic, NO api value at
- * all, and `capability` carrying a NAME string where the column is a reference
- * to sys_one_extend_capability. Three missing bindings, so an installed run
- * could fail for any of them and a diagnosis blaming the wrong one would be
- * unfairly scored.
+ * ====== THE PREMISE WAS REFUTED, AND THE SEED RE-TARGETED (2026-08-01) ======
+ * This seed's defect USED to be an empty `connection`, on the R-18 theory that
+ * an empty connection IS "capability not mapped to a provider". R-18 drew that
+ * from a TEN-ROW sample. Measured against the whole table on gpinst01,
+ * read-only, denominators stated:
  *
- * The well-formed shape was read off gpinst01 (read-only) rather than guessed.
- * Every one of the 12 sys_one_extend_capability_definition rows on the instance
- * uses api_type=sys_hub_flow with `api` pointing at the provider integration
- * subflow, and `capability` pointing at a sys_one_extend_capability row. This
- * seed now matches that shape exactly, and leaves `connection` empty. Note the
- * instance itself carries a live example of precisely this state - "Generic
- * metadata summarizer (Now LLM Service - Now LLM Generic)" has `api` set and
- * `connection` empty - which is corroboration that an empty connection is a
- * real, reachable condition and not an artifact of how this seed is built.
+ *   - sys_one_extend_capability_definition holds 2026 rows (not 10, not 12).
+ *   - 318 of 2026 (15.7%) have `connection` EMPTY, shipped OOB Now Assist
+ *     definitions among them.
+ *   - sys_dictionary: `connection` is mandatory=FALSE (a reference to
+ *     sys_alias). `capability`, `api_type` and `api` are all mandatory=TRUE.
+ *
+ * So an empty connection is a normal, common, supported state, and after the
+ * previous fix wave this record had become a structural clone of working OOB
+ * definitions differing only in an optional field. The seed would most likely
+ * not have failed at all - a benchmark specimen that measures nothing.
+ *
+ * WHY `api` IS THE REPLACEMENT, with its counts. Same table, same denominator:
+ *   - 1 of 2026 rows has `api` empty (0.05%) - the "Decision" row.
+ *   - api_type=sys_hub_flow accounts for 1840 of 2026 rows, spread over 55
+ *     distinct `api` values. 54 of those 55 resolve to a live sys_hub_flow;
+ *     exactly ONE does not, and it belongs to a single OOB row ("Default
+ *     OneExtend Profanity Filter"). So a dangling `api` is 1 row in 2026
+ *     (0.05%) - roughly 300x rarer than an empty connection, and genuinely
+ *     anomalous rather than routine.
+ *   - `api` is internal_type=document_id, so it carries NO referential
+ *     integrity: an arbitrary sys_id installs verbatim and resolves to
+ *     nothing. That is what makes the failure guaranteed rather than hoped for.
+ *
+ * The rejected alternative was a dangling `capability` reference. It is also
+ * mandatory, but (a) it is a true `reference` column, so the platform may
+ * validate or repair it, and (b) breaking it would change the seed's failure
+ * signature to "capability not found" and would leave the tool with no sys_id
+ * to invoke at all - the fallback construction, not this one.
+ *
+ * `connection` STAYS EMPTY, and is NO LONGER THE DEFECT. It is left empty
+ * because there is no credential alias to bind and because 318 OOB rows do
+ * exactly the same; it is deliberately not load-bearing. A diagnosis that
+ * names the empty connection as the root cause is naming a normal state and
+ * should NOT be scored as a hit - see benchmark/seeds/seed-04-genai-unmapped.md.
  *
  * THE PARENT CAPABILITY RECORD IS NOT OPTIONAL. OneExtend is invoked by
  * capability SYS_ID (see the tool script below), so without a
@@ -57,10 +80,11 @@ export const seed04CapabilityParent = Record({
     },
 })
 
-// The provider binding for that capability - complete except for the one thing
-// the seed removes. `api` is the OOB "Now LLM Integration" sys_hub_flow
-// (936e514a53b3b110f028ddeeff7b128c), verified present on gpinst01 and the
-// value used by every Now LLM Generic definition row on the instance.
+// The provider binding for that capability - well-formed in every respect
+// except the one the seed breaks. The healthy value of `api` for a Now LLM
+// Generic definition is the OOB "Now LLM Integration" sys_hub_flow
+// 936e514a53b3b110f028ddeeff7b128c (verified present on gpinst01; 422 of the
+// 2026 definition rows use it). THAT is what a correct fix restores.
 //
 // NOTE THE REFERENCE FORM, measured in dist/: `capability` takes the exported
 // Record OBJECT directly. Writing Now.ID['seed-04-capability-parent'] here
@@ -77,9 +101,23 @@ export const seed04Capability = Record({
         name: 'x_snc_tsbench_unmapped_capability (Now LLM Service - unmapped)',
         capability: seed04CapabilityParent,
         api_type: 'sys_hub_flow',
-        api: '936e514a53b3b110f028ddeeff7b128c',
-        // THE DEFECT, AND NOW THE ONLY ONE. Empty = no provider credential
-        // alias bound = "capability not mapped to a provider".
+        // THE DEFECT. api_type says "the provider is a Flow" and `api` names a
+        // sys_hub_flow that does not exist. All zeros on purpose: a maintainer
+        // must be able to see at a glance that this is deliberate, which a
+        // plausible-looking random GUID would hide. `api` is document_id, so
+        // there is no referential integrity to catch it - it installs verbatim
+        // and resolves to nothing. Verify this value in dist/ after any change.
+        api: '00000000000000000000000000000000',
+        // IDENTITY NOTE, measured in generated/keys.ts: this record's identity
+        // key is the COMPOSITE {capability, api}. Changing `api` therefore
+        // mints a NEW sys_id and marks the old entry deleted:true - it is not
+        // an in-place update. That matters because repointing `api` is exactly
+        // what fixing this seed means, so a Fluent-side fix re-IDs the record
+        // and the runtime capability sys_id (the parent's) is what stays
+        // stable. Same identity-churn family as Build Rule #33.
+        // NOT the defect, and not scored as one. Empty is the normal state for
+        // 318 of the 2026 definition rows on gpinst01 and the column is
+        // mandatory=false. Left empty because there is no alias to bind.
         connection: '',
     },
 })
