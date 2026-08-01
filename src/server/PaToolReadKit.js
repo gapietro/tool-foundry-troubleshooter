@@ -184,7 +184,7 @@ PaToolReadKit.prototype = {
      * @returns {Object} {valid: [], status: 'ok'|'DENIED'}
      */
     validFields: function (table, candidates, data) {
-        var out = { valid: [], status: 'DENIED' }
+        var out = { valid: [], probed: candidates, status: 'DENIED' }
 
         try {
             var gr = new GlideRecordSecure(table)
@@ -193,7 +193,11 @@ PaToolReadKit.prototype = {
                     if (gr.isValidField(candidates[i])) out.valid.push(candidates[i])
                 } catch (e) {
                     // R-1: `e` untouched. Cannot tell is not the same as absent.
+                    // The probe stopped part-way, so `valid` is a PREFIX of the
+                    // candidate list rather than an answer about all of them.
                     out.status = 'unknown'
+                    out.partial = true
+                    this.noteRead(data, table, 'unknown')
                     return out
                 }
             }
@@ -203,14 +207,19 @@ PaToolReadKit.prototype = {
             out.status = 'DENIED'
         }
 
-        this.noteRead(data, table, out.status === 'ok' ? this.readStatusOf(data, table) : out.status)
+        // A SUCCESSFUL PROBE RECORDS NOTHING.
+        //
+        // `ok` in data.reads means "read succeeded and rows were present" —
+        // readRows sets it only when rows.length > 0. A field probe reads no
+        // rows at all, so writing `ok` from here asserts something the probe
+        // never established, and because noteRead only ever upgrades, a later
+        // read returning zero rows could not correct it. The table would be
+        // reported readable-with-data on the strength of a schema question.
+        //
+        // Only the negative outcomes are real information about access, and
+        // those are recorded: DENIED here, `unknown` at the early return above.
+        if (out.status === 'DENIED') this.noteRead(data, table, 'DENIED')
         return out
-    },
-
-    /** Current recorded status for a table, so validFields does not downgrade it. */
-    readStatusOf: function (data, table) {
-        if (!data || !data.reads) return 'ok'
-        return data.reads[table] || 'ok'
     },
 
     /**
