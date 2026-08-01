@@ -11,6 +11,97 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.07.3112 — 2026-07-31
+
+Phase 1a vertical slice, **Task 11**: the seeded-failure benchmark suite — the measuring
+instrument DESIGN.md §1 calls the load-bearing component of the whole harness strategy:
+*"Under A the load-bearing component is the **benchmark**, not Agent Doctor."* Five
+deliberately-broken AI Agents, the run protocol, and the scorecard that will score Agent
+Doctor against them. Build-only — **no `now-sdk install`, no seed executions triggered**.
+
+**The seed-location decision, resolved (new ruling R-21).** `IMPLEMENTATION_PLAN.md` had
+carried an explicit "OPEN — decide before Task 11, not during it" gate against R-13 since
+2026-07-30: where do five deliberately-broken agents live? Both obvious answers failed on a
+requirement the other satisfied — Fluent inside `src/fluent/` (the product app) gives
+reproducibility for Phase 1b's re-run but ships five broken agents inside
+`x_snc_troubleshoot`, the scope every customer installs; MCP/Foundry record automation keeps
+them out of the product app but violates CLAUDE.md's port-to-Fluent rule and is not reliably
+reproducible months later, which is exactly when Phase 1b needs it. Resolved with a **separate
+scoped fixture app**, `benchmark/seed-app/`, scope `x_snc_tsbench`, five seeds authored as
+Fluent DSL (`src/fluent/seed-0{1..5}-*.now.ts`) — reproducibility from the first option,
+app-separation from the second, at the accepted cost of a second scope and a second install
+target. What made scaffolding it low-risk without an install: `now-sdk init` contacts the
+instance during scaffolding but creates no record there — a `sys_scope` query for
+`scope=x_snc_tsbench` returned zero rows against an instance where the same query for other
+scopes returned nine. Full rationale and the rejected-options table in
+`benchmark/DECISION-seed-location.md`.
+
+**The five seeds**, one per gate-scored layer, each a Fluent `AiAgent` (seed 5 an
+`AiAgenticWorkflow`) built to fail for exactly one documented reason:
+
+- **Seed 01 — tool schema mismatch** (layer 3, `tool_schema`). `set_ticket_priority` declares
+  `priority` as a free string while `x_snc_tsbench_ticket.priority` is an integer choice 1-5;
+  the write silently coerces to empty and `gr.update()` still reports success. Also built to
+  produce a LARGE trace, deliberately stressing Task 9's artifact-paging path.
+- **Seed 02 — ambiguous instruction** (layer 2, `instruction`). "Assign it to the right group"
+  with no group-lookup tool, no routing table, and no group list in the instructions — the
+  agent must invent an answer or stall.
+- **Seed 03 — missing data** (layer 5, `data`). The lookup table exists and the tool queries it
+  correctly, but the table is empty — the seed that separates "the data is absent" from "the
+  read failed," the R-6/R-11 failure mode this project keeps legislating against. Its table is
+  named `x_snc_tsbench_routing`, not the LLD §7's original `x_snc_troubleshoot_bench_routing`,
+  because a scoped table name must begin with its own app's exact scope value (R-13's 40-of-40
+  finding) — a build-time rejection, not shorthand awaiting expansion.
+- **Seed 04 — GenAI capability not mapped to a provider** (layer 6, `genai_stack`). A new
+  capability definition owned by the fixture app with `connection` left empty, rather than
+  unmapping a real one — the shared-instance-safe construction R-18 narrowed this item to.
+  Closes LLD §8 item 8 **build-proven, not yet runtime-proven** — triggering the failure and
+  capturing the execution is Task 12's.
+- **Seed 05 — use case exists but is inactive** (layer 7, `wiring`). Everything is correct and
+  published except `sn_aia_trigger_configuration.active=false`, with the sibling gate
+  `sn_aia_trigger_agent_usecase_m2m.active` deliberately left `true` — so the diagnosis has to
+  name the right gate, not just "something is inactive."
+
+**Protocol, scorecard, and decision record** — `benchmark/README.md` (replaces the placeholder
+wholesale), `benchmark/scorecard-template.md`, `benchmark/DECISION-seed-location.md`: smoke
+test against a known-answer gpinst01 specimen invisible from its plan header, then 2 runs per
+seed across all 5 seeds in fresh conversations (10 scored rows), keyed on
+`_agentic_context_.conversation_id` rather than a time window — DESIGN.md §2.4 disqualifies
+time-window keying outright, since `PaRunAnchor`'s 30-minute fallback would glue a second
+blind run onto the first run's anchor and let it read the first run's evidence. The scorecard's
+six-point rubric is joined by four further columns, each discharging a specific ruling:
+`layers_swept` and `layers_available` (R-3's amendment plus the new `layers_available`
+column from R-21, extending "finished vs. did not look" to a third state, "could not look" —
+`swept 1/7, available 1/7` and `swept 1/7, available 7/7` are the same total score and opposite
+verdicts), `cause_of_death` (§2.3 — a 0-point budget death and a 0-point reasoning death are
+opposite verdicts on the gate), and `continuous_tool_execution_limit` /
+`max_auto_executions`, read fresh per run rather than assumed (R-4 / #30 — E2's 19-call result
+was reachable only because that probe's `max_auto_executions` was 20 against an
+instance-typical 10).
+
+**The finding that came out of building the scorecard, not from a probe.** Checking the
+seeds' expected layers against what Agent Doctor can actually sweep surfaced that it has tools
+for **layer 1 only** — `agent_trace` and `read_artifact` (paging, not a layer), the deliberate
+Task 10 vertical-slice scope. All five gate-scored seeds target layers 2-7. A scored run
+executed today therefore returns near-0/10 **by construction**, and Task 12's gate table reads
+that as `< 5/10 → full custom harness as designed` — the most expensive decision in the
+project, reached from a missing-tools gap rather than from anything measured about the native
+harness. Recorded as DESIGN.md **R-21** and filed as its own blocker, **issue #32**: Task 12's
+scored protocol is blocked on Tasks 7-8 (the remaining five tool cores), independent of this
+ruling, since discharging R-21 here does not build those tools.
+
+**What was deliberately not attempted here.** DESIGN.md §2.1's `PaEvidenceCollector` — the
+benchmark's pre-scoring de-risker, meant to separate "tools cannot see the defect" from "agent
+cannot reason to it" before scoring starts — is not built and not in the Phase 1a task list.
+Recording the substitution (a manual pass invoking the tool cores directly against each seed)
+matters more than the substitution itself: an unbuilt de-risker everyone assumes ran is how a
+benchmark produces scores nobody can interpret.
+
+**Doc reconciliation.** `IMPLEMENTATION_PLAN.md` Task 11, `docs/LOW_LEVEL_DESIGN.md` §7
+(instance correction to gpinst01, R-18c) and §8 item 8 (closed, build-proven), and DESIGN.md
+R-21 all updated in this branch to match what was actually built, including the corrected
+`x_snc_tsbench_routing` table name.
+
 ## 2026.07.3111 — 2026-07-31
 
 Phase 1a vertical slice, **Task 10**: Agent Doctor as a Fluent `AiAgent`
