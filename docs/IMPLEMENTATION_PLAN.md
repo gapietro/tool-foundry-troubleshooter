@@ -255,9 +255,11 @@ Four things to carry forward rather than rediscover:
 ## Task 11: Seeded-Failure Benchmark Suite
 
 **Files:**
-- Create: `benchmark/README.md` — protocol (below)
-- Create: `benchmark/seeds/seed-01-schema-mismatch.md` … `seed-05-inactive-usecase.md` — per seed: the broken agent's definition, the defect, expected root-cause layer, expected fix target, setup steps
+- Create: `benchmark/README.md` — protocol
+- Create: `benchmark/DECISION-seed-location.md` — the seed-location decision record (DESIGN.md R-21)
 - Create: `benchmark/scorecard-template.md`
+- Create: `benchmark/seeds/seed-01-schema-mismatch.md` … `seed-05-inactive-usecase.md` — per seed: the broken agent's definition, the defect, expected root-cause layer, expected fix target, setup steps
+- Create: `benchmark/seed-app/` — separate scoped fixture app (scope `x_snc_tsbench`), the five seeds authored as Fluent DSL
 
 **The five seeds (from PRD):**
 
@@ -276,11 +278,12 @@ The five seeds cover four of the six symptoms in ServiceNow's official K26 failu
 **Protocol:**
 - Each seed: build the broken agent, trigger the failure, capture the execution sys_id
 
-> **OPEN — decide before Task 11, not during it (raised 2026-07-30, DESIGN.md R-13).** How the five deliberately-broken seed agents get created is genuinely unsettled, and the two obvious answers are both wrong as stated:
-> - **Fluent in `src/fluent/`** gives reproducibility — Phase 1b re-runs this same benchmark against the custom harness, and the comparison is only valid on identical seeds. But it would ship five broken agents inside the product app to any customer who installs it.
-> - **MCP/Foundry automation** keeps them out of the app, but CLAUDE.md requires anything prototyped via MCP to be ported to Fluent before the session ends, and hand-built seeds are not reliably reproducible months later.
->
-> Likely resolution is a **separate scoped app** for the benchmark fixtures (Fluent, reproducible, never installed alongside the product), but that costs a second scope and a second install target. Not decided here.
+> **RESOLVED 2026-07-31 (issue #31, DESIGN.md R-21).** The five seeded failure agents live in a
+> **separate scoped fixture app** — `benchmark/seed-app/`, scope `x_snc_tsbench`, authored as Fluent.
+> Fluent gives the reproducibility the Phase 1b re-run needs (the two harnesses are only comparable
+> on identical seeds); the separate scope keeps five deliberately broken agents out of the product
+> app a customer installs. The cost — a second scope and a second install target — is accepted.
+> Rationale and rejected options: `benchmark/DECISION-seed-location.md`.
 - **2 runs per seed** (fresh conversation each) = 10 scored runs — the doubled runs test the documented "inconsistent behavior on identical inputs" failure mode
 - Blind: Agent Doctor's instructions/tools contain no knowledge of the seeds
 

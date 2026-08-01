@@ -405,4 +405,38 @@ changing that test, deliberately.
 
 ---
 
+**R-21 — The seed-location gate is resolved; and the resolution exposes that a scored run today can't be meaningful, only interpretable. (2026-07-31)**
+
+**Found:** two things, discovered building Task 11.
+
+1. **The seed-location decision** (`IMPLEMENTATION_PLAN.md`'s "OPEN — decide before Task 11" gate,
+   raised 2026-07-30 against R-13). Both prior candidates failed on a requirement the other
+   satisfied: Fluent in `src/fluent/` (the product app) gives reproducibility but ships five
+   deliberately broken agents inside `x_snc_troubleshoot`, the scope every customer installs; MCP/
+   Foundry record automation keeps them out of the product app but violates CLAUDE.md's port-to-
+   Fluent rule and is not reliably reproducible months later, which is exactly when Phase 1b needs
+   it. A **separate scoped fixture app** — `benchmark/seed-app/`, scope `x_snc_tsbench`, the five
+   seeds authored as Fluent DSL — takes reproducibility from the first option and app-separation
+   from the second, at the accepted cost of a second scope and a second install target. The
+   measured fact that made scaffolding it low-risk: `now-sdk init` contacts the instance during
+   scaffolding but creates no record there — a `sys_scope` query for `scope=x_snc_tsbench` returned
+   zero rows against an instance where the same query for other scopes returned nine. Full
+   rationale and the rejected-options table: `benchmark/DECISION-seed-location.md`.
+2. **The layer-availability finding**, surfaced while checking that finding against the seeds'
+   expected layers. `docs/agent/agent-doctor-instructions.md` states it directly: Agent Doctor "has
+   tools for LAYER 1 ONLY" — `agent_trace` and `read_artifact` (paging, not a layer), the deliberate
+   Task 10 vertical-slice scope. Layers 2–7 have no tool in this build. All five gate-scored seeds
+   target layers 2–7 (schema, instruction, data, genai_stack, wiring — none targets layer 1), so a
+   scored run executed today returns near-0/10 **by construction**, and Task 12's gate table reads
+   that as `< 5/10 → Full custom harness as designed` — the most expensive decision in the project,
+   reached from a missing-tools gap rather than anything measured about the native harness.
+
+**Change:** `benchmark/scorecard-template.md` records `layers_available` alongside `layers_swept` —
+extending R-3's *finished vs. did not look* distinction to a third state, *could not look*, so a
+near-0 score reads as "no tools to look with" rather than "looked and failed." Task 12's scored
+protocol is **blocked on Tasks 7–8** (the remaining five tool cores) and is filed as its own issue,
+separate from this ruling, since discharging R-21 here does not build those tools.
+
+---
+
 *Next steps agreed in spar: fold changes 2.1–2.4 into `docs/IMPLEMENTATION_PLAN.md` (new collector task; scorecard field; anchor keying rule) and `docs/LOW_LEVEL_DESIGN.md` (§4.6 anchor spec, §7 protocol, §8 items). Drift review after Phase 1a build compares the built system to this record.*
