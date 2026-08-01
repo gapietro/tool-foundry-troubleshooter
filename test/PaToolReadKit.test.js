@@ -253,6 +253,42 @@ describe('PaToolReadKit.noteRead', () => {
 
         expect(data.reads.sn_aia_agent).toBe('ok')
     })
+
+    it('lets any real read outcome supersede unknown', () => {
+        // `unknown` means the field-presence check was unavailable — "could not
+        // tell", not "could not read". Leaving it in place after rows came back
+        // reports a table as indeterminate when it was read successfully, which
+        // understates access in the direction this project keeps getting wrong.
+        const kit = kitWith(makeGlideRecordSecure({}))
+
+        const a = kit.newData()
+        kit.noteRead(a, 't', 'unknown')
+        kit.noteRead(a, 't', 'ok')
+        expect(a.reads.t).toBe('ok')
+
+        const b = kit.newData()
+        kit.noteRead(b, 't', 'unknown')
+        kit.noteRead(b, 't', 'empty')
+        expect(b.reads.t).toBe('empty')
+    })
+
+    it('never downgrades a real outcome back to unknown', () => {
+        const kit = kitWith(makeGlideRecordSecure({}))
+        const data = kit.newData()
+
+        kit.noteRead(data, 't', 'ok')
+        kit.noteRead(data, 't', 'unknown')
+        expect(data.reads.t).toBe('ok')
+    })
+
+    it('keeps DENIED sticky even against unknown', () => {
+        const kit = kitWith(makeGlideRecordSecure({}))
+        const data = kit.newData()
+
+        kit.noteRead(data, 't', 'DENIED')
+        kit.noteRead(data, 't', 'unknown')
+        expect(data.reads.t).toBe('DENIED')
+    })
 })
 
 describe('PaToolReadKit.pluck', () => {

@@ -1373,8 +1373,14 @@ PaToolAgentConfig.prototype = {
         var branches = { agent_direct: 0, team_usecase_chain: 0 }
         var statuses = []
 
+        // No silent caps: each branch is limited independently, so a branch
+        // that hits the ceiling has to say so or a partial traversal reads as a
+        // complete one — the failure this whole section exists to avoid.
+        var truncated = {}
+
         function collect(self, read, via) {
             statuses.push(read.status)
+            if (read.rows.length >= self.MAX_TRIGGER_LINKS) truncated[via] = self.MAX_TRIGGER_LINKS
             for (var i = 0; i < read.rows.length; i++) {
                 var row = read.rows[i]
                 var triggerId = k.refValue(row.trigger_configuration)
@@ -1403,6 +1409,11 @@ PaToolAgentConfig.prototype = {
                     m2m_sys_id: row.sys_id,
                     found_via: via,
                     m2m_active: row.active,
+                    // Carried separately from `trigger` because when the read
+                    // is DENIED there is no trigger object to take it from, and
+                    // a finding about an unreadable trigger has to name the
+                    // trigger — not the agent or use case the link points at.
+                    trigger_sys_id: triggerId,
                     related_resource_table: row.related_resource_table,
                     related_resource_record: k.refValue(row.related_resource_record),
                     m2m_objective_template: k.digest(row.objective_template, self.DIGEST_CHARS),
@@ -1479,6 +1490,18 @@ PaToolAgentConfig.prototype = {
         ctx.trigger_branches = branches
         ctx.trigger_read_statuses = statuses
         ctx.trigger_usecase_ids = usecaseIds
+        ctx.trigger_truncated = truncated
+
+        if (truncated.agent_direct || truncated.team_usecase_chain) {
+            data.notes.push(
+                'The trigger traversal hit its per-branch ceiling of ' +
+                    this.MAX_TRIGGER_LINKS +
+                    ' link(s) on: ' +
+                    Object.keys(truncated).join(', ') +
+                    '. More links exist than are reported, so an absent trigger below is NOT evidence that ' +
+                    'no such trigger is wired. Stated rather than silently truncated.'
+            )
+        }
         return links
     },
 
@@ -1515,7 +1538,12 @@ PaToolAgentConfig.prototype = {
                 findings.push({
                     finding: 'trigger_unreadable',
                     severity: 'medium',
-                    subject: 'sn_aia_trigger_configuration[' + l.related_resource_record + ']',
+                    // The TRIGGER's sys_id. related_resource_record is the
+                    // agent or use case the link points at, and naming it here
+                    // would send an investigator to the wrong record under a
+                    // label saying otherwise.
+                    subject: 'sn_aia_trigger_configuration[' + (l.trigger_sys_id || '(no reference on the link)') + ']',
+                    via_link: 'sn_aia_trigger_agent_usecase_m2m[' + l.m2m_sys_id + ']',
                     detail:
                         'The link exists but its trigger configuration could not be read from this scope. ' +
                         'The wiring state is unknown, not absent.',
@@ -1547,6 +1575,7 @@ PaToolAgentConfig.prototype = {
         return {
             links: links,
             branches: ctx.trigger_branches,
+            truncated_at: ctx.trigger_truncated,
             usecases_walked: ctx.trigger_usecase_ids || [],
             wiring_findings: findings,
             access_alignment: this._accessAlignment(ctx, links, data),
@@ -1636,6 +1665,7 @@ PaToolAgentConfig.prototype = {
         }
 
         var requiredRoles = {}
+        var permissiveRows = 0
         var i
 
         for (i = 0; i < subjects.length; i++) {
@@ -1658,9 +1688,25 @@ PaToolAgentConfig.prototype = {
             for (var r = 0; r < read.rows.length; r++) {
                 var row = read.rows[r]
                 var roles = this._rolesForConfig(row, data)
-                for (var x = 0; x < roles.length; x++) {
-                    if (roles[x].sys_id) requiredRoles[roles[x].sys_id] = roles[x]
+
+                // `allow_all_session_roles` makes this row's role list MOOT:
+                // the configuration accepts whatever roles the session carries,
+                // so nothing in the list is required and a role the run-as user
+                // lacks is not a gap. Merging these into requiredRoles produces
+                // a false missing_roles entry — and, because a missing role
+                // reads as the K26 Lab 1 security-violation cause, a confident
+                // wrong diagnosis of the most serious kind this tool emits.
+                // Live on 47 of 703 configuration rows (6.7%) on gpinst01, so
+                // this is a path real instances take, not a hypothetical.
+                var permissive = k.lower(row.allow_all_session_roles) === 'true'
+                if (!permissive) {
+                    for (var x = 0; x < roles.length; x++) {
+                        if (roles[x].sys_id) requiredRoles[roles[x].sys_id] = roles[x]
+                    }
+                } else {
+                    permissiveRows++
                 }
+
                 var description = row.description === undefined ? '' : row.description
                 out.role_rows.push({
                     config_sys_id: row.sys_id,
@@ -1681,8 +1727,30 @@ PaToolAgentConfig.prototype = {
                     allow_all_session_roles:
                         row.allow_all_session_roles === undefined ? null : row.allow_all_session_roles,
                     roles: roles,
+                    // Stated per row, because the same role list means opposite
+                    // things depending on this flag.
+                    roles_are_required: !permissive,
+                    roles_note: permissive
+                        ? 'allow_all_session_roles is true on this row, so its role list is NOT a ' +
+                          'requirement — the configuration accepts whatever roles the session carries. ' +
+                          'These roles are listed for information and are excluded from the missing-role ' +
+                          'comparison.'
+                        : null,
                 })
             }
+        }
+
+        out.permissive_rows = permissiveRows
+        out.required_role_count = Object.keys(requiredRoles).length
+        if (permissiveRows) {
+            out.permissive_note =
+                permissiveRows +
+                ' of ' +
+                out.role_rows.length +
+                ' configuration row(s) set allow_all_session_roles=true. Their roles are excluded from the ' +
+                'comparison below because the configuration accepts any role the session carries — ' +
+                'treating them as required would report a missing role, which reads as the ACL-trigger ' +
+                'security-violation cause.'
         }
 
         // --- the run-as side -------------------------------------------------
