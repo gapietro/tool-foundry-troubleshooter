@@ -464,7 +464,7 @@ PaToolGenAiLog.prototype = {
             out.push(entry)
         }
 
-        if (!wantPayload && out.length) {
+        if (!wantPayload && out.length && data.notes.join(' ').indexOf('were NOT fetched') === -1) {
             data.notes.push(
                 'Prompt and response payloads were NOT fetched. Re-call with include_payload=true to ' +
                     'attempt them — they live on sys_generative_ai_log, a separate role-gated table, so ' +
@@ -614,6 +614,7 @@ PaToolGenAiLog.prototype = {
         )
         var sourceIds = [a.execution].concat(k.ids(taskRead.rows))
         data.source_ids_joined = sourceIds
+        data.task_truncated_at = taskRead.truncated_at || null
 
         var m2mRead = k.readRows(
             'sn_aia_gen_ai_m2m',
@@ -657,6 +658,27 @@ PaToolGenAiLog.prototype = {
         }
 
         data.llm_calls = calls
+        data.m2m_truncated_at = m2mRead.truncated_at || null
+        data.llm_calls_truncated_at = data.task_truncated_at || data.m2m_truncated_at || null
+
+        if (data.llm_calls_truncated_at) {
+            data.notes.push(
+                'llm_calls is INCOMPLETE. ' +
+                    (data.task_truncated_at
+                        ? 'The task list was truncated at ' +
+                          data.task_truncated_at +
+                          ', so calls made by tasks beyond that were never joined. '
+                        : '') +
+                    (data.m2m_truncated_at
+                        ? 'The sn_aia_gen_ai_m2m link list was truncated at ' +
+                          data.m2m_truncated_at +
+                          '. '
+                        : '') +
+                    'The join below looks complete and is not — do NOT conclude the run made fewer ' +
+                    'provider calls than it did.'
+            )
+        }
+
         data.plan = {
             sys_id: plan.sys_id,
             state: plan.state_display || plan.state,
