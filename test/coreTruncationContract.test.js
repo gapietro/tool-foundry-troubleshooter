@@ -126,6 +126,36 @@ describe('no kit-based core re-derives truncation from a length', () => {
     })
 })
 
+describe('no core asserts a read status it did not establish (R-25)', () => {
+    // R-24's counterpart. R-24 governs how MUCH was read; this governs whether
+    // anything was. Both halves of the same rule: every claim in a diagnostic
+    // result names what backed it, and nothing may assert a claim it did not
+    // earn. Enforced across every core, not just the one that was reviewed.
+    const SUCCESS_ASSERTION = /noteRead\s*\([^)]*['"](ok|empty)['"]/
+
+    KIT_CORES.forEach((core) => {
+        it(core + ' records only access facts, never a data claim', () => {
+            const offenders = sourceOf(core)
+                .split('\n')
+                .map((line, i) => ({ line: line.trim(), n: i + 1 }))
+                .filter((e) => SUCCESS_ASSERTION.test(e.line))
+                .map((e) => e.n + ': ' + e.line)
+
+            // DENIED and unknown are observable by any path. `ok` and `empty`
+            // are claims about data and belong to readRows/readOne alone.
+            expect(offenders).toEqual([])
+        })
+    })
+
+    it('the kit passes the row-read flag from exactly the two paths that fetch rows', () => {
+        const kitSrc = fs.readFileSync(
+            path.join(__dirname, '..', 'src', 'server', 'PaToolReadKit.js'),
+            'utf8'
+        )
+        expect((kitSrc.match(/noteRead\(data, table, result\.status, true\)/g) || []).length).toBe(2)
+    })
+})
+
 describe('the kit makes truncation a measurement, not a guess', () => {
     function kit() {
         const G = makeQueryingGlideRecordSecure({
