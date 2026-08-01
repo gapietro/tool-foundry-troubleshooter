@@ -749,6 +749,25 @@ describe('usage mode', () => {
 })
 
 describe('read failures', () => {
+    it('does not explain a denied usage read with assist-consumption semantics', () => {
+        // The semantics note is a plausible WRONG cause when the read was
+        // denied: it steers the investigation toward execution timing when
+        // the emptiness is an ACL gap.
+        const { result } = run({ mode: 'usage' }, world(), { denied: ['sys_gen_ai_usage_log'] })
+        const notes = result.data.notes.join(' ')
+
+        expect(notes).not.toMatch(/failed before reaching\s+the provider/)
+        expect(notes).toMatch(/PERMISSION GAP/)
+        expect(notes).toMatch(/do not reason about\s+execution timing/)
+    })
+
+    it('keeps the semantics note on a genuinely empty usage window', () => {
+        const { result } = run({ mode: 'usage' }, world())
+
+        expect(result.data.read_status).toBe('empty')
+        expect(result.data.notes.join(' ')).toMatch(/ASSIST CONSUMPTION, not LLM calls/)
+    })
+
     it('reports a denied read as a privilege gap, not as an empty stack', () => {
         const { result } = run({ mode: 'usage' }, world(), { denied: ['sys_gen_ai_usage_log'] })
 

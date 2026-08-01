@@ -409,11 +409,26 @@ PaToolGenAiLog.prototype = {
         data.entries = out
         data.read_status = read.status
         data.truncated_at = read.truncated_at || null
-        data.notes.push(
-            'usage mode counts ASSIST CONSUMPTION, not LLM calls. A run that failed before reaching the ' +
-                'provider consumes no assists and leaves no row here — an empty result is not evidence the ' +
-                'LLM was never invoked. Use mode=llm for the call detail.'
-        )
+
+        // The semantics note explains a GENUINE empty window. Pushing it on a
+        // DENIED read hands the investigator a plausible wrong cause — "runs
+        // that fail before the provider leave no rows" — for an emptiness that
+        // is actually an ACL gap. A note is part of the claim as much as a
+        // status is (R-19b): the two cases get different narratives, never the
+        // same one.
+        if (read.status === 'DENIED') {
+            data.notes.push(
+                'sys_gen_ai_usage_log is not readable from this scope. Empty entries here is a ' +
+                    'PERMISSION GAP and says nothing about assist consumption — do not reason about ' +
+                    'execution timing or provider reachability from this result.'
+            )
+        } else {
+            data.notes.push(
+                'usage mode counts ASSIST CONSUMPTION, not LLM calls. A run that failed before reaching ' +
+                    'the provider consumes no assists and leaves no row here — an empty result is not ' +
+                    'evidence the LLM was never invoked. Use mode=llm for the call detail.'
+            )
+        }
     },
 
     // =======================================================================
