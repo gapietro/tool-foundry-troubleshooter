@@ -363,6 +363,28 @@ PaToolReadKit.prototype = {
         if (!prior || limit > prior) data.truncations[table] = limit
     },
 
+    /**
+     * Tables that came back DENIED, so a core can say WHICH permission gap
+     * shaped an empty answer rather than leaving the reader to infer absence.
+     *
+     * The third axis of the same rule (R-26). R-24 governs how much was read
+     * and R-25 whether anything was; this one governs whether the read was
+     * permitted at all. An empty collection has three causes and they are not
+     * interchangeable: nothing matched, the page was clipped, or the caller
+     * was not allowed to look.
+     *
+     * @returns {Array} table names, empty when nothing was denied
+     */
+    deniedTables: function (data) {
+        var out = []
+        if (!data || !data.reads) return out
+        for (var table in data.reads) {
+            if (!Object.prototype.hasOwnProperty.call(data.reads, table)) continue
+            if (data.reads[table] === 'DENIED') out.push(table)
+        }
+        return out
+    },
+
     /** @returns {Boolean} whether any read recorded a truncation. */
     anyTruncation: function (data) {
         if (!data || !data.truncations) return false

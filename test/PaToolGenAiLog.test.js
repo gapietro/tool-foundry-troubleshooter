@@ -410,6 +410,57 @@ describe('for_execution mode', () => {
         expect(repeated).toHaveLength(1)
     })
 
+    it('says llm_calls is unavailable when the m2m link table is denied', () => {
+        // An empty llm_calls has three causes and they are not
+        // interchangeable: no calls were made, the list was clipped, or the
+        // caller may not look. Only the first is a finding about the run.
+        const { result } = run(
+            { mode: 'for_execution', execution: PLAN },
+            world({ sn_aia_execution_plan: [{ sys_id: PLAN }] }),
+            { denied: ['sn_aia_gen_ai_m2m'] }
+        )
+
+        expect(result.data.llm_calls).toEqual([])
+        expect(result.data.llm_calls_status).toBe('unavailable')
+        expect(result.data.m2m_read_status).toBe('DENIED')
+        expect(result.data.notes.join(' ')).toMatch(/EMPTY FOR A REASON THAT HAS NOTHING TO DO WITH THE RUN/)
+    })
+
+    it('says the join ran on the plan alone when the task table is denied', () => {
+        const { result } = run(
+            { mode: 'for_execution', execution: PLAN },
+            world({ sn_aia_execution_plan: [{ sys_id: PLAN }] }),
+            { denied: ['sn_aia_execution_task'] }
+        )
+
+        expect(result.data.task_read_status).toBe('DENIED')
+        // Zero task ids here is a permission gap, not an execution with no steps.
+        expect(result.data.source_ids_joined).toEqual([PLAN])
+        expect(result.data.notes.join(' ')).toMatch(/NOT an execution without tasks/)
+    })
+
+    it('distinguishes a genuinely empty join from an unavailable one', () => {
+        const { result } = run(
+            { mode: 'for_execution', execution: PLAN },
+            world({ sn_aia_execution_plan: [{ sys_id: PLAN }] })
+        )
+
+        expect(result.data.llm_calls_status).toBe('empty')
+        expect(result.data.evidence_basis.denied_tables).toEqual([])
+        expect(result.data.evidence_basis.denial_note).toBeNull()
+    })
+
+    it('names the denied tables in evidence_basis', () => {
+        const { result } = run(
+            { mode: 'for_execution', execution: PLAN },
+            world({ sn_aia_execution_plan: [{ sys_id: PLAN }] }),
+            { denied: ['sn_aia_gen_ai_m2m'] }
+        )
+
+        expect(result.data.evidence_basis.denied_tables).toContain('sn_aia_gen_ai_m2m')
+        expect(result.data.evidence_basis.denial_note).toMatch(/permission gap, NOT an absence/)
+    })
+
     it('says the plan is absent rather than reporting no LLM calls', () => {
         const { result } = run({ mode: 'for_execution', execution: PLAN }, world())
 
