@@ -10,7 +10,10 @@ thing produces a confident answer to a question the gate did not ask.
   the defect, expected root-cause layer, expected fix target, setup/trigger steps, and expected
   diagnosis for each of the five gate-scored seeds.
 - **Fixture app:** `seed-app/` — the second scoped SDK project (`x_snc_tsbench`) the seed agents are
-  built and installed from. Never installed alongside the product app; see `seed-app/README.md`.
+  built and installed from. **Never shipped *inside* the product app, and never installed on a
+  customer instance** — but on the benchmark instance the two apps are deliberately installed **side
+  by side**, because Agent Doctor (`x_snc_troubleshoot`) is what diagnoses the seeds. Task 12
+  installs both on `gpinst01`. See `seed-app/README.md`.
 - **Where the seed agents live, and why:** `DECISION-seed-location.md`.
 - **Scorecard:** `scorecard-template.md` — copied to `scorecard-agent-doctor.md` and filled in during
   Task 12's scored runs.

@@ -496,6 +496,21 @@ evidence a ruling is written from, not only to the code it governs.
 4. **Standing rule, and it is a reporting rule, not a research one:** state the denominator every
    time a count is stated, in rulings and in specs alike. "12 rows" and "318 of 2026" are the same
    sentence shape and only one of them can be checked.
+5. **LLD §4.3's `check_config` is corrected — added 2026-08-01 after PR #33 review, and this item is
+   the ruling's most important one for anything not yet built.** Items 1–3 corrected the *seed*; they
+   left §4.3 — the build spec for `PaToolGenAiLog` (Task 8, **unbuilt**) — still instructing the tool
+   that *"`connection` empty or unresolvable **is** the capability not mapped to a provider finding"*.
+   A tool built to that sentence would report **318 of 2026** healthy capabilities as broken: not a
+   diagnostic, a false-positive generator, and one shipped inside the product rather than confined to
+   a fixture. §4.3 now strikes the refuted heuristic and specifies the mandatory-binding check in its
+   place. **This is R-17's standing rule re-failed** — *"a correction to §2.x is not complete until
+   §4.x has been re-read against it"* — and the re-failure is the point: R-17 was written about §2↔§4,
+   the R-19a walk was made bidirectional, and neither caught this because the correction originated in
+   §7/§8 and nobody asked which §4 consumer read from it. **Extend the walk: when a ruling invalidates
+   a *fact*, sweep every section that consumes the fact, not only the section that stated it** — and
+   give unbuilt specs priority in that sweep, because a wrong sentence in a spec for existing code
+   contradicts something a reader can check, while a wrong sentence in a spec for unbuilt code simply
+   becomes the code.
 
 ---
 

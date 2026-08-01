@@ -53,4 +53,6 @@ corrected name.
 - `IMPLEMENTATION_PLAN.md` — the "OPEN — decide before Task 11" gate this record discharges
 - DESIGN.md R-13 — scope-prefix finalization and the 40-of-40 table-naming evidence
 - `docs/BUILD_BRIEF_Phase1a_VerticalSlice.md`, "Two decisions to make, not assume" — item 2
-- `benchmark/seed-app/README.md` — the fixture app's own "never install alongside the product" rule
+- `benchmark/seed-app/README.md` — the fixture app's own "never on a customer instance, never inside
+  the product app" rule, and why installing it *beside* the product app on the benchmark instance is
+  required rather than a violation of it
