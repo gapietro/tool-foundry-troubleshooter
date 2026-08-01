@@ -1408,7 +1408,7 @@ PaToolAgentConfig.prototype = {
 
         function collect(self, read, via) {
             statuses.push(read.status)
-            if (read.rows.length >= self.MAX_TRIGGER_LINKS) truncated[via] = self.MAX_TRIGGER_LINKS
+            if (read.truncated_at) truncated[via] = read.truncated_at
             for (var i = 0; i < read.rows.length; i++) {
                 var row = read.rows[i]
                 var triggerId = k.refValue(row.trigger_configuration)
@@ -1804,8 +1804,8 @@ PaToolAgentConfig.prototype = {
                 data
             )
 
-            if (read.rows.length >= this.MAX_ROLE_ROWS) {
-                out.role_rows_truncated_at = this.MAX_ROLE_ROWS
+            if (read.truncated_at) {
+                out.role_rows_truncated_at = read.truncated_at
             }
 
             for (var r = 0; r < read.rows.length; r++) {
@@ -2102,18 +2102,20 @@ PaToolAgentConfig.prototype = {
             return out
         }
 
-        if (out.role_rows_truncated_at) {
+        var clipped = this._requirementsClipped(out)
+        if (clipped) {
             // The requirement set is a lower bound, so "holds every required
             // role" is unprovable — an identity can hold everything that was
             // read and still lack one that was not.
+            out.requirements_incomplete_because = clipped
             out.comparison_status = 'partial'
             out.comparison_note =
                 (missing.length
                     ? 'At least one static run-as identity is missing a required role — see missing_roles. '
                     : 'Every static run-as identity holds every role in the requirement set that was read. ') +
-                'But that set is INCOMPLETE: access configuration rows were truncated at ' +
-                out.role_rows_truncated_at +
-                ', so an identity reported as holding every required role may still lack one that was ' +
+                'But that set is INCOMPLETE — ' +
+                clipped +
+                ' — so an identity reported as holding every required role may still lack one that was ' +
                 'never read. Do not read this as an access all-clear.'
             return out
         }
@@ -2190,7 +2192,7 @@ PaToolAgentConfig.prototype = {
             data
         )
 
-        if (mapped.rows.length >= this.MAX_ROLE_NAMES) out.truncated = this.MAX_ROLE_NAMES
+        if (mapped.truncated_at) out.truncated = mapped.truncated_at
 
         for (i = 0; i < mapped.rows.length; i++) {
             var ref = k.refValue(mapped.rows[i][roleField])
@@ -2204,6 +2206,39 @@ PaToolAgentConfig.prototype = {
         }
 
         return out
+    },
+
+    /**
+     * Every way the requirement set can be a lower bound, in one place.
+     *
+     * There are three, and the first version of the completed-gate consulted
+     * exactly one of them — the config-row count — so a single row carrying
+     * more roles than the per-row cap still produced an all-clear. Enumerating
+     * them here means a fourth source has one obvious place to be added, rather
+     * than a condition somewhere else to be remembered.
+     *
+     * @returns {String|null} why the set is incomplete, or null if it is not
+     */
+    _requirementsClipped: function (out) {
+        var reasons = []
+
+        if (out.role_rows_truncated_at) {
+            reasons.push('access configuration rows were truncated at ' + out.role_rows_truncated_at)
+        }
+
+        var clippedRows = 0
+        for (var i = 0; i < out.role_rows.length; i++) {
+            if (out.role_rows[i].roles_truncated_at) clippedRows++
+        }
+        if (clippedRows) {
+            reasons.push(
+                clippedRows +
+                    ' configuration row(s) carry more roles than the per-row ceiling, so their role lists ' +
+                    'are partial'
+            )
+        }
+
+        return reasons.length ? reasons.join('; ') : null
     },
 
     /** Distinct reasons an identity could not be compared, with counts. */
