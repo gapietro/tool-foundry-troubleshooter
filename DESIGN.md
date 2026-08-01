@@ -599,4 +599,31 @@ A second defect in the same function: on a mid-probe throw it returned before re
 
 ---
 
+**R-26 — The third axis, and the reason the first two guards could not see it: a control against a wrong line does not catch a missing one. (2026-08-01)**
+
+**Found:** review of `PaToolGenAiLog` (PR #38, round 2). `_forExecution` handled a denied `sn_aia_execution_plan` read with an explicit privilege-gap note and then **never checked `taskRead.status` or `m2mRead.status`**. So a denied `sn_aia_gen_ai_m2m` returned `llm_calls: []` — shaped exactly like a run that genuinely called no provider — and a denied `sn_aia_execution_task` silently collapsed the join to the plan sys_id alone, reporting zero task ids as though the execution had no steps.
+
+**Why this is a third ruling and not a repeat of R-24.** The same *failure* on a new *axis*. An empty collection in this codebase has three causes and they are not interchangeable:
+
+| cause | axis | control before this ruling |
+|---|---|---|
+| nothing matched | — | the genuine finding |
+| the page was clipped | bound | **R-24** — `limit + 1`, central record, evidence block |
+| the read was refused | denial | **none** — fixed case by case in `PaToolAgentConfig`, never generalised |
+| (and the status itself unearned) | status | **R-25** — `fromRowRead` flag, source guard |
+
+**The methodological finding, which matters more than the fix.** Neither R-24's nor R-25's guard could have caught this, and the reason is structural rather than an oversight: **both scan for a pattern** — a length comparison, a success literal. Here there was no pattern to find, because the check was simply **absent**. A control against a *wrong line* does not catch a *missing* one. The same blind spot produced PR #38's first finding (a bound with no report at all), and I confirmed it by asking the question the guards could not — *which reads have a bound or a denial, and which answers carry one* — which then surfaced two further instances in `PaToolSchemaLookup` and `PaToolQueryTable` that no sweep had flagged.
+
+**Change:**
+
+1. **`PaToolReadKit.deniedTables(data)`** returns the tables that came back `DENIED`, so a core can name the gap rather than leave a reader to infer absence.
+2. **Every core's `evidence_basis` carries `denied_tables` and `denial_note`**, the exact analogue of R-24's truncation block, enforced by the same cross-core contract test.
+3. **`_forExecution` states it on the answer**, not only in the evidence: `llm_calls_status` becomes `unavailable`, with a note saying an empty `llm_calls` here is a permission gap and is indistinguishable *in shape alone* from a run that called no provider.
+
+**Standing rule, completing R-24 and R-25.** Three axes, one sentence: **every claim names what backed it — how much was read, whether anything was, and whether the read was permitted — and no claim may be asserted by a path that did not establish it.** All three now have a mechanical control and a cross-core test.
+
+**What is still uncontrolled, stated so it is not mistaken for solved.** The guards catch a *wrong* line; nothing catches a *missing* one. The only instrument that found those was the manual question above, run over every read. That is a checklist, not a control, and it is the honest boundary of what this file's review cycle has achieved: seventeen findings across seven rounds, fifteen of one class, and the class stopped recurring on an axis only once that axis had a mechanism — never because the code was read more carefully.
+
+---
+
 *Next steps agreed in spar: fold changes 2.1–2.4 into `docs/IMPLEMENTATION_PLAN.md` (new collector task; scorecard field; anchor keying rule) and `docs/LOW_LEVEL_DESIGN.md` (§4.6 anchor spec, §7 protocol, §8 items). Drift review after Phase 1a build compares the built system to this record.*

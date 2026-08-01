@@ -43,6 +43,12 @@ describe('every kit-based core surfaces the bounds it hit (R-24)', () => {
             expect(evidence).toContain('truncations: truncations')
             expect(evidence).toContain('truncation_note')
             expect(evidence).toContain('LOWER BOUND')
+
+            // R-26: the third axis, enforced identically. An empty result that
+            // depends on a denied read is a permission gap, not an absence.
+            expect(evidence).toContain('denied_tables: denied')
+            expect(evidence).toContain('denial_note')
+            expect(evidence).toContain('NOT an absence')
         })
     })
 

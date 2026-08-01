@@ -614,7 +614,16 @@ PaToolGenAiLog.prototype = {
         )
         var sourceIds = [a.execution].concat(k.ids(taskRead.rows))
         data.source_ids_joined = sourceIds
+        data.task_read_status = taskRead.status
         data.task_truncated_at = taskRead.truncated_at || null
+
+        if (taskRead.status === 'DENIED') {
+            data.notes.push(
+                'sn_aia_execution_task is not readable from this scope, so the join below runs on the ' +
+                    'plan sys_id ALONE. Every per-step LLM call is therefore missing from llm_calls, and ' +
+                    'the zero task ids reported are a permission gap — NOT an execution without tasks.'
+            )
+        }
 
         var m2mRead = k.readRows(
             'sn_aia_gen_ai_m2m',
@@ -658,7 +667,20 @@ PaToolGenAiLog.prototype = {
         }
 
         data.llm_calls = calls
+        data.m2m_read_status = m2mRead.status
         data.m2m_truncated_at = m2mRead.truncated_at || null
+
+        if (m2mRead.status === 'DENIED') {
+            data.llm_calls_status = 'unavailable'
+            data.notes.push(
+                'sn_aia_gen_ai_m2m is not readable from this scope, so llm_calls is EMPTY FOR A REASON ' +
+                    'THAT HAS NOTHING TO DO WITH THE RUN. An empty llm_calls here is a permission gap and ' +
+                    'is indistinguishable, in shape alone, from a run that genuinely called no provider — ' +
+                    'do not read it as the latter.'
+            )
+        } else {
+            data.llm_calls_status = calls.length ? 'ok' : 'empty'
+        }
         data.llm_calls_truncated_at = data.task_truncated_at || data.m2m_truncated_at || null
 
         if (data.llm_calls_truncated_at) {
@@ -959,9 +981,22 @@ PaToolGenAiLog.prototype = {
               'those tables is a LOWER BOUND, not a complete answer.'
             : null
 
+        // R-26, the third axis. An empty collection has three causes -- nothing
+        // matched, the page was clipped, or the read was refused -- and they
+        // are not interchangeable.
+        var denied = k.deniedTables(data)
+        var denialNote = denied.length
+            ? 'These tables were DENIED: ' +
+              denied.join(', ') +
+              '. Any empty result above that depends on them is a permission gap, NOT an absence, and ' +
+              'must not be reported as one.'
+            : null
+
         return {
             truncations: truncations,
             truncation_note: truncationNote,
+            denied_tables: denied,
+            denial_note: denialNote,
             statement:
                 'Every count below is the number of rows actually read. A zero with read status "ok"/"empty" ' +
                 'is a genuine absence; a zero with "DENIED" is a permission gap and says nothing about the ' +
