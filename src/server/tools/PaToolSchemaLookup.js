@@ -603,9 +603,22 @@ PaToolSchemaLookup.prototype = {
               'those tables is a LOWER BOUND, not a complete answer.'
             : null
 
+        // R-26, the third axis. An empty collection has three causes -- nothing
+        // matched, the page was clipped, or the read was refused -- and they
+        // are not interchangeable.
+        var denied = k.deniedTables(data)
+        var denialNote = denied.length
+            ? 'These tables were DENIED: ' +
+              denied.join(', ') +
+              '. Any empty result above that depends on them is a permission gap, NOT an absence, and ' +
+              'must not be reported as one.'
+            : null
+
         return {
             truncations: truncations,
             truncation_note: truncationNote,
+            denied_tables: denied,
+            denial_note: denialNote,
             statement:
                 'Every count below is the number of rows actually read. A zero with read status "ok"/"empty" ' +
                 'is a genuine absence; a zero with "DENIED" is a permission gap and says nothing about the ' +
