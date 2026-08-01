@@ -574,4 +574,29 @@ evidence a ruling is written from, not only to the code it governs.
 
 ---
 
+**R-25 — The second half of R-24's invariant: a status is a claim, and only the path that established it may write one. (2026-08-01)**
+
+**Found:** review rounds 5 and 6 on `PaToolAgentConfig`. R-24 made *truncation* structural and the class stopped recurring on that axis — but the same failure simply moved to the adjacent one. `validFields`, a field probe that reads **no rows at all**, wrote `ok` into `data.reads`:
+
+- `ok` is set by `readRows` only when `rows.length > 0`. It means *"the read succeeded and rows were present"* — a claim about **data**.
+- The probe asked a **schema** question. It was in no position to make that claim.
+- And because `noteRead` only ever *upgrades*, a later read returning zero rows **could not correct it**. The evidence block would report a table as readable-with-data on the strength of a question that fetched nothing.
+
+A second defect in the same function: on a mid-probe throw it returned before recording anything, so a consumer checking only for `DENIED` proceeded on a `valid` list that is a **prefix** of the candidates rather than an answer about them.
+
+**Why this needed a ruling and not a third fix.** The composition is what makes it dangerous. `role_list` is a column a partial probe can miss; missing it empties the requirement set; and R-22's fix reports an empty requirement set as `no_requirements` — *"nothing was required"* — when the truth is *"we could not tell what was required"*. **Three individually-correct mechanisms compose into a confident wrong answer**, and no single one of them is wrong. Reviewing each in isolation would never find it.
+
+**Change — enforced, not remembered:**
+
+1. **`noteRead` requires a `fromRowRead` flag for a success status.** Exactly two callers pass it: `readRows` and `readOne`. Everything else may record only `DENIED` and `unknown`, which are facts about **access** rather than about data and which any path can legitimately observe.
+2. **A rejected assertion is recorded** in `data.read_status_rejected` rather than dropped, so the attempt is visible instead of merely absent — the same reasoning as R-24's truncation record.
+3. **A source-level guard** asserts no core passes a success literal to `noteRead`, mirroring R-24's heuristic lint. Both halves matter: the runtime one stops the write, the source one stops the pattern.
+4. **A partial probe records `unknown`, flags itself, and returns `probed` alongside `valid`** so a prefix cannot be mistaken for an answer. Both consumers stop rather than reading with a truncated column list.
+
+**The generalised rule, which is R-24's stated in full.** R-24 said *a bound must travel with the answer it shaped*. R-25 is the other half: **a status may only be written by the operation that established it.** Together: *every claim in a diagnostic result names what backed it, and nothing may assert a claim it did not earn.* That is now enforced for the two claim types this tool makes about a read — how much it saw, and whether it saw anything.
+
+**Assessment, stated plainly.** Sixteen findings across six rounds on one file, fifteen of one class. Six were introduced or left behind by fixes earlier in the same cycle. The pattern only stopped recurring on an axis once that axis had a **mechanical** control — `limit + 1`, the contract test, and now the `fromRowRead` flag. Every axis governed only by attention regressed. The honest generalisation for the remaining cores is that they are not safe because they were written carefully; they are safe only where a control makes the defect impossible, and the rest is unverified.
+
+---
+
 *Next steps agreed in spar: fold changes 2.1–2.4 into `docs/IMPLEMENTATION_PLAN.md` (new collector task; scorecard field; anchor keying rule) and `docs/LOW_LEVEL_DESIGN.md` (§4.6 anchor spec, §7 protocol, §8 items). Drift review after Phase 1a build compares the built system to this record.*
