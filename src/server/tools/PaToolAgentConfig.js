@@ -141,6 +141,9 @@ PaToolAgentConfig.prototype = {
             data.resolution.matched_agents = target.matched_agents
             data.resolution.matched_usecases = target.matched_usecases
             data.resolution.candidates = target.candidates
+            if (target.name_collision_usecases) {
+                data.resolution.name_collision_usecases = target.name_collision_usecases
+            }
             data.resolution.agent = target.agent
             data.resolution.note = target.note
 
@@ -157,7 +160,7 @@ PaToolAgentConfig.prototype = {
             var ctx = {
                 agent_sys_id: target.agent_sys_id,
                 agent_row: target.agent_row,
-                seed_usecases: target.matched_usecases,
+                seed_usecases: target.seed_usecases || [],
                 usecases: null,
                 teams: null,
                 bindings: null,
@@ -475,6 +478,7 @@ PaToolAgentConfig.prototype = {
             matched_agents: [],
             matched_usecases: [],
             usecase_ids: [],
+            seed_usecases: [],
             candidates: [],
             note: '',
         }
@@ -538,6 +542,21 @@ PaToolAgentConfig.prototype = {
             out.mode = 'agent'
             out.agent_row = agentFind.rows[0]
             out.agent_sys_id = out.agent_row.sys_id
+
+            // The use cases matched by NAME are deliberately NOT seeded in this
+            // mode. They were found by searching the same string against
+            // sn_aia_usecase, which says nothing about whether this agent is
+            // related to them — and a use case pulled in on a name collision
+            // would contribute its trigger links to branch 2 and its role rows
+            // to the access check, attributing another use case's wiring to
+            // this agent. In agent mode the relationship must come from the
+            // team chain, which is the only thing that actually records one.
+            // (When the agent and its use case genuinely share a name, the
+            // chain finds it anyway, so nothing legitimate is lost.)
+            out.seed_usecases = []
+            if (usecaseFind.rows.length) {
+                out.name_collision_usecases = this._slim(usecaseFind.rows, ['sys_id', 'name'])
+            }
             out.agent = {
                 sys_id: out.agent_sys_id,
                 name: out.agent_row.name || null,
@@ -552,13 +571,22 @@ PaToolAgentConfig.prototype = {
                     ? agentFind.rows.length +
                       ' agents matched; the first is inspected and the full list is in ' +
                       'resolution.matched_agents. Re-call with agent=<sys_id> to inspect a different one.'
-                    : 'One agent matched.')
+                    : 'One agent matched.') +
+                (out.name_collision_usecases
+                    ? ' NOTE: ' +
+                      out.name_collision_usecases.length +
+                      ' use case(s) also match that name. They are NOT treated as this agent\'s use cases — ' +
+                      'a shared name is not a relationship. Use cases below come from the team chain only, ' +
+                      'and the name matches are listed in resolution.name_collision_usecases.'
+                    : '')
             return out
         }
 
         // Use-case anchor only. The agent-keyed sections (tools, agent-direct
         // triggers) have nothing to key on and say so rather than reading empty.
+        // Here the matched use cases ARE the anchor, so they are seeded.
         out.mode = 'usecase'
+        out.seed_usecases = usecaseFind.rows
         out.agent = {
             sys_id: '',
             name: null,
@@ -1753,6 +1781,10 @@ PaToolAgentConfig.prototype = {
                 data
             )
 
+            if (read.rows.length >= this.MAX_ROLE_ROWS) {
+                out.role_rows_truncated_at = this.MAX_ROLE_ROWS
+            }
+
             for (var r = 0; r < read.rows.length; r++) {
                 var row = read.rows[r]
                 var roles = this._rolesForConfig(row, data)
@@ -1795,6 +1827,7 @@ PaToolAgentConfig.prototype = {
                     allow_all_session_roles:
                         row.allow_all_session_roles === undefined ? null : row.allow_all_session_roles,
                     roles: roles,
+                    roles_truncated_at: roles.truncated || null,
                     // Stated per row, because the same role list means opposite
                     // things depending on this flag.
                     roles_are_required: !permissive,
@@ -1810,6 +1843,14 @@ PaToolAgentConfig.prototype = {
 
         out.permissive_rows = permissiveRows
         out.required_role_count = Object.keys(requiredRoles).length
+        if (out.role_rows_truncated_at) {
+            out.truncation_note =
+                'Access configuration rows were truncated at ' +
+                out.role_rows_truncated_at +
+                ' per subject. The required-role set below is a LOWER BOUND, so a run-as identity reported ' +
+                'as holding every required role may still be missing one that was never read. Stated ' +
+                'rather than silently applied.'
+        }
         if (permissiveRows) {
             out.permissive_note =
                 permissiveRows +
@@ -1961,6 +2002,33 @@ PaToolAgentConfig.prototype = {
         out.users_compared = comparedUsers.length
         out.users_not_comparable = uncomparableUsers.length
 
+        // An empty required set makes every comparison vacuously true. Reporting
+        // that as "completed — every identity holds every role" is a clean bill
+        // of health issued over nothing checked, which is the shape of wrong
+        // answer this tool exists to catch. Say WHY the set is empty instead:
+        // the three causes need different responses.
+        if (!out.required_role_count) {
+            out.comparison_status = 'no_requirements'
+            out.comparison_note =
+                'No roles were required, so there was nothing to compare and this is NOT an all-clear. ' +
+                (out.role_rows.length === 0
+                    ? 'No access configuration rows exist for this agent or its use cases at all — which ' +
+                      'may itself be the finding, since an agent with no access configuration is governed ' +
+                      'by whatever default the platform applies.'
+                    : out.permissive_rows === out.role_rows.length
+                      ? 'All ' +
+                        out.role_rows.length +
+                        ' configuration row(s) set allow_all_session_roles=true, so none of their roles is ' +
+                        'a requirement.'
+                      : 'The configuration rows carry no resolvable roles.') +
+                (out.role_rows_truncated_at
+                    ? ' Role rows were also TRUNCATED at ' +
+                      out.role_rows_truncated_at +
+                      ', so the requirement set may be incomplete.'
+                    : '')
+            return out
+        }
+
         if (!comparedUsers.length) {
             out.comparison_status = 'not_possible'
             out.comparison_note =
@@ -2027,6 +2095,7 @@ PaToolAgentConfig.prototype = {
         var listed = String(row.role_list === undefined ? '' : row.role_list)
         if (listed) {
             var parts = listed.split(',')
+            if (parts.length > this.MAX_ROLE_NAMES) out.truncated = this.MAX_ROLE_NAMES
             for (i = 0; i < parts.length && out.length < this.MAX_ROLE_NAMES; i++) {
                 var id = k.trim(parts[i])
                 if (!id || seen[id]) continue
@@ -2063,6 +2132,8 @@ PaToolAgentConfig.prototype = {
             null,
             data
         )
+
+        if (mapped.rows.length >= this.MAX_ROLE_NAMES) out.truncated = this.MAX_ROLE_NAMES
 
         for (i = 0; i < mapped.rows.length; i++) {
             var ref = k.refValue(mapped.rows[i][roleField])
