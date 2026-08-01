@@ -1324,6 +1324,41 @@ describe('truncation is measured, never re-derived from a length', () => {
     })
 })
 
+describe('no core asserts a read status it did not establish (R-25)', () => {
+    // The runtime half is enforced in the kit. This is the source half: the
+    // pattern that caused it was a call site passing a success literal from a
+    // path that read no rows, and the equivalent guard for truncation (round 4)
+    // is what stopped that class recurring. This is the same control for status.
+    const SUCCESS_ASSERTION = /noteRead\s*\([^)]*['"](ok|empty)['"]/
+
+    it('PaToolAgentConfig asserts none', () => {
+        const src = fs.readFileSync(
+            path.join(__dirname, '..', 'src', 'server', 'tools', 'PaToolAgentConfig.js'),
+            'utf8'
+        )
+        const offenders = src
+            .split('\n')
+            .map((line, i) => ({ line: line.trim(), n: i + 1 }))
+            .filter((e) => SUCCESS_ASSERTION.test(e.line))
+            .map((e) => e.n + ': ' + e.line)
+
+        // A core may record DENIED or unknown - facts about access. A success
+        // status is a claim about DATA and belongs to readRows/readOne alone.
+        expect(offenders).toEqual([])
+    })
+
+    it('the kit accepts one only with the row-read flag', () => {
+        const kitSrc = fs.readFileSync(
+            path.join(__dirname, '..', 'src', 'server', 'PaToolReadKit.js'),
+            'utf8'
+        )
+
+        // Both callers that fetch rows, and nothing else.
+        const flagged = (kitSrc.match(/noteRead\(data, table, result\.status, true\)/g) || []).length
+        expect(flagged).toBe(2)
+    })
+})
+
 describe('evidence basis carries every bound that was hit', () => {
     it('surfaces truncations even from a section that did not mention them', () => {
         // The structural guard (R-24). Four review rounds produced four silent
