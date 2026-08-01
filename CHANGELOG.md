@@ -11,6 +11,61 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0102 — 2026-08-01
+
+Phase 1a, **Tasks 7 and 8**: the five remaining diagnostic tool cores, wired into Agent Doctor.
+Every one of the seven diagnostic layers now has a tool, which is what **issue #32** was blocked
+on — the five gate-scored benchmark seeds target layers 2 through 7, and the previous build could
+sweep only layer 1.
+
+Delivered as four stacked PRs: the shared read layer plus `PaToolAgentConfig`, then
+`PaToolGenAiLog`, then `PaToolSchemaLookup` / `PaToolQueryTable` / `PaToolLogAnalysis`, then the
+wiring. **Runtime-verified end to end on gpinst01**, not merely built: a real Agent Doctor
+execution ran `agent_trace`, `agent_config` and `genai_log` through the script-tool path with all
+nine tool calls succeeding, a 26,847-char trace offloaded to an artifact and paged back in seven
+`read_artifact` calls.
+
+**New ruling R-23 — seven data-model corrections, found before the code was wired.** Every field
+list was checked against `sys_dictionary` first. Six would have returned blanks rather than errors
+(**R-6**): the `sys_agent_access_role_mapping` join field is `agent_access_config` and matched none
+of the five names first guessed, so the entire per-role breakout would have been skipped while
+`role_list` was reported as the complete picture; `sys_agent_access_role_configuration` has no
+`active` column; `sn_aia_trigger_configuration.name` is declared and mandatory although §2.2's
+verified list omitted it; `sn_aia_agent_tool_m2m` has 28 columns rather than 14. R-18a's "5 of 6
+sampled" is now measured over the whole table: **38 of 40 (95%)**.
+
+**The seventh is not a field defect and it changes what a tool can claim.** LLD §4.2's
+access-alignment check is written against `run_as_user` — which is set on **3 of 36** trigger
+configurations. `run_as` is an `internal_type=field_name` column naming a FIELD on the target
+table, so the identity is whoever occupies that field on the record that fired the trigger,
+resolved per execution and unknowable from configuration. That is the K26 Lab 1 semantic exactly,
+and the reason ACL-trigger misalignment is invisible from configuration in the first place. The
+tool now classifies each trigger's identity path, compares only the static ones, and states
+coverage as a fraction rather than emitting a silent pass computed over one trigger in twelve.
+Compounding it: `description`, the only signal for the User-vs-Data split, is empty on **638 of 703
+rows (91%)**.
+
+**`check_config` is built to the corrected heuristic (R-22), and carries its own denominator.**
+An empty `connection` is reported as normal state — 318 of 2026 rows, `mandatory=false`. Resolving
+`api` has three outcomes rather than two: a non-table `api_type` (`Decision` is not a table) or an
+unreadable target table is `unverifiable`, never `dangling`.
+
+**`PaToolLogAnalysis` ships blocked, deliberately.** `syslog` still carries
+`caller_access = Caller Restriction` and the app's own `CrossScopePrivilege` installs correctly and
+does nothing (R-12, R-19). Dropping to six tools would make the gap invisible — an agent with no
+log tool cannot tell you the log layer was skipped — so the read is attempted and degrades with a
+stated cause, what was already tried, and the admin action required.
+
+**One deliberate ACL bypass, bounded.** `PaToolQueryTable` takes an unfiltered COUNT — and only a
+count, never row content — when and only when the secure read returns zero rows, because otherwise
+a missing read ACL is indistinguishable from missing data by the very tool meant to find it.
+
+`docs/agent/agent-doctor-instructions.md` is rewritten for seven tools and asserted byte-for-byte
+against the Fluent agent. Our own seven tool descriptions are scored by `agent_config`'s own
+checklist in the test suite: zero description smells, zero high-severity smells.
+
+---
+
 ## 2026.08.0101 — 2026-08-01
 
 Phase 1a vertical slice, **Task 11 remediation**: a scoped re-review of the benchmark suite found

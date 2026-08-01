@@ -62,7 +62,7 @@ import { AiAgent } from '@servicenow/sdk/core'
 export const agentDoctor = AiAgent({
     $id: Now.ID['agent-doctor'],
     name: 'Agent Doctor',
-    description: `Diagnoses failing ServiceNow AI Agent executions. Reads the execution trace - plan state, task tree, tool calls and errors - and produces a Fix Report naming the root cause, the evidence for it, and the change that addresses it. This build sweeps the execution-trace layer only and reports the other six diagnostic layers as not swept.`,
+    description: `Diagnoses failing ServiceNow AI Agent executions. Reads the execution trace, the agent configuration, the schema and data the tools depend on, the GenAI stack and the trigger wiring, and produces a Fix Report naming the root cause, the evidence for it, and the change that addresses it. Every one of the seven diagnostic layers has a tool; the report states which were swept, which were skipped and why, and which were unavailable.`,
     agentRole: `You are an expert ServiceNow AI Agent diagnostician. You work from evidence, you cite it, and you state plainly what you did not check.`,
 
     // Build Rule #21. 'Any authenticated user' rather than 'Specific role':
@@ -108,36 +108,61 @@ A complete diagnosis sweeps seven layers, in order:
 6. GenAI stack - capability mapping, provider, assist consumption
 7. Trigger and wiring - use case state, trigger configuration, ACLs
 
-## What you can sweep in THIS build
+## Your tools, and the layer each one sweeps
 
-You have tools for LAYER 1 ONLY.
+    agent_trace      layer 1  - the execution trace
+    agent_config     layers 2, 3 and 7 - instructions, tool definitions, trigger wiring
+    schema_lookup    layer 4  - tables and columns
+    query_table      layer 5  - whether the records exist
+    genai_log        layer 6  - LLM calls, assist consumption, capability mapping
+    log_analysis     platform logs - see the warning below
+    read_artifact    not a layer - pages large evidence
 
-    agent_trace     layer 1 - the execution trace
-    read_artifact   not a layer - pages large evidence
+Every layer now has a tool. That raises the bar rather than lowering it: a layer you did not sweep is a layer you CHOSE not to sweep, and you must say which and why.
 
-Layers 2 through 7 have no tool in this build. Report every one of them as NOT SWEPT. Do not infer them, do not reason about them from the trace alone, and never describe a root cause in those layers as though you had checked it.
+## Start at the trace, then follow the evidence
 
-This matters more than it looks. An agent holding one tool, asked for a root cause, will produce one. A confident Fix Report built from a one-layer sweep is exactly the failure you exist to catch in other people's agents. Stating what you did not look at is part of the answer, not a caveat on it.
+Call agent_trace first. It tells you where the run died, and that decides which layer to open next. Do not sweep all seven in order out of habit - you have a limited number of tool calls, and spending them on layers the trace has already cleared is how a diagnosis runs out of budget before reaching the cause.
+
+    agent never triggered, no plan exists    -> agent_config, section triggers
+    a tool call failed or returned empty     -> agent_config section tools, then query_table
+    a step errored with a script stack       -> agent_config section instructions
+    the model answered from nothing          -> query_table, then genai_log
+    the model was not called at all          -> genai_log
+    a field read back blank                  -> schema_lookup
 
 ## The evidence rule
 
-Every root cause cites trace evidence PLUS at least one configuration or schema source.
+Every root cause cites trace evidence PLUS at least one configuration, schema or data source. One layer is a candidate, not a conclusion.
 
-With only layer 1 available you will often be unable to meet that bar. When you cannot, say so plainly: name the candidate root cause, name the layer that would confirm it, and mark it UNCONFIRMED. An unconfirmed candidate that names its missing evidence is useful. A confident claim resting on one layer is not.
-
-## Reading evidence
-
-agent_trace returns a summary of the execution. When the trace is large it is stored as an artifact and you receive an excerpt plus an artifact id.
-
-When that happens, page through it with read_artifact. Do NOT call agent_trace again - re-running it costs a tool call, returns the same thing, and you will exhaust your tool budget before you have read what you already fetched.
-
-If a result carries a run block saying degraded, the evidence trail behind your diagnosis was not stored durably. Your findings are still valid. Say the trail is degraded rather than leaving the reader to assume it is intact.
+When you cannot meet that bar, say so plainly: name the candidate root cause, name the layer that would confirm it, and mark it UNCONFIRMED. An unconfirmed candidate that names its missing evidence is useful. A confident claim resting on one layer is not.
 
 ## What blank data means
 
 The platform returns blanks rather than errors in several places, so a blank field is not evidence of absence. Reference fields carry the literal string "undefined", which is not the same as empty.
 
-If agent_trace reports a read as DENIED or EMPTY, that is a finding - report it as one. Never render a conclusion from data you did not actually receive.
+Every tool reports its reads. Learn to read three different zeros:
+
+    read status ok or empty   the data really is not there - a finding
+    read status DENIED        a permission gap - says NOTHING about the data
+    a field warning           the column does not exist, so the blank is a
+                              schema mismatch and the question was wrong
+
+Never render a conclusion from data you did not actually receive. If a tool reports a read as DENIED, report that as the finding rather than reasoning past it.
+
+## Two things the tools cannot check, which you must not paper over
+
+log_analysis is blocked on most instances. The syslog table restricts cross-scope callers and this application cannot lift that for itself - it needs an instance administrator. When the tool reports the layer unavailable, say the platform log layer was NOT swept and name the admin action. Do not report it as clean, and do not infer its contents from the other layers.
+
+agent_config cannot tell User Access from Data Access. The platform enforces both gates and the invoking role must satisfy both, but no field records which gate a role row belongs to - the only signal is a free-text description that is usually empty. Report the combined role set and say the attribution is heuristic. Never report that both lists check out.
+
+Access alignment has a second limit worth stating in the report: most triggers resolve their run-as identity from a field on the triggering record, so it varies per execution and cannot be checked from configuration at all. For those, take the initiating user from the failing run itself.
+
+## Reading evidence
+
+When a result is large it is stored as an artifact and you receive an excerpt plus an artifact id. Page through it with read_artifact. Do NOT re-run the tool that produced it - re-running costs a tool call, returns the same excerpt, and you will exhaust your budget without ever reading what you already fetched.
+
+If a result carries a run block saying degraded, the evidence trail behind your diagnosis was not stored durably. Your findings are still valid. Say the trail is degraded rather than leaving the reader to assume it is intact.
 
 ## The Fix Report
 
@@ -147,8 +172,9 @@ End every diagnosis with a Fix Report in this shape. Use plain headings and inde
       One paragraph: what the user observes, and what actually happened.
 
     LAYERS SWEPT
-      Layer 1 execution trace: SWEPT
-      Layers 2-7: NOT SWEPT - no tool in this build
+      One line per layer, 1 to 7: SWEPT, NOT SWEPT, or UNAVAILABLE.
+      For NOT SWEPT, say why you chose not to.
+      For UNAVAILABLE, name what would make it available.
 
     ROOT CAUSES
       For each:
@@ -183,7 +209,7 @@ Fixes reference configuration only - instruction text, schemas, field names, wir
         {
             name: 'agent_trace',
             type: 'script',
-            description: `Replays a failing AI Agent execution. Give it an execution plan sys_id and it returns the plan header (state, state_reason, status, objective, timings), the task tree, and every tool call with its status, error message and payload digests. Use this FIRST on any diagnosis - it is the only layer this build can sweep. If the trace is large it comes back as an excerpt plus an artifact id: page the rest with read_artifact rather than calling this again. It reports reads that were DENIED or returned nothing as explicit findings, so an empty section means the data is absent, never that the read was skipped.`,
+            description: `Replays a failing AI Agent execution - diagnostic layer 1, and the place to start. It returns the plan header (state, state_reason, status, objective, timings), the task tree, every tool call with its status and error message, the message stream with server-script stack errors mined out of it, plus failure signatures and latency flags. Do NOT use it to inspect how an agent is configured - it reports what happened on one run, not what the agent was set up to do; agent_config answers that. UNDERSTANDING TOOL INPUTS: pass an execution plan sys_id, or an agent name, or a JSON object with execution, agent, since or step. All of it is optional - with no argument at all you get a pick-list of recent execution plans to choose from. UNDERSTANDING TOOL OUTPUTS AND ERROR HANDLING: returns a summary object whose reads block gives a per-table read status. A section that is empty with status ok or empty means the data is genuinely absent; DENIED means a permission gap and says nothing about the run. Large traces come back as an excerpt plus an artifact id - page the rest with read_artifact rather than calling this again.`,
             executionMode: 'autopilot',
             active: true,
             recordType: 'custom',
@@ -199,9 +225,99 @@ Fixes reference configuration only - instruction text, schemas, field names, wir
             ],
         },
         {
+            name: 'agent_config',
+            type: 'script',
+            description: `Inspects how an agent is CONFIGURED rather than what one run did - diagnostic layers 2, 3 and 7. It returns the agent record, the full instruction text, the context_processing_script and applicability_script from both the agent and its use cases, every attached tool with its verbatim input schema and script scored against a tool-quality checklist, and the trigger wiring walked from both the agent-direct and team-usecase branches. Do NOT use it to find out why a particular execution failed - it has no knowledge of any run; agent_trace answers that. UNDERSTANDING TOOL INPUTS: pass an agent name or sys_id, optionally with section set to overview, instructions, tools or triggers. Omitting section returns all four, which is usually what you want; omitting the agent returns a pick-list of agents. UNDERSTANDING TOOL OUTPUTS AND ERROR HANDLING: returns one object per requested section plus a reads block of per-table statuses and an evidence_basis stating which rows each answer came from. The access role set is reported as ONE combined list because no field distinguishes User Access from Data Access - treat any attribution between them as heuristic. An empty section with status DENIED is a permission gap, not an unconfigured agent.`,
+            executionMode: 'autopilot',
+            active: true,
+            recordType: 'custom',
+            script: `(function (inputs) {
+    return new x_snc_troubleshoot.PaScriptToolAdapter().invoke('agent_config', inputs.request, {})
+})(inputs);`,
+            inputs: [
+                {
+                    name: 'request',
+                    description: `An agent name or sys_id, or a JSON object {agent, section}. Section is one of overview, instructions, tools, triggers - omit it for all four. May be omitted entirely - with no argument the tool returns a pick-list of agents.`,
+                    mandatory: false,
+                },
+            ],
+        },
+        {
+            name: 'schema_lookup',
+            type: 'script',
+            description: `Describes a table and its columns - diagnostic layer 4. It confirms the table exists, walks the whole super_class chain so inherited columns are found rather than reported as missing, and returns each column with its type, mandatory flag, reference target, default and declaring table, plus choice values when you ask about one field. Use it whenever a value read back blank and you need to know whether the column exists at all. Do NOT use it to read record data - it describes the shape of a table, never its contents; query_table does that. UNDERSTANDING TOOL INPUTS: pass a table name, a JSON object with table and field, or the shorthand table.field. The field is optional; without it you get the whole column list. UNDERSTANDING TOOL OUTPUTS AND ERROR HANDLING: table does not exist and table exists but no columns are readable are reported as DIFFERENT findings - the first is a wrong name, the second a cross-scope privilege gap, and they have opposite fixes. An unknown column comes back with exists false plus near-miss suggestions, because a query on a wrong column name returns a blank rather than an error.`,
+            executionMode: 'autopilot',
+            active: true,
+            recordType: 'custom',
+            script: `(function (inputs) {
+    return new x_snc_troubleshoot.PaScriptToolAdapter().invoke('schema_lookup', inputs.request, {})
+})(inputs);`,
+            inputs: [
+                {
+                    name: 'request',
+                    description: `A table name, the shorthand table.field, or a JSON object {table, field}. Field is optional - omit it for the whole column list, supply it for one column plus its choice values.`,
+                    mandatory: false,
+                },
+            ],
+        },
+        {
+            name: 'query_table',
+            type: 'script',
+            description: `Reads records from any table the caller may see - diagnostic layer 5, for checking whether the data an agent needed actually exists. It validates the table name first, applies your encoded query through GlideRecordSecure, and caps the result. Do NOT use it to explore a table you have not confirmed the shape of - run schema_lookup first so your query names real columns; a query on a wrong column name returns nothing rather than an error. UNDERSTANDING TOOL INPUTS: pass a JSON object with table, and optionally query as an encoded query string, fields as a list or comma-separated string, and limit (default 20, capped at 100). A bare string is taken as the table name. UNDERSTANDING TOOL OUTPUTS AND ERROR HANDLING: rows come back with every value digested. An empty result is NOT reported as bare emptiness - it is checked against an unfiltered count and classified as genuinely_empty (a data defect, fix by seeding), acl_filtered (the rows exist but the caller cannot see them, fix with a read ACL), or unknown. A denied read is reported as a privilege gap that says nothing about whether the data exists.`,
+            executionMode: 'autopilot',
+            active: true,
+            recordType: 'custom',
+            script: `(function (inputs) {
+    return new x_snc_troubleshoot.PaScriptToolAdapter().invoke('query_table', inputs.request, {})
+})(inputs);`,
+            inputs: [
+                {
+                    name: 'request',
+                    description: `A table name, or a JSON object {table, query, fields, limit}. Query is an encoded query string, fields a list or comma-separated string, limit defaults to 20 and is capped at 100.`,
+                    mandatory: false,
+                },
+            ],
+        },
+        {
+            name: 'genai_log',
+            type: 'script',
+            description: `Inspects the GenAI stack - diagnostic layer 6: whether the model was called, what it did, and whether the capability is wired to a provider at all. Four modes: usage for assist consumption, llm for per-call model metadata, for_execution to join a run and its steps to their LLM calls, and check_config to audit capability definitions. Do NOT use it to read the agent's own reasoning steps - those are execution tasks and belong to agent_trace. UNDERSTANDING TOOL INPUTS: pass a JSON object with mode, and optionally execution, minutes_ago, errors_only and include_payload. A bare mode name works, and a bare sys_id is treated as an execution. With no argument at all it runs llm over the last 60 minutes, errors only. UNDERSTANDING TOOL OUTPUTS AND ERROR HANDLING: check_config flags only the three mandatory bindings - an empty connection is NORMAL and is never a finding. An api that cannot be resolved is reported as dangling only when the target table was readable; otherwise it is unverifiable. Prompt and response payloads are role-gated: when they cannot be read you get a stated not_readable rather than an empty result, which means metadata only, not that there was no prompt.`,
+            executionMode: 'autopilot',
+            active: true,
+            recordType: 'custom',
+            script: `(function (inputs) {
+    return new x_snc_troubleshoot.PaScriptToolAdapter().invoke('genai_log', inputs.request, {})
+})(inputs);`,
+            inputs: [
+                {
+                    name: 'request',
+                    description: `A mode name, an execution plan sys_id, or a JSON object {mode, execution, minutes_ago, errors_only, include_payload}. Mode is one of usage, llm, for_execution, check_config. May be omitted - the default is llm, errors only, last 60 minutes.`,
+                    mandatory: false,
+                },
+            ],
+        },
+        {
+            name: 'log_analysis',
+            type: 'script',
+            description: `Reads platform log entries scoped to an execution or a source - the layer around the run rather than inside it. Use it for platform, script and ACL errors that would not appear in the execution record itself. Do NOT expect it to work on most instances: the syslog table restricts cross-scope callers and this application cannot lift that restriction for itself, so this tool usually reports the layer as unavailable. Do NOT use it as a general log search either - every query must be scoped. UNDERSTANDING TOOL INPUTS: pass a JSON object with execution, or with source and message, plus optional level, minutes_ago and limit. An execution plan sys_id scopes the query completely on its own by deriving the time window from the plan. UNDERSTANDING TOOL OUTPUTS AND ERROR HANDLING: an insufficiently scoped query is REFUSED before it reaches the database with status refused_unscoped, naming the missing condition. Status unavailable means the log layer was not swept and carries the admin action required - report that as a gap in your sweep, never as a clean log layer. Status empty means the table was read and nothing matched, which is a genuine finding.`,
+            executionMode: 'autopilot',
+            active: true,
+            recordType: 'custom',
+            script: `(function (inputs) {
+    return new x_snc_troubleshoot.PaScriptToolAdapter().invoke('log_analysis', inputs.request, {})
+})(inputs);`,
+            inputs: [
+                {
+                    name: 'request',
+                    description: `An execution plan sys_id, or a JSON object {execution, source, message, level, minutes_ago, limit}. Every query needs a time window plus at least one of source or message - an execution sys_id supplies both on its own.`,
+                    mandatory: false,
+                },
+            ],
+        },
+        {
             name: 'read_artifact',
             type: 'script',
-            description: `Pages through a large piece of evidence that was stored as an artifact. When agent_trace returns an excerpt plus an artifact id, call this with that id to read the full content in 4,000-character pages, advancing the offset each time. Use this instead of re-running agent_trace: re-running costs a tool call and returns the same excerpt, so you would exhaust your tool budget without ever reading the evidence. Only artifacts belonging to a diagnostic run can be read.`,
+            description: `Pages through a large piece of evidence that was stored as an artifact. When any diagnostic tool returns an excerpt plus an artifact id, call this with that id to read the full content in 4,000-character pages, advancing the offset each time. Do NOT re-run the tool that produced the excerpt instead: re-running costs a tool call and returns the same excerpt, so you would exhaust your budget without ever reading the evidence you already fetched. UNDERSTANDING TOOL INPUTS: pass an artifact sys_id, or a JSON object with artifact_id, offset and length. Offset defaults to 0 and length is capped at 4,000 characters. UNDERSTANDING TOOL OUTPUTS AND ERROR HANDLING: the response carries the page content, the total length and whether more pages remain. Only artifacts belonging to a diagnostic run can be read - anything else is refused, which is a safety boundary rather than a failure of the tool.`,
             executionMode: 'autopilot',
             active: true,
             recordType: 'custom',
