@@ -921,6 +921,41 @@ describe('access alignment (R-18a — what the tool may claim)', () => {
         expect(access.requirements_incomplete_because).toMatch(/per-row ceiling/)
     })
 
+    it('does not read the role set on a partial field probe', () => {
+        // A probe that stops part-way returns a PREFIX of the candidate list.
+        // Reading with it would silently omit whichever columns were never
+        // reached - role_list among them - so the requirement set could come
+        // back empty for a reason that has nothing to do with the data.
+        const tables = world({
+            sys_agent_access_role_configuration: [
+                { sys_id: 'acc1', agent: AGENT, agent_table: 'sn_aia_agent', role_list: 'role_itil' },
+            ],
+        })
+        const GlideRecordSecure = makeQueryingGlideRecordSecure(tables)
+        const realIsValid = GlideRecordSecure.prototype.isValidField
+        GlideRecordSecure.prototype.isValidField = function (f) {
+            if (this._table === 'sys_agent_access_role_configuration' && f === 'role_list') {
+                throw new Error('unavailable')
+            }
+            return realIsValid.call(this, f)
+        }
+
+        const kitCtx = loadScriptInclude('PaToolReadKit.js', { GlideRecordSecure: GlideRecordSecure })
+        const ctx = loadScriptInclude('tools/PaToolAgentConfig.js', {
+            GlideRecordSecure: GlideRecordSecure,
+            PaToolReadKit: kitCtx.PaToolReadKit,
+        })
+        const access = new ctx.PaToolAgentConfig().execute({
+            agent: 'Seed Agent',
+            section: 'triggers',
+        }).data.triggers.access_alignment
+
+        expect(access.config_probe_status).toBe('unknown')
+        expect(access.role_rows).toEqual([])
+        expect(access.comparison_note).toMatch(/did not complete/)
+        expect(access.comparison_note).toMatch(/Unknown, not absent/)
+    })
+
     it('reports the comparison as not possible rather than passing when run-as roles cannot be read', () => {
         const { result } = run({ agent: 'Seed Agent', section: 'triggers' }, withAccess(), {
             denied: ['sys_user_has_role'],

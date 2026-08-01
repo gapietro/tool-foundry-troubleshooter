@@ -1761,10 +1761,30 @@ PaToolAgentConfig.prototype = {
             comparison_note: '',
         }
 
+        out.config_probe_status = probe.status
+
         if (probe.status === 'DENIED') {
             out.comparison_note =
                 'sys_agent_access_role_configuration is not readable from this scope. The access ' +
                 'configuration is unknown, not absent.'
+            return out
+        }
+        if (probe.status !== 'ok') {
+            // The probe stopped part-way, so `valid` is a prefix of the
+            // candidate list, not an answer about it. Reading with that list
+            // would quietly omit whichever columns were never reached — and
+            // role_list is one of them, so the requirement set could come back
+            // empty for a reason that has nothing to do with the data.
+            out.comparison_note =
+                'The field probe on sys_agent_access_role_configuration did not complete (status "' +
+                probe.status +
+                '"), so only ' +
+                probe.valid.length +
+                ' of ' +
+                probe.probed.length +
+                ' candidate columns were confirmed. Reading with a partial column list would silently ' +
+                'omit whichever were never reached, so the access role set was NOT read. Unknown, not ' +
+                'absent.'
             return out
         }
         if (probe.valid.indexOf('agent') === -1 || probe.valid.indexOf('agent_table') === -1) {
@@ -2178,8 +2198,18 @@ PaToolAgentConfig.prototype = {
             }
         }
 
-        var joinField = this._mappingProbe.join.valid.length ? this._mappingProbe.join.valid[0] : null
-        var roleField = this._mappingProbe.role.valid.length ? this._mappingProbe.role.valid[0] : null
+        var joinProbe = this._mappingProbe.join
+        var roleProbe = this._mappingProbe.role
+        var joinField = joinProbe.valid.length ? joinProbe.valid[0] : null
+        var roleField = roleProbe.valid.length ? roleProbe.valid[0] : null
+
+        if (joinProbe.status !== 'ok' || roleProbe.status !== 'ok') {
+            // An incomplete probe here means the per-role breakout may exist
+            // and simply not have been reachable. Returning the role_list rows
+            // alone would present a partial set as the whole one.
+            out.mapping_probe_status = joinProbe.status + '/' + roleProbe.status
+            return out
+        }
         if (!joinField || !roleField) return out
 
         var mapped = k.readRows(
