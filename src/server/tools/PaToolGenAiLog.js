@@ -394,7 +394,7 @@ PaToolGenAiLog.prototype = {
 
         data.entries = out
         data.read_status = read.status
-        data.truncated_at = out.length >= this.MAX_ROWS ? this.MAX_ROWS : null
+        data.truncated_at = read.truncated_at || null
         data.notes.push(
             'usage mode counts ASSIST CONSUMPTION, not LLM calls. A run that failed before reaching the ' +
                 'provider consumes no assists and leaves no row here — an empty result is not evidence the ' +

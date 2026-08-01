@@ -70,6 +70,62 @@ describe('every kit-based core surfaces the bounds it hit (R-24)', () => {
     })
 })
 
+describe('no kit-based core re-derives truncation from a length', () => {
+    // Round 5 found two of these still in place after the R-24 kit fix, and a
+    // tip-wide sweep then found five more in the sibling cores. My manual greps
+    // kept missing them because the receiver varied — `this.MAX_`, `self.MAX_`,
+    // `out.length`, `entries.length`. A grep I have to remember to run, and to
+    // write correctly, is the same class of control as a bound I have to
+    // remember to report. So it is a test, matched on the CAP name rather than
+    // on whatever the rows happen to be called.
+    const HEURISTIC = /\.length\s*>=\s*(this\.|self\.)?(MAX_[A-Z_]+|limit)\b/
+
+    KIT_CORES.forEach((core) => {
+        it(core + ' uses the kit s measured truncated_at', () => {
+            const lines = sourceOf(core).split('\n')
+            const offenders = lines
+                .map((line, i) => ({
+                    line: line.trim(),
+                    n: i + 1,
+                    // The declaration may sit anywhere in the comment block
+                    // immediately above the line it governs.
+                    context: lines.slice(Math.max(0, i - 5), i + 1).join(' '),
+                }))
+                .filter((e) => HEURISTIC.test(e.line))
+                // A cap over an in-memory accumulation is NOT a read
+                // truncation and cannot use the kit's value - but it must
+                // DECLARE itself rather than look identical to the defect.
+                .filter((e) => !/IN-MEMORY CAP/.test(e.context))
+                .map((e) => e.n + ': ' + e.line)
+
+            // Wrong in BOTH directions: it calls an exactly-full result
+            // truncated, and cannot see a clipped one where no limit was set.
+            expect(offenders).toEqual([])
+        })
+    })
+
+    it('is implemented once, in the kit, where the limit+1 read lives', () => {
+        const kitSrc = fs.readFileSync(
+            path.join(__dirname, '..', 'src', 'server', 'PaToolReadKit.js'),
+            'utf8'
+        )
+        expect(HEURISTIC.test(kitSrc)).toBe(true)
+    })
+
+    it('records that PaToolAgentTrace is exempt and what the exemption costs', () => {
+        // It keeps its own inline read layer (deliberately unmigrated - it is
+        // the only core verified against real sn_aia_* rows), so it still
+        // infers truncation from a length comparison in three places. The cost
+        // is real and bounded: an exactly-full task, tool-call or conversation
+        // page is reported as truncated. Recorded rather than hidden, with a
+        // follow-up to migrate it.
+        const trace = sourceOf('PaToolAgentTrace')
+        const occurrences = trace.split('\n').filter((l) => HEURISTIC.test(l)).length
+
+        expect(occurrences).toBe(3)
+    })
+})
+
 describe('the kit makes truncation a measurement, not a guess', () => {
     function kit() {
         const G = makeQueryingGlideRecordSecure({

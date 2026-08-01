@@ -372,7 +372,7 @@ PaToolLogAnalysis.prototype = {
             status: entries.length ? 'ok' : 'empty',
             entries: entries,
             read_status: read.status,
-            truncated_at: entries.length >= limit ? limit : null,
+            truncated_at: read.truncated_at || null,
         }
     },
 
