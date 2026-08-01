@@ -145,9 +145,49 @@ describe('PaToolReadKit.readRows', () => {
             'addQuery',
             'orderByDesc:sys_created_on',
             'orderBy:sys_id',
-            'setLimit:10',
+            // limit + 1, deliberately: see the truncation tests below.
+            'setLimit:11',
             'query',
         ])
+    })
+
+    it('detects truncation by reading one more row than it returns', () => {
+        // `rows.length === limit` cannot distinguish a truncated result from an
+        // exactly-full one, and every consumer of that ambiguity in this
+        // codebase resolved it the optimistic way - four silent caps across
+        // four review rounds. Reading limit+1 makes it a fact.
+        const kit = kitWith(
+            makeGlideRecordSecure({
+                t: [{ sys_id: '1' }, { sys_id: '2' }, { sys_id: '3' }],
+            })
+        )
+        const data = kit.newData()
+        const read = kit.readRows('t', null, ['sys_id'], [], 2, null, data)
+
+        expect(read.rows).toHaveLength(2)
+        expect(read.truncated_at).toBe(2)
+        expect(data.truncations.t).toBe(2)
+        expect(kit.anyTruncation(data)).toBe(true)
+    })
+
+    it('does not claim truncation when the result exactly fills the limit', () => {
+        const kit = kitWith(makeGlideRecordSecure({ t: [{ sys_id: '1' }, { sys_id: '2' }] }))
+        const data = kit.newData()
+        const read = kit.readRows('t', null, ['sys_id'], [], 2, null, data)
+
+        expect(read.rows).toHaveLength(2)
+        expect(read.truncated_at).toBeUndefined()
+        expect(kit.anyTruncation(data)).toBe(false)
+    })
+
+    it('keeps the largest bound when a table is read more than once', () => {
+        const kit = kitWith(makeGlideRecordSecure({}))
+        const data = kit.newData()
+
+        kit.noteTruncation(data, 't', 20)
+        kit.noteTruncation(data, 't', 5)
+        // A later, smaller read must not mask a bigger truncation.
+        expect(data.truncations.t).toBe(20)
     })
 
     it('reports fields the table does not declare instead of reading them as blank (R-6)', () => {

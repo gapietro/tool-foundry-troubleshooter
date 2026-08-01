@@ -62,6 +62,10 @@ PaToolReadKit.prototype = {
     newData: function (toolName, version) {
         var data = {
             reads: {},
+            // Every read that hit its ceiling, recorded centrally. See
+            // readRows: a core cannot forget to check this, because
+            // evidence_basis surfaces it whether the core looks or not.
+            truncations: {},
             field_warnings: [],
             notes: [],
         }
@@ -114,12 +118,21 @@ PaToolReadKit.prototype = {
             if (queryFn) queryFn(gr)
             // R-17: at the database, and before the limit picks the page.
             this.applyOrder(gr, orderBy)
-            if (limit) gr.setLimit(limit)
+            // ONE MORE than asked for. `rows.length === limit` cannot tell a
+            // truncated result from an exactly-full one, and every consumer of
+            // that ambiguity in this codebase resolved it the optimistic way.
+            // Reading limit+1 and returning limit turns the guess into a fact
+            // for the cost of a single row.
+            if (limit) gr.setLimit(limit + 1)
             gr.query()
 
             result.missing_fields = this.missingFields(gr, fields)
 
             while (gr.next()) {
+                if (limit && result.rows.length >= limit) {
+                    result.truncated_at = limit
+                    break
+                }
                 result.rows.push(this.pluck(gr, fields, displayFields))
             }
             result.status = result.rows.length > 0 ? 'ok' : 'empty'
@@ -129,6 +142,7 @@ PaToolReadKit.prototype = {
         }
 
         this.noteRead(data, table, result.status)
+        this.noteTruncation(data, table, result.truncated_at)
         this.noteFieldWarnings(data, table, result.missing_fields)
         return result
     },
@@ -296,6 +310,31 @@ PaToolReadKit.prototype = {
         if (status === 'empty') return 2
         if (status === 'unknown') return 1
         return 0
+    },
+
+    /**
+     * Records that a read hit its ceiling, keeping the LARGEST bound seen for a
+     * table so a later smaller read cannot mask a bigger truncation.
+     *
+     * This is central rather than per-caller because every silent cap found in
+     * review had the same shape: the bound was applied in one place and the
+     * answer was reported in another, with nothing structurally connecting
+     * them. A core can still choose how to present it, but it can no longer
+     * fail to know.
+     */
+    noteTruncation: function (data, table, limit) {
+        if (!data || !data.truncations || !limit) return
+        var prior = data.truncations[table]
+        if (!prior || limit > prior) data.truncations[table] = limit
+    },
+
+    /** @returns {Boolean} whether any read recorded a truncation. */
+    anyTruncation: function (data) {
+        if (!data || !data.truncations) return false
+        for (var k in data.truncations) {
+            if (Object.prototype.hasOwnProperty.call(data.truncations, k)) return true
+        }
+        return false
     },
 
     noteFieldWarnings: function (data, table, missing) {

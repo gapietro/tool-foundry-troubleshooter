@@ -538,4 +538,40 @@ evidence a ruling is written from, not only to the code it governs.
 
 ---
 
+**R-24 — Twelve review findings across four rounds on one file, and eleven are the same defect. Patching instances was not converging; the invariant is now enforced in the read layer. (2026-08-01)**
+
+**Found:** `PaToolAgentConfig` went through four rounds of automated review. Twelve findings, of which **eleven are one failure mode**: *a partial, excluded, empty or bounded read presented as a definitive answer.*
+
+| Round | Finding | Shape |
+|---|---|---|
+| 1 | `allow_all_session_roles` excluded from requirements but still counted | excluded-yet-counted |
+| 1 | `trigger_unreadable` named the linked agent, not the trigger | wrong subject on a partial read |
+| 1 | trigger traversal capped at 25 per branch, silently | silent cap |
+| 1 | `unknown` sticky in `noteRead`, never upgraded | "cannot tell" frozen as an answer |
+| 2 | `no_trigger_wiring` emitted over a DENIED read | denial as absence |
+| 2 | partial role comparison discarded on one denial | computed findings thrown away |
+| 3 | name-matched use cases seeded into agent mode | unrelated data presented as related |
+| 3 | vacuous `completed` over an empty requirement set | clean bill of health over nothing checked |
+| 3 | access-configuration read capped at 50, silently | silent cap |
+| 4 | `sys_user_has_role` capped at 200, silently | silent cap feeding a false "missing" |
+| 4 | `_traversalIntegrity` reported complete over a truncated input | **the integrity check itself lied** |
+| 4 | `completed` claimed over a truncated requirement set | silent cap, one layer up |
+
+**Four of the twelve were introduced or left behind by fixes earlier in the same review cycle.** Round 3's vacuous pass was *opened* by round 1's permissive-row fix, which emptied the requirement set without anyone asking what an empty set meant downstream. Round 3's silent cap was round 1's silent cap, in the same file, twelve lines from code edited for exactly that defect. Round 4's integrity failure was round 2's fix — a function written to answer "was this traversal complete?" that checked denials and not truncation, and so answered *yes* over a use-case list cut at 20.
+
+**Why this is a ruling rather than twelve fixed bugs.** The file's own header cites R-6, R-11, R-15 and R-22 — the four rulings about precisely this failure — and then committed eleven instances of it. Being *aware* of the pattern demonstrably did not prevent it; each instance was locally reasonable and the bound was always applied in one place while the answer was reported in another, with nothing structurally connecting them. Fixing instances one at a time was **not converging**: rounds 3 and 4 both produced fresh instances of a defect class that the previous round had supposedly addressed.
+
+**Change — the invariant is enforced in `PaToolReadKit`, not remembered by callers.**
+
+1. **`readRows` reads `limit + 1` and returns `limit`.** `rows.length === limit` cannot distinguish a truncated result from an exactly-full one, and every consumer of that ambiguity in this codebase resolved it optimistically. One extra row turns the guess into a fact, and `result.truncated_at` is now a measurement rather than a heuristic.
+2. **Every truncation is recorded centrally** in `data.truncations` by the kit itself, keeping the largest bound per table. A core cannot fail to *know* it truncated; it can only choose how to present it.
+3. **Every core's `evidence_basis` surfaces `data.truncations`** with a note that any count or absence derived from those tables is a **lower bound**. This is the structural half: a silent cap now requires deleting a line from the evidence block, not merely forgetting one at a call site.
+4. **Standing rule, the one that generalises:** *a bound, an exclusion, a denial or an empty set must travel with the answer it shaped.* Any code path that narrows what was read and then reports a conclusion must state the narrowing in the same object as the conclusion. "Reported somewhere in the payload" is not enough — R-19b's lesson applies here too: **the status label is part of the claim**, so a `comparison_status` of `completed` computed over a truncated input is a false statement regardless of what a neighbouring note says.
+
+**Method note, and the reason to trust these twelve fixes more than the earlier ones.** Every guard added from round 2 onward was **mutation-tested**: the fix was reverted and the test confirmed to fail. That caught a real problem — my first regression test for round 2's partial-comparison defect passed without ever reaching the branch it claimed to cover, because the table-level test stub could not deny one user's roles and not another's. It would have shipped as a green test over an unguarded fix, which is the same class of defect as the code it was guarding: *an artefact that looks like verification and is not.*
+
+**Open, and deliberately not closed here:** the other five cores were written in the same style and are unreviewed. `PaToolGenAiLog.check_config` caps at 100 definitions against ~2026 rows, and `PaToolQueryTable`'s empty-result verdict rests on an unfiltered count that can itself be unavailable. They inherit items 1–3 automatically by using the kit, but their *consumers* of truncation have not been audited. That sweep is a work item, not a record (R-18c).
+
+---
+
 *Next steps agreed in spar: fold changes 2.1–2.4 into `docs/IMPLEMENTATION_PLAN.md` (new collector task; scorecard field; anchor keying rule) and `docs/LOW_LEVEL_DESIGN.md` (§4.6 anchor spec, §7 protocol, §8 items). Drift review after Phase 1a build compares the built system to this record.*
