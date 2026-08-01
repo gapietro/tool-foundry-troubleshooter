@@ -175,6 +175,27 @@ export const seed04Agent = AiAgent({
             // propagates and stays visible in the trace. It is refusing to
             // LABEL a failure as a success.
             //
+            // TWO TRAPS IN THAT ONE LINE, both caught by PR #33 round-3 review.
+            // (a) Array.isArray(cap), NOT (cap && cap.length). STRINGS HAVE
+            //     .length, so an error string response would be reduced to its
+            //     FIRST CHARACTER - and a one-character string is truthy with
+            //     no .error property, so it reports ok: true. That is the same
+            //     hardcoded-success defect round 2 removed, re-entering through
+            //     a truthiness test.
+            // (b) typeof result !== 'object' in the failed check. Array.isArray
+            //     alone stops the truncation but not the mislabelling: a whole
+            //     error string is still truthy and still has no .error. A
+            //     capability response is an object; anything else is a failure.
+            // Both lines are copied from the house pattern in
+            // .claude/context/sdk-examples/now-assist-skill.now.ts, which this
+            // script should have matched in the first place.
+            //
+            // Deliberately still execute(), not executeSecure(): the golden
+            // example prefers executeSecure() in scoped contexts, but this seed
+            // must fail on its dangling `api` and nothing else. An ACL-enforcing
+            // call could fail earlier with an access error and change the seed's
+            // signature - the exact class of mistake that produced R-22.
+            //
             // REPLACE_WITH_SEED_04_CAPABILITY_SYS_ID is the house placeholder
             // pattern (Build Rule #33): the sys_id only exists after install, and
             // an unreplaced placeholder fails loudly and obviously rather than
@@ -189,8 +210,8 @@ export const seed04Agent = AiAgent({
         }]
     });
     var cap = resp && resp.capabilities && resp.capabilities[capabilityId];
-    var result = (cap && cap.length) ? cap[0] : cap;
-    var failed = !result || !!result.error || !!result.errorCode;
+    var result = Array.isArray(cap) ? cap[0] : cap;
+    var failed = !result || typeof result !== 'object' || !!result.error || !!result.errorCode;
     return JSON.stringify({
         ok: !failed,
         capability_id: capabilityId,
