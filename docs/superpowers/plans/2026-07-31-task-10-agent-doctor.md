@@ -50,7 +50,10 @@ Add to `test/PaRunAnchor.test.js`, at the end of the file, inside the outermost 
 ```js
 describe('the run-completion contract (Task 10, DESIGN.md R-20)', () => {
     it('exposes NO completion method — native runs have no terminal state', () => {
-        const anchor = new PaRunAnchor()
+        // Use this file's own load() helper, NOT `new PaRunAnchor()`. The
+        // Script Include is evaluated inside a vm sandbox by
+        // test/_loadScriptInclude.js, so the class is not a bare global here.
+        const { anchor } = load()
 
         // This is a GUARD, not a description. Adding a completion method to
         // this class is not a small convenience — it re-opens a ruling. The
