@@ -407,7 +407,19 @@ PaToolLogAnalysis.prototype = {
     },
 
     _evidenceBasis: function (data) {
+        var k = this._k()
+        // R-24: every bound that was hit, surfaced whether or not the section
+        // that hit it thought to mention it. A silent cap now requires deleting
+        // a line here rather than forgetting one at a call site.
+        var truncations = data.truncations || {}
+        var truncationNote = k.anyTruncation(data)
+            ? 'One or more reads hit their ceiling — see truncations. Any count or absence derived from ' +
+              'those tables is a LOWER BOUND, not a complete answer.'
+            : null
+
         return {
+            truncations: truncations,
+            truncation_note: truncationNote,
             statement:
                 'entry_rows is the number of syslog rows actually read. status "unavailable" means the ' +
                 'table could not be read at all — that is a stated gap in the sweep, NOT an absence of ' +
