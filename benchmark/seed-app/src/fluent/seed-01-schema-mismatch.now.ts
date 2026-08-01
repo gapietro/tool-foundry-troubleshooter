@@ -3,7 +3,13 @@ import { AiAgent, Table, StringColumn, IntegerColumn } from '@servicenow/sdk/cor
 
 /**
  * SEED 1 - tool schema mismatch. Expected layer: tool_schema.
- * Expected fix target: the tool input schema.
+ * Expected fix target: the tool's WORD-TYPED CONTRACT - map the word to its
+ * integer inside the script, or change the tool description and the agent
+ * instructions to pass 1-5. NOT "the tool input schema": Fluent script-tool
+ * inputs have no `type` property, the emitted sn_aia_tool.input_schema is
+ * [{name, description, mandatory}] and is shape-identical to seeds 3 and 4's
+ * CORRECT tools, so there is nothing in the schema to constrain and that fix
+ * is not expressible. See benchmark/seeds/seed-01-schema-mismatch.md.
  *
  * THE DEFECT, ON PURPOSE: the instructions tell the agent to express priority
  * as a WORD, and the tool passes that word straight through to a column that is

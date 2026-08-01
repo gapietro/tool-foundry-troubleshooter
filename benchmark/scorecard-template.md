@@ -82,8 +82,24 @@ reason is honest; a `0` is a measurement that did not happen.
    again, and score the replacement. Voidness is a property of the run, not of
    the seed.
 3. If a void run cannot be made valid, the gate is read as
-   `sum(passes_gate) / <valid runs>` against the **same proportional threshold**
-   (8/10 = 80%).
+   `sum(passes_gate) / <valid runs>` against the **same proportions**, and
+   *all three* bands are proportional — not just the top one. The
+   `IMPLEMENTATION_PLAN.md` Task 12 bands are `≥ 8/10`, `5–7/10` and `< 5/10`,
+   which are:
+
+   | Band | Proportion of valid runs | Outcome |
+   |---|---|---|
+   | Top (`≥ 8/10`) | **≥ 80%** | Native is the front door |
+   | Middle (`5–7/10`) | **≥ 50% and < 80%** | Native for lightweight triage + custom deep-diagnosis harness |
+   | Bottom (`< 5/10`) | **< 50%** | Full custom harness as designed |
+
+   Edges are **inclusive at the bottom of each band** (`≥`), and the comparison
+   is on the proportion — do **not** round the pass count to a /10 equivalent
+   first. Worked example, because this is the case that had no stated answer:
+   **8 valid runs, 4 passes = 50.0% → middle band.** At 8 valid runs the bands
+   are 7–8 passes (top), 4–6 (middle), 0–3 (bottom); at 9 valid runs, 8–9 (top),
+   5–7 (middle), 0–4 (bottom). `DECISION.md` must show the percentage it read,
+   not only the fraction.
 4. **Floor: below 8 valid runs the gate is not evaluable.** `DECISION.md` must
    record the outcome as *gate not met — insufficient data*, state how many runs
    were void and why, and must **not** compute a verdict from the survivors. Two

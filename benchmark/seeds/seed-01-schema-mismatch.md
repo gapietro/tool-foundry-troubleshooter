@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Expected root-cause layer** | `tool_schema` (layer 3) |
-| **Expected fix target** | the tool input schema |
+| **Expected fix target** | the tool's **word-typed contract** — map the word to its integer inside the script, or change the tool description + agent instructions to pass 1–5. **Not** "the tool input schema": Fluent script-tool inputs have no `type` property, so that fix is not expressible — see "Expected diagnosis" |
 | **Fluent source** | `../seed-app/src/fluent/seed-01-schema-mismatch.now.ts` |
 | **Agent name** | Seed 01 Ticket Prioritizer |
 | **Also stresses** | artifact paging — this seed is built to produce a LARGE trace |
@@ -20,9 +20,11 @@
 The instructions require the agent to express priority as a **word**
 ("critical", "high", …), and `set_ticket_priority` passes that word straight
 through to `x_snc_tsbench_ticket.priority`, which is an **integer** choice
-column, 1–5. `'critical'` is not an integer, so it is not stored — while
-`gr.update()` still reports success, so the agent tells the user the ticket was
-prioritised.
+column, 1–5. `'critical'` is not an integer, so the requested priority is **not
+what ends up in the column** (a non-numeric string on an integer field typically
+settles at `0` — see "Expected diagnosis" for why no literal value is scored) —
+while `gr.update()` still reports success, so the agent tells the user the ticket
+was prioritised.
 
 **Where the declaration actually lives — and where it does not.** Script-tool
 inputs have no `type` property in Fluent. The emitted `sn_aia_tool.input_schema`
@@ -92,8 +94,21 @@ field to constrain, so that fix is not expressible and must not be the standard
 a run is scored against.
 
 Evidence a correct diagnosis should cite: the trace showing `priority_stored`
-empty (and `priority_requested` holding the word) in the tool result, plus the
+**disagreeing with `priority_requested`** in the tool result, plus the
 `x_snc_tsbench_ticket.priority` dictionary entry showing `internal_type=integer`.
+
+**What `priority_stored` will actually read — do not score on a literal value.**
+The criterion above deliberately does not name one. A ServiceNow integer field
+handed a non-numeric string typically settles at **`0`**, not empty, and the
+column is now genuinely integer-typed; `''`, `0` and `null` are all plausible,
+and which one appears depends on platform coercion this benchmark has not
+measured. **Any value that is not the requested word scores as correct
+evidence** — the finding is the mismatch between `priority_requested:
+"critical"` and whatever `priority_stored` came back as. Only
+`priority_stored == "critical"` would refute the seed, and that outcome means
+the column is not integer-backed after all: record it in `notes` and treat the
+run as a **refutation of the seed**, not a miss by the diagnosing agent. Replace
+this paragraph with the measured value once Task 12 has run one.
 
 ### Scoring note — layers 3 and 4 (M18)
 
