@@ -97,10 +97,40 @@ Recording the substitution (a manual pass invoking the tool cores directly again
 matters more than the substitution itself: an unbuilt de-risker everyone assumes ran is how a
 benchmark produces scores nobody can interpret.
 
-**Doc reconciliation.** `IMPLEMENTATION_PLAN.md` Task 11, `docs/LOW_LEVEL_DESIGN.md` §7
-(instance correction to gpinst01, R-18c) and §8 item 8 (closed, build-proven), and DESIGN.md
-R-21 all updated in this branch to match what was actually built, including the corrected
-`x_snc_tsbench_routing` table name.
+**Doc reconciliation.** `IMPLEMENTATION_PLAN.md` Task 11, `docs/LOW_LEVEL_DESIGN.md` §7 (the seed
+rows — including the corrected `x_snc_tsbench_routing` table name) and §8 item 8 (closed,
+build-proven), and DESIGN.md R-21 all updated in this branch to match what was actually built.
+~~§7 instance correction to gpinst01 (R-18c).~~ **That claim was false and is withdrawn:** §7's
+instance correction was made on an earlier branch and this branch made no instance correction at
+all.
+
+**Fix wave following whole-branch review.** The seeds were broken on purpose, but four of them were
+broken in ways their specs did not claim, and two instruments could not measure what they existed
+to measure. Verified in `benchmark/seed-app/dist/`, not by a passing build:
+
+- **Seed 5 was void as built** — both activation gates emitted `false`. Fluent has no property for
+  the `sn_aia_trigger_agent_usecase_m2m` gate, so the seed could not express its own specification.
+  The gate is now a mandatory post-install PATCH, documented in the seed spec, the protocol and LLD §7.
+- **Seed 4 would have failed at layer 3, not layer 6** — the `OneExtendUtil` envelope was a flat
+  name-keyed object rather than an `executionRequests` array keyed by capability sys_id, so it could
+  never have reached the empty `connection`. Envelope corrected, capability record completed so
+  `connection` is the only missing binding, and the invocation sys_id moved to the house
+  `REPLACE_WITH_..._SYS_ID` placeholder.
+- **Build Rule #42 had made three seeds' setup steps impossible** — `dist/` carried six ACLs, all
+  `operation=execute`, and zero record ACLs, with `ws_access=false` on both fixture tables. Adds
+  `seed-tables-acl.now.ts`. On seed 3 the read ACL is part of the instrument: a `GlideRecordSecure`
+  sweep cannot distinguish an empty table from an unreadable one.
+- **Seed 1's stated mechanism was false** — the column emitted `internal_type=choice`
+  (string-backed) and would have stored `'critical'` verbatim; now `IntegerColumn`. Its evidence
+  path also read the in-memory record after `update()` rather than re-querying.
+- **Seed 5's trigger condition referenced a column that does not exist** (`active=true` on a table
+  with no `active` field), so it could never have matched even with both gates on.
+- **The scorecard could not produce the number the gate consumes** — it scored /6 while the gate
+  counts runs. Adds `passes_gate` with its rule derived from the gate's wording, a void-run state
+  with a denominator rule and an 8-valid-run floor, a partial band on `fix_target_correct`, the
+  two-step `layers_swept` derivation (the documented one-step query matched nothing), and the
+  canonical tool→layer map (the roster is seven tools, not seven layers).
+- Every seed spec's defect section is now marked **predicted, not observed — confirm at Task 12**.
 
 ## 2026.07.3111 — 2026-07-31
 

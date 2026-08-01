@@ -434,8 +434,8 @@ changing that test, deliberately.
 **Change:** `benchmark/scorecard-template.md` records `layers_available` alongside `layers_swept` —
 extending R-3's *finished vs. did not look* distinction to a third state, *could not look*, so a
 near-0 score reads as "no tools to look with" rather than "looked and failed." Task 12's scored
-protocol is **blocked on Tasks 7–8** (the remaining five tool cores) and is filed as its own issue,
-separate from this ruling, since discharging R-21 here does not build those tools.
+protocol is **blocked on Tasks 7–8** (the remaining five tool cores) and is filed as its own issue —
+**issue #32** — separate from this ruling, since discharging R-21 here does not build those tools.
 
 ---
 

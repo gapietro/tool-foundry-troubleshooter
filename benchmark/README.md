@@ -24,19 +24,52 @@ the scores mean anything:
 > teaches the diagnostic method; an agent that has read the answer key is not being measured on
 > anything.
 
+**Pointer, not a change to the rule above.** There is no `docs/agent/playbook.md` in the repo, and
+nothing was lost: the file that carries Agent Doctor's instructions — the playbook in the sense the
+rule means — is **`docs/agent/agent-doctor-instructions.md`**, the only file in `docs/agent/`. The
+rule's wording is preserved verbatim because it is the condition that makes the scores mean
+anything; read "the playbook" as that file. The rule binds anything that becomes part of Agent
+Doctor's instructions, whatever it ends up being called.
+
 ## The protocol
 
-1. **Smoke test, before any seed is scored.** Run Agent Doctor against gpinst01 execution
+Steps 1–2 were previously documented **only** inside the individual seed specs, so the one document
+an operator reads top to bottom skipped the first two things they have to do. They are here now;
+the per-seed specs remain authoritative for the detail.
+
+1. **Install the fixture app.** `cd benchmark/seed-app && npm install && now-sdk build && now-sdk
+   install --alias gpinst01`. This is a **second scoped app** (`x_snc_tsbench`), installed alongside
+   the product app, never instead of it — see `seed-app/README.md` and `DECISION-seed-location.md`.
+   Task 11 stops at a passing build; the install is Task 12's step.
+
+2. **Per-seed setup — two seeds are VOID without it.** Each spec's "Setup" section is mandatory, not
+   illustrative. Two of them do not work by simply installing:
+
+   - **Seed 5** — flip the second activation gate on **post-install**:
+     `PATCH sn_aia_trigger_agent_usecase_m2m/<sys_id>` with `{"active": "true"}`, then re-read it and
+     confirm it returns `true`. Fluent cannot set this gate — a plain install leaves *both* gates
+     off, and with both off the seed isolates nothing. Leave
+     `sn_aia_trigger_configuration.active` at `false`; that is the seeded defect.
+   - **Seed 4** — replace `REPLACE_WITH_SEED_04_CAPABILITY_SYS_ID` in the `summarise_ticket` tool
+     script with the installed capability's real sys_id (read it from
+     `sys_one_extend_capability` where `name=x_snc_tsbench_unmapped_capability`).
+
+   Seeds 1, 4 and 5 also need a bench ticket row inserted and its sys_id recorded. Skipping any of
+   this does not merely weaken a run — it makes the run **void**, which has its own recording rule
+   in `scorecard-template.md` §A3 and takes the benchmark toward its 8-valid-run floor.
+
+3. **Smoke test, before any seed is scored.** Run Agent Doctor against gpinst01 execution
    `c9d63a932bda8b9417a6ffbeee91bfd0`. Expected diagnosis: `script_error` citing
    `context_processing_script` **line 42**. This specimen is chosen deliberately over an easier one:
    it is *invisible from the plan header* — `state=Completed`, empty `state_reason`, all 11 tasks and
    all 5 tool calls `Success` — so it tests whether a diagnosis that stops at the header gets caught,
    not merely whether the tools can read rows. This is a pass/fail gate, not one of the 10 scored
    rows.
-2. **2 runs per seed, in fresh conversations, for all 5 seeds — 10 scored runs.** Each run is blind:
+4. **2 runs per seed, in fresh conversations, for all 5 seeds — 10 scored runs.** Each run is blind:
    Agent Doctor's instructions, its tools, and the playbook carry no seed knowledge. The doubling
    measures the documented "inconsistent behavior on identical inputs" failure mode, not redundancy.
-3. Score each run against `scorecard-template.md`.
+5. Score each run against `scorecard-template.md` — including `passes_gate`, which is the only
+   column the Task 12 gate consumes, and the void-run rule for any seed whose setup did not hold.
 
 ## Run identity
 
@@ -61,7 +94,7 @@ a missing-tools gap rather than from anything measured about the native harness 
 The `layers_available` column in `scorecard-template.md` exists to make this visible in the scored
 data rather than let it hide inside a low total: a run showing `swept 1/7, available 1/7` is an agent
 doing everything it can, while `swept 1/7, available 7/7` is one that stopped early — the same total
-score, opposite verdicts. Tracked separately as a blocker issue.
+score, opposite verdicts. Tracked separately as blocker **issue #32**.
 
 ## The de-risking step that is unavailable
 
