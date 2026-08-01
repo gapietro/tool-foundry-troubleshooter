@@ -333,6 +333,83 @@ describe('for_execution mode', () => {
         expect(result.data.source_ids_joined).toEqual([PLAN, 'task1'])
     })
 
+    it('says llm_calls is incomplete when the task list was clipped', () => {
+        // Both reads feed the join. A clipped either omits calls while the
+        // result still looks like a complete join - the exact shape R-24
+        // governs, and a global evidence note is not the same as the bound
+        // travelling with the answer it shaped.
+        const tasks = []
+        for (let i = 0; i < 250; i++) tasks.push({ sys_id: 't' + i, execution_plan: PLAN })
+
+        const { result } = run(
+            { mode: 'for_execution', execution: PLAN },
+            world({
+                sn_aia_execution_plan: [{ sys_id: PLAN }],
+                sn_aia_execution_task: tasks,
+            })
+        )
+
+        expect(result.data.task_truncated_at).toBe(200)
+        expect(result.data.llm_calls_truncated_at).toBe(200)
+        expect(result.data.notes.join(' ')).toMatch(/llm_calls is INCOMPLETE/)
+        expect(result.data.notes.join(' ')).toMatch(/fewer\s+provider calls than it did/)
+    })
+
+    it('says so when the m2m link list itself was clipped', () => {
+        const links = []
+        for (let i = 0; i < 150; i++) {
+            links.push({
+                sys_id: 'm' + i,
+                source_id: PLAN,
+                source_table: 'sn_aia_execution_plan',
+                gen_ai_log_metadata: 'md1',
+            })
+        }
+
+        const { result } = run(
+            { mode: 'for_execution', execution: PLAN },
+            world({
+                sn_aia_execution_plan: [{ sys_id: PLAN }],
+                sn_aia_gen_ai_m2m: links,
+                sys_gen_ai_log_metadata: [{ sys_id: 'md1', model_name: 'now-llm', status: 'success' }],
+            })
+        )
+
+        expect(result.data.m2m_truncated_at).toBe(100)
+        expect(result.data.notes.join(' ')).toMatch(/link list was truncated/)
+    })
+
+    it('states the payload omission once, not once per linked call', () => {
+        const links = []
+        for (let i = 0; i < 5; i++) {
+            links.push({
+                sys_id: 'm' + i,
+                source_id: PLAN,
+                source_table: 'sn_aia_execution_plan',
+                gen_ai_log_metadata: 'md' + i,
+            })
+        }
+        const metadata = links.map((l, i) => ({
+            sys_id: 'md' + i,
+            model_name: 'now-llm',
+            status: 'success',
+        }))
+
+        const { result } = run(
+            { mode: 'for_execution', execution: PLAN },
+            world({
+                sn_aia_execution_plan: [{ sys_id: PLAN }],
+                sn_aia_gen_ai_m2m: links,
+                sys_gen_ai_log_metadata: metadata,
+            })
+        )
+
+        const repeated = result.data.notes.filter((n) => n.indexOf('were NOT fetched') !== -1)
+        expect(result.data.llm_calls).toHaveLength(5)
+        // Five identical notes bury the four that carry information.
+        expect(repeated).toHaveLength(1)
+    })
+
     it('says the plan is absent rather than reporting no LLM calls', () => {
         const { result } = run({ mode: 'for_execution', execution: PLAN }, world())
 
