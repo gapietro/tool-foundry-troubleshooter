@@ -255,6 +255,59 @@ describe('trigger traversal (R-18a)', () => {
         expect(result.data.triggers.wiring_findings.map((f) => f.finding)).toContain('inactive_link')
     })
 
+    it('names the TRIGGER, not the linked agent, when the trigger cannot be read', () => {
+        // related_resource_record is the agent or use case the link points at.
+        // Naming it under a sn_aia_trigger_configuration label sends an
+        // investigator to the wrong record with a label saying otherwise.
+        const { result } = run(
+            { agent: 'Seed Agent', section: 'triggers' },
+            world({
+                sn_aia_trigger_agent_usecase_m2m: [
+                    {
+                        sys_id: 'tm2m1',
+                        trigger_configuration: 'trg1',
+                        related_resource_table: 'sn_aia_agent',
+                        related_resource_record: AGENT,
+                        active: 'true',
+                    },
+                ],
+            }),
+            { denied: ['sn_aia_trigger_configuration'] }
+        )
+
+        const finding = result.data.triggers.wiring_findings.find((f) => f.finding === 'trigger_unreadable')
+        expect(finding.subject).toBe('sn_aia_trigger_configuration[trg1]')
+        expect(finding.subject).not.toContain(AGENT)
+        expect(finding.via_link).toBe('sn_aia_trigger_agent_usecase_m2m[tm2m1]')
+    })
+
+    it('says so when a branch hits its link ceiling, rather than truncating silently', () => {
+        const many = []
+        for (let i = 0; i < 30; i++) {
+            many.push({
+                sys_id: 'm' + i,
+                trigger_configuration: 'trg1',
+                related_resource_table: 'sn_aia_agent',
+                related_resource_record: AGENT,
+                active: 'true',
+            })
+        }
+
+        const { result } = run(
+            { agent: 'Seed Agent', section: 'triggers' },
+            world({
+                sn_aia_trigger_agent_usecase_m2m: many,
+                sn_aia_trigger_configuration: [{ sys_id: 'trg1', name: 'T', active: 'true' }],
+            })
+        )
+
+        // An absent trigger under a silent cap reads as "not wired", which is
+        // the opposite of what a hit ceiling means.
+        expect(result.data.triggers.truncated_at.agent_direct).toBe(25)
+        expect(result.data.notes.join(' ')).toMatch(/per-branch ceiling/)
+        expect(result.data.notes.join(' ')).toMatch(/NOT evidence that no such trigger is wired/)
+    })
+
     it('reports an agent with no links as unwired, stating both branches were walked', () => {
         const { result } = run({ agent: 'Seed Agent', section: 'triggers' }, world())
 
@@ -349,6 +402,85 @@ describe('access alignment (R-18a — what the tool may claim)', () => {
         )
 
         expect(result.data.triggers.access_alignment.role_rows[0].gate_attribution).toMatch(/UNKNOWABLE/)
+    })
+
+    it('excludes roles from a row that allows all session roles', () => {
+        // Live on 47 of 703 configuration rows (6.7%) on gpinst01. Treating a
+        // permissive row's list as required produces a missing_roles entry,
+        // which reads as the K26 Lab 1 security-violation cause - a confident
+        // wrong diagnosis of the most serious kind this tool emits.
+        const { result } = run(
+            { agent: 'Seed Agent', section: 'triggers' },
+            world({
+                sn_aia_trigger_agent_usecase_m2m: [
+                    {
+                        sys_id: 'l1',
+                        trigger_configuration: 'trg1',
+                        related_resource_table: 'sn_aia_agent',
+                        related_resource_record: AGENT,
+                        active: 'true',
+                    },
+                ],
+                sn_aia_trigger_configuration: [
+                    { sys_id: 'trg1', name: 'T', active: 'true', run_as_user: 'user1' },
+                ],
+                sys_agent_access_role_configuration: [
+                    {
+                        sys_id: 'acc1',
+                        agent: AGENT,
+                        agent_table: 'sn_aia_agent',
+                        role_list: 'role_itil',
+                        allow_all_session_roles: 'true',
+                    },
+                ],
+                sys_user_role: [{ sys_id: 'role_itil', name: 'itil' }],
+            })
+        )
+        const access = result.data.triggers.access_alignment
+
+        expect(access.role_rows[0].roles_are_required).toBe(false)
+        expect(access.role_rows[0].roles_note).toMatch(/NOT a requirement/)
+        expect(access.required_role_count).toBe(0)
+        expect(access.permissive_rows).toBe(1)
+        expect(access.permissive_note).toMatch(/excluded from the comparison/)
+        // The run-as user holds no roles at all, and there must still be no
+        // missing-role finding against a permissive configuration.
+        expect(access.missing_roles).toEqual([])
+    })
+
+    it('still requires roles from a row that does not allow all session roles', () => {
+        const { result } = run(
+            { agent: 'Seed Agent', section: 'triggers' },
+            world({
+                sn_aia_trigger_agent_usecase_m2m: [
+                    {
+                        sys_id: 'l1',
+                        trigger_configuration: 'trg1',
+                        related_resource_table: 'sn_aia_agent',
+                        related_resource_record: AGENT,
+                        active: 'true',
+                    },
+                ],
+                sn_aia_trigger_configuration: [
+                    { sys_id: 'trg1', name: 'T', active: 'true', run_as_user: 'user1' },
+                ],
+                sys_agent_access_role_configuration: [
+                    {
+                        sys_id: 'acc1',
+                        agent: AGENT,
+                        agent_table: 'sn_aia_agent',
+                        role_list: 'role_itil',
+                        allow_all_session_roles: 'false',
+                    },
+                ],
+                sys_user_role: [{ sys_id: 'role_itil', name: 'itil' }],
+            })
+        )
+        const access = result.data.triggers.access_alignment
+
+        expect(access.role_rows[0].roles_are_required).toBe(true)
+        expect(access.required_role_count).toBe(1)
+        expect(access.missing_roles[0].roles[0].name).toBe('itil')
     })
 
     it('reports the comparison as not possible rather than passing when run-as roles cannot be read', () => {
