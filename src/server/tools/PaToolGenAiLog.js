@@ -427,7 +427,7 @@ PaToolGenAiLog.prototype = {
 
         data.entries = this._shapeMetadata(read.rows, a, data)
         data.read_status = read.status
-        data.truncated_at = read.rows.length >= this.MAX_ROWS ? this.MAX_ROWS : null
+        data.truncated_at = read.truncated_at || null
     },
 
     _shapeMetadata: function (rows, a, data) {
@@ -761,7 +761,7 @@ PaToolGenAiLog.prototype = {
         data.definitions = definitions
         data.findings = findings
         data.read_status = read.status
-        data.truncated_at = read.rows.length >= this.MAX_DEFINITIONS ? this.MAX_DEFINITIONS : null
+        data.truncated_at = read.truncated_at || null
 
         // R-22 item 4: state the denominator every time a count is stated.
         data.connection_note =
@@ -927,7 +927,19 @@ PaToolGenAiLog.prototype = {
     // =======================================================================
 
     _evidenceBasis: function (data) {
+        var k = this._k()
+        // R-24: every bound that was hit, surfaced whether or not the section
+        // that hit it thought to mention it. A silent cap now requires deleting
+        // a line here rather than forgetting one at a call site.
+        var truncations = data.truncations || {}
+        var truncationNote = k.anyTruncation(data)
+            ? 'One or more reads hit their ceiling — see truncations. Any count or absence derived from ' +
+              'those tables is a LOWER BOUND, not a complete answer.'
+            : null
+
         return {
+            truncations: truncations,
+            truncation_note: truncationNote,
             statement:
                 'Every count below is the number of rows actually read. A zero with read status "ok"/"empty" ' +
                 'is a genuine absence; a zero with "DENIED" is a permission gap and says nothing about the ' +

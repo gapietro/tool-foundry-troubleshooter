@@ -136,7 +136,7 @@ PaToolSchemaLookup.prototype = {
                 data.field = this._oneField(a.field, fields, a.table, data)
             } else {
                 data.fields = fields
-                data.truncated_at = fields.length >= this.MAX_FIELDS ? this.MAX_FIELDS : null
+                data.truncated_at = k.anyTruncation(data) ? this.MAX_FIELDS : null
             }
 
             phase = 'derive_findings'
@@ -575,7 +575,19 @@ PaToolSchemaLookup.prototype = {
     },
 
     _evidenceBasis: function (data) {
+        var k = this._k()
+        // R-24: every bound that was hit, surfaced whether or not the section
+        // that hit it thought to mention it. A silent cap now requires deleting
+        // a line here rather than forgetting one at a call site.
+        var truncations = data.truncations || {}
+        var truncationNote = k.anyTruncation(data)
+            ? 'One or more reads hit their ceiling — see truncations. Any count or absence derived from ' +
+              'those tables is a LOWER BOUND, not a complete answer.'
+            : null
+
         return {
+            truncations: truncations,
+            truncation_note: truncationNote,
             statement:
                 'Every count below is the number of rows actually read. A zero with read status "ok"/"empty" ' +
                 'is a genuine absence; a zero with "DENIED" is a permission gap and says nothing about the ' +

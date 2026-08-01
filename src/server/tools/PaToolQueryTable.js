@@ -480,7 +480,19 @@ PaToolQueryTable.prototype = {
     },
 
     _evidenceBasis: function (data) {
+        var k = this._k()
+        // R-24: every bound that was hit, surfaced whether or not the section
+        // that hit it thought to mention it. A silent cap now requires deleting
+        // a line here rather than forgetting one at a call site.
+        var truncations = data.truncations || {}
+        var truncationNote = k.anyTruncation(data)
+            ? 'One or more reads hit their ceiling — see truncations. Any count or absence derived from ' +
+              'those tables is a LOWER BOUND, not a complete answer.'
+            : null
+
         return {
+            truncations: truncations,
+            truncation_note: truncationNote,
             statement:
                 'row_rows is the number of rows actually returned by a GlideRecordSecure read. A zero with ' +
                 'status "empty" is checked against an unfiltered count before being called an absence; a ' +
