@@ -364,6 +364,29 @@ describe('trigger traversal (R-18a)', () => {
         )
     })
 
+    it('does NOT report the traversal complete when its use-case input was truncated', () => {
+        // Branch 2 keys solely on the use-case id list. Truncate that list and
+        // wiring on the omitted use cases is never queried - while the first
+        // version of _traversalIntegrity, which checked only denials, still
+        // reported "complete" over it.
+        const many = []
+        for (let i = 0; i < 30; i++) {
+            many.push({ sys_id: 'uc' + i, name: 'UC ' + i, team: TEAM })
+        }
+
+        const { result } = run(
+            { agent: 'Seed Agent', section: 'triggers' },
+            world({ sn_aia_usecase: many })
+        )
+        const integrity = result.data.triggers.traversal_integrity
+
+        expect(integrity.complete).toBe(false)
+        expect(integrity.truncated.join(' ')).toContain('sn_aia_usecase')
+        expect(result.data.triggers.wiring_findings.map((f) => f.finding)).not.toContain(
+            'no_trigger_wiring'
+        )
+    })
+
     it('reports an agent with no links as unwired, stating both branches were walked', () => {
         const { result } = run({ agent: 'Seed Agent', section: 'triggers' }, world())
 
@@ -743,6 +766,86 @@ describe('access alignment (R-18a — what the tool may claim)', () => {
         expect(access.truncation_note).toMatch(/LOWER BOUND/)
     })
 
+    it('will not claim a role is missing from a truncated role set', () => {
+        // The set read is partial, so a role the user actually holds may be
+        // among the ones not read. Reporting it as missing produces a false
+        // security-violation diagnosis - the most consequential wrong answer
+        // this tool emits.
+        const roles = []
+        for (let i = 0; i < 250; i++) {
+            roles.push({ sys_id: 'r' + i, user: 'user1', role: 'role_other_' + i })
+        }
+
+        const { result } = run(
+            { agent: 'Seed Agent', section: 'triggers' },
+            world({
+                sn_aia_trigger_agent_usecase_m2m: [
+                    {
+                        sys_id: 'l1',
+                        trigger_configuration: 'trg1',
+                        related_resource_table: 'sn_aia_agent',
+                        related_resource_record: AGENT,
+                        active: 'true',
+                    },
+                ],
+                sn_aia_trigger_configuration: [
+                    { sys_id: 'trg1', name: 'T', active: 'true', run_as_user: 'user1' },
+                ],
+                sys_agent_access_role_configuration: [
+                    { sys_id: 'acc1', agent: AGENT, agent_table: 'sn_aia_agent', role_list: 'role_itil' },
+                ],
+                sys_user_role: [{ sys_id: 'role_itil', name: 'itil' }],
+                sys_user_has_role: roles,
+            })
+        )
+        const access = result.data.triggers.access_alignment
+
+        expect(access.users_compared).toBe(0)
+        expect(access.comparison_status).toBe('not_possible')
+        expect(access.not_comparable[0].reason).toMatch(/more than 200 role assignments/)
+        expect(access.missing_roles).toBeNull()
+    })
+
+    it('will not claim a comparison completed against a truncated requirement set', () => {
+        const many = []
+        for (let i = 0; i < 60; i++) {
+            many.push({
+                sys_id: 'acc' + i,
+                agent: AGENT,
+                agent_table: 'sn_aia_agent',
+                role_list: 'role_itil',
+            })
+        }
+
+        const { result } = run(
+            { agent: 'Seed Agent', section: 'triggers' },
+            world({
+                sn_aia_trigger_agent_usecase_m2m: [
+                    {
+                        sys_id: 'l1',
+                        trigger_configuration: 'trg1',
+                        related_resource_table: 'sn_aia_agent',
+                        related_resource_record: AGENT,
+                        active: 'true',
+                    },
+                ],
+                sn_aia_trigger_configuration: [
+                    { sys_id: 'trg1', name: 'T', active: 'true', run_as_user: 'user1' },
+                ],
+                sys_agent_access_role_configuration: many,
+                sys_user_role: [{ sys_id: 'role_itil', name: 'itil' }],
+                sys_user_has_role: [{ sys_id: 'h1', user: 'user1', role: 'role_itil' }],
+            })
+        )
+        const access = result.data.triggers.access_alignment
+
+        // The identity holds everything that was READ, which is not the same as
+        // everything required.
+        expect(access.comparison_status).toBe('partial')
+        expect(access.comparison_note).toMatch(/INCOMPLETE/)
+        expect(access.comparison_note).toMatch(/all-clear/i)
+    })
+
     it('reports the comparison as not possible rather than passing when run-as roles cannot be read', () => {
         const { result } = run({ agent: 'Seed Agent', section: 'triggers' }, withAccess(), {
             denied: ['sys_user_has_role'],
@@ -1075,6 +1178,39 @@ describe('overview', () => {
         expect(result.data.overview.active_tool_count).toBe(1)
         expect(result.data.overview.usecases).toHaveLength(1)
         expect(result.data.overview.strategy).toBe('ReAct')
+    })
+})
+
+describe('evidence basis carries every bound that was hit', () => {
+    it('surfaces truncations even from a section that did not mention them', () => {
+        // The structural guard (R-24). Four review rounds produced four silent
+        // caps in this file, each fixed at its own call site. This one cannot
+        // be forgotten: the kit records the bound and the evidence block
+        // reports it whether or not the consuming section looked.
+        const many = []
+        for (let i = 0; i < 60; i++) {
+            many.push({ sys_id: 'm' + i, agent: AGENT, tool: 'tool1', name: 'a', active: 'true' })
+        }
+
+        const { result } = run(
+            { agent: 'Seed Agent', section: 'tools' },
+            world({
+                sn_aia_agent_tool_m2m: many,
+                sn_aia_tool: [
+                    { sys_id: 'tool1', name: 't', type: 'script', description: 'x', active: 'true' },
+                ],
+            })
+        )
+
+        expect(result.data.evidence_basis.truncations.sn_aia_agent_tool_m2m).toBe(50)
+        expect(result.data.evidence_basis.truncation_note).toMatch(/LOWER BOUND/)
+    })
+
+    it('says nothing about truncation when nothing was truncated', () => {
+        const { result } = run('Seed Agent', world())
+
+        expect(result.data.evidence_basis.truncations).toEqual({})
+        expect(result.data.evidence_basis.truncation_note).toBeNull()
     })
 })
 
