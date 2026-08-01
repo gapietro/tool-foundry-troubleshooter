@@ -80,10 +80,12 @@ declare global {
                     'scope-probe-adapter': {
                         table: 'sys_ws_operation'
                         id: '41e02cdf0a3f40aba13d2e4f4a71178a'
+                        deleted: true
                     }
                     'scope-probe-anchor-selftest': {
                         table: 'sys_ws_operation'
                         id: '89ad8ce31da841608b1514bc1644b3a7'
+                        deleted: true
                     }
                     'scope-probe-api': {
                         table: 'sys_ws_definition'
@@ -92,6 +94,7 @@ declare global {
                     'scope-probe-artifact-selftest': {
                         table: 'sys_ws_operation'
                         id: '1fc74db242f84cc79c489e4a72c6ec35'
+                        deleted: true
                     }
                     'scope-probe-reads': {
                         table: 'sys_ws_operation'
@@ -100,6 +103,7 @@ declare global {
                     'scope-probe-trace': {
                         table: 'sys_ws_operation'
                         id: '074e8ea6df954aeb9a92cc93f586b790'
+                        deleted: true
                     }
                     'scope-probe-v1': {
                         table: 'sys_ws_version'
