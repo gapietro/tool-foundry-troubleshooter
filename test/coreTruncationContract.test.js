@@ -193,3 +193,109 @@ describe('the kit makes truncation a measurement, not a guess', () => {
         expect(read.rows).toHaveLength(2)
     })
 })
+
+describe('every core answers with its status intact on an adverse path', () => {
+    // Round 4 on #38 found three early returns that assigned an answer and
+    // returned without its status. That gap is reached through CONTROL FLOW,
+    // and neither pattern-scanning guard above can see it: there is no wrong
+    // line to match, only a path that skipped one.
+    //
+    // The first version of this test asserted "no top-level key is undefined"
+    // and PASSED against the reintroduced defect - Object.keys cannot see a key
+    // that was never assigned at all, which is precisely what an early return
+    // produces. Presence is the assertion; absence of undefined is not.
+    const ALL_DENIED = [
+        'sn_aia_agent',
+        'sn_aia_usecase',
+        'sn_aia_team_member',
+        'sn_aia_agent_tool_m2m',
+        'sn_aia_tool',
+        'sn_aia_trigger_agent_usecase_m2m',
+        'sn_aia_trigger_configuration',
+        'sn_aia_execution_plan',
+        'sn_aia_execution_task',
+        'sn_aia_gen_ai_m2m',
+        'sys_agent_access_role_configuration',
+        'sys_agent_access_role_mapping',
+        'sys_user_has_role',
+        'sys_user_role',
+        'sys_gen_ai_usage_log',
+        'sys_gen_ai_log_metadata',
+        'sys_generative_ai_log',
+        'sys_one_extend_capability_definition',
+        'sys_one_extend_capability',
+        'sys_db_object',
+        'sys_dictionary',
+        'sys_choice',
+        'syslog',
+    ]
+
+    /** The field each core must always answer with, however it degrades. */
+    const REQUIRED = {
+        PaToolAgentConfig: { args: undefined, fields: ['resolution', 'evidence_basis'] },
+        PaToolGenAiLog: { args: undefined, fields: ['mode', 'evidence_basis'] },
+        PaToolSchemaLookup: { args: 'sn_aia_agent', fields: ['mode', 'table_exists', 'evidence_basis'] },
+        PaToolQueryTable: { args: 'sn_aia_agent', fields: ['status', 'evidence_basis'] },
+        PaToolLogAnalysis: { args: { source: 'x_snc' }, fields: ['status', 'evidence_basis'] },
+    }
+
+    function runCore(core, args) {
+        const G = makeQueryingGlideRecordSecure({}, { denied: ALL_DENIED })
+        const kitCtx = loadScriptInclude('PaToolReadKit.js', { GlideRecordSecure: G })
+        const ctx = loadScriptInclude('tools/' + core + '.js', {
+            GlideRecordSecure: G,
+            PaToolReadKit: kitCtx.PaToolReadKit,
+            GlideAggregate: function () {
+                throw new Error('unavailable')
+            },
+            GlideDateTime: function () {
+                this.addSeconds = function () {}
+                this.toString = function () {
+                    return '2026-08-01 00:00:00'
+                }
+            },
+        })
+        return new ctx[core]().execute(args)
+    }
+
+    function missing(data, fields) {
+        return fields.filter((f) => !Object.prototype.hasOwnProperty.call(data, f))
+    }
+
+    KIT_CORES.forEach((core) => {
+        it(core + ' answers with every required field when all reads are denied', () => {
+            const spec = REQUIRED[core]
+            const result = runCore(core, spec.args)
+
+            // Never a throw into the orchestrator, and never a bare failure:
+            // a denial is a finding, not an error.
+            expect(result.success).toBe(true)
+            expect({ core: core, missing: missing(result.data, spec.fields) }).toEqual({
+                core: core,
+                missing: [],
+            })
+        })
+    })
+
+    it('PaToolGenAiLog carries a status on every mode, not just the default', () => {
+        // The default mode alone would have missed round 4's findings, which
+        // live in for_execution and check_config.
+        const perMode = {
+            usage: ['entries', 'read_status'],
+            llm: ['entries', 'read_status'],
+            for_execution: ['llm_calls', 'llm_calls_status'],
+            check_config: ['definitions', 'findings', 'audit_status'],
+        }
+
+        Object.keys(perMode).forEach((mode) => {
+            const result = runCore('PaToolGenAiLog', {
+                mode: mode,
+                execution: 'c9d63a932bda8b9417a6ffbeee91bfd0',
+            })
+            expect({ mode: mode, missing: missing(result.data, perMode[mode]) }).toEqual({
+                mode: mode,
+                missing: [],
+            })
+        })
+    })
+})
