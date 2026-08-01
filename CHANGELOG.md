@@ -117,6 +117,19 @@ known for `sys_generative_ai_log`. Verification for this task read `sys_cs_messa
 `sys_choice` instead. Practically, this means the plan's step to read the published version
 record directly is not reachable as written on this instance.
 
+**`max_auto_executions` deliberately left unset, a knowing deviation from LLD §5.** The row for
+rows 9–15 says to set it explicitly rather than accept the dictionary default of 10; Agent
+Doctor's Fluent definition does the opposite on purpose. The tool bindings take the dictionary
+default, so the instance this branch benchmarks against is the same one a default-configured
+customer would have, rather than a value tuned to whatever this build needed. R-4's actual
+requirement was never that this agent pin a budget — it was that Task 11's scorecard **read and
+record** both budget knobs at run time, `sn_aia.continuous_tool_execution_limit` and
+`sn_aia_agent_tool_m2m.max_auto_executions`, so a transferability claim can be checked rather
+than assumed. Pinning a raised value here would reproduce exactly the problem R-4 was filed
+against — the Phase 0 probe's 19-call result was reachable only because its own
+`max_auto_executions` was set to 20 against an instance-typical 10. The decision lived only in
+an untracked execution ledger until now; the LLD row carries the same note.
+
 **Cleanup.** The four temporary `/scope_probe` routes are gone — all four now return 400, and
 `/reads` is the one route that survives. They were removed in a separate commit *after* the
 smoke test passed, specifically so a smoke-test failure could have been bisected against the
