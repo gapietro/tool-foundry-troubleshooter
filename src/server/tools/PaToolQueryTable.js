@@ -356,6 +356,15 @@ PaToolQueryTable.prototype = {
             if (chosen.indexOf(candidates[c]) === -1) chosen.push(candidates[c])
         }
 
+        if (read.truncated_at) {
+            data.notes.push(
+                'The column list this table declares was itself truncated at ' +
+                    read.truncated_at +
+                    ' while choosing which fields to return, so the automatic selection was made from a ' +
+                    'partial view of the table. Name the fields you need rather than relying on it.'
+            )
+        }
+
         data.notes.push(
             'No fields were requested, so ' +
                 chosen.length +

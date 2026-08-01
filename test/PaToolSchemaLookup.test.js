@@ -159,6 +159,37 @@ describe('field detail', () => {
         expect(result.data.field.choices[0].value).toBe('nap')
     })
 
+    it('says so when the choice list was clipped', () => {
+        // The reader's next move after asking for choices is "is this value
+        // valid?" - and a silently partial list answers no for values that
+        // are perfectly valid. Found by sweeping before review rather than in
+        // it (R-24 / R-25).
+        const many = []
+        for (let i = 0; i < 150; i++) {
+            many.push({
+                sys_id: 'c' + i,
+                name: 'sn_aia_agent',
+                element: 'channel',
+                value: 'v' + i,
+                label: 'V ' + i,
+                sequence: String(i),
+            })
+        }
+
+        const { result } = run({ table: 'sn_aia_agent', field: 'channel' }, world({ sys_choice: many }))
+
+        expect(result.data.field.choices_truncated_at).toBe(100)
+        expect(result.data.field.choices_note).toMatch(/LOWER BOUND/)
+        expect(result.data.field.choices_note).toMatch(/do NOT conclude a value is invalid/)
+    })
+
+    it('reports no clipping when the whole choice list fits', () => {
+        const { result } = run({ table: 'sn_aia_agent', field: 'channel' }, world())
+
+        expect(result.data.field.choices).toHaveLength(2)
+        expect(result.data.field.choices_truncated_at).toBeNull()
+    })
+
     it('reports a missing column as a schema mismatch and suggests near misses', () => {
         const { result } = run({ table: 'sn_aia_agent', field: 'chanel' }, world())
 

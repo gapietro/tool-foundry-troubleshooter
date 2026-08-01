@@ -504,6 +504,17 @@ PaToolSchemaLookup.prototype = {
             }
             out.choices = choices
             out.choice_read_status = choiceRead.status
+            // A clipped choice list is the worst kind of silence in a SCHEMA
+            // tool: the reader's next move is "is this value valid?", and a
+            // partial list answers no to values that are perfectly valid.
+            out.choices_truncated_at = choiceRead.truncated_at || null
+            if (out.choices_truncated_at) {
+                out.choices_note =
+                    'Only the first ' +
+                    out.choices_truncated_at +
+                    ' choices were read. This list is a LOWER BOUND — do NOT conclude a value is invalid ' +
+                    'because it is absent from it.'
+            }
             out.choice_note =
                 choiceRead.rows.length || choiceRead.status !== 'empty'
                     ? null
