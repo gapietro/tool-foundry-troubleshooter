@@ -514,4 +514,89 @@ evidence a ruling is written from, not only to the code it governs.
 
 ---
 
+**R-23 — Seven data-model corrections from building `PaToolAgentConfig` against real rows; and §4.2's access-alignment check turns out to be executable on 8% of triggers, not on the ones that fail. (2026-08-01)**
+
+**Found:** the field lists for Task 7 were written from LLD §2.2 and then checked against `sys_dictionary` and against whole-table counts on gpinst01 *before* the tool was wired to anything. Six of the seven would have produced blanks rather than errors (**R-6**), and the seventh changes what the tool is able to claim.
+
+| # | Claim in the spec | Measured on gpinst01, 2026-08-01 |
+|---|---|---|
+| 1 | §2.2: "per-role breakout in `sys_agent_access_role_mapping`" — join field unnamed | The table declares exactly **three** columns: `role`, **`agent_access_config`**, `sys_id`. None of the five names this build first guessed matched, so the entire breakout would have been skipped while `role_list` was reported as the complete picture. 34 rows exist across three `agent_table` values |
+| 2 | §2.2: `sys_agent_access_role_configuration` catalogued by shape only | 8 columns: `name`, `action`, `allow_all_session_roles`, `agent_table`, `agent`, `description`, `role_list`, `sys_id`. There is **no `active`** column, which this build guessed at |
+| 3 | §4.2: the User/Data split "is conventional, carried in free-text `description`" | `description` is **EMPTY on 638 of 703 rows (91%)**. The one signal the split is supposed to travel in is absent from nine rows in ten. `action` is no substitute: **703 of 703** read `Limit To Roles` |
+| 4 | §4.2: "emit the role sets alongside the trigger's `run_as`/`run_as_user` roles, and flag any role the run-as user lacks" | **`run_as` is not a user.** Its dictionary type is `field_name` — it names a FIELD on `target_table` (`caller_id`, `assigned_to`, `employee`), so the identity is whoever sits in that field on the record that fired the trigger. Static `run_as_user` is set on **3 of 36** trigger configurations (8%); the `run_as` field path on **18 of 36** (50%) |
+| 5 | R-18a: branch 2 holds "5 of 6 sampled" m2m rows | Whole table: **38 of 40 (95%)** are `related_resource_table=sn_aia_usecase`, 2 are `sn_aia_agent` |
+| 6 | §2.2: 14 verified fields on `sn_aia_trigger_configuration`, `name` not among them | 30 columns, and **`name` is declared and mandatory** — LLD §4.2 asked for it and §2.2's list did not carry it, so the tool probed for it needlessly. `usecase` and `business_rule` are both labelled **"(deprecated)"** in the dictionary |
+| 7 | §2.2: 14 fields on `sn_aia_agent_tool_m2m` | 28 columns. The **binding carries its own `description`**, distinct from the tool's |
+
+**Item 4 is the one that matters, and it is not a field-name defect.** §4.2's access-alignment check — the automated form of the K26 Lab 1 security-violation diagnosis — is written against `run_as_user`, and `run_as_user` is set on roughly one trigger in twelve. On the other 92% the identity is resolved *per triggering record*, which is precisely the Lab 1 semantic ("the trigger invokes the workflow under the **initiating user's** context") and precisely why the misalignment is invisible from configuration. **A config-time comparison cannot answer the question the check exists to answer.** The tool therefore reports which identity path each trigger uses, compares only the static ones, states the coverage as a fraction, and points at `agent_trace` for the initiating user of a real failing run. A silent "no missing roles" over a 1-in-12 sample would have been the most dangerous output this tool could produce: confident, specific, and blind to the failing case.
+
+**Item 3 compounds it.** R-18a already narrowed the claim from "two verified lists" to "one combined set plus a heuristic". The heuristic's only input is empty 91% of the time, so the honest output is a per-row `gate_attribution` of `UNKNOWABLE` rather than a `description: null` a reader will skim past.
+
+**Why this is a ruling and not seven notes.** Every one of the six field defects was caught by checking `sys_dictionary` *before* wiring the tool up, which is the R-15 method applied deliberately instead of by accident. Had they been left in, each would have produced a working-looking config summary rendered from columns that do not exist — an agent reported as having no access configuration, no trigger name, no per-role breakout. That is this project's signature failure mode for the fourth recorded time (R-11, R-15, R-18a, R-22), and the only reason it did not ship again is that the check is now routine. **Standing rule, cheap: a field list written from a design document is unverified until `sys_dictionary` has been asked. Ask before the code is wired, not after it returns blanks.**
+
+**Change:** applied in the same PR that found them, per R-18c — `docs/LOW_LEVEL_DESIGN.md` §2.2 gains items 1, 2, 6 and 7 and the corrected R-18a denominator; §4.2's access-alignment bullet is corrected for items 3 and 4 with the refuted instruction struck rather than annotated (R-19b). `src/server/tools/PaToolAgentConfig.js` carries all seven, each with the measurement inline, and `test/PaToolAgentConfig.test.js` carries a regression guard per correction — an unguarded correction is one that comes back.
+
+---
+
+**R-24 — Twelve review findings across four rounds on one file, and eleven are the same defect. Patching instances was not converging; the invariant is now enforced in the read layer. (2026-08-01)**
+
+**Found:** `PaToolAgentConfig` went through four rounds of automated review. Twelve findings, of which **eleven are one failure mode**: *a partial, excluded, empty or bounded read presented as a definitive answer.*
+
+| Round | Finding | Shape |
+|---|---|---|
+| 1 | `allow_all_session_roles` excluded from requirements but still counted | excluded-yet-counted |
+| 1 | `trigger_unreadable` named the linked agent, not the trigger | wrong subject on a partial read |
+| 1 | trigger traversal capped at 25 per branch, silently | silent cap |
+| 1 | `unknown` sticky in `noteRead`, never upgraded | "cannot tell" frozen as an answer |
+| 2 | `no_trigger_wiring` emitted over a DENIED read | denial as absence |
+| 2 | partial role comparison discarded on one denial | computed findings thrown away |
+| 3 | name-matched use cases seeded into agent mode | unrelated data presented as related |
+| 3 | vacuous `completed` over an empty requirement set | clean bill of health over nothing checked |
+| 3 | access-configuration read capped at 50, silently | silent cap |
+| 4 | `sys_user_has_role` capped at 200, silently | silent cap feeding a false "missing" |
+| 4 | `_traversalIntegrity` reported complete over a truncated input | **the integrity check itself lied** |
+| 4 | `completed` claimed over a truncated requirement set | silent cap, one layer up |
+
+**Four of the twelve were introduced or left behind by fixes earlier in the same review cycle.** Round 3's vacuous pass was *opened* by round 1's permissive-row fix, which emptied the requirement set without anyone asking what an empty set meant downstream. Round 3's silent cap was round 1's silent cap, in the same file, twelve lines from code edited for exactly that defect. Round 4's integrity failure was round 2's fix — a function written to answer "was this traversal complete?" that checked denials and not truncation, and so answered *yes* over a use-case list cut at 20.
+
+**Why this is a ruling rather than twelve fixed bugs.** The file's own header cites R-6, R-11, R-15 and R-22 — the four rulings about precisely this failure — and then committed eleven instances of it. Being *aware* of the pattern demonstrably did not prevent it; each instance was locally reasonable and the bound was always applied in one place while the answer was reported in another, with nothing structurally connecting them. Fixing instances one at a time was **not converging**: rounds 3 and 4 both produced fresh instances of a defect class that the previous round had supposedly addressed.
+
+**Change — the invariant is enforced in `PaToolReadKit`, not remembered by callers.**
+
+1. **`readRows` reads `limit + 1` and returns `limit`.** `rows.length === limit` cannot distinguish a truncated result from an exactly-full one, and every consumer of that ambiguity in this codebase resolved it optimistically. One extra row turns the guess into a fact, and `result.truncated_at` is now a measurement rather than a heuristic.
+2. **Every truncation is recorded centrally** in `data.truncations` by the kit itself, keeping the largest bound per table. A core cannot fail to *know* it truncated; it can only choose how to present it.
+3. **Every core's `evidence_basis` surfaces `data.truncations`** with a note that any count or absence derived from those tables is a **lower bound**. This is the structural half: a silent cap now requires deleting a line from the evidence block, not merely forgetting one at a call site.
+4. **Standing rule, the one that generalises:** *a bound, an exclusion, a denial or an empty set must travel with the answer it shaped.* Any code path that narrows what was read and then reports a conclusion must state the narrowing in the same object as the conclusion. "Reported somewhere in the payload" is not enough — R-19b's lesson applies here too: **the status label is part of the claim**, so a `comparison_status` of `completed` computed over a truncated input is a false statement regardless of what a neighbouring note says.
+
+**Method note, and the reason to trust these twelve fixes more than the earlier ones.** Every guard added from round 2 onward was **mutation-tested**: the fix was reverted and the test confirmed to fail. That caught a real problem — my first regression test for round 2's partial-comparison defect passed without ever reaching the branch it claimed to cover, because the table-level test stub could not deny one user's roles and not another's. It would have shipped as a green test over an unguarded fix, which is the same class of defect as the code it was guarding: *an artefact that looks like verification and is not.*
+
+**Open, and deliberately not closed here:** the other five cores were written in the same style and are unreviewed. `PaToolGenAiLog.check_config` caps at 100 definitions against ~2026 rows, and `PaToolQueryTable`'s empty-result verdict rests on an unfiltered count that can itself be unavailable. They inherit items 1–3 automatically by using the kit, but their *consumers* of truncation have not been audited. That sweep is a work item, not a record (R-18c).
+
+---
+
+**R-25 — The second half of R-24's invariant: a status is a claim, and only the path that established it may write one. (2026-08-01)**
+
+**Found:** review rounds 5 and 6 on `PaToolAgentConfig`. R-24 made *truncation* structural and the class stopped recurring on that axis — but the same failure simply moved to the adjacent one. `validFields`, a field probe that reads **no rows at all**, wrote `ok` into `data.reads`:
+
+- `ok` is set by `readRows` only when `rows.length > 0`. It means *"the read succeeded and rows were present"* — a claim about **data**.
+- The probe asked a **schema** question. It was in no position to make that claim.
+- And because `noteRead` only ever *upgrades*, a later read returning zero rows **could not correct it**. The evidence block would report a table as readable-with-data on the strength of a question that fetched nothing.
+
+A second defect in the same function: on a mid-probe throw it returned before recording anything, so a consumer checking only for `DENIED` proceeded on a `valid` list that is a **prefix** of the candidates rather than an answer about them.
+
+**Why this needed a ruling and not a third fix.** The composition is what makes it dangerous. `role_list` is a column a partial probe can miss; missing it empties the requirement set; and R-22's fix reports an empty requirement set as `no_requirements` — *"nothing was required"* — when the truth is *"we could not tell what was required"*. **Three individually-correct mechanisms compose into a confident wrong answer**, and no single one of them is wrong. Reviewing each in isolation would never find it.
+
+**Change — enforced, not remembered:**
+
+1. **`noteRead` requires a `fromRowRead` flag for a success status.** Exactly two callers pass it: `readRows` and `readOne`. Everything else may record only `DENIED` and `unknown`, which are facts about **access** rather than about data and which any path can legitimately observe.
+2. **A rejected assertion is recorded** in `data.read_status_rejected` rather than dropped, so the attempt is visible instead of merely absent — the same reasoning as R-24's truncation record.
+3. **A source-level guard** asserts no core passes a success literal to `noteRead`, mirroring R-24's heuristic lint. Both halves matter: the runtime one stops the write, the source one stops the pattern.
+4. **A partial probe records `unknown`, flags itself, and returns `probed` alongside `valid`** so a prefix cannot be mistaken for an answer. Both consumers stop rather than reading with a truncated column list.
+
+**The generalised rule, which is R-24's stated in full.** R-24 said *a bound must travel with the answer it shaped*. R-25 is the other half: **a status may only be written by the operation that established it.** Together: *every claim in a diagnostic result names what backed it, and nothing may assert a claim it did not earn.* That is now enforced for the two claim types this tool makes about a read — how much it saw, and whether it saw anything.
+
+**Assessment, stated plainly.** Sixteen findings across six rounds on one file, fifteen of one class. Six were introduced or left behind by fixes earlier in the same cycle. The pattern only stopped recurring on an axis once that axis had a **mechanical** control — `limit + 1`, the contract test, and now the `fromRowRead` flag. Every axis governed only by attention regressed. The honest generalisation for the remaining cores is that they are not safe because they were written carefully; they are safe only where a control makes the defect impossible, and the rest is unverified.
+
+---
+
 *Next steps agreed in spar: fold changes 2.1–2.4 into `docs/IMPLEMENTATION_PLAN.md` (new collector task; scorecard field; anchor keying rule) and `docs/LOW_LEVEL_DESIGN.md` (§4.6 anchor spec, §7 protocol, §8 items). Drift review after Phase 1a build compares the built system to this record.*

@@ -87,6 +87,129 @@ function makeGlideRecordSecure(tables) {
 }
 
 /**
+ * A QUERY-AWARE GlideRecordSecure fake.
+ *
+ * `makeGlideRecordSecure` above deliberately ignores addQuery — it answers "does
+ * this code run", and a permissive stub is right for that. It cannot answer the
+ * question PaToolAgentConfig's trigger traversal turns on: *which* key was
+ * queried. R-18a's defect was a query against the wrong key returning rows with
+ * blanks instead of an error, and a stub that returns every row regardless of
+ * the filter reproduces neither the bug nor the fix.
+ *
+ * Honours addQuery(field, value) and addQuery(field, 'IN', 'a,b,c'), records
+ * every query for assertions, and still proves nothing about the platform
+ * (DESIGN.md R-8).
+ *
+ * @param {Object} tables  {tableName: [row, ...]}
+ * @param {Object} [options]
+ *   denied      [tableName, ...] — these throw on construction, as a cross-scope
+ *               denial does. The thrown value's `.message` getter THROWS, so any
+ *               handler that inspects it fails the test rather than passing
+ *               quietly (R-1).
+ *   invalidFields {tableName: [field, ...]} — fields isValidField reports absent
+ */
+function makeQueryingGlideRecordSecure(tables, options) {
+    var opts = options || {}
+    var denied = opts.denied || []
+    var invalid = opts.invalidFields || {}
+    var calls = { queries: [] }
+
+    function hostile() {
+        var h = {}
+        Object.defineProperty(h, 'message', {
+            get: function () {
+                throw new Error('Illegal access to getter method getMessage')
+            },
+        })
+        return h
+    }
+
+    function GlideRecordSecure(table) {
+        if (denied.indexOf(table) !== -1) throw hostile()
+        this._table = table
+        this._filters = []
+        this._matched = null
+        this._i = -1
+        this._limit = 0
+    }
+
+    GlideRecordSecure.calls = calls
+
+    GlideRecordSecure.prototype.addQuery = function (field, op, value) {
+        var f = { field: field, op: '=', value: op }
+        if (arguments.length >= 3) {
+            f.op = String(op).toUpperCase()
+            f.value = value
+        }
+        this._filters.push(f)
+        return {
+            addOrCondition: function () {
+                return this
+            },
+            addCondition: function () {
+                return this
+            },
+        }
+    }
+
+    GlideRecordSecure.prototype.orderBy = function () {}
+    GlideRecordSecure.prototype.orderByDesc = function () {}
+    GlideRecordSecure.prototype.setLimit = function (n) {
+        this._limit = n
+    }
+
+    GlideRecordSecure.prototype.query = function () {
+        var filters = this._filters
+        var rows = (tables[this._table] || []).filter(function (row) {
+            return filters.every(function (f) {
+                var actual = row[f.field] === undefined || row[f.field] === null ? '' : String(row[f.field])
+                if (f.op === 'IN') return String(f.value).split(',').indexOf(actual) !== -1
+                return actual === String(f.value)
+            })
+        })
+        calls.queries.push({ table: this._table, filters: filters.slice(0) })
+        this._matched = this._limit ? rows.slice(0, this._limit) : rows
+        this._i = -1
+    }
+
+    GlideRecordSecure.prototype.next = function () {
+        this._i++
+        return this._i < (this._matched || []).length
+    }
+
+    GlideRecordSecure.prototype.get = function (sysId) {
+        var rows = tables[this._table] || []
+        for (var i = 0; i < rows.length; i++) {
+            if (String(rows[i].sys_id) === String(sysId)) {
+                this._matched = rows
+                this._i = i
+                return true
+            }
+        }
+        return false
+    }
+
+    GlideRecordSecure.prototype.isValidField = function (f) {
+        return (invalid[this._table] || []).indexOf(f) === -1
+    }
+
+    GlideRecordSecure.prototype.getValue = function (f) {
+        var row = (this._matched || [])[this._i]
+        if (!row) return ''
+        return row[f] === undefined || row[f] === null ? '' : String(row[f])
+    }
+
+    GlideRecordSecure.prototype.getDisplayValue = function (f) {
+        var row = (this._matched || [])[this._i]
+        if (!row) return ''
+        var d = row[f + '__display']
+        return d === undefined ? '' : String(d)
+    }
+
+    return GlideRecordSecure
+}
+
+/**
  * A WRITABLE fake of the app's own tables, for the two components that insert:
  * PaRunAnchor (run records) and PaAuditLogger (audit rows).
  *
@@ -251,6 +374,7 @@ function makeGlideDateTime() {
 
 module.exports = {
     makeGlideRecordSecure: makeGlideRecordSecure,
+    makeQueryingGlideRecordSecure: makeQueryingGlideRecordSecure,
     makeWritableWorld: makeWritableWorld,
     makeGlideDateTime: makeGlideDateTime,
 }

@@ -65,6 +65,10 @@ declare global {
                         table: 'sys_script_include'
                         id: '8adcc81877fb40be96f1422c18682b5b'
                     }
+                    'pa-tool-agent-config': {
+                        table: 'sys_script_include'
+                        id: '47a854bd8a684dfb829eb5c5f5129b33'
+                    }
                     'pa-tool-agent-trace': {
                         table: 'sys_script_include'
                         id: 'e460c4021e4b44dcaf92570057d5a360'
@@ -72,6 +76,10 @@ declare global {
                     'pa-tool-read-artifact': {
                         table: 'sys_script_include'
                         id: '3979cce296d748edac6f85de1d9136a5'
+                    }
+                    'pa-tool-read-kit': {
+                        table: 'sys_script_include'
+                        id: 'a1dabd22816640edbcc43b3d87422997'
                     }
                     package_json: {
                         table: 'sys_module'
@@ -125,9 +133,17 @@ declare global {
                         table: 'sys_module'
                         id: '5a54685b6fd04426acc3bb39714b0f4f'
                     }
+                    src_server_PaToolReadKit_js: {
+                        table: 'sys_module'
+                        id: 'b77434ce374d497d8337ca6c0484c564'
+                    }
                     src_server_script_ts: {
                         table: 'sys_module'
                         id: 'd8226c63fd0d44bea250580a81a4424c'
+                    }
+                    src_server_tools_PaToolAgentConfig_js: {
+                        table: 'sys_module'
+                        id: 'b4b6eedfa3494d7b89ad2211c8b1e221'
                     }
                     src_server_tools_PaToolAgentTrace_js: {
                         table: 'sys_module'
