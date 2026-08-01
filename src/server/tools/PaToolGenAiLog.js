@@ -671,16 +671,25 @@ PaToolGenAiLog.prototype = {
         data.m2m_truncated_at = m2mRead.truncated_at || null
 
         if (m2mRead.status === 'DENIED') {
-            data.llm_calls_status = 'unavailable'
             data.notes.push(
                 'sn_aia_gen_ai_m2m is not readable from this scope, so llm_calls is EMPTY FOR A REASON ' +
                     'THAT HAS NOTHING TO DO WITH THE RUN. An empty llm_calls here is a permission gap and ' +
                     'is indistinguishable, in shape alone, from a run that genuinely called no provider — ' +
                     'do not read it as the latter.'
             )
-        } else {
-            data.llm_calls_status = calls.length ? 'ok' : 'empty'
         }
+
+        // ONE derivation, fed by every axis that can shape this answer.
+        //
+        // The first version of this branched on the m2m read alone, so a
+        // DENIED task read still produced `empty` — the exact failure the m2m
+        // branch had just been written to close, surviving one line away from
+        // its own fix. And a status is part of the claim (R-19b): the denial
+        // note added beside it did not repair the label a reader scans.
+        // Assigned BEFORE the status is derived: _callsStatus reads it, and the
+        // first version of this ran the derivation one line too early, leaving
+        // its truncation branch dead. Caught by reading rather than by a test,
+        // which is why the test below now exists.
         data.llm_calls_truncated_at = data.task_truncated_at || data.m2m_truncated_at || null
 
         if (data.llm_calls_truncated_at) {
@@ -701,6 +710,8 @@ PaToolGenAiLog.prototype = {
             )
         }
 
+        data.llm_calls_status = this._callsStatus(calls, taskRead, m2mRead, data)
+
         data.plan = {
             sys_id: plan.sys_id,
             state: plan.state_display || plan.state,
@@ -708,10 +719,39 @@ PaToolGenAiLog.prototype = {
             created: plan.sys_created_on,
         }
         data.notes.push(
-            'LLM calls are joined through sn_aia_gen_ai_m2m on source_id IN (the plan, plus each of its ' +
-                taskRead.rows.length +
-                ' task sys_ids). Querying the plan sys_id alone misses every per-step call.'
+            'LLM calls are joined through sn_aia_gen_ai_m2m on source_id IN (the plan, plus ' +
+                (taskRead.status === 'DENIED'
+                    ? 'NO task sys_ids, because sn_aia_execution_task could not be read — that is a ' +
+                      'permission gap, not an execution without tasks'
+                    : 'each of its ' + taskRead.rows.length + ' task sys_ids') +
+                '). Querying the plan sys_id alone misses every per-step call.'
         )
+    },
+
+    /**
+     * The status of `llm_calls`, derived from every axis that can shape it.
+     *
+     *   ok           both reads succeeded and calls were found
+     *   empty        both succeeded and there genuinely were none
+     *   partial      calls were found, but the set is knowably incomplete
+     *   unavailable  an empty result that says nothing about the run
+     *
+     * `empty` is the only value that asserts something about the RUN, so it is
+     * the one that must be earned: it requires both reads to have succeeded and
+     * neither to have been clipped. Everything else is a statement about what
+     * could be seen (R-24, R-25, R-26).
+     */
+    _callsStatus: function (calls, taskRead, m2mRead, data) {
+        if (m2mRead.status === 'DENIED') return 'unavailable'
+
+        // A denied task read collapses the join to the plan sys_id alone, so
+        // every per-step call is missing. With nothing found, that is not an
+        // absence — it is a question that was never asked.
+        if (taskRead.status === 'DENIED') return calls.length ? 'partial' : 'unavailable'
+
+        if (data.llm_calls_truncated_at) return calls.length ? 'partial' : 'unavailable'
+
+        return calls.length ? 'ok' : 'empty'
     },
 
     // =======================================================================
