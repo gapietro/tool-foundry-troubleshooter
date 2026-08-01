@@ -536,6 +536,16 @@ PaToolGenAiLog.prototype = {
     _forExecution: function (a, data) {
         var k = this._k()
 
+        // Set BEFORE any branch. Three early returns assigned llm_calls and
+        // returned without a status, leaving it undefined - the same class as
+        // the task/m2m gap, reached through control flow rather than through a
+        // missing axis. Consolidating the derivation fixed the axes and left
+        // the PATHS, so the default now does what remembering four call sites
+        // did not: `unavailable` claims nothing about the run, and only the
+        // success path may earn something stronger.
+        data.llm_calls = []
+        data.llm_calls_status = 'unavailable'
+
         if (!a.execution) {
             data.llm_calls = []
             data.notes.push(
@@ -636,6 +646,7 @@ PaToolGenAiLog.prototype = {
         )
 
         var calls = []
+        var unreadableLinks = 0
         for (var i = 0; i < m2mRead.rows.length; i++) {
             var link = m2mRead.rows[i]
             var metadataId = k.refValue(link.gen_ai_log_metadata)
@@ -649,6 +660,7 @@ PaToolGenAiLog.prototype = {
                 data
             )
             if (!mdRead.row) {
+                if (mdRead.status === 'DENIED') unreadableLinks++
                 calls.push({
                     m2m_sys_id: link.sys_id,
                     source_id: link.source_id,
@@ -710,7 +722,8 @@ PaToolGenAiLog.prototype = {
             )
         }
 
-        data.llm_calls_status = this._callsStatus(calls, taskRead, m2mRead, data)
+        data.unreadable_link_count = unreadableLinks
+        data.llm_calls_status = this._callsStatus(calls, taskRead, m2mRead, data, unreadableLinks)
 
         data.plan = {
             sys_id: plan.sys_id,
@@ -741,8 +754,13 @@ PaToolGenAiLog.prototype = {
      * neither to have been clipped. Everything else is a statement about what
      * could be seen (R-24, R-25, R-26).
      */
-    _callsStatus: function (calls, taskRead, m2mRead, data) {
+    _callsStatus: function (calls, taskRead, m2mRead, data, unreadableLinks) {
         if (m2mRead.status === 'DENIED') return 'unavailable'
+
+        // A link whose metadata row was DENIED is present in `calls` as a stub
+        // carrying no model, status or tokens. Counting it toward a plain `ok`
+        // reports a set that is complete in length and not in content.
+        if (unreadableLinks) return calls.length > unreadableLinks ? 'partial' : 'unavailable'
 
         // A denied task read collapses the join to the plan sys_id alone, so
         // every per-step call is missing. With nothing found, that is not an
@@ -846,6 +864,16 @@ PaToolGenAiLog.prototype = {
         data.findings = findings
         data.read_status = read.status
         data.truncated_at = read.truncated_at || null
+        data.audit_status = read.status === 'DENIED' ? 'unavailable' : definitions.length ? 'ok' : 'empty'
+
+        if (read.status === 'DENIED') {
+            data.notes.push(
+                'sys_one_extend_capability_definition is not readable from this scope, so NOTHING was ' +
+                    'audited. Zero definitions and zero findings here are a permission gap and must not be ' +
+                    'read as a clean capability configuration — the shape is identical to an instance ' +
+                    'where every definition is healthy.'
+            )
+        }
 
         // R-22 item 4: state the denominator every time a count is stated.
         data.connection_note =
