@@ -629,8 +629,83 @@ describe('for_execution mode', () => {
             { denied: ['sys_gen_ai_log_metadata'] }
         )
 
-        expect(result.data.unreadable_link_count).toBe(1)
+        expect(result.data.link_stubs).toEqual({ unreadable: 1, dangling: 0, no_ref: 0 })
         expect(result.data.llm_calls_status).toBe('unavailable')
+    })
+
+    it('routes an execution object to for_execution when no mode is given', () => {
+        // The object shape is what the native wrapper actually produces after
+        // tolerantParse. A bare sys_id string already routed correctly; the
+        // common path fell through to a time-window query that ignored the
+        // execution entirely.
+        const { result } = run(
+            { execution: PLAN },
+            world({ sn_aia_execution_plan: [{ sys_id: PLAN }] })
+        )
+
+        expect(result.data.mode).toBe('for_execution')
+        expect(result.data.plan.sys_id).toBe(PLAN)
+        expect(result.data.notes.join(' ')).toMatch(/an execution was, so for_execution was used/)
+    })
+
+    it('does not report empty when join rows exist without metadata references', () => {
+        // The link rows ARE evidence the engine recorded LLM interactions.
+        // `empty` asserts the run called no provider - a wrong claim made
+        // exactly when the data is at its most broken.
+        const { result } = run(
+            { mode: 'for_execution', execution: PLAN },
+            world({
+                sn_aia_execution_plan: [{ sys_id: PLAN }],
+                sn_aia_gen_ai_m2m: [
+                    { sys_id: 'm1', source_id: PLAN, source_table: 'sn_aia_execution_plan', gen_ai_log_metadata: '' },
+                    { sys_id: 'm2', source_id: PLAN, source_table: 'sn_aia_execution_plan', gen_ai_log_metadata: '' },
+                ],
+            })
+        )
+
+        expect(result.data.link_stubs).toEqual({ unreadable: 0, dangling: 0, no_ref: 2 })
+        // The stubs are IN llm_calls, so the join rows are visible.
+        expect(result.data.llm_calls).toHaveLength(2)
+        expect(result.data.llm_calls_status).toBe('partial')
+        expect(result.data.llm_calls[0].note).toMatch(/unrecoverable from this row/)
+    })
+
+    it('does not report ok when some links dangle', () => {
+        // A dangling ref is a read that SUCCEEDED and found nothing - the
+        // record is gone, which is itself a GenAI-stack finding, not a
+        // permission gap and not an absence of calls.
+        const { result } = run(
+            { mode: 'for_execution', execution: PLAN },
+            world({
+                sn_aia_execution_plan: [{ sys_id: PLAN }],
+                sn_aia_gen_ai_m2m: [
+                    { sys_id: 'm1', source_id: PLAN, source_table: 'sn_aia_execution_plan', gen_ai_log_metadata: 'md1' },
+                    { sys_id: 'm2', source_id: PLAN, source_table: 'sn_aia_execution_plan', gen_ai_log_metadata: 'gone' },
+                ],
+                sys_gen_ai_log_metadata: [{ sys_id: 'md1', model_name: 'now-llm', status: 'success' }],
+            })
+        )
+
+        expect(result.data.link_stubs).toEqual({ unreadable: 0, dangling: 1, no_ref: 0 })
+        expect(result.data.llm_calls).toHaveLength(2)
+        expect(result.data.llm_calls_status).toBe('partial')
+        const stub = result.data.llm_calls.find((c) => c.read_status === 'empty')
+        expect(stub.note).toMatch(/DANGLING/)
+    })
+
+    it('reports partial, not empty, when every link dangles', () => {
+        const { result } = run(
+            { mode: 'for_execution', execution: PLAN },
+            world({
+                sn_aia_execution_plan: [{ sys_id: PLAN }],
+                sn_aia_gen_ai_m2m: [
+                    { sys_id: 'm1', source_id: PLAN, source_table: 'sn_aia_execution_plan', gen_ai_log_metadata: 'gone' },
+                ],
+            })
+        )
+
+        expect(result.data.llm_calls_status).toBe('partial')
+        expect(result.data.llm_calls_status).not.toBe('empty')
     })
 
     it('says the plan is absent rather than reporting no LLM calls', () => {

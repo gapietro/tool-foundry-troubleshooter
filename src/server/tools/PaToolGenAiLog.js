@@ -298,7 +298,21 @@ PaToolGenAiLog.prototype = {
 
     _resolveMode: function (a, data) {
         var requested = a.mode
-        if (!requested) return 'llm'
+        if (!requested) {
+            // {execution: X} without a mode is not ambiguous: the caller named
+            // a run, so they want that run's calls. A bare sys_id string
+            // already routed here; the object shape - the one the native
+            // wrapper actually produces after tolerantParse - fell through to
+            // a time-window query that ignored the execution entirely.
+            if (a.execution) {
+                data.notes.push(
+                    'No mode was supplied but an execution was, so for_execution was used. Pass mode ' +
+                        'explicitly to override.'
+                )
+                return 'for_execution'
+            }
+            return 'llm'
+        }
 
         for (var i = 0; i < this.MODES.length; i++) {
             if (this.MODES[i] === requested) return requested
@@ -646,11 +660,31 @@ PaToolGenAiLog.prototype = {
         )
 
         var calls = []
-        var unreadableLinks = 0
+        // Every link that yields no readable metadata is a STUB: present in
+        // llm_calls so the join row is visible, counted so the status cannot
+        // claim more than the content supports. Three shapes, one accounting -
+        // round 5 found that only DENIED was counted and ref-less links were
+        // dropped without a trace, so join rows could exist while the status
+        // asserted `empty`: "this run called no provider".
+        var stubs = { unreadable: 0, dangling: 0, no_ref: 0 }
         for (var i = 0; i < m2mRead.rows.length; i++) {
             var link = m2mRead.rows[i]
             var metadataId = k.refValue(link.gen_ai_log_metadata)
-            if (!metadataId) continue
+            if (!metadataId) {
+                stubs.no_ref++
+                calls.push({
+                    m2m_sys_id: link.sys_id,
+                    source_id: link.source_id,
+                    source_table: link.source_table,
+                    metadata_sys_id: null,
+                    read_status: 'no_reference',
+                    note:
+                        'This join row carries no gen_ai_log_metadata reference at all. The link is ' +
+                        'evidence the engine recorded an LLM interaction here; what it did is unrecoverable ' +
+                        'from this row.',
+                })
+                continue
+            }
 
             var mdRead = k.readOne(
                 'sys_gen_ai_log_metadata',
@@ -660,14 +694,21 @@ PaToolGenAiLog.prototype = {
                 data
             )
             if (!mdRead.row) {
-                if (mdRead.status === 'DENIED') unreadableLinks++
+                if (mdRead.status === 'DENIED') stubs.unreadable++
+                else stubs.dangling++
                 calls.push({
                     m2m_sys_id: link.sys_id,
                     source_id: link.source_id,
                     source_table: link.source_table,
                     metadata_sys_id: metadataId,
                     read_status: mdRead.status,
-                    note: 'The link exists but its log metadata row could not be read (' + mdRead.status + ').',
+                    note:
+                        mdRead.status === 'DENIED'
+                            ? 'The link exists but its log metadata row could not be read — a permission gap.'
+                            : 'The link points at sys_gen_ai_log_metadata[' +
+                              metadataId +
+                              '], which the read succeeded on and returned no row. The reference is DANGLING — ' +
+                              'evidence of a call whose record is gone, which is itself a GenAI-stack finding.',
                 })
                 continue
             }
@@ -722,8 +763,8 @@ PaToolGenAiLog.prototype = {
             )
         }
 
-        data.unreadable_link_count = unreadableLinks
-        data.llm_calls_status = this._callsStatus(calls, taskRead, m2mRead, data, unreadableLinks)
+        data.link_stubs = stubs
+        data.llm_calls_status = this._callsStatus(calls, taskRead, m2mRead, data, stubs)
 
         data.plan = {
             sys_id: plan.sys_id,
@@ -754,13 +795,22 @@ PaToolGenAiLog.prototype = {
      * neither to have been clipped. Everything else is a statement about what
      * could be seen (R-24, R-25, R-26).
      */
-    _callsStatus: function (calls, taskRead, m2mRead, data, unreadableLinks) {
+    _callsStatus: function (calls, taskRead, m2mRead, data, stubs) {
         if (m2mRead.status === 'DENIED') return 'unavailable'
 
-        // A link whose metadata row was DENIED is present in `calls` as a stub
-        // carrying no model, status or tokens. Counting it toward a plain `ok`
-        // reports a set that is complete in length and not in content.
-        if (unreadableLinks) return calls.length > unreadableLinks ? 'partial' : 'unavailable'
+        // A stub is present in `calls` carrying no model, status or tokens.
+        // Counting one toward a plain `ok` reports a set complete in length
+        // and not in content — and `empty` over stubbed join rows asserts the
+        // run called no provider when the links say otherwise.
+        var stubbed = stubs ? stubs.unreadable + stubs.dangling + stubs.no_ref : 0
+        var readable = calls.length - stubbed
+        if (stubbed) {
+            if (readable > 0) return 'partial'
+            // Nothing readable at all: permission-shaped if any denial is
+            // involved, otherwise the content is genuinely gone — still not
+            // `empty`, because the join rows are evidence calls happened.
+            return stubs.unreadable ? 'unavailable' : 'partial'
+        }
 
         // A denied task read collapses the join to the plan sys_id alone, so
         // every per-step call is missing. With nothing found, that is not an
