@@ -1505,6 +1505,38 @@ PaToolAgentConfig.prototype = {
         return links
     },
 
+    /**
+     * Whether every read the trigger traversal depends on actually succeeded.
+     *
+     * Wider than the two m2m reads, deliberately. Branch 2's INPUT is the use
+     * case list, which comes from sn_aia_team_member -> sn_aia_usecase. If
+     * either of those is denied the list is empty, the branch queries a
+     * deliberately impossible value, and it returns empty — an absence
+     * manufactured one hop upstream that looks identical to a real one.
+     *
+     * @returns {Object} {complete, denied: [table, ...], statuses}
+     */
+    _traversalIntegrity: function (ctx) {
+        var denied = []
+        var statuses = ctx.trigger_read_statuses || []
+
+        for (var i = 0; i < statuses.length; i++) {
+            if (statuses[i] === 'DENIED' && denied.indexOf('sn_aia_trigger_agent_usecase_m2m') === -1) {
+                denied.push('sn_aia_trigger_agent_usecase_m2m')
+            }
+        }
+        if (ctx.team_read_status === 'DENIED') denied.push('sn_aia_team_member')
+        if (ctx.usecase_read_status === 'DENIED') denied.push('sn_aia_usecase')
+
+        return {
+            complete: denied.length === 0,
+            denied: denied,
+            m2m_read_statuses: statuses,
+            team_member_read_status: ctx.team_read_status || 'not_read',
+            usecase_read_status: ctx.usecase_read_status || 'not_read',
+        }
+    },
+
     _triggers: function (ctx, data) {
         var k = this._k()
         var links = this._ensureTriggerLinks(ctx, data)
@@ -1552,7 +1584,15 @@ PaToolAgentConfig.prototype = {
             }
         }
 
-        if (!links.length) {
+        // An empty traversal means "no wiring" ONLY if the traversal actually
+        // ran. If any read behind it was denied, the same empty result means
+        // "unknown" — and reporting that as a definitive high-severity
+        // configuration finding is the exact partial-read-as-absence failure
+        // this project keeps legislating against (R-6, R-11), committed by the
+        // tool built to detect it.
+        var integrity = this._traversalIntegrity(ctx)
+
+        if (!links.length && integrity.complete) {
             findings.push({
                 finding: 'no_trigger_wiring',
                 severity: 'high',
@@ -1564,11 +1604,38 @@ PaToolAgentConfig.prototype = {
                     (ctx.trigger_branches.team_usecase_chain || 0) +
                     ' rows, over ' +
                     (ctx.trigger_usecase_ids || []).length +
-                    ' use case(s)). An agent with no trigger wiring never starts on its own, and leaves NO ' +
-                    'execution plan — the absence is the diagnosis.',
+                    ' use case(s)). Every read behind this traversal succeeded, so the absence is real. ' +
+                    'An agent with no trigger wiring never starts on its own, and leaves NO execution ' +
+                    'plan — the absence is the diagnosis.',
                 next_step:
                     'If the agent is invoked conversationally this is expected. If it is meant to fire on a ' +
                     'record event, the trigger configuration is missing.',
+            })
+        } else if (!links.length) {
+            findings.push({
+                finding: 'trigger_wiring_unreadable',
+                severity: 'high',
+                subject: 'sn_aia_trigger_agent_usecase_m2m',
+                detail:
+                    'No trigger link was found, but the traversal was INCOMPLETE — ' +
+                    integrity.denied.join(', ') +
+                    ' could not be read from this scope. The wiring state is UNKNOWN, not absent. Do not ' +
+                    'diagnose this agent as unwired on the strength of this result.',
+                next_step:
+                    'Re-run with a role that can read ' +
+                    integrity.denied.join(' and ') +
+                    ', or check the wiring in AI Agent Studio directly.',
+            })
+        } else if (!integrity.complete) {
+            findings.push({
+                finding: 'trigger_traversal_partial',
+                severity: 'medium',
+                subject: 'sn_aia_trigger_agent_usecase_m2m',
+                detail:
+                    'Trigger links were found, but the traversal was incomplete — ' +
+                    integrity.denied.join(', ') +
+                    ' could not be read. There may be further wiring this result does not show.',
+                next_step: 'Treat the link list below as a lower bound rather than the complete set.',
             })
         }
 
@@ -1576,6 +1643,7 @@ PaToolAgentConfig.prototype = {
             links: links,
             branches: ctx.trigger_branches,
             truncated_at: ctx.trigger_truncated,
+            traversal_integrity: integrity,
             usecases_walked: ctx.trigger_usecase_ids || [],
             wiring_findings: findings,
             access_alignment: this._accessAlignment(ctx, links, data),
@@ -1837,7 +1905,8 @@ PaToolAgentConfig.prototype = {
         }
 
         var missing = []
-        var comparable = true
+        var comparedUsers = []
+        var uncomparableUsers = []
         for (i = 0; i < userIds.length; i++) {
             var userId = userIds[i]
             var held = k.readRows(
@@ -1857,9 +1926,13 @@ PaToolAgentConfig.prototype = {
             // read is attempted and the degradation reported, rather than the
             // capability being written off in advance.
             if (held.status === 'DENIED') {
-                comparable = false
+                // One unreadable identity does not invalidate the ones that WERE
+                // read. Discarding their results would throw away a real missing
+                // -role finding because a different user could not be checked.
+                uncomparableUsers.push(userId)
                 continue
             }
+            comparedUsers.push(userId)
 
             var heldSet = {}
             for (var h = 0; h < held.rows.length; h++) {
@@ -1885,15 +1958,42 @@ PaToolAgentConfig.prototype = {
             }
         }
 
-        if (!comparable) {
+        out.users_compared = comparedUsers.length
+        out.users_not_comparable = uncomparableUsers.length
+
+        if (!comparedUsers.length) {
+            out.comparison_status = 'not_possible'
             out.comparison_note =
-                'sys_user_has_role is not readable from this scope for at least one run-as user, so the ' +
-                'comparison could not be completed. The role set above is still what the agent requires.'
+                'sys_user_has_role is not readable from this scope for any of the ' +
+                userIds.length +
+                ' static run-as user(s), so no comparison could be made. The role set above is still what ' +
+                'the agent requires.'
+            return out
+        }
+
+        // Whatever WAS computed is reported, even when another identity could
+        // not be read. A missing role found for user A is a real finding
+        // regardless of whether user B was readable.
+        out.missing_roles = missing.length ? missing : []
+
+        if (uncomparableUsers.length) {
+            out.comparison_status = 'partial'
+            out.comparison_note =
+                (missing.length
+                    ? 'At least one static run-as identity is missing a required role — see missing_roles. '
+                    : 'Every static run-as identity that COULD be read holds every required role. ') +
+                comparedUsers.length +
+                ' of ' +
+                userIds.length +
+                ' static run-as user(s) were comparable; sys_user_has_role was not readable for the other ' +
+                uncomparableUsers.length +
+                '. An empty missing_roles here does NOT mean every identity checks out, because ' +
+                uncomparableUsers.length +
+                ' were never checked. This does not certify either access gate — see caveat.'
             return out
         }
 
         out.comparison_status = 'completed'
-        out.missing_roles = missing.length ? missing : []
         out.comparison_note =
             (missing.length
                 ? 'At least one static run-as identity is missing a required role. See missing_roles. '
