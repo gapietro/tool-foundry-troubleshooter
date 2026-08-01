@@ -11,6 +11,84 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0101 — 2026-08-01
+
+Phase 1a vertical slice, **Task 11 remediation**: a scoped re-review of the benchmark suite found
+that its GenAI seed was built on a **refuted premise**, plus four residuals. Build-only — **no
+`now-sdk install`, no seed executions triggered**. Verified in `benchmark/seed-app/dist/`, not by a
+passing build.
+
+**Seed 4's defect was not a defect (new ruling R-22).** The seed's failure mode was an empty
+`connection` on its own `sys_one_extend_capability_definition`, on R-18's Phase 0 reading that
+`connection` *is* the provider binding. R-18 drew that from a **10-row sample**. Measured against
+the whole table on gpinst01, read-only: the table holds **2026 rows**, **318 of them (15.7%)** have
+`connection` empty — shipped OOB Now Assist definitions among them — and `sys_dictionary` marks
+`connection` **`mandatory=false`** while `capability`, `api_type` and `api` are all
+`mandatory=true`. An empty `connection` is a normal, supported state. Worse, the previous fix wave
+had *hardened every other field* to make `connection` "the only gap", which turned the seed into a
+structural clone of a working OOB definition differing only in an optional field — a specimen that
+would most likely not have failed at all. A benchmark row that measures nothing scores as a miss
+and is indistinguishable from one that measures something.
+
+**This is the project's own signature failure mode, occurring inside the instrument built to catch
+it.** R-11 retracted a `v_plugin` finding for reading a truncated result as absence; R-6 records the
+same shape. R-18 read 10 rows of 2026 and generalised, the inference closed LLD §8 item 8, and it
+then *survived a full adversarial fix wave* that asserted a false denominator ("all 12 rows") three
+times. It was caught only by re-measuring the denominator. **A count without its denominator is not
+a measurement** — recorded as a standing reporting rule in R-22, binding on rulings as well as code.
+
+**Seed 4 re-targeted at a mandatory binding.** `api` now holds
+`00000000000000000000000000000000` against `api_type=sys_hub_flow` — the definition names a
+provider integration Flow that exists nowhere. Justified on the same denominator: `api` is
+`mandatory=true` and `internal_type=document_id`, so it carries **no referential integrity** and
+installs verbatim; **1 of 2026 rows (0.05%)** has an empty `api` and **1 of 2026 (0.05%)** a
+dangling one, making it ~300× rarer than an empty `connection`. The all-zeros value is deliberately
+unmistakable — a plausible random GUID would read as real drift. `connection` stays empty as a
+**documented decoy**: a "no connection bound" diagnosis now scores the correct layer with a **0**
+fix target, and the decoy hit is recorded in `notes`. The rejected alternative, a dangling
+`capability` reference, remains the documented install-refusal **fallback** with its own signature
+(*capability not found*).
+
+**LLD §8 item 8 split, R-21 annotated.** Safety **closed** — it never depended on R-18; the seed
+adds records rather than unmapping anything, and the dangling sys_id cannot collide with a live
+flow. Efficacy **re-opened** until a Task 12 run produces the failure: the new construction is a
+stronger inference, but it is still an inference from table statistics, and this item was already
+closed once on exactly that. §8 item 6 carries the sample-size correction at the point R-18's
+reading originated.
+
+**Four residuals.**
+
+- **Two seed 1 summary lines still named a fix target their own body invalidates** — the spec's
+  header table and the Fluent header both read "the tool input schema", which the body already
+  established is not expressible (Fluent script-tool inputs have no `type` property). Both now name
+  the word-typed contract.
+- **Seed 1's evidence criterion would have mis-scored a correct run** — it said the trace shows
+  `priority_stored` **empty**, but an integer column given a non-numeric string typically settles at
+  **`0`**. Reworded to score the *mismatch* rather than a literal value, with `priority_stored ==
+  "critical"` called out as a refutation of the seed rather than a miss by the agent.
+- **The scorecard stated only the top gate band proportionally** — 8 valid runs with 4 passes had no
+  band. All three bands are now given as proportions of the valid-run denominator (≥80% / ≥50% / 
+  <50%), with inclusive edges, per-denominator pass counts and that worked example.
+- **A general Fluent hazard filed as [#34](https://github.com/gapietro/tool-foundry-troubleshooter/issues/34)** — `Now.ID['key']` inside a `Record()` **data**
+  field builds clean and emits the **literal key name**, not a sys_id, corrupting both the column
+  and the record's composite identity key in `generated/keys.ts`. Same silent-phantom family as
+  Build Rules #21 and #33; proposed for promotion to a numbered rule in `sdk-reference.md`.
+
+**`dist/` evidence for the seed 4 change:**
+
+```xml
+<!-- sys_one_extend_capability_definition_904c0485….xml -->
+<api>00000000000000000000000000000000</api>
+<api_type>sys_hub_flow</api_type>
+<capability>92ff62af516741769c437feb88c80ef3</capability>   <!-- the parent record's real sys_id -->
+<connection/>                                                <!-- the decoy, not the defect -->
+```
+
+Noted while verifying: this record's identity key in `generated/keys.ts` is the **composite
+`{capability, api}`**, so changing `api` mints a new sys_id and marks the old entry `deleted: true`
+rather than updating in place — which matters because repointing `api` is exactly what *fixing* this
+seed means. Recorded in the Fluent header.
+
 ## 2026.07.3112 — 2026-07-31
 
 Phase 1a vertical slice, **Task 11**: the seeded-failure benchmark suite — the measuring
@@ -39,10 +117,15 @@ scopes returned nine. Full rationale and the rejected-options table in
 **The five seeds**, one per gate-scored layer, each a Fluent `AiAgent` (seed 5 an
 `AiAgenticWorkflow`) built to fail for exactly one documented reason:
 
-- **Seed 01 — tool schema mismatch** (layer 3, `tool_schema`). `set_ticket_priority` declares
-  `priority` as a free string while `x_snc_tsbench_ticket.priority` is an integer choice 1-5;
-  the write silently coerces to empty and `gr.update()` still reports success. Also built to
-  produce a LARGE trace, deliberately stressing Task 9's artifact-paging path.
+- **Seed 01 — tool schema mismatch** (layer 3, `tool_schema`). ~~`set_ticket_priority` declares
+  `priority` as a free string~~ ~~and the write silently coerces to empty.~~ **Corrected
+  2026-08-01:** Fluent script-tool inputs have **no `type` property**, so nothing is "declared as
+  a free string" and the emitted `input_schema` is shape-identical to the *correct* seeds' — the
+  word-typed contract lives in the tool description and the script's unguarded `setValue`. And a
+  non-numeric string on an integer column typically settles at **`0`**, not empty; the seed spec no
+  longer scores on a literal stored value, only on the mismatch. `x_snc_tsbench_ticket.priority` is
+  an integer choice 1-5 and `gr.update()` still reports success. Also built to produce a LARGE
+  trace, deliberately stressing Task 9's artifact-paging path.
 - **Seed 02 — ambiguous instruction** (layer 2, `instruction`). "Assign it to the right group"
   with no group-lookup tool, no routing table, and no group list in the instructions — the
   agent must invent an answer or stall.
@@ -53,10 +136,12 @@ scopes returned nine. Full rationale and the rejected-options table in
   because a scoped table name must begin with its own app's exact scope value (R-13's 40-of-40
   finding) — a build-time rejection, not shorthand awaiting expansion.
 - **Seed 04 — GenAI capability not mapped to a provider** (layer 6, `genai_stack`). A new
-  capability definition owned by the fixture app with `connection` left empty, rather than
-  unmapping a real one — the shared-instance-safe construction R-18 narrowed this item to.
-  Closes LLD §8 item 8 **build-proven, not yet runtime-proven** — triggering the failure and
-  capturing the execution is Task 12's.
+  capability definition owned by the fixture app rather than unmapping a real one — the
+  shared-instance-safe construction. ~~with `connection` left empty — the construction R-18
+  narrowed this item to. Closes LLD §8 item 8 **build-proven, not yet runtime-proven**.~~
+  **REFUTED and re-targeted 2026-08-01 (R-22)** — an empty `connection` is a normal state
+  (318 of 2026 rows, `mandatory=false`); the defect is now a dangling **mandatory** `api`.
+  LLD §8 item 8 is split: safety closed, efficacy re-opened until Task 12.
 - **Seed 05 — use case exists but is inactive** (layer 7, `wiring`). Everything is correct and
   published except `sn_aia_trigger_configuration.active=false`, with the sibling gate
   `sn_aia_trigger_agent_usecase_m2m.active` deliberately left `true` — so the diagnosis has to
@@ -98,8 +183,9 @@ matters more than the substitution itself: an unbuilt de-risker everyone assumes
 benchmark produces scores nobody can interpret.
 
 **Doc reconciliation.** `IMPLEMENTATION_PLAN.md` Task 11, `docs/LOW_LEVEL_DESIGN.md` §7 (the seed
-rows — including the corrected `x_snc_tsbench_routing` table name) and §8 item 8 (closed,
-build-proven), and DESIGN.md R-21 all updated in this branch to match what was actually built.
+rows — including the corrected `x_snc_tsbench_routing` table name) and ~~§8 item 8 (closed,
+build-proven)~~ **§8 item 8 (that closure is withdrawn — see R-22 in 2026.08.0101)**, and
+DESIGN.md R-21 all updated in this branch to match what was actually built.
 ~~§7 instance correction to gpinst01 (R-18c).~~ **That claim was false and is withdrawn:** §7's
 instance correction was made on an earlier branch and this branch made no instance correction at
 all.
@@ -113,9 +199,10 @@ to measure. Verified in `benchmark/seed-app/dist/`, not by a passing build:
   The gate is now a mandatory post-install PATCH, documented in the seed spec, the protocol and LLD §7.
 - **Seed 4 would have failed at layer 3, not layer 6** — the `OneExtendUtil` envelope was a flat
   name-keyed object rather than an `executionRequests` array keyed by capability sys_id, so it could
-  never have reached the empty `connection`. Envelope corrected, capability record completed so
-  `connection` is the only missing binding, and the invocation sys_id moved to the house
-  `REPLACE_WITH_..._SYS_ID` placeholder.
+  never have reached the empty `connection`. Envelope corrected and the invocation sys_id moved to
+  the house `REPLACE_WITH_..._SYS_ID` placeholder — both still stand. ~~Capability record completed
+  so `connection` is the only missing binding.~~ **That hardening was aimed at the wrong field and
+  is superseded by R-22 (below).**
 - **Build Rule #42 had made three seeds' setup steps impossible** — `dist/` carried six ACLs, all
   `operation=execute`, and zero record ACLs, with `ws_access=false` on both fixture tables. Adds
   `seed-tables-acl.now.ts`. On seed 3 the read ACL is part of the instrument: a `GlideRecordSecure`
