@@ -1,0 +1,194 @@
+/**
+ * PaToolLogAnalysis — LLD §4.4, the layer that is blocked at the data source.
+ *
+ * Two things are being guarded here, and neither is "does it read logs":
+ *
+ *   the mandatory scoping — an unfiltered syslog read can slow or time out an
+ *       instance (K26 guidebook), so an insufficiently scoped query is refused
+ *       BEFORE it reaches the database, on any instance, permitted or not.
+ *   the explicit degradation — syslog is DENIED from this scope
+ *       (caller_access = Caller Restriction, measured twice, R-12/R-19) and the
+ *       app's own CrossScopePrivilege installs correctly and does nothing. The
+ *       tool ships anyway so the gap is VISIBLE: an agent with no log tool
+ *       cannot tell you the log layer was skipped.
+ *
+ * The read is ATTEMPTED rather than assumed — hard-coding the denial would mean
+ * the tool never starts working if an admin lifts the restriction.
+ */
+
+const { loadScriptInclude } = require('./_loadScriptInclude')
+const { makeQueryingGlideRecordSecure } = require('./_glideStub')
+
+const PLAN = 'c9d63a932bda8b9417a6ffbeee91bfd0'
+
+function world(overrides) {
+    const base = {
+        syslog: [],
+        sn_aia_execution_plan: [],
+    }
+    return Object.assign(base, overrides || {})
+}
+
+function run(args, tables, options) {
+    const GlideRecordSecure = makeQueryingGlideRecordSecure(tables, options)
+    const kitCtx = loadScriptInclude('PaToolReadKit.js', { GlideRecordSecure: GlideRecordSecure })
+
+    function GlideDateTime(value) {
+        this._v = value || '2026-08-01 12:00:00'
+        this.addSeconds = function () {}
+        this.toString = function () {
+            return this._v
+        }
+    }
+
+    const ctx = loadScriptInclude('tools/PaToolLogAnalysis.js', {
+        GlideRecordSecure: GlideRecordSecure,
+        GlideDateTime: GlideDateTime,
+        PaToolReadKit: kitCtx.PaToolReadKit,
+    })
+    return { result: new ctx.PaToolLogAnalysis().execute(args), queries: GlideRecordSecure.calls.queries }
+}
+
+describe('mandatory scoping', () => {
+    it('refuses a query with no filter at all, naming what is missing', () => {
+        const { result, queries } = run(undefined, world())
+
+        expect(result.success).toBe(true)
+        expect(result.data.status).toBe('refused_unscoped')
+        expect(result.data.missing_conditions.join(' ')).toMatch(/source-contains or message-contains/)
+        // Refused BEFORE the database, not after a failed read.
+        expect(queries.some((q) => q.table === 'syslog')).toBe(false)
+    })
+
+    it('refuses even when a window was supplied, because a window alone is not enough', () => {
+        const { result } = run({ minutes_ago: 30 }, world())
+
+        expect(result.data.status).toBe('refused_unscoped')
+        expect(result.data.how_to_scope).toMatch(/execution=|source=|message=/)
+    })
+
+    it('accepts a source filter', () => {
+        const { result, queries } = run({ source: 'x_snc_troubleshoot' }, world())
+
+        expect(result.data.status).not.toBe('refused_unscoped')
+        const q = queries.find((x) => x.table === 'syslog')
+        expect(q.filters.some((f) => f.field === 'source' && f.op === 'LIKE')).toBe(true)
+    })
+
+    it('bounds every accepted query with a time window and a level filter', () => {
+        const { queries } = run({ message: 'Unterminated' }, world())
+        const q = queries.find((x) => x.table === 'syslog')
+        const fields = q.filters.map((f) => f.field)
+
+        expect(fields).toContain('sys_created_on')
+        expect(fields).toContain('level')
+    })
+
+    it('clamps an oversized window', () => {
+        const { result } = run({ source: 'x_snc', minutes_ago: 99999 }, world())
+
+        expect(result.data.scope.window.minutes_ago).toBe(1440)
+        expect(result.data.scope.window.clamped).toBe(true)
+    })
+
+    it('treats a bare sys_id as an execution, which scopes the query on its own', () => {
+        const { result } = run(PLAN, world())
+
+        expect(result.data.status).not.toBe('refused_unscoped')
+        expect(result.data.scope.message_contains).toBe(PLAN)
+    })
+})
+
+describe('execution-derived scope', () => {
+    it('takes the window from the plan start and end, padded either side', () => {
+        const { result } = run(
+            { execution: PLAN },
+            world({
+                sn_aia_execution_plan: [
+                    {
+                        sys_id: PLAN,
+                        sys_created_on: '2026-08-01 09:00:00',
+                        sys_updated_on: '2026-08-01 09:04:00',
+                        state: 'terminated',
+                    },
+                ],
+            })
+        )
+
+        expect(result.data.scope.derived_from_execution).toBe(true)
+        expect(result.data.scope.window.basis).toMatch(/padded by 120 seconds/)
+        expect(result.data.scope.message_contains).toBe(PLAN)
+    })
+
+    it('falls back to minutes_ago when the plan cannot be read, and still filters on the sys_id', () => {
+        const { result } = run({ execution: PLAN }, world())
+
+        expect(result.data.scope.derived_from_execution).toBe(false)
+        expect(result.data.scope.message_contains).toBe(PLAN)
+        expect(result.data.notes.join(' ')).toMatch(/Falling back to minutes_ago/)
+    })
+})
+
+describe('the R-19 degradation', () => {
+    it('reports the denial as an unavailable layer, not as a clean one', () => {
+        const { result } = run({ source: 'x_snc_troubleshoot' }, world(), { denied: ['syslog'] })
+
+        expect(result.data.status).toBe('unavailable')
+        expect(result.data.entries).toEqual([])
+        // The distinction the whole tool exists for: "no log entries matched"
+        // and "the log layer was not swept" are different diagnoses.
+        expect(result.data.evidence_basis.statement).toMatch(/NOT an absence of log entries/)
+        expect(result.data.notes.join(' ')).toMatch(/NOT swept/)
+    })
+
+    it('names the cause, what was already tried, and whose action is required', () => {
+        const { result } = run({ source: 'x_snc_troubleshoot' }, world(), { denied: ['syslog'] })
+        const a = result.data.availability
+
+        expect(a.cause).toMatch(/caller_access = Caller Restriction/)
+        // Re-attempting the grant has been measured twice as useless; the
+        // output has to say so or the next session tries it again.
+        expect(a.already_tried).toMatch(/DOES install correctly/)
+        expect(a.already_tried).toMatch(/cannot grant itself/)
+        expect(a.required_action).toMatch(/instance administrator/)
+        expect(a.required_action).toMatch(/CUSTOMER-SIDE PREREQUISITE/)
+    })
+
+    it('points at the nearest available substitute rather than leaving a hole', () => {
+        const { result } = run({ source: 'x_snc' }, world(), { denied: ['syslog'] })
+
+        expect(result.data.availability.what_this_means_for_the_diagnosis).toMatch(/agent_trace/)
+    })
+
+    it('actually attempts the read rather than assuming the denial', () => {
+        // If an admin lifts the restriction the tool must start working with no
+        // code change. A hard-coded denial would also misreport an instance
+        // where syslog was never restricted.
+        const { result, queries } = run(
+            { source: 'x_snc_troubleshoot' },
+            world({
+                syslog: [
+                    {
+                        sys_id: 'l1',
+                        sys_created_on: '2026-08-01 12:30:00',
+                        level: 'Error',
+                        source: 'x_snc_troubleshoot.PaToolAgentTrace',
+                        message: 'SyntaxError: Unterminated string constant',
+                    },
+                ],
+            })
+        )
+
+        expect(queries.some((q) => q.table === 'syslog')).toBe(true)
+        expect(result.data.status).toBe('ok')
+        expect(result.data.entries[0].message).toMatch(/Unterminated string constant/)
+        expect(result.data.availability).toBeUndefined()
+    })
+
+    it('distinguishes a readable-but-empty log from an unavailable one', () => {
+        const { result } = run({ source: 'nothing_matches_this' }, world())
+
+        expect(result.data.status).toBe('empty')
+        expect(result.data.availability).toBeUndefined()
+    })
+})
