@@ -63,3 +63,53 @@ describe('agent-doctor-instructions.md is safe to embed in a Fluent template', (
         expect(words).toBeLessThan(1200)
     })
 })
+
+describe('the Fluent agent carries the instructions verbatim', () => {
+    // Task 10's verification step says "verify the deployed instructions match
+    // the markdown". Half of that is checkable offline and permanently: the
+    // Fluent file must contain the markdown byte-for-byte. The other half - that
+    // what INSTALLED matches what was built - is the live check in Task 4.
+    //
+    // Two copies of a 700-word document drift silently. This is the guard.
+    it('src/fluent/agent-doctor.now.ts contains the markdown byte-for-byte', () => {
+        const md = fs.readFileSync(INSTRUCTIONS_PATH, 'utf8').trim()
+        const fluent = fs.readFileSync(
+            path.join(__dirname, '..', 'src', 'fluent', 'agent-doctor.now.ts'),
+            'utf8'
+        )
+        expect(fluent).toContain(md)
+    })
+
+    it('declares no triggerConfig', () => {
+        // Build Rule #31: triggerConfig on a bare AiAgent yields a trigger whose
+        // usecase is null. It never fires, and nothing reports that it did not.
+        const fluent = fs.readFileSync(
+            path.join(__dirname, '..', 'src', 'fluent', 'agent-doctor.now.ts'),
+            'utf8'
+        )
+        expect(fluent).not.toContain('triggerConfig')
+    })
+
+    it('uses no Now.ref anywhere', () => {
+        // Build Rules #21 and #33: Now.ref in the AI family emits a random
+        // build-time GUID with no lookup key retained, so it installs verbatim
+        // pointing at nothing. Silent at build, install, and in the logs.
+        const fluent = fs.readFileSync(
+            path.join(__dirname, '..', 'src', 'fluent', 'agent-doctor.now.ts'),
+            'utf8'
+        )
+        expect(fluent).not.toContain('Now.ref')
+    })
+
+    it('ends both wrapper IIFEs with the required (inputs) invocation', () => {
+        // Build Rule #19: without the trailing (inputs) the runtime receives a
+        // function object instead of a JSON string. Builds clean, installs
+        // clean, fails only when the tool is called.
+        const fluent = fs.readFileSync(
+            path.join(__dirname, '..', 'src', 'fluent', 'agent-doctor.now.ts'),
+            'utf8'
+        )
+        const invocations = fluent.match(/\}\)\(inputs\);/g) || []
+        expect(invocations.length).toBe(2)
+    })
+})
