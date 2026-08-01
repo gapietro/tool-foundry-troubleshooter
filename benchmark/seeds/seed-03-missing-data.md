@@ -10,6 +10,11 @@
 
 ## The defect
 
+> **PREDICTED, NOT OBSERVED.** No seed has been installed or executed. What
+> follows is derived from the Fluent source and the records emitted into
+> `seed-app/dist/` — build-time evidence, not runtime evidence. **Confirm at
+> Task 12** before scoring, and correct this section if the run disagrees.
+
 The table exists, the tool queries it correctly, and the instructions are
 unambiguous. The table is empty. Every lookup returns `matched: false`. This
 is the seed that separates "the data is absent" from "the read failed" —
@@ -23,9 +28,26 @@ Everything upstream of the data is correct: the query, the tool's contract,
 the instructions telling the agent never to guess. The only thing wrong is
 that `x_snc_tsbench_routing` was installed with zero rows. A diagnosis that
 blames the tool or the query is chasing a layer that has no defect in it —
-the tool already reports the empty result honestly (`matched: false`,
-`rules_in_table: 0`), so the evidence needed to reach the correct layer is in
+the tool reports the empty result honestly (`matched: false`, plus a
+`rules_in_table` count), so the evidence needed to reach the correct layer is in
 the trace if it is read.
+
+**`rules_in_table` is now measured, corrected 2026-08-01.** ~~The tool reports
+`rules_in_table: 0`.~~ It previously returned the literal `0` unconditionally,
+with no count — which handed the diagnostic agent the seed's answer as a
+constant rather than as a measured empty read, and would have reported "0 rules"
+even from a populated table. It is now a real `GlideAggregate` count returned on
+both the matched and unmatched paths, so the distinction the seed is built to
+reward — *no rule for this category* versus *no rules at all* — is something the
+tool actually establishes.
+
+**The read ACL is part of the instrument, not housekeeping.** A layer-5 sweep
+using `GlideRecordSecure` against a table with no read ACL returns zero rows
+whether the table is empty or merely unreadable — which would make this seed's
+defect indistinguishable from an access denial *by the very tool meant to find
+it*. `seed-app/src/fluent/seed-tables-acl.now.ts` grants the read ACL for
+exactly this reason (Build Rule #42). Granting `create` there does **not** seed
+the table; it stays empty, and nothing in the app inserts into it.
 
 ## Setup
 

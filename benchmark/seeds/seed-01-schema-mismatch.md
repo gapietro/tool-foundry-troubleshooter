@@ -10,11 +10,42 @@
 
 ## The defect
 
-`set_ticket_priority` declares `priority` as a free string, and the instructions
-require the agent to express priority in words. The column
-`x_snc_tsbench_ticket.priority` is an integer choice, 1–5. The word never
-matches a choice value, the write coerces to empty, and `gr.update()` reports
-success — so the agent tells the user the ticket was prioritised.
+> **PREDICTED, NOT OBSERVED.** No seed has been installed or executed. What
+> follows is derived from the Fluent source and from the records emitted into
+> `seed-app/dist/`, which is build-time evidence, not runtime evidence.
+> **Confirm at Task 12** before scoring, and correct this section if the run
+> disagrees. Four predictions in this seed set were already wrong once and were
+> only caught by reading `dist/`.
+
+The instructions require the agent to express priority as a **word**
+("critical", "high", …), and `set_ticket_priority` passes that word straight
+through to `x_snc_tsbench_ticket.priority`, which is an **integer** choice
+column, 1–5. `'critical'` is not an integer, so it is not stored — while
+`gr.update()` still reports success, so the agent tells the user the ticket was
+prioritised.
+
+**Where the declaration actually lives — and where it does not.** Script-tool
+inputs have no `type` property in Fluent. The emitted `sn_aia_tool.input_schema`
+is `[{name, description, mandatory}]`, byte-identical in shape to seeds 3 and 4's
+*correct* tools (verified in `dist/`). So there is nothing in the tool's input
+schema for a layer-3 sweep to find wrong, and "constrain the input schema to
+1–5" is not something the schema can express. The word-typed contract is
+declared in two places that *are* readable:
+
+1. the tool **description** — "the priority as a word — critical, high,
+   moderate, low or planning";
+2. the tool **script**, which does `gr.setValue('priority', inputs.priority)`
+   with no mapping or validation.
+
+Those are what a diagnosis can cite and what a builder could actually change.
+
+**Column type corrected 2026-08-01.** ~~The column is a `ChoiceColumn`.~~ It was
+originally declared with `ChoiceColumn`, which emits `internal_type=choice`,
+`max_length=40` — a *string-backed* column that stores `'critical'` quite
+happily. The mechanism above was false as shipped. The column is now
+`IntegerColumn` + choices, emitting `internal_type=integer` (the shape
+`task.priority` itself uses on gpinst01), which makes the mismatch real. See
+`../seed-app/src/fluent/seed-01-schema-mismatch.now.ts`.
 
 ## Why it is built this way
 
@@ -35,7 +66,11 @@ test is unchanged; the obstacle in front of it is removed.
 
 1. Install the fixture app (Task 12): `cd benchmark/seed-app && now-sdk install --alias gpinst01`
 2. Insert one bench ticket with `short_description` set and `priority` empty.
-   Record its sys_id.
+   Record its sys_id. (This is possible only because
+   `seed-app/src/fluent/seed-tables-acl.now.ts` grants record ACLs and the table
+   sets `allowWebServiceAccess` — Build Rule #42. Without both, an admin insert
+   returns *Access denied: User Not Authorized* and this step cannot be done at
+   all.)
 
 ## Trigger
 
@@ -46,12 +81,34 @@ is down for all customers, no workaround"*. Capture the resulting
 
 ## Expected diagnosis
 
-Root cause in `tool_schema`: the tool's `priority` input is a free string while
-the target column is an integer choice 1–5. Fix target: the tool input schema
-(constrain to 1–5, or map words to values before the write).
+Root cause in `tool_schema`: the tool accepts and forwards a priority **word**
+while the target column is an integer choice 1–5, so the value is never stored.
 
-Evidence a correct diagnosis should cite: the trace showing
-`priority_stored` empty in the tool result, plus the column definition.
+Fix target: **the tool's word-typed contract** — map the word to its integer
+value inside the script before `setValue`, or change the tool description and
+the agent instructions to pass 1–5. Do **not** expect "constrain the input
+schema to 1–5"; as "The defect" explains, the Fluent input schema has no type
+field to constrain, so that fix is not expressible and must not be the standard
+a run is scored against.
+
+Evidence a correct diagnosis should cite: the trace showing `priority_stored`
+empty (and `priority_requested` holding the word) in the tool result, plus the
+`x_snc_tsbench_ticket.priority` dictionary entry showing `internal_type=integer`.
+
+### Scoring note — layers 3 and 4 (M18)
+
+This defect straddles two layers by construction: it is a disagreement *between*
+the tool contract (layer 3) and the column type (layer 4), and neither side is
+wrong on its own. `root_cause_layer_correct` is binary, so the resolution is
+stated here rather than left to the scorer:
+
+- **`tool_schema` (layer 3) is the expected answer** and scores full marks.
+- **A run answering "layer 4 — the column is an integer choice and the tool
+  sends a word" also scores full marks.** It describes the same finding from the
+  other side and identifies the same fix.
+- A run naming only one side *without* the disagreement — e.g. "the column is an
+  integer choice" with no mention of what is being written to it — scores 0. The
+  finding is the mismatch, not either half.
 
 ## Safety
 

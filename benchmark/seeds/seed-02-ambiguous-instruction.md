@@ -10,6 +10,11 @@
 
 ## The defect
 
+> **PREDICTED, NOT OBSERVED.** No seed has been installed or executed. What
+> follows is derived from the Fluent source and the records emitted into
+> `seed-app/dist/` — build-time evidence, not runtime evidence. **Confirm at
+> Task 12** before scoring, and correct this section if the run disagrees.
+
 "Assign it to the right group" defines neither "right" nor any means of
 determining it. The agent has no group-lookup tool, no routing table, and no
 list of groups in its instructions — so it must either invent a group name or

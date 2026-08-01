@@ -10,12 +10,42 @@
 
 ## The defect
 
+> **PREDICTED, NOT OBSERVED.** No seed has been installed or executed. What
+> follows is derived from the Fluent source and the records emitted into
+> `seed-app/dist/` — build-time evidence, not runtime evidence. **Confirm at
+> Task 12** before scoring, and correct this section if the run disagrees.
+
 The capability definition `x_snc_tsbench_unmapped_capability` exists, but its
 `connection` — the bound provider credential alias — is empty. R-18
 established that `connection` is exactly that binding, so an empty one is
 precisely "capability not mapped to a provider": the capability record is
 real and reachable, but there is no provider behind it to actually run the
 call.
+
+**One missing binding, not three — corrected 2026-08-01.** ~~The capability
+definition carries `api_type: 'generic'`.~~ As originally built the record had
+`api_type=generic`, **no `api` value at all**, and `capability` holding a name
+string where the column is a reference to `sys_one_extend_capability` — three
+missing bindings, so an installed run could have failed on any of them and a
+diagnosis blaming the wrong one would have been scored unfairly. The well-formed
+shape was read off gpinst01 read-only: all 12 `sys_one_extend_capability_definition`
+rows use `api_type=sys_hub_flow` with `api` pointing at the provider integration
+subflow. The seed now matches that shape exactly, with a real
+`sys_one_extend_capability` parent record, so **`connection` is the only gap** —
+which is the seed's entire purpose. (The instance carries a live example of this
+same state: *"Generic metadata summarizer (Now LLM Service - Now LLM Generic)"*
+has `api` set and `connection` empty.)
+
+**The invocation envelope was also wrong — corrected 2026-08-01.** ~~The tool
+calls `sn_one_extend.OneExtendUtil.execute` with the capability name.~~ It
+previously called `execute({capability: '<name>', ticket: ...})`. The real
+envelope is an array under `executionRequests`, keyed by capability **sys_id**
+(see `.claude/context/sdk-examples/now-assist-skill.now.ts`). The old form could
+not reach the capability record at all, so it could never have failed on the
+empty `connection`: it would have died as a malformed-request **script error —
+layer 3, not layer 6** — and an agent correctly reporting the malformed envelope
+would have been scored a **miss** on a seed whose expected answer is
+`genai_stack`.
 
 ## Shared-instance safety
 
@@ -50,7 +80,31 @@ signature, not the one described above.
 ## Setup
 
 1. Install the fixture app (Task 12): `cd benchmark/seed-app && now-sdk install --alias gpinst01`
-2. Insert one bench ticket with `short_description` set. Record its sys_id.
+
+2. **Substitute the capability sys_id into the tool script — mandatory.** The
+   tool ships with the placeholder `REPLACE_WITH_SEED_04_CAPABILITY_SYS_ID`
+   (the house pattern from Build Rule #33: the sys_id exists only after install,
+   and an unreplaced placeholder fails loudly rather than pointing silently at
+   the wrong record). Read the installed capability's sys_id:
+
+   ```
+   GET /api/now/table/sys_one_extend_capability
+       ?sysparm_query=name=x_snc_tsbench_unmapped_capability
+       &sysparm_fields=sys_id,name
+   ```
+
+   then replace the placeholder with that sys_id in
+   `seed-app/src/fluent/seed-04-genai-unmapped.now.ts` and rebuild + reinstall,
+   or patch `sn_aia_tool.script` for `summarise_ticket` directly on the instance.
+   Confirm the placeholder string no longer appears in the installed script.
+
+   **If this is skipped the seed is void** — the tool cannot reach any
+   capability, and the run tests a malformed reference rather than an unmapped
+   provider.
+
+3. Insert one bench ticket with `short_description` set. Record its sys_id.
+   (Possible only because of the record ACLs and `allowWebServiceAccess` in
+   `seed-app/src/fluent/seed-tables-acl.now.ts` — Build Rule #42.)
 
 ## Trigger
 
