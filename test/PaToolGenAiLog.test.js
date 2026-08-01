@@ -461,6 +461,86 @@ describe('for_execution mode', () => {
         expect(result.data.evidence_basis.denial_note).toMatch(/permission gap, NOT an absence/)
     })
 
+    it('does not report empty when the task join was denied', () => {
+        // Round 2 closed the m2m branch and left this one: a DENIED task read
+        // collapses the join to the plan sys_id alone, so every per-step call
+        // is missing - and `empty` asserts there were none. The status is the
+        // claim a reader scans (R-19b); a note beside it does not repair it.
+        const { result } = run(
+            { mode: 'for_execution', execution: PLAN },
+            world({ sn_aia_execution_plan: [{ sys_id: PLAN }] }),
+            { denied: ['sn_aia_execution_task'] }
+        )
+
+        expect(result.data.llm_calls).toEqual([])
+        expect(result.data.llm_calls_status).toBe('unavailable')
+    })
+
+    it('reports partial when the task join was denied but calls were still found', () => {
+        const { result } = run(
+            { mode: 'for_execution', execution: PLAN },
+            world({
+                sn_aia_execution_plan: [{ sys_id: PLAN }],
+                sn_aia_gen_ai_m2m: [
+                    {
+                        sys_id: 'm1',
+                        source_id: PLAN,
+                        source_table: 'sn_aia_execution_plan',
+                        gen_ai_log_metadata: 'md1',
+                    },
+                ],
+                sys_gen_ai_log_metadata: [{ sys_id: 'md1', model_name: 'now-llm', status: 'success' }],
+            }),
+            { denied: ['sn_aia_execution_task'] }
+        )
+
+        // Plan-level calls were readable; per-step ones were not.
+        expect(result.data.llm_calls).toHaveLength(1)
+        expect(result.data.llm_calls_status).toBe('partial')
+    })
+
+    it('reports partial when the join was truncated rather than denied', () => {
+        // This is the case that caught a live ordering bug: _callsStatus reads
+        // llm_calls_truncated_at, and the first version derived the status one
+        // line before that field was assigned, leaving the branch dead.
+        const tasks = []
+        for (let i = 0; i < 250; i++) tasks.push({ sys_id: 't' + i, execution_plan: PLAN })
+
+        const { result } = run(
+            { mode: 'for_execution', execution: PLAN },
+            world({
+                sn_aia_execution_plan: [{ sys_id: PLAN }],
+                sn_aia_execution_task: tasks,
+                sn_aia_gen_ai_m2m: [
+                    {
+                        sys_id: 'm1',
+                        source_id: PLAN,
+                        source_table: 'sn_aia_execution_plan',
+                        gen_ai_log_metadata: 'md1',
+                    },
+                ],
+                sys_gen_ai_log_metadata: [{ sys_id: 'md1', model_name: 'now-llm', status: 'success' }],
+            })
+        )
+
+        expect(result.data.llm_calls_truncated_at).toBe(200)
+        expect(result.data.llm_calls_status).toBe('partial')
+    })
+
+    it('does not quote a task count taken from a denied read', () => {
+        const { result } = run(
+            { mode: 'for_execution', execution: PLAN },
+            world({ sn_aia_execution_plan: [{ sys_id: PLAN }] }),
+            { denied: ['sn_aia_execution_task'] }
+        )
+        const notes = result.data.notes.join(' ')
+
+        // "plus each of its 0 task sys_ids" reads as an execution with no
+        // steps, contradicting the denial note two lines above it.
+        expect(notes).not.toMatch(/each of its 0 task sys_ids/)
+        expect(notes).toMatch(/NO task sys_ids, because sn_aia_execution_task could not be read/)
+    })
+
     it('says the plan is absent rather than reporting no LLM calls', () => {
         const { result } = run({ mode: 'for_execution', execution: PLAN }, world())
 
