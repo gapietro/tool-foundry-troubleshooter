@@ -163,6 +163,18 @@ export const seed04Agent = AiAgent({
             // and an agent correctly reporting the malformed envelope would have
             // been scored a MISS on a seed whose expected answer is genai_stack.
             //
+            // THE RESULT IS REPORTED HONESTLY, AND THAT IS LOAD-BEARING (PR #33
+            // review, round 2). This script used to return a hardcoded
+            // ok: true. Because JSON.stringify DROPS an undefined value, a
+            // failed capability call returned {"ok":true,"capability_id":"..."}
+            // - success, with the evidence deleted. The seed would then have
+            // produced no signal at all for the diagnostic agent to find, which
+            // is the one thing a fixture must never do. ok is now derived,
+            // result is normalised to null rather than vanishing, and the raw
+            // response is surfaced. This is NOT error HANDLING - a throw still
+            // propagates and stays visible in the trace. It is refusing to
+            // LABEL a failure as a success.
+            //
             // REPLACE_WITH_SEED_04_CAPABILITY_SYS_ID is the house placeholder
             // pattern (Build Rule #33): the sys_id only exists after install, and
             // an unreplaced placeholder fails loudly and obviously rather than
@@ -178,7 +190,13 @@ export const seed04Agent = AiAgent({
     });
     var cap = resp && resp.capabilities && resp.capabilities[capabilityId];
     var result = (cap && cap.length) ? cap[0] : cap;
-    return JSON.stringify({ ok: true, capability_id: capabilityId, result: result });
+    var failed = !result || !!result.error || !!result.errorCode;
+    return JSON.stringify({
+        ok: !failed,
+        capability_id: capabilityId,
+        result: (result === undefined) ? null : result,
+        raw_response: (resp === undefined) ? null : resp
+    });
 })(inputs);`,
             inputs: [
                 {

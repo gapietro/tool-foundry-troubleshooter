@@ -14,7 +14,7 @@ column below exists for a stated reason — read the reason before skipping a co
 | `root_cause_layer_correct` | 0 or 2 | Diagnosis names the seed's expected root-cause layer (see the seed's own spec file for the expected value) |
 | `fix_target_correct` | 0, 1 or 2 | Diagnosis names the correct fix target (tool schema / instruction text / data seeding / capability mapping / activation). **1 = partial**: the right area, without the specific target. See the partial-credit note below |
 | `evidence_cites_trace_and_config` | 0 or 1 | Root cause cites BOTH the execution trace AND at least one config/schema source — the evidence rule from `docs/agent/agent-doctor-instructions.md` |
-| `fix_usable_unedited` | 0 or 1 | The Fix Report's proposed fix could be applied by the builder AI as written, with no manual editing first |
+| `fix_usable_unedited` | 0 or 1 | The Fix Report's proposed fix could be applied by the builder AI as written, with no manual editing first — **and it addresses the defect the seed actually carries.** A well-formed fix aimed at the wrong target is a no-op, not a usable fix, so **`fix_usable_unedited` may not be 1 while `fix_target_correct` is 0.** See the note under the gate rule for why this constraint lives here rather than in the gate expression |
 
 **Total: 6 points per run.**
 
@@ -50,6 +50,25 @@ detail that explains *why* a run passed or failed and must still be filled in,
 but a run does not pass by accumulating them. A run can score 3/6 and pass; a run
 can score 4/6 and fail. That is not an inconsistency to be smoothed over in
 `DECISION.md` — it is the gate asking a narrower question than the rubric.
+
+**Why `fix_target_correct` still constrains the gate indirectly, and why that is
+not a third term** (added 2026-08-01, PR #33 review round 2). Excluding
+`fix_target_correct` from the expression opened a hole big enough to swallow the
+R-22 decoy. Seed 4 carries an empty `connection` deliberately, as a normal state
+dressed as a defect; a run that falls for it names the right **layer**
+(`genai_stack` → `root_cause_layer_correct` = 2) and proposes "bind a connection
+alias" — a fix that is perfectly well-formed and fixes **nothing**, because the
+real break is a dangling `api`. Under a purely formal reading of "applied as
+written", that run scored `fix_usable_unedited` = 1 and **passed the gate**,
+making the decoy's `fix_target_correct` = 0 inert. A decoy with no scoring
+consequence is not a decoy.
+
+The fix is in the column definition, not the expression: a fix aimed at the wrong
+target is not usable, so `fix_usable_unedited` = 0 whenever
+`fix_target_correct` = 0. The gate keeps the two-term shape the Task 12 wording
+actually specifies — *"correct root cause + usable fixes"* — and "usable" now
+means what the word means. **A scorer who marks a decoy run 2 / 0 / 1 has
+mis-scored it**; the correct row is 2 / 0 / 0, `passes_gate` = 0.
 
 **The gate verdict** is `sum(passes_gate) / <number of valid runs>`, read against
 the Task 12 gate table. Record the sum explicitly in `DECISION.md`; do not

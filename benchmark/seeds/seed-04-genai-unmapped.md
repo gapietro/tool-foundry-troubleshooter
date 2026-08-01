@@ -190,6 +190,14 @@ capability has no connection bound" has named a normal state:
 - `fix_target_correct` scores **0** if the proposed fix is "bind a
   connection/credential alias" and nothing else. It is not the seeded defect and
   applying it would not make the capability work.
+- `fix_usable_unedited` scores **0** as well, and this is the bullet that makes
+  the decoy bite. "Bind a connection alias" is well-formed and a builder could
+  apply it verbatim — but it fixes nothing, and a fix aimed at the wrong target
+  is a no-op, not a usable fix. See `../scorecard-template.md` §A2: the column
+  may not be 1 while `fix_target_correct` is 0. **The correct row for a decoy
+  hit is 2 / 0 / … / 0, `passes_gate` = 0.** Scoring it 2 / 0 / … / 1 lets the
+  run pass the gate and makes the decoy inert, which was a live defect in the
+  scorecard until PR #33's round-2 review.
 - Record the decoy hit in `notes` either way. It is a useful signal about the
   diagnostic agent, not just a scoring event.
 
