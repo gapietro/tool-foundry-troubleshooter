@@ -47,6 +47,30 @@ declare global {
                         table: 'sn_aia_agent'
                         id: '0bbf1b00cce848838cc675986233120b'
                     }
+                    'seed-04-acl': {
+                        table: 'sys_security_acl'
+                        id: '155a5f3bfbf34973bc6f37cc1a3e9aee'
+                    }
+                    'seed-04-agent': {
+                        table: 'sn_aia_agent'
+                        id: '8bac1f84f3a1481487fe8dd219295914'
+                    }
+                    'seed-05-acl': {
+                        table: 'sys_security_acl'
+                        id: 'cc49a414f14247a68d3db8196a983abc'
+                    }
+                    'seed-05-agent': {
+                        table: 'sn_aia_agent'
+                        id: 'a4b7ef5d793346ea861730c6d28b8f58'
+                    }
+                    'seed-05-workflow': {
+                        table: 'sn_aia_usecase'
+                        id: 'af15173b98ce46c3a5f35a9f7160e888'
+                    }
+                    'seed-05-workflow-acl': {
+                        table: 'sys_security_acl'
+                        id: 'ae03b8b8c2fe447eafda3617190a17f3'
+                    }
                     src_server_script_ts: {
                         table: 'sys_module'
                         id: '30055670e07444bd993faecf66d51bc8'
@@ -58,6 +82,14 @@ declare global {
                         id: '0434d97b6fb84307ba54774a0a161df6'
                         key: {
                             agent: '0bbf1b00cce848838cc675986233120b'
+                        }
+                    },
+                    {
+                        table: 'sys_one_extend_capability_definition'
+                        id: '0efd9496eb9345b7a293bf8e23ecccf0'
+                        key: {
+                            capability: 'x_snc_tsbench_unmapped_capability'
+                            api: 'NULL'
                         }
                     },
                     {
@@ -107,6 +139,21 @@ declare global {
                         }
                     },
                     {
+                        table: 'sn_aia_version'
+                        id: '35539871bbf74d1a90c538f0ee166799'
+                        key: {
+                            target_id: 'af15173b98ce46c3a5f35a9f7160e888'
+                            version_name: 'V1'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_tool'
+                        id: '37d6957bb5cd4bda96fc9a93de494eac'
+                        key: {
+                            name: 'summarise_ticket'
+                        }
+                    },
+                    {
                         table: 'sn_aia_agent_tool_m2m'
                         id: '3bacb3ef18454586b86a87f11ffaae9a'
                         key: {
@@ -120,6 +167,15 @@ declare global {
                         id: '3bd31a0be63d4e81856598dbd2c96788'
                         key: {
                             name: 'lookup_routing_rule'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_agent_tool_m2m'
+                        id: '3c72dab2668c4ba5a6080a5cd5fb2b91'
+                        key: {
+                            agent: '8bac1f84f3a1481487fe8dd219295914'
+                            tool: '37d6957bb5cd4bda96fc9a93de494eac'
+                            name: 'summarise_ticket'
                         }
                     },
                     {
@@ -160,6 +216,19 @@ declare global {
                         }
                     },
                     {
+                        table: 'sn_aia_team_member'
+                        id: '5900beb798ad4118aeee1109857e234a'
+                        key: {
+                            agent: 'a4b7ef5d793346ea861730c6d28b8f58'
+                            team: {
+                                id: '71ccfffde1364e008c716a1b0530ab16'
+                                key: {
+                                    name: 'Seed 05 Acknowledgement Team'
+                                }
+                            }
+                        }
+                    },
+                    {
                         table: 'sys_db_object'
                         id: '5e789b25ca3844f984e662bb2bc8dc97'
                         key: {
@@ -182,6 +251,13 @@ declare global {
                         }
                     },
                     {
+                        table: 'sn_aia_team'
+                        id: '71ccfffde1364e008c716a1b0530ab16'
+                        key: {
+                            name: 'Seed 05 Acknowledgement Team'
+                        }
+                    },
+                    {
                         table: 'ua_table_licensing_config'
                         id: '76c1e6d91ed547dc911fdcf4fdaaa2ba'
                         key: {
@@ -194,6 +270,14 @@ declare global {
                         key: {
                             name: 'x_snc_tsbench_ticket'
                             element: 'escalation_count'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_version'
+                        id: '839cf9dacaeb48cba477b11a4a8ac0dc'
+                        key: {
+                            target_id: '8bac1f84f3a1481487fe8dd219295914'
+                            version_name: 'V1'
                         }
                     },
                     {
@@ -220,6 +304,13 @@ declare global {
                         key: {
                             target_id: 'cd050d48e810411d9f113fd530694fe6'
                             version_name: 'V1'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_usecase_config_override'
+                        id: '966b6507233440219a8dd643c2b62410'
+                        key: {
+                            usecase_configuration: 'af15173b98ce46c3a5f35a9f7160e888'
                         }
                     },
                     {
@@ -272,6 +363,42 @@ declare global {
                         }
                     },
                     {
+                        table: 'sn_aia_trigger_agent_usecase_m2m'
+                        id: 'ba30d8775b0c4cebb960c58830590d5d'
+                        key: {
+                            trigger_configuration: {
+                                id: 'bfb77d6c64884500a80203ee029436ee'
+                                key: {
+                                    name: 'Seed 05 Bench Ticket Created'
+                                    usecase: 'af15173b98ce46c3a5f35a9f7160e888'
+                                }
+                            }
+                            related_resource_record: 'af15173b98ce46c3a5f35a9f7160e888'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_trigger_configuration'
+                        id: 'bfb77d6c64884500a80203ee029436ee'
+                        key: {
+                            name: 'Seed 05 Bench Ticket Created'
+                            usecase: 'af15173b98ce46c3a5f35a9f7160e888'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_agent_config'
+                        id: 'c9edd5cc81e24d17b6ef1256c0228494'
+                        key: {
+                            agent: 'a4b7ef5d793346ea861730c6d28b8f58'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_agent_config'
+                        id: 'cb8ecb1fef754e97b75a15496ad1a689'
+                        key: {
+                            agent: '8bac1f84f3a1481487fe8dd219295914'
+                        }
+                    },
+                    {
                         table: 'sys_choice'
                         id: 'cbc6be9077c244bfb29f245e38309f66'
                         key: {
@@ -314,6 +441,14 @@ declare global {
                         id: 'ece2b203c073475e89ffad8a360bb204'
                         key: {
                             name: 'x_snc_tsbench_routing'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_version'
+                        id: 'f2f0d047d6df47ff97aa3de05be7ed1e'
+                        key: {
+                            target_id: 'a4b7ef5d793346ea861730c6d28b8f58'
+                            version_name: 'V1'
                         }
                     },
                     {
