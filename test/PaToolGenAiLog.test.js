@@ -127,6 +127,32 @@ describe('check_config — the refuted heuristic (R-22)', () => {
         expect(result.data.findings).toEqual([])
     })
 
+    it('does not present a denied audit as a clean one', () => {
+        // Zero definitions and zero findings is shaped exactly like an
+        // instance where every capability is healthy.
+        const { result } = run({ mode: 'check_config' }, world(), {
+            denied: ['sys_one_extend_capability_definition'],
+        })
+
+        expect(result.data.audit_status).toBe('unavailable')
+        expect(result.data.definitions).toEqual([])
+        expect(result.data.notes.join(' ')).toMatch(/NOTHING was audited/)
+        expect(result.data.notes.join(' ')).toMatch(/identical to an instance where every definition is healthy/)
+    })
+
+    it('reports a genuinely clean audit as ok', () => {
+        const { result } = run(
+            { mode: 'check_config' },
+            world({
+                sys_one_extend_capability_definition: [definition()],
+                sys_one_extend_capability: [{ sys_id: 'cap1', name: 'Summarize' }],
+            })
+        )
+
+        expect(result.data.audit_status).toBe('ok')
+        expect(result.data.findings).toEqual([])
+    })
+
     it('states the denominator behind the connection claim (R-22 item 4)', () => {
         const { result } = run({ mode: 'check_config' }, world({
             sys_one_extend_capability_definition: [definition()],
@@ -539,6 +565,72 @@ describe('for_execution mode', () => {
         // steps, contradicting the denial note two lines above it.
         expect(notes).not.toMatch(/each of its 0 task sys_ids/)
         expect(notes).toMatch(/NO task sys_ids, because sn_aia_execution_task could not be read/)
+    })
+
+    it('never leaves llm_calls_status undefined, on any path', () => {
+        // The generic form of round 4's first finding. Three early returns
+        // assigned llm_calls and returned without a status - a gap reached
+        // through CONTROL FLOW, which the consolidated derivation could not
+        // see because it only ever ran on the success path. Enumerating the
+        // paths is the only thing that catches that.
+        const VOCABULARY = ['ok', 'empty', 'partial', 'unavailable']
+        const paths = {
+            'no execution supplied': [{ mode: 'for_execution' }, world(), undefined],
+            'plan denied': [
+                { mode: 'for_execution', execution: PLAN },
+                world(),
+                { denied: ['sn_aia_execution_plan'] },
+            ],
+            'plan absent': [{ mode: 'for_execution', execution: PLAN }, world(), undefined],
+            'task denied': [
+                { mode: 'for_execution', execution: PLAN },
+                world({ sn_aia_execution_plan: [{ sys_id: PLAN }] }),
+                { denied: ['sn_aia_execution_task'] },
+            ],
+            'm2m denied': [
+                { mode: 'for_execution', execution: PLAN },
+                world({ sn_aia_execution_plan: [{ sys_id: PLAN }] }),
+                { denied: ['sn_aia_gen_ai_m2m'] },
+            ],
+            'genuinely empty': [
+                { mode: 'for_execution', execution: PLAN },
+                world({ sn_aia_execution_plan: [{ sys_id: PLAN }] }),
+                undefined,
+            ],
+        }
+
+        Object.keys(paths).forEach((name) => {
+            const [args, tables, options] = paths[name]
+            const status = run(args, tables, options).result.data.llm_calls_status
+            expect({ path: name, status: status }).toEqual({
+                path: name,
+                status: expect.stringMatching(new RegExp('^(' + VOCABULARY.join('|') + ')$')),
+            })
+        })
+    })
+
+    it('does not report ok when a linked metadata row was denied', () => {
+        // The stub is present in `calls` and carries no model, status or
+        // tokens. Counting it toward `ok` reports a set complete in length and
+        // not in content.
+        const { result } = run(
+            { mode: 'for_execution', execution: PLAN },
+            world({
+                sn_aia_execution_plan: [{ sys_id: PLAN }],
+                sn_aia_gen_ai_m2m: [
+                    {
+                        sys_id: 'm1',
+                        source_id: PLAN,
+                        source_table: 'sn_aia_execution_plan',
+                        gen_ai_log_metadata: 'md1',
+                    },
+                ],
+            }),
+            { denied: ['sys_gen_ai_log_metadata'] }
+        )
+
+        expect(result.data.unreadable_link_count).toBe(1)
+        expect(result.data.llm_calls_status).toBe('unavailable')
     })
 
     it('says the plan is absent rather than reporting no LLM calls', () => {
