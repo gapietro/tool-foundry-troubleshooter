@@ -805,4 +805,54 @@ describe('getOrCreate — tolerant inputs (R-9)', () => {
         anchor.getOrCreate()
         expect(world.calls.inserts[0].row.user || '').toBe('')
     })
+
+    describe('the run-completion contract (Task 10, DESIGN.md R-20)', () => {
+        it('exposes NO completion method — native runs have no terminal state', () => {
+            const { anchor } = load()
+
+            // This is a GUARD, not a description. Adding a completion method to
+            // this class is not a small convenience — it re-opens a ruling. The
+            // native harness emits no end-of-conversation signal, so any
+            // completer must DECLARE completion, and all three ways to declare it
+            // were rejected for measured reasons (R-9 unreliable agent, R-2
+            // deleted time-window reasoning, plan state is turn-scoped not
+            // conversation-scoped). Completeness is DERIVED from
+            // x_snc_troubleshoot_audit instead.
+            //
+            // If you are here because you added one of these: read DESIGN.md R-20
+            // first, then change the ruling, then change this test.
+            expect(typeof anchor.complete).toBe('undefined')
+            expect(typeof anchor.finish).toBe('undefined')
+            expect(typeof anchor.close).toBe('undefined')
+            expect(typeof anchor.setStatus).toBe('undefined')
+        })
+
+        it('never writes any status other than running', () => {
+            // The whole class, scanned. A completion path added anywhere in this
+            // file — not just as a method on the prototype — has to write one of
+            // the terminal choice values to be a completion path at all.
+            const source = require('fs').readFileSync(
+                require('path').join(__dirname, '..', 'src', 'server', 'PaRunAnchor.js'),
+                'utf8'
+            )
+
+            // Quoted form: the actual guard. This is what writing the value looks
+            // like, whether via setValue or a constant.
+            expect(source).not.toMatch(/['"]complete['"]/)
+            expect(source).not.toMatch(/['"]failed['"]/)
+            expect(source).not.toMatch(/['"]awaiting_confirmation['"]/)
+            expect(source).not.toMatch(/['"]queued['"]/)
+
+            // Bare form, for the two that are never ordinary English in this file.
+            // This keeps the PROSE honest too: a comment claiming a run is created
+            // "running, not queued" implies a lifecycle that R-20 says does not
+            // exist, and that comment is how the next reader forms their model.
+            //
+            // Deliberately NOT applied to `complete` or `failed`: both are normal
+            // English words, and line 356's "a failed lookup" is a legitimate use
+            // that a bare-word ban would force into an awkward rewrite for nothing.
+            expect(source).not.toMatch(/\bqueued\b/)
+            expect(source).not.toMatch(/\bawaiting_confirmation\b/)
+        })
+    })
 })

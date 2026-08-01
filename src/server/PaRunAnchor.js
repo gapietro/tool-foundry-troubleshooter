@@ -105,7 +105,27 @@ PaRunAnchor.prototype = {
     DEFAULT_HARNESS: 'native',
     DEFAULT_MODE: 'diagnose',
 
-    /** §4.6: native runs are created `running`, not `queued`. */
+    /**
+     * THE ONLY STATUS THIS CLASS EVER WRITES (DESIGN.md R-20).
+     *
+     * A native diagnostic run has no terminal state, by design. The harness
+     * emits no end-of-conversation signal, so completion could only be
+     * DECLARED, and every declarer was rejected on measured grounds: the agent
+     * is unreliable (R-9 — the Phase 0 probe passed a declared input in zero
+     * runs while claiming it had), a clock reintroduces the time-window
+     * reasoning R-2 deleted outright, and sn_aia_execution_plan state is
+     * turn-scoped rather than conversation-scoped, so closing on it would end
+     * a run while the user is still asking follow-up questions.
+     *
+     * Completeness is DERIVED instead, from x_snc_troubleshoot_audit: the
+     * distinct tool_name set over rows with action_type of result. That
+     * answers the question a status field structurally cannot — DESIGN.md §97,
+     * premature completion is indistinguishable from a genuine finish.
+     *
+     * The remaining choice values on the column belong to the Phase 2 custom
+     * harness. They are deliberately not named here; test/PaRunAnchor.test.js
+     * scans this file for them.
+     */
     DEFAULT_STATUS: 'running',
 
     /**

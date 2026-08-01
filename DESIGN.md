@@ -358,6 +358,49 @@ Superseded is arguably the more expensive of the two: an unapplied ruling leaves
 
 **Assessment, stated plainly.** R-18's premise was too narrow, R-19's ledger walk was one-directional, and R-19a's own edits reintroduced the failure it had just named. Three consecutive processes with a blind spot on first execution — and in each case the blind spot was found by review, not by the process. The honest reading is that a rule written in the same pass as the work it governs does not get applied to that work; the pass is already committed to its own approach by the time the rule is articulated. Rules from this project should be checked against the *next* pass, deliberately, rather than assumed to bind retroactively on the one that produced them.
 
+**R-20 — Native diagnostic runs have no terminal state, by design. (2026-07-31)**
+
+**Raised:** 2026-07-31, at Task 10 (issue #24), settling a gap Task 9 carried forward explicitly.
+
+**Finding.** `PaRunAnchor` creates every run at `status: 'running'` and nothing moves it. This was
+invisible while a run was one REST call long; Task 10 is what makes a run span many tool calls.
+
+**Ruling.** There is no completion path, and this is the contract rather than a gap. The native
+harness emits no end-of-conversation signal, so completion could only be *declared*, and all three
+declarers fail on grounds this project already measured:
+
+- **The agent**, via a terminal tool — R-9 measured the Phase 0 probe agent passing a declared input
+  in **zero** runs while its own reasoning text claimed it had. A terminal tool the agent forgets to
+  call leaves the run open anyway; the failure mode is unchanged but now *looks* deliberate. It also
+  spends one of the platform's 5–7 tool slots on bookkeeping that diagnoses nothing.
+- **A clock** — reintroduces time-window reasoning into the one component where R-2 deleted it
+  outright. R-2 killed time-window *keying* rather than *reaping*, and the distinction is real, but
+  it is subtle enough that a future reader finds a clock inside `PaRunAnchor` and reads it as
+  permission to key on one. The guard R-2 bought was structural; a sweeper spends it.
+- **`sn_aia_execution_plan` state** — the platform does know when work ends, but at **turn**
+  granularity. One conversation spans many plans, one per user turn, so closing on plan-terminal
+  marks a run complete while the user is still mid-conversation — and the PRD explicitly wants
+  follow-up questions inside the same run.
+
+**Change.** Completeness is **derived, never declared**: the distinct `tool_name` set over
+`x_snc_troubleshoot_audit` rows with `action_type='result'` for a run. This is strictly stronger
+than a status field, because §97 already established that premature completion surfaces as
+`completed` and is *indistinguishable from a genuine finish* — a status column answers "did it
+stop?", the audit-derived layer set answers "did it look?", which is the question that matters and
+the one R-3's amendment makes binding for every scored benchmark row.
+
+**Consequences.** `status`, `transcript`, `context_summary`, `fix_report` and `error` are **Phase 2
+(custom harness) columns**, unwritten on the native path; the `queued` / `awaiting_confirmation` /
+`complete` / `failed` vocabulary stays in `tables.now.ts` for Phase 2 but is unreachable in Phase 1a.
+LLD §3.1's status row is corrected in the same PR (R-18c: a ruling naming a document section is a
+work item, not a record). The derived-completeness reader is **Task 11's** deliverable — with a
+two-tool roster it could only ever report 2 of 7 and would be rewritten once Tasks 7–8 land.
+Unkeyed runs now accumulate without closing; accepted, since the alternative is the rejected clock.
+
+**Guard.** `test/PaRunAnchor.test.js` asserts the class exposes no `complete`/`finish`/`close`/
+`setStatus`, and scans the file for the terminal choice values. Re-opening this ruling means
+changing that test, deliberately.
+
 ---
 
 *Next steps agreed in spar: fold changes 2.1–2.4 into `docs/IMPLEMENTATION_PLAN.md` (new collector task; scorecard field; anchor keying rule) and `docs/LOW_LEVEL_DESIGN.md` (§4.6 anchor spec, §7 protocol, §8 items). Drift review after Phase 1a build compares the built system to this record.*
