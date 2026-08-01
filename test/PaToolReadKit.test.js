@@ -16,7 +16,7 @@
  */
 
 const { loadScriptInclude } = require('./_loadScriptInclude')
-const { makeGlideRecordSecure } = require('./_glideStub')
+const { makeGlideRecordSecure, makeQueryingGlideRecordSecure } = require('./_glideStub')
 
 function kitWith(GlideRecordSecure) {
     const ctx = loadScriptInclude('PaToolReadKit.js', { GlideRecordSecure: GlideRecordSecure })
@@ -268,6 +268,77 @@ describe('PaToolReadKit.readOne', () => {
         const read = kit.readOne('syslog', 'x', ['sys_id'], [], kit.newData())
 
         expect(read.status).toBe('DENIED')
+    })
+})
+
+describe('PaToolReadKit.validFields', () => {
+    /** A stub whose isValidField throws on a named field, mid-probe. */
+    function throwingOn(field) {
+        const Stub = makeGlideRecordSecure({ t: [{ sys_id: '1' }] })
+        Stub.prototype.isValidField = function (f) {
+            if (f === field) throw new Error('unavailable')
+            return true
+        }
+        return Stub
+    }
+
+    it('records NOTHING in reads when the probe succeeds', () => {
+        // `ok` means "read succeeded and rows were present" — readRows sets it
+        // only when rows.length > 0. A probe reads no rows, so writing `ok`
+        // from here asserts something it never established, and noteRead only
+        // upgrades, so a later empty read could not correct it.
+        const kit = kitWith(makeGlideRecordSecure({ t: [] }))
+        const data = kit.newData()
+
+        const probe = kit.validFields('t', ['a', 'b'], data)
+
+        expect(probe.status).toBe('ok')
+        expect(data.reads.t).toBeUndefined()
+    })
+
+    it('does not let a successful probe mask a later empty read', () => {
+        const kit = kitWith(makeGlideRecordSecure({ t: [] }))
+        const data = kit.newData()
+
+        kit.validFields('t', ['a'], data)
+        kit.readRows('t', null, ['a'], [], 10, null, data)
+
+        // The table really did return zero rows, and the evidence block has to
+        // say so — an `ok` here would be an absence dressed as data.
+        expect(data.reads.t).toBe('empty')
+    })
+
+    it('records unknown when the probe stops part-way', () => {
+        const kit = kitWith(throwingOn('b'))
+        const data = kit.newData()
+
+        const probe = kit.validFields('t', ['a', 'b', 'c'], data)
+
+        expect(probe.status).toBe('unknown')
+        expect(probe.partial).toBe(true)
+        // Previously this returned early WITHOUT recording anything, so a
+        // consumer checking only for DENIED proceeded on a truncated list.
+        expect(data.reads.t).toBe('unknown')
+    })
+
+    it('reports the candidate list alongside what it confirmed', () => {
+        const kit = kitWith(throwingOn('b'))
+        const probe = kit.validFields('t', ['a', 'b', 'c'], kit.newData())
+
+        // `valid` is a PREFIX on a partial probe, not an answer about all three.
+        expect(probe.valid).toEqual(['a'])
+        expect(probe.probed).toEqual(['a', 'b', 'c'])
+    })
+
+    it('records DENIED when the table cannot be opened at all', () => {
+        // makeHostileStub throws from query(), not from the constructor - a
+        // field probe never calls query(), so the denial has to come from
+        // opening the table, which is what a cross-scope block actually does.
+        const kit = kitWith(makeQueryingGlideRecordSecure({}, { denied: ['syslog'] }))
+        const data = kit.newData()
+
+        expect(kit.validFields('syslog', ['a'], data).status).toBe('DENIED')
+        expect(data.reads.syslog).toBe('DENIED')
     })
 })
 
