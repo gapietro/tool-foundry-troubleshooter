@@ -437,6 +437,66 @@ near-0 score reads as "no tools to look with" rather than "looked and failed." T
 protocol is **blocked on Tasks 7–8** (the remaining five tool cores) and is filed as its own issue —
 **issue #32** — separate from this ruling, since discharging R-21 here does not build those tools.
 
+⚠ **Amended 2026-08-01 by R-22.** R-21's finding 1 and its `layers_available` change both stand. What
+does not stand is what R-21 was recorded alongside: the seed 4 construction it closed **LLD §8 item 8**
+on. That construction rested on R-18's reading of `sys_one_extend_capability_definition.connection`,
+which R-22 refutes. Item 8's safety half stays closed; its efficacy half is re-opened, and seed 4 is
+re-targeted at `api`. Nothing about the seed-*location* decision is affected.
+
+---
+
+**R-22 — A Phase 0 inference from a 10-row sample was contradicted by the full 2026-row table, inside the instrument built to catch exactly that. (2026-08-01)**
+
+**Found:** seed 4's defect was an empty `connection` on its own
+`sys_one_extend_capability_definition`, on R-18's theory that `connection` is *the* provider binding
+and an empty one is therefore precisely the "capability not mapped to a provider" finding. LLD §8
+item 8 was closed on it (R-21), and the previous fix wave hardened every *other* field on the record
+to make `connection` "the only gap". Measured against the whole table on gpinst01, read-only:
+
+| Measurement | Value |
+|---|---|
+| `sys_one_extend_capability_definition` rows | **2026** — R-18 sampled **10** (0.5%); the fix wave then asserted "all 12" |
+| …with `connection` empty | **318 of 2026 (15.7%)**, including shipped OOB Now Assist definitions |
+| `sys_dictionary` — `connection` | `reference` → `sys_alias`, **`mandatory=false`** |
+| `sys_dictionary` — `capability`, `api_type`, `api` | all **`mandatory=true`** |
+
+An empty `connection` is a normal, common, supported state. The hardening had turned the seed into a
+**structural clone of a working OOB definition differing only in an optional field** — a specimen
+that would most likely not fail at all. A benchmark row that measures nothing scores as a miss
+against the diagnostic agent and is indistinguishable from one that measures something, which is the
+worst failure a benchmark has.
+
+**This is the project's own signature failure mode, and it is worth recording in its own right.**
+R-11 retracted a `v_plugin` finding for reading a truncated result as absence; R-6 records the same
+shape. R-18 read 10 rows of 2026 and generalised. The failure then survived a full adversarial fix
+wave — which *tightened* the seed around the wrong field and asserted a false denominator ("all 12
+rows") three times — and was caught only by a second review that re-measured the denominator. The
+instrument being built here exists to catch partial results read as wholes, and it was built with
+one inside it. **A count without its denominator is not a measurement**, and that applies to the
+evidence a ruling is written from, not only to the code it governs.
+
+**Change:**
+
+1. **Seed 4 is re-targeted at a mandatory binding.** `api` now holds
+   `00000000000000000000000000000000` against `api_type=sys_hub_flow` — the definition names a
+   provider integration Flow that does not exist. Justification, same denominator of 2026: `api` is
+   `mandatory=true` and `internal_type=document_id`, so it carries **no referential integrity** and
+   installs verbatim; **1 of 2026 rows (0.05%)** has an empty `api` and **1 of 2026 (0.05%)** has a
+   dangling one (a single OOB profanity-filter row), making it ~300× rarer than an empty
+   `connection` and genuinely anomalous. The all-zeros value is deliberately unmistakable; a
+   plausible random GUID would read as real drift. The rejected alternative — a dangling `capability`
+   reference — is a true `reference` column the platform may validate, and breaking it changes the
+   signature to *capability not found*, which is the documented **fallback**, not the primary.
+2. **`connection` stays empty as a documented decoy.** `benchmark/seeds/seed-04-genai-unmapped.md`
+   now scores a "no connection bound" diagnosis as a correct **layer** with a **0 fix target**, and
+   requires the decoy hit to be recorded in `notes`.
+3. **LLD §8 item 8 is split** — safety CLOSED (it never depended on R-18), efficacy RE-OPENED until a
+   Task 12 run produces the failure. R-21 is annotated accordingly. LLD §8 item 6 carries the
+   sample-size correction at the point R-18's reading originated.
+4. **Standing rule, and it is a reporting rule, not a research one:** state the denominator every
+   time a count is stated, in rulings and in specs alike. "12 rows" and "318 of 2026" are the same
+   sentence shape and only one of them can be checked.
+
 ---
 
 *Next steps agreed in spar: fold changes 2.1–2.4 into `docs/IMPLEMENTATION_PLAN.md` (new collector task; scorecard field; anchor keying rule) and `docs/LOW_LEVEL_DESIGN.md` (§4.6 anchor spec, §7 protocol, §8 items). Drift review after Phase 1a build compares the built system to this record.*
