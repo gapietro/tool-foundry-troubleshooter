@@ -267,14 +267,35 @@ PaToolReadKit.prototype = {
         return row
     },
 
-    /** DENIED is sticky — see the header. */
+    /**
+     * DENIED is sticky — see the header.
+     *
+     * The rest is a strength ordering. `unknown` is the WEAKEST status: it comes
+     * from validFields when the presence check itself was unavailable, and means
+     * "could not tell", not "could not read". Any real read outcome supersedes
+     * it — leaving it in place would report a table as indeterminate when rows
+     * were subsequently read from it, understating access in the one direction
+     * this project keeps getting wrong (R-11: a partial result read as absence).
+     *
+     * Strength: unknown < empty < ok, with DENIED overriding everything.
+     */
     noteRead: function (data, table, status) {
         if (!data || !data.reads) return
         var prior = data.reads[table]
+
         if (prior === 'DENIED') return
-        if (!prior || status === 'DENIED' || (prior === 'empty' && status === 'ok')) {
+        if (status === 'DENIED' || !prior) {
             data.reads[table] = status
+            return
         }
+        if (this._readRank(status) > this._readRank(prior)) data.reads[table] = status
+    },
+
+    _readRank: function (status) {
+        if (status === 'ok') return 3
+        if (status === 'empty') return 2
+        if (status === 'unknown') return 1
+        return 0
     },
 
     noteFieldWarnings: function (data, table, missing) {
