@@ -87,6 +87,55 @@ export const paAuditLogger = ScriptInclude({
 })
 
 /**
+ * PaToolReadKit — the GlideRecordSecure read layer the tool cores share.
+ *
+ * Infrastructure, not a tool core: nothing an agent can call. It exists because
+ * Tasks 7 and 8 add five cores that each need identical read semantics — the
+ * R-6 field-presence assertion, the R-1 no-touch catch, database-side ordering,
+ * sticky DENIED — and five private copies of safety-critical plumbing is five
+ * chances for one to lose a rule quietly.
+ *
+ * PaToolAgentTrace below is deliberately NOT migrated onto it: it is the only
+ * core verified against real sn_aia_* rows, and rewriting its read path to
+ * prove a refactor is risk spent for no diagnostic gain.
+ *
+ * accessibleFrom 'public' for the standing reason (DESIGN.md R-5): a script
+ * tool runs in rhino.global, so the cores are reached from outside this scope.
+ */
+export const paToolReadKit = ScriptInclude({
+    $id: Now.ID['pa-tool-read-kit'],
+    name: 'PaToolReadKit',
+    // Build Rule #29: ONE literal, no `+` concatenation.
+    description: `Agent Doctor infrastructure: the GlideRecordSecure read layer shared by the diagnostic tool cores. readRows and readOne assert every requested field against isValidField so a name the table does not declare is reported rather than read as a blank, apply ordering at the database before setLimit, and record a denial without ever touching the exception object - reading one throws a second time and kills the request. A table denied once stays denied in the read log. Also carries the digest, reference-normalisation and ES5 helpers the cores share.`,
+    active: true,
+    accessibleFrom: 'public',
+    script: Now.include('../server/PaToolReadKit.js'),
+})
+
+/**
+ * PaToolAgentConfig — LLD §4.2, the agent-definition tool core.
+ *
+ * Sweeps diagnostic layers 2 (instructions), 3 (tool definitions) and 7
+ * (trigger and wiring). Read-only, so 'public' carries no modification risk.
+ *
+ * The part to read before editing is the trigger traversal in the .js —
+ * DESIGN.md R-18a. It runs agent -> m2m keyed on related_resource_record and
+ * walks BOTH branches, and the first version of that correction had it
+ * backwards. Walking only the agent-direct branch reports a wired agent as
+ * unwired, and the wrong key returns blanks rather than an error, so nothing
+ * anywhere says the traversal missed.
+ */
+export const paToolAgentConfig = ScriptInclude({
+    $id: Now.ID['pa-tool-agent-config'],
+    name: 'PaToolAgentConfig',
+    // Build Rule #29: ONE literal, no `+` concatenation.
+    description: `Agent Doctor tool core: inspects an AI Agent definition rather than a run. execute(args) takes an agent name or sys_id and an optional section - overview, instructions, tools or triggers, defaulting to all four - and returns the agent record, the full instruction text, the context_processing_script and applicability_script from BOTH the agent and its use cases, every attached tool with its verbatim input schema and script, and the trigger wiring walked from both the agent-direct and team-usecase branches. Scores each tool against the K26 tool-quality checklist as tool_smells, and emits the combined access role set alongside the trigger run-as identity - one set, because no field distinguishes User Access from Data Access. Read-only, GlideRecordSecure throughout.`,
+    active: true,
+    accessibleFrom: 'public',
+    script: Now.include('../server/tools/PaToolAgentConfig.js'),
+})
+
+/**
  * PaToolAgentTrace — LLD §4.1, the first Agent Doctor tool core.
  *
  * accessibleFrom is 'public' deliberately. DESIGN.md R-5 established that an AI

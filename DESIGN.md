@@ -514,4 +514,28 @@ evidence a ruling is written from, not only to the code it governs.
 
 ---
 
+**R-23 — Seven data-model corrections from building `PaToolAgentConfig` against real rows; and §4.2's access-alignment check turns out to be executable on 8% of triggers, not on the ones that fail. (2026-08-01)**
+
+**Found:** the field lists for Task 7 were written from LLD §2.2 and then checked against `sys_dictionary` and against whole-table counts on gpinst01 *before* the tool was wired to anything. Six of the seven would have produced blanks rather than errors (**R-6**), and the seventh changes what the tool is able to claim.
+
+| # | Claim in the spec | Measured on gpinst01, 2026-08-01 |
+|---|---|---|
+| 1 | §2.2: "per-role breakout in `sys_agent_access_role_mapping`" — join field unnamed | The table declares exactly **three** columns: `role`, **`agent_access_config`**, `sys_id`. None of the five names this build first guessed matched, so the entire breakout would have been skipped while `role_list` was reported as the complete picture. 34 rows exist across three `agent_table` values |
+| 2 | §2.2: `sys_agent_access_role_configuration` catalogued by shape only | 8 columns: `name`, `action`, `allow_all_session_roles`, `agent_table`, `agent`, `description`, `role_list`, `sys_id`. There is **no `active`** column, which this build guessed at |
+| 3 | §4.2: the User/Data split "is conventional, carried in free-text `description`" | `description` is **EMPTY on 638 of 703 rows (91%)**. The one signal the split is supposed to travel in is absent from nine rows in ten. `action` is no substitute: **703 of 703** read `Limit To Roles` |
+| 4 | §4.2: "emit the role sets alongside the trigger's `run_as`/`run_as_user` roles, and flag any role the run-as user lacks" | **`run_as` is not a user.** Its dictionary type is `field_name` — it names a FIELD on `target_table` (`caller_id`, `assigned_to`, `employee`), so the identity is whoever sits in that field on the record that fired the trigger. Static `run_as_user` is set on **3 of 36** trigger configurations (8%); the `run_as` field path on **18 of 36** (50%) |
+| 5 | R-18a: branch 2 holds "5 of 6 sampled" m2m rows | Whole table: **38 of 40 (95%)** are `related_resource_table=sn_aia_usecase`, 2 are `sn_aia_agent` |
+| 6 | §2.2: 14 verified fields on `sn_aia_trigger_configuration`, `name` not among them | 30 columns, and **`name` is declared and mandatory** — LLD §4.2 asked for it and §2.2's list did not carry it, so the tool probed for it needlessly. `usecase` and `business_rule` are both labelled **"(deprecated)"** in the dictionary |
+| 7 | §2.2: 14 fields on `sn_aia_agent_tool_m2m` | 28 columns. The **binding carries its own `description`**, distinct from the tool's |
+
+**Item 4 is the one that matters, and it is not a field-name defect.** §4.2's access-alignment check — the automated form of the K26 Lab 1 security-violation diagnosis — is written against `run_as_user`, and `run_as_user` is set on roughly one trigger in twelve. On the other 92% the identity is resolved *per triggering record*, which is precisely the Lab 1 semantic ("the trigger invokes the workflow under the **initiating user's** context") and precisely why the misalignment is invisible from configuration. **A config-time comparison cannot answer the question the check exists to answer.** The tool therefore reports which identity path each trigger uses, compares only the static ones, states the coverage as a fraction, and points at `agent_trace` for the initiating user of a real failing run. A silent "no missing roles" over a 1-in-12 sample would have been the most dangerous output this tool could produce: confident, specific, and blind to the failing case.
+
+**Item 3 compounds it.** R-18a already narrowed the claim from "two verified lists" to "one combined set plus a heuristic". The heuristic's only input is empty 91% of the time, so the honest output is a per-row `gate_attribution` of `UNKNOWABLE` rather than a `description: null` a reader will skim past.
+
+**Why this is a ruling and not seven notes.** Every one of the six field defects was caught by checking `sys_dictionary` *before* wiring the tool up, which is the R-15 method applied deliberately instead of by accident. Had they been left in, each would have produced a working-looking config summary rendered from columns that do not exist — an agent reported as having no access configuration, no trigger name, no per-role breakout. That is this project's signature failure mode for the fourth recorded time (R-11, R-15, R-18a, R-22), and the only reason it did not ship again is that the check is now routine. **Standing rule, cheap: a field list written from a design document is unverified until `sys_dictionary` has been asked. Ask before the code is wired, not after it returns blanks.**
+
+**Change:** applied in the same PR that found them, per R-18c — `docs/LOW_LEVEL_DESIGN.md` §2.2 gains items 1, 2, 6 and 7 and the corrected R-18a denominator; §4.2's access-alignment bullet is corrected for items 3 and 4 with the refuted instruction struck rather than annotated (R-19b). `src/server/tools/PaToolAgentConfig.js` carries all seven, each with the measurement inline, and `test/PaToolAgentConfig.test.js` carries a regression guard per correction — an unguarded correction is one that comes back.
+
+---
+
 *Next steps agreed in spar: fold changes 2.1–2.4 into `docs/IMPLEMENTATION_PLAN.md` (new collector task; scorecard field; anchor keying rule) and `docs/LOW_LEVEL_DESIGN.md` (§4.6 anchor spec, §7 protocol, §8 items). Drift review after Phase 1a build compares the built system to this record.*
