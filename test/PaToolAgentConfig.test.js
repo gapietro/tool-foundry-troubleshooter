@@ -21,6 +21,8 @@
  * set is not evidence about the platform. Those are on-instance checks.
  */
 
+const fs = require('fs')
+const path = require('path')
 const { loadScriptInclude } = require('./_loadScriptInclude')
 const { makeQueryingGlideRecordSecure } = require('./_glideStub')
 
@@ -360,6 +362,38 @@ describe('trigger traversal (R-18a)', () => {
         )
 
         expect(result.data.triggers.wiring_findings.map((f) => f.finding)).toContain(
+            'trigger_traversal_partial'
+        )
+    })
+
+    it('does not call an exactly-full branch truncated', () => {
+        // The mirror of every other finding in this review: a COMPLETE read
+        // reported as partial. rows.length >= limit cannot tell 25-of-25 from
+        // 25-of-many, and the optimistic reading is wrong in one direction
+        // while the pessimistic one is wrong in the other. The kit measures it.
+        const exactly = []
+        for (let i = 0; i < 25; i++) {
+            exactly.push({
+                sys_id: 'm' + i,
+                trigger_configuration: 'trg1',
+                related_resource_table: 'sn_aia_agent',
+                related_resource_record: AGENT,
+                active: 'true',
+            })
+        }
+
+        const { result } = run(
+            { agent: 'Seed Agent', section: 'triggers' },
+            world({
+                sn_aia_trigger_agent_usecase_m2m: exactly,
+                sn_aia_trigger_configuration: [{ sys_id: 'trg1', name: 'T', active: 'true' }],
+            })
+        )
+
+        expect(result.data.triggers.links).toHaveLength(25)
+        expect(result.data.triggers.truncated_at).toEqual({})
+        expect(result.data.triggers.traversal_integrity.complete).toBe(true)
+        expect(result.data.triggers.wiring_findings.map((f) => f.finding)).not.toContain(
             'trigger_traversal_partial'
         )
     })
@@ -846,6 +880,47 @@ describe('access alignment (R-18a — what the tool may claim)', () => {
         expect(access.comparison_note).toMatch(/all-clear/i)
     })
 
+    it('will not claim completed when a single row s role list was clipped', () => {
+        // The requirement set can be a lower bound three ways, and the first
+        // version of the gate consulted only the config-row count. One row
+        // carrying more roles than the per-row ceiling clips the set just as
+        // effectively.
+        const roleList = []
+        for (let i = 0; i < 40; i++) roleList.push('role_' + i)
+
+        const { result } = run(
+            { agent: 'Seed Agent', section: 'triggers' },
+            world({
+                sn_aia_trigger_agent_usecase_m2m: [
+                    {
+                        sys_id: 'l1',
+                        trigger_configuration: 'trg1',
+                        related_resource_table: 'sn_aia_agent',
+                        related_resource_record: AGENT,
+                        active: 'true',
+                    },
+                ],
+                sn_aia_trigger_configuration: [
+                    { sys_id: 'trg1', name: 'T', active: 'true', run_as_user: 'user1' },
+                ],
+                sys_agent_access_role_configuration: [
+                    {
+                        sys_id: 'acc1',
+                        agent: AGENT,
+                        agent_table: 'sn_aia_agent',
+                        role_list: roleList.join(','),
+                    },
+                ],
+                sys_user_has_role: roleList.map((r, i) => ({ sys_id: 'h' + i, user: 'user1', role: r })),
+            })
+        )
+        const access = result.data.triggers.access_alignment
+
+        expect(access.role_rows[0].roles_truncated_at).toBe(20)
+        expect(access.comparison_status).toBe('partial')
+        expect(access.requirements_incomplete_because).toMatch(/per-row ceiling/)
+    })
+
     it('reports the comparison as not possible rather than passing when run-as roles cannot be read', () => {
         const { result } = run({ agent: 'Seed Agent', section: 'triggers' }, withAccess(), {
             denied: ['sys_user_has_role'],
@@ -1178,6 +1253,39 @@ describe('overview', () => {
         expect(result.data.overview.active_tool_count).toBe(1)
         expect(result.data.overview.usecases).toHaveLength(1)
         expect(result.data.overview.strategy).toBe('ReAct')
+    })
+})
+
+describe('truncation is measured, never re-derived from a length', () => {
+    // Round 5 found two of these still in place AFTER the kit fix, and my own
+    // manual sweep missed one because it was written `self.MAX_...` rather than
+    // `this.MAX_...`. A grep I have to remember to run is the same class of
+    // control as a bound I have to remember to report - so it is a test, and it
+    // matches on the property name rather than the receiver.
+    const HEURISTIC = /\.length\s*>=\s*(this|self)?\.?\s*(MAX_[A-Z_]+|limit)\b/
+
+    it('PaToolAgentConfig re-derives it nowhere', () => {
+        const src = fs.readFileSync(
+            path.join(__dirname, '..', 'src', 'server', 'tools', 'PaToolAgentConfig.js'),
+            'utf8'
+        )
+        const offenders = src
+            .split('\n')
+            .map((line, i) => ({ line: line.trim(), n: i + 1 }))
+            .filter((e) => HEURISTIC.test(e.line))
+            .map((e) => e.n + ': ' + e.line)
+
+        // Wrong in BOTH directions: it calls an exactly-full result truncated,
+        // and cannot see a clipped one where no limit was applied.
+        expect(offenders).toEqual([])
+    })
+
+    it('is implemented once, in the kit, where the limit+1 read lives', () => {
+        const kitSrc = fs.readFileSync(
+            path.join(__dirname, '..', 'src', 'server', 'PaToolReadKit.js'),
+            'utf8'
+        )
+        expect(HEURISTIC.test(kitSrc)).toBe(true)
     })
 })
 
