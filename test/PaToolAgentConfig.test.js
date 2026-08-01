@@ -500,8 +500,42 @@ describe('access alignment (R-18a — what the tool may claim)', () => {
         expect(access.permissive_rows).toBe(1)
         expect(access.permissive_note).toMatch(/excluded from the comparison/)
         // The run-as user holds no roles at all, and there must still be no
-        // missing-role finding against a permissive configuration.
-        expect(access.missing_roles).toEqual([])
+        // missing-role finding against a permissive configuration. `null`
+        // rather than `[]`: nothing was required, so no comparison happened —
+        // an empty array would claim one was made and found nothing missing.
+        expect(access.missing_roles).toBeNull()
+        expect(access.comparison_status).toBe('no_requirements')
+        expect(access.comparison_note).toMatch(/NOT an all-clear/)
+    })
+
+    it('does not issue a clean bill of health when nothing was required', () => {
+        // A vacuous pass: with no access rows at all, every comparison is
+        // trivially true, and "every identity holds every role" reads as an
+        // all-clear over nothing checked.
+        const { result } = run(
+            { agent: 'Seed Agent', section: 'triggers' },
+            world({
+                sn_aia_trigger_agent_usecase_m2m: [
+                    {
+                        sys_id: 'l1',
+                        trigger_configuration: 'trg1',
+                        related_resource_table: 'sn_aia_agent',
+                        related_resource_record: AGENT,
+                        active: 'true',
+                    },
+                ],
+                sn_aia_trigger_configuration: [
+                    { sys_id: 'trg1', name: 'T', active: 'true', run_as_user: 'user1' },
+                ],
+                sys_agent_access_role_configuration: [],
+            })
+        )
+        const access = result.data.triggers.access_alignment
+
+        expect(access.comparison_status).toBe('no_requirements')
+        expect(access.required_role_count).toBe(0)
+        expect(access.comparison_note).toMatch(/No access configuration rows exist/)
+        expect(access.comparison_note).toMatch(/NOT an all-clear/)
     })
 
     it('still requires roles from a row that does not allow all session roles', () => {
@@ -680,6 +714,35 @@ describe('access alignment (R-18a — what the tool may claim)', () => {
         expect(access.users_not_comparable).toBe(1)
     })
 
+    it('says so when access configuration rows hit their ceiling', () => {
+        // The same silent-cap defect round 1 fixed for the trigger traversal,
+        // recurring here - and it bites harder, because a truncated role set
+        // feeds required_role_count, so silence understates what is required
+        // and an identity can be reported as holding every role it needs while
+        // missing one that was never read.
+        const many = []
+        for (let i = 0; i < 60; i++) {
+            many.push({
+                sys_id: 'acc' + i,
+                agent: AGENT,
+                agent_table: 'sn_aia_agent',
+                role_list: 'role_itil',
+            })
+        }
+
+        const { result } = run(
+            { agent: 'Seed Agent', section: 'triggers' },
+            world({
+                sys_agent_access_role_configuration: many,
+                sys_user_role: [{ sys_id: 'role_itil', name: 'itil' }],
+            })
+        )
+        const access = result.data.triggers.access_alignment
+
+        expect(access.role_rows_truncated_at).toBe(50)
+        expect(access.truncation_note).toMatch(/LOWER BOUND/)
+    })
+
     it('reports the comparison as not possible rather than passing when run-as roles cannot be read', () => {
         const { result } = run({ agent: 'Seed Agent', section: 'triggers' }, withAccess(), {
             denied: ['sys_user_has_role'],
@@ -688,6 +751,53 @@ describe('access alignment (R-18a — what the tool may claim)', () => {
 
         expect(access.comparison_status).toBe('not_possible')
         expect(access.missing_roles).toBeNull()
+    })
+})
+
+describe('a shared name is not a relationship', () => {
+    /** An agent and an UNRELATED use case that happen to share a name. */
+    function collision() {
+        return world({
+            sn_aia_usecase: [
+                // Reachable from the agent's team - genuinely this agent's.
+                { sys_id: USECASE, name: 'Seed Usecase', team: TEAM },
+                // Same name as the agent, different team, no relationship.
+                { sys_id: 'other', name: 'Seed Agent', team: 'other_team' },
+            ],
+            sn_aia_trigger_agent_usecase_m2m: [
+                {
+                    sys_id: 'l1',
+                    trigger_configuration: 'trg1',
+                    related_resource_table: 'sn_aia_usecase',
+                    related_resource_record: 'other',
+                    active: 'true',
+                },
+            ],
+            sn_aia_trigger_configuration: [{ sys_id: 'trg1', name: 'Someone elses trigger', active: 'true' }],
+        })
+    }
+
+    it('does not attribute a name-matched use case to the agent', () => {
+        const { result } = run({ agent: 'Seed Agent', section: 'triggers' }, collision())
+
+        // The use case matched only because it shares the agent's name. Pulling
+        // it in would attribute another use case's trigger wiring to this agent.
+        expect(result.data.triggers.usecases_walked).toEqual([USECASE])
+        expect(result.data.triggers.links).toEqual([])
+        expect(result.data.triggers.branches.team_usecase_chain).toBe(0)
+    })
+
+    it('reports the name collision instead of silently dropping it', () => {
+        const { result } = run({ agent: 'Seed Agent', section: 'triggers' }, collision())
+
+        expect(result.data.resolution.name_collision_usecases.map((u) => u.sys_id)).toEqual(['other'])
+        expect(result.data.resolution.note).toMatch(/a shared name is not a relationship/)
+    })
+
+    it('still anchors on the use cases when the use case IS the anchor', () => {
+        // In use-case mode the matched rows are the anchor, not a collision.
+        const { result } = run({ agent: 'Seed Usecase', section: 'triggers' }, world())
+        expect(result.data.triggers.usecases_walked).toContain(USECASE)
     })
 })
 
