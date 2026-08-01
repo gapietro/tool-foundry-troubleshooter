@@ -11,6 +11,59 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.07.3110 — 2026-07-31
+
+Phase 1a vertical slice, **Task 9**: `PaScriptToolAdapter` + the `read_artifact` tool core
+(LLD §4.7) — the bridge an AI Agent script tool calls to reach a diagnostic tool core. Scoped
+to **two** wrappers, `agent_trace` and `read_artifact`, rather than the plan's seven: it is the
+smallest set that makes the Task 10 panel smoke test answerable, and the other five need cores
+that do not exist yet.
+
+**The defect this task existed to close.** `PaArtifactStore.MAX_PAGE_CHARS` is 4000 and
+`THRESHOLD_CHARS` is also 4000, so a full page *plus its envelope* always exceeds the threshold.
+Routed through `applyThreshold` like any other result, `read_artifact` would have stored every
+page as a **new** attachment and returned an excerpt of it — paging that pages, with the agent no
+closer to the content on each call, and nothing anywhere reporting a problem. The exemption is a
+`PAGED_OUTPUT: true` flag declared on the tool core rather than in the Fluent wrapper literal,
+because a wrapper literal is a string no unit test can reach.
+
+Closed by measurement on gpinst01, not by argument: a real trace of **26,847 chars** stored as
+**one** attachment (`1f1a63a7…bf91`) and paged back in seven calls — 6×4000 + 2847 — reassembling
+to exactly 26,847, with the joins landing mid-word and mid-sys_id. The attachment counter never
+advanced past 1, which is the falsifier that matters.
+
+**Tools resolve by NAME against a closed factory map**, deviating from LLD §4.7's
+`invoke(toolClassName, …)`. The first argument originates in a tool-script literal and beyond
+that in whatever the platform hands the wrapper, so resolving an arbitrary class by string is a
+code-execution surface. The map is an allowlist, errors cleanly on a typo, and its key is the
+same string written to `x_snc_troubleshoot_audit.tool_name` — registry and audit trail cannot
+drift apart.
+
+**A bare string reaches the tool core completely untouched, whitespace included** (LLD §4.7
+Note 4). The plan originally trimmed it; that was reversed mid-build. Wrapping a bare string as
+`{value: s}` — the older, superseded reading — produces an args object with none of the keys the
+cores read, so `PaToolAgentTrace` falls through to its recent-plan pick-list and **silently
+discards the caller's request**. Trimming is milder but the same class of liberty: the core owns
+normalisation, and the adapter does not second-guess it.
+
+**Run-anchor degradation is surfaced to the agent** as `run: {degraded, note}` — an addition
+beyond LLD §4.7. `PaArtifactStore` and `PaAuditLogger` both tolerate a degraded anchor quietly,
+so without this the agent would never learn that the evidence trail behind its diagnosis was not
+durable. The findings stay valid; the difference has to be stated rather than inferred (R-10).
+
+**Containment.** `invoke()` returns a String on every path including every failure path, and a
+caught exception is never read — a `phase` variable localises failures instead (R-1). The tests
+enforce it with a fake whose `.message` getter throws, which is the shape a
+`ScopeAccessNotGrantedException` presents: any future edit that reads `e.message` fails the suite
+rather than 500-ing on an instance weeks later.
+
+**Known gaps, deliberately carried to Task 10.** `PaRunAnchor` has no run-completion path, so
+every run sits at `status: "running"` — invisible while a run is one call long, load-bearing the
+moment the wrapper makes a run span calls. The four `/scope_probe` routes are ungated and
+write-capable, held back only by a source comment, and are removed with the Task 10 agent.
+`_stringify` guards `undefined` but not every non-string `JSON.stringify` return. An unknown tool
+name leaves no trace anywhere, so an agent hallucinating a tool name is currently invisible.
+
 ## 2026.07.3109 — 2026-07-31
 
 Phase 1a vertical slice, **Task 5**: `PaRunAnchor` + `PaAuditLogger` (LLD §4.6). Every artifact
