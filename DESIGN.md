@@ -123,6 +123,8 @@ Stated plainly: these are **single samples per instance**. The qualitative findi
 **Found:** LLD §5 record 17 instructs "no custom `context_processing_script` (verified failure vector — keep ours empty)". Creating an `sn_aia_agent` with the field simply omitted did **not** leave it empty — the platform populated it with a default template script. `applicability_script` was likewise auto-populated, with a body ending in `return false;`. This matters because the instance's known reference failure (`78f347b7…`, LLD §1) has its root cause in a `context_processing_script` throwing at line 61 — i.e. the exact field class we intended to avoid arrives populated by default.
 **Change:** LLD §5's instruction is not implementable as written and must be restated: the field must be **explicitly cleared after creation** if an empty value is genuinely wanted, and the Foundry automation that creates the agent record set must do that clearing and verify it. "Omit the field" is not a control. Also worth folding into the design: the auto-populated script's own signature documents that `task`, `user_utterance`, `agent_id` and `context` (`pageContext`, `triggerContext`) are available at that hook — a different and better-documented surface than the script-tool runtime context of R-2.
 
+**AMENDED 2026-07-31 (gpinst01, Task 10, issue #24) — HALF-REFUTED, and the field lives on the wrong record in LLD §5.** Building the real Agent Doctor `sn_aia_agent` on Fluent and reading the installed record back split this ruling's two auto-population claims. `applicability_script` — the **dangerous** half, the claim that auto-populated bodies end in `return false;` and silently suppress the agent — came back **EMPTY**. That half is **refuted**. `context_processing_script` came back **auto-populated at 2,124 characters** of platform boilerplate: a comment block followed by a no-op pass-through returning `{ pageContext: context?.pageContext, triggerContext: context?.triggerContext }`. That half — that Fluent omission does not leave the field empty — is **confirmed**. It was deliberately **left uncleared**: clearing an unverified field immediately before the one test that had to work would have put three candidate causes (agent broken / anchor broken / cleared context) behind any failed smoke test, with no way to attribute the failure. That script is also what forwards context into the agent — `PaRunAnchor` keys every run on `_agentic_context_.conversation_id` — so test first, decide after. The smoke test then **passed** with the boilerplate in place, `_agentic_context_` propagation included (16 audit rows resolved to one run). It remains uncleared and the question is **OPEN**, with a follow-up filed to decide whether to clear it now that a passing baseline exists. **Note for LLD §5 row 17:** the populated field was found on **`sn_aia_agent`**, not on `sn_aia_usecase`, which is where row 17 places it — this branch built no usecase at all, so row 17's own subject does not yet exist on the instance.
+
 **R-8 — MCP reconnaissance understates in-instance access; REST denial is not an ACL denial. (2026-07-30)**
 **Found:** `sn_aia_tools_execution` reads **OK** via `GlideRecordSecure` from inside the running script tool, but is **denied to the same admin user over the REST API** (`servicenow_query` → "Access denied: Insufficient rights to query records"). The denial is an API-layer restriction, not a table ACL.
 **Change, methodological and binding on the remaining verification items:** an MCP/REST probe result may **not** be used as a proxy for what an in-instance tool can read. A REST denial is evidence of nothing about tool-runtime access and must be re-tested in-instance before any capability is written off. This cuts both ways: it is an argument *for* the in-instance design (the tools can see more than the recon suggested), and a caution that Phase 0's read-only reconnaissance systematically **understates** available access. Any Phase 1a decision that turns on "table X is unreadable" must cite an in-instance test, not an MCP result.
@@ -357,6 +359,49 @@ Superseded is arguably the more expensive of the two: an unapplied ruling leaves
 **Second rule, cheaper and duller:** before inventing a notation for superseded text, check what the repo already uses. R-19a invented a banner; `~~strikethrough~~` was already the house convention in the very file being edited.
 
 **Assessment, stated plainly.** R-18's premise was too narrow, R-19's ledger walk was one-directional, and R-19a's own edits reintroduced the failure it had just named. Three consecutive processes with a blind spot on first execution — and in each case the blind spot was found by review, not by the process. The honest reading is that a rule written in the same pass as the work it governs does not get applied to that work; the pass is already committed to its own approach by the time the rule is articulated. Rules from this project should be checked against the *next* pass, deliberately, rather than assumed to bind retroactively on the one that produced them.
+
+**R-20 — Native diagnostic runs have no terminal state, by design. (2026-07-31)**
+
+**Raised:** 2026-07-31, at Task 10 (issue #24), settling a gap Task 9 carried forward explicitly.
+
+**Finding.** `PaRunAnchor` creates every run at `status: 'running'` and nothing moves it. This was
+invisible while a run was one REST call long; Task 10 is what makes a run span many tool calls.
+
+**Ruling.** There is no completion path, and this is the contract rather than a gap. The native
+harness emits no end-of-conversation signal, so completion could only be *declared*, and all three
+declarers fail on grounds this project already measured:
+
+- **The agent**, via a terminal tool — R-9 measured the Phase 0 probe agent passing a declared input
+  in **zero** runs while its own reasoning text claimed it had. A terminal tool the agent forgets to
+  call leaves the run open anyway; the failure mode is unchanged but now *looks* deliberate. It also
+  spends one of the platform's 5–7 tool slots on bookkeeping that diagnoses nothing.
+- **A clock** — reintroduces time-window reasoning into the one component where R-2 deleted it
+  outright. R-2 killed time-window *keying* rather than *reaping*, and the distinction is real, but
+  it is subtle enough that a future reader finds a clock inside `PaRunAnchor` and reads it as
+  permission to key on one. The guard R-2 bought was structural; a sweeper spends it.
+- **`sn_aia_execution_plan` state** — the platform does know when work ends, but at **turn**
+  granularity. One conversation spans many plans, one per user turn, so closing on plan-terminal
+  marks a run complete while the user is still mid-conversation — and the PRD explicitly wants
+  follow-up questions inside the same run.
+
+**Change.** Completeness is **derived, never declared**: the distinct `tool_name` set over
+`x_snc_troubleshoot_audit` rows with `action_type='result'` for a run. This is strictly stronger
+than a status field, because §97 already established that premature completion surfaces as
+`completed` and is *indistinguishable from a genuine finish* — a status column answers "did it
+stop?", the audit-derived layer set answers "did it look?", which is the question that matters and
+the one R-3's amendment makes binding for every scored benchmark row.
+
+**Consequences.** `status`, `transcript`, `context_summary`, `fix_report` and `error` are **Phase 2
+(custom harness) columns**, unwritten on the native path; the `queued` / `awaiting_confirmation` /
+`complete` / `failed` vocabulary stays in `tables.now.ts` for Phase 2 but is unreachable in Phase 1a.
+LLD §3.1's status row is corrected in the same PR (R-18c: a ruling naming a document section is a
+work item, not a record). The derived-completeness reader is **Task 11's** deliverable — with a
+two-tool roster it could only ever report 2 of 7 and would be rewritten once Tasks 7–8 land.
+Unkeyed runs now accumulate without closing; accepted, since the alternative is the rejected clock.
+
+**Guard.** `test/PaRunAnchor.test.js` asserts the class exposes no `complete`/`finish`/`close`/
+`setStatus`, and scans the file for the terminal choice values. Re-opening this ruling means
+changing that test, deliberately.
 
 ---
 

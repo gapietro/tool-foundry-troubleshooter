@@ -11,6 +11,138 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.07.3111 — 2026-07-31
+
+Phase 1a vertical slice, **Task 10**: Agent Doctor as a Fluent `AiAgent`
+(`src/fluent/agent-doctor.now.ts`), wired to the two script tools built in Task 9 —
+`agent_trace` and `read_artifact` — with its instruction document at
+`docs/agent/agent-doctor-instructions.md`. This is the first time any of the server-side
+components built across this slice have been driven by an actual agent rather than a probe
+route or a unit test.
+
+**The run-completion contract, new ruling R-20.** Native diagnostic runs have no terminal
+state, and that is by design, not an oversight. The native harness emits no
+end-of-conversation signal, so completion could only ever be *declared* by something inside
+the system, and all three candidates fail on grounds already measured earlier in this slice.
+The agent itself is unreliable as a declarer — R-9's Phase 0 probe caught it passing a
+declared input in zero runs while its own reasoning trace claimed it had. A clock is out
+because it reintroduces the time-window reasoning R-2 deleted outright. And
+`sn_aia_execution_plan` state is scoped to a single turn, not to a conversation, so closing a
+run on it would end the run while the user is still asking follow-up questions — which the
+PRD explicitly wants to support. Completeness is instead **derived**, not declared: read from
+`x_snc_troubleshoot_audit`, as the distinct set of `tool_name` values recorded under
+`action_type='result'`. That answers the harder question the design doc poses — a run that
+stopped early is indistinguishable from one that genuinely finished — which a status column
+is structurally incapable of answering, since it can only report what it was last told.
+Consequence: `status`, `transcript`, `context_summary`, `fix_report`, and `error` are Phase 2
+(custom harness) columns and stay unwritten on the native path; LLD §3.1's status-row
+description was corrected in this same PR to say so. A guard test fails the suite if anyone
+adds a completion-declaring code path in the future.
+
+**Task 3 was never built, and that surfaced here.** `docs/agent/` did not exist anywhere in
+git history. The Phase 1a build brief scoped the slice to Tasks 2, 4, 5, 9, and 10, and
+silently dropped Task 3 — but Task 10's `instructions` property was specified as depending on
+"the Task 3 native rendering", a document that had never been written. Resolved by writing
+the native rendering scoped to the two tools that actually exist, `agent_trace` and
+`read_artifact`, rather than the full seven-tool roster the design assumes. The
+harness-neutral `playbook.md` stays deferred to Tasks 7–8, where the remaining tool cores get
+built.
+
+**Build Rule #43's backtick corollary reaches `instructions`, not just `script`.**
+`instructions` is a Fluent backtick template exactly like a tool's `script`, so a markdown
+code span inside it closes the template early and produces the same misdirecting cluster of
+errors — TS2796, TS304, TS20 — at line numbers scattered across the file rather than at the
+offending backtick. The instruction document was therefore written with no backtick, no
+`${`, and no two-character backslash-n escape anywhere: table names appear bare in prose
+instead of in code spans, and the Fix Report template uses indentation rather than fenced code
+blocks. Three Jest tests enforce all three constraints so a future edit can't reintroduce
+them. Worth flagging: `.claude/context/sdk-reference.md`'s Rule #43 currently documents this
+failure mode for `script` templates only — the text should be broadened, since `instructions`
+is exposed to exactly the same TypeScript-consumes-the-escape mechanism.
+
+**The live results on gpinst01 — the actual point of building the slice.** Reported plainly,
+including what didn't go as designed:
+
+- Install was clean, and produced exactly two `sn_aia_tool` records and two
+  `sn_aia_agent_tool_m2m` rows with names matching the Fluent definitions — Build Rule #34's
+  silent-tool-skip-on-missing-description defect did not fire here.
+- The panel smoke test found the seeded defect. Agent `601672d3…`,
+  `context_processing_script`, line 42, `InternalError` — against a specimen whose failure is
+  invisible from the plan header alone: `state=Completed`, `state_reason` empty, all 11 tasks
+  and all 5 tool calls reporting `Success`. The defect only shows up once something reads past
+  the header.
+- The agent correctly reported layers 2–7 as **not swept**, per its instructions, and gave a
+  per-layer table showing what it had and hadn't looked at.
+- **`_agentic_context_` is present on the Now Assist panel path.** 16 audit rows all resolved
+  to one run (`TR1000032`). R-2's earlier closure on this point was explicitly
+  API-path-provisional — it had only ever been observed via `servicenow_aia_execute` — and the
+  build brief required re-confirming it before the benchmark work in Task 11 could rely on it.
+  It is now confirmed on the panel path too.
+- Artifact paging held under a real invocation. One attachment, 26,871 bytes; one
+  `agent_trace` call; seven `read_artifact` calls at offsets 0, 4000, 8000 … 24000. Task 9's
+  paging-that-pages defect stayed closed at the first real agent-driven call, not just in the
+  measured probe.
+- `sn_aia_message.role` vocabulary is confirmed as `user_profile` / `user` / `agent`, with
+  `history` defined on the table but unused in practice — a check DESIGN.md §78 records as
+  never having been performed before this task.
+
+**Two findings from the live run that must not be smoothed over.**
+
+R-7 came back half-refuted. `applicability_script` was empty on the installed agent, which is
+the dangerous field — the one where an auto-populated `return false;` silently suppresses
+everything — and it is clean. But `context_processing_script` *was* auto-populated, with
+2,124 characters of platform boilerplate: a comment block followed by a no-op pass-through
+returning `{ pageContext: context?.pageContext, triggerContext: context?.triggerContext }`.
+The plan called for clearing it. The ruling was not to, at least not before the smoke test,
+because that script is what forwards context into the agent, and `PaRunAnchor` keys every
+run on `_agentic_context_.conversation_id` — clearing an unverified field first would have put
+three candidate causes behind any smoke-test failure with no way to tell them apart. It
+remains uncleared on the instance and the question is open.
+
+Second, the agent found the right answer and ranked it second. It produced three candidate
+root causes and marked only the layer-1-observable one CONFIRMED, correctly labelling the
+line-42 script error UNCONFIRMED — which is exactly what the instructions require, since
+confirming a script error needs a Layer 2 tool the agent doesn't have yet. But it gave a
+self-generated tool-input-schema narrative primary billing over the correct finding, which the
+instructions never asked it to do. The instruction document specifies how to *label*
+confidence but says nothing about how to *rank* candidates against each other. This was
+deliberately left untuned: with n=1, tuning the instructions against the single specimen we
+also test against overfits to that specimen and mildly contaminates the blind-run protocol
+§2.4 depends on. Task 11's 5-seeds-by-2-runs benchmark will say whether the mis-ranking is
+systematic or a one-off.
+
+**Access findings worth recording for later tasks.** Both `sn_aia_message` and
+`sn_aia_version` are ACL-denied on gpinst01 even to admin — the same restriction class already
+known for `sys_generative_ai_log`. Verification for this task read `sys_cs_message` and
+`sys_choice` instead. Practically, this means the plan's step to read the published version
+record directly is not reachable as written on this instance.
+
+**`max_auto_executions` deliberately left unset, a knowing deviation from LLD §5.** The row for
+rows 9–15 says to set it explicitly rather than accept the dictionary default of 10; Agent
+Doctor's Fluent definition does the opposite on purpose. The tool bindings take the dictionary
+default, so the instance this branch benchmarks against is the same one a default-configured
+customer would have, rather than a value tuned to whatever this build needed. R-4's actual
+requirement was never that this agent pin a budget — it was that Task 11's scorecard **read and
+record** both budget knobs at run time, `sn_aia.continuous_tool_execution_limit` and
+`sn_aia_agent_tool_m2m.max_auto_executions`, so a transferability claim can be checked rather
+than assumed. Pinning a raised value here would reproduce exactly the problem R-4 was filed
+against — the Phase 0 probe's 19-call result was reachable only because its own
+`max_auto_executions` was set to 20 against an instance-typical 10. The decision lived only in
+an untracked execution ledger until now; the LLD row carries the same note.
+
+**Cleanup.** The four temporary `/scope_probe` routes are gone — all four now return 400, and
+`/reads` is the one route that survives. They were removed in a separate commit *after* the
+smoke test passed, specifically so a smoke-test failure could have been bisected against the
+probe routes still being present, rather than against the tool cores themselves.
+
+**Known gaps carried forward.** `playbook.md` (Tasks 7–8); the five remaining tool cores and
+their wrappers; the derived-completeness "layers swept" reader (Task 11); the `log_analysis`
+roster decision, still open and now explicitly deferred to Task 8 because
+`PaToolLogAnalysis` has no core yet to include or exclude it against; and one minor
+test-hardening item — the guard tests strip comments with a regex that isn't string-aware, so
+it's currently unreachable but would weaken the `Now.ref` guard if a `//` ever appeared inside
+a string literal on a line that also carried a real `Now.ref(` call.
+
 ## 2026.07.3110 — 2026-07-31
 
 Phase 1a vertical slice, **Task 9**: `PaScriptToolAdapter` + the `read_artifact` tool core

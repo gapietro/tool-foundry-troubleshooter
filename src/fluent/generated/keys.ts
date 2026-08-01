@@ -29,6 +29,14 @@ declare global {
                         table: 'sys_security_acl'
                         id: 'd9f189d4511546fdbcc03fae8da4a7dd'
                     }
+                    'agent-doctor': {
+                        table: 'sn_aia_agent'
+                        id: 'e1392946828940e5a708fc51b0a5e954'
+                    }
+                    'agent-doctor-acl': {
+                        table: 'sys_security_acl'
+                        id: 'ef1f815d97a0431e8b87f4a055ba5b3d'
+                    }
                     bom_json: {
                         table: 'sys_module'
                         id: 'cfd6e48922964e20ade700d69db34931'
@@ -72,10 +80,12 @@ declare global {
                     'scope-probe-adapter': {
                         table: 'sys_ws_operation'
                         id: '41e02cdf0a3f40aba13d2e4f4a71178a'
+                        deleted: true
                     }
                     'scope-probe-anchor-selftest': {
                         table: 'sys_ws_operation'
                         id: '89ad8ce31da841608b1514bc1644b3a7'
+                        deleted: true
                     }
                     'scope-probe-api': {
                         table: 'sys_ws_definition'
@@ -84,6 +94,7 @@ declare global {
                     'scope-probe-artifact-selftest': {
                         table: 'sys_ws_operation'
                         id: '1fc74db242f84cc79c489e4a72c6ec35'
+                        deleted: true
                     }
                     'scope-probe-reads': {
                         table: 'sys_ws_operation'
@@ -92,6 +103,7 @@ declare global {
                     'scope-probe-trace': {
                         table: 'sys_ws_operation'
                         id: '074e8ea6df954aeb9a92cc93f586b790'
+                        deleted: true
                     }
                     'scope-probe-v1': {
                         table: 'sys_ws_version'
@@ -137,6 +149,15 @@ declare global {
                         key: {
                             name: 'x_snc_troubleshoot_run'
                             element: 'harness'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_agent_tool_m2m'
+                        id: '0154a35691fd416a8364bcab414fd5a9'
+                        key: {
+                            agent: 'e1392946828940e5a708fc51b0a5e954'
+                            tool: '387983889a1845e8ac55829bef5b238e'
+                            name: 'agent_trace'
                         }
                     },
                     {
@@ -323,6 +344,13 @@ declare global {
                         }
                     },
                     {
+                        table: 'sn_aia_tool'
+                        id: '387983889a1845e8ac55829bef5b238e'
+                        key: {
+                            name: 'agent_trace'
+                        }
+                    },
+                    {
                         table: 'sys_dictionary'
                         id: '3faf6ce2337f4a788e65d7775f455c59'
                         key: {
@@ -364,6 +392,13 @@ declare global {
                         id: '43ebe4750f814df2ad0b015099662199'
                         key: {
                             name: 'x_snc_troubleshoot_run'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_agent_config'
+                        id: '4874f8bc13c94fa9a70dae46abc8ba1e'
+                        key: {
+                            agent: 'e1392946828940e5a708fc51b0a5e954'
                         }
                     },
                     {
@@ -629,6 +664,22 @@ declare global {
                         }
                     },
                     {
+                        table: 'sn_aia_agent_tool_m2m'
+                        id: '9fb95833fdb24cfcaaad91cf0d756330'
+                        key: {
+                            agent: 'e1392946828940e5a708fc51b0a5e954'
+                            tool: 'a0716c5ad77f42c29e1420b7f9009bda'
+                            name: 'read_artifact'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_tool'
+                        id: 'a0716c5ad77f42c29e1420b7f9009bda'
+                        key: {
+                            name: 'read_artifact'
+                        }
+                    },
+                    {
                         table: 'sys_documentation'
                         id: 'a21fd9a9cbe34fffb0160f84de1768f1'
                         key: {
@@ -792,6 +843,14 @@ declare global {
                         key: {
                             name: 'x_snc_troubleshoot_run'
                             element: 'context_summary'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_version'
+                        id: 'e710ed445e8b42409684b1d1b50b3cee'
+                        key: {
+                            target_id: 'e1392946828940e5a708fc51b0a5e954'
+                            version_name: 'V1'
                         }
                     },
                     {
