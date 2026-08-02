@@ -515,4 +515,46 @@ describe('PaFixReport.repairPrompt', () => {
         expect(() => fx.repairPrompt(null, null)).not.toThrow()
         expect(() => fx.repairPrompt({}, [])).not.toThrow()
     })
+
+    // Fix round (issue #64/#65): live-caught on gpinst01 — a model that
+    // perfectly fixes every structural problem on repair still failed,
+    // because the repair prompt never told it to keep the
+    // {"action":"fix_report","report":{...}} envelope PaLlmProxy.reason()
+    // unconditionally requires. This is the instruction that closes that
+    // gap.
+    test('contains the response envelope instruction, not just the bare report shape', () => {
+        const fx = load()
+
+        const prompt = fx.repairPrompt({}, ['some problem'])
+
+        expect(prompt).toEqual(expect.stringContaining('{"action":"fix_report","report":'))
+        expect(prompt).toEqual(expect.stringContaining('Do not return the report object by itself'))
+    })
+})
+
+// ===========================================================================
+// schemaText — single-sourced schema prose (fix round, issue #64/#65):
+// PaAgentLoop's own fix_report contract block reads this SAME method, so the
+// required JSON key names are authored in exactly one place rather than
+// copied by hand into two prompts that can drift apart.
+// ===========================================================================
+
+describe('PaFixReport.schemaText', () => {
+    test('is public and mentions every required top-level field', () => {
+        const fx = load()
+
+        const text = fx.schemaText()
+
+        ;['failure_summary', 'layers_swept', 'root_causes', 'fixes', 'verification', 'data_markers'].forEach(
+            (field) => {
+                expect(text).toEqual(expect.stringContaining(field))
+            }
+        )
+    })
+
+    test('is what repairPrompt embeds verbatim under "Required schema:"', () => {
+        const fx = load()
+
+        expect(fx.repairPrompt({}, ['x'])).toEqual(expect.stringContaining(fx.schemaText()))
+    })
 })

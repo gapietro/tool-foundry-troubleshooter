@@ -304,8 +304,22 @@ PaFixReport.prototype = {
      * @param {*} report the invalid draft (whatever was passed to validate()).
      * @param {Array} problems the `problems` array validate() returned.
      * @returns {String} the problems verbatim + the required schema + the
-     *          literal instruction to return corrected JSON only. PaAgentLoop
-     *          sends this through PaLlmProxy.reason() for exactly one retry.
+     *          literal instruction to return corrected JSON only, WRAPPED in
+     *          the `{"action":"fix_report","report":{...}}` response
+     *          envelope. PaAgentLoop sends this through PaLlmProxy.reason()
+     *          for exactly one retry.
+     *
+     * ENVELOPE INSTRUCTION — fix round, issue #64/#65 (live-caught on
+     * gpinst01, Task 7 Step 4). Every earlier version of this prompt asked
+     * only for "the corrected fix_report JSON" — the report object alone.
+     * `PaLlmProxy.reason()` parses EVERY response, repair or not, against its
+     * own strict `{"action":...}` contract (`_parseResponse`), so a model
+     * that dutifully returns the bare (even perfectly corrected) report
+     * object fails at THAT layer with "missing action key" — 3/3 live runs
+     * against the Task 12 smoke specimen reproduced exactly this: the model
+     * fixed every structural problem on repair, and the repair still failed,
+     * because the prompt never told it to keep the envelope. The instruction
+     * below is what closes that gap.
      */
     repairPrompt: function (report, problems) {
         var probs = this._isArray(problems) ? problems : []
@@ -322,19 +336,30 @@ PaFixReport.prototype = {
         }
         lines.push('')
         lines.push('Required schema:')
-        lines.push(this._schemaText())
+        lines.push(this.schemaText())
         lines.push('')
         lines.push('Previous draft:')
         lines.push(this.renderJson(report))
         lines.push('')
         lines.push(
-            'Return the corrected fix_report JSON only — no prose, no markdown fence, matching the schema exactly.'
+            'Respond with exactly one JSON object and nothing else — no prose, no markdown fence — wrapping the ' +
+                'corrected report in the required response envelope: {"action":"fix_report","report":{...corrected ' +
+                'report matching the schema above...}}. Do not return the report object by itself: the caller ' +
+                'only accepts a fix_report submission wrapped in that envelope, exactly like every other action.'
         )
 
         return lines.join('\n')
     },
 
-    _schemaText: function () {
+    /**
+     * The fix_report JSON schema, in prose — the single source both
+     * `repairPrompt` (above) and `PaAgentLoop`'s own first-attempt contract
+     * block read from, so the required field names are authored in exactly
+     * ONE place. Public (not `_schemaText`) precisely because it now has a
+     * second caller outside this file (fix round, issue #64/#65) — see
+     * PaAgentLoop.js's `_fixReportContract`/`_safeSchemaText`.
+     */
+    schemaText: function () {
         var defs = this._layerDefs()
         var layerList = []
         for (var i = 0; i < defs.length; i++) {

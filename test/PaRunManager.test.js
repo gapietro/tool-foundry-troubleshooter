@@ -689,6 +689,102 @@ describe('collectBundle', () => {
         expect(traceCall.args.execution).toBeUndefined()
     })
 
+    // -----------------------------------------------------------------------
+    // Truncated-envelope handling (review fix round, issue #64/#65) — a
+    // truncated PaToolRegistry.dispatch result (PaArtifactStore.applyThreshold)
+    // has NO `.data` key at all: {success, truncated:true, tool, total_length,
+    // artifact_id, page_size, pages, excerpt, note}. Before this fix, reading
+    // `result.data` off it was `undefined`, and every pick() silently returned
+    // null — indistinguishable from "genuinely nothing here" even though the
+    // real content exists, paged, behind `artifact_id`. Live-caught on
+    // gpinst01, Task 7 Step 4: `mode:"collect"` against a real execution
+    // returned `data: null` for layers 1/2/3/6/7.
+    // -----------------------------------------------------------------------
+
+    test('a truncated dispatch result carries the artifact reference as the layer data, not null', () => {
+        const registry = fakeRegistry({
+            agent_trace: {
+                success: true,
+                truncated: true,
+                tool: 'agent_trace',
+                total_length: 5874,
+                artifact_id: 'art1',
+                page_size: 4000,
+                pages: 2,
+                excerpt: '{"success":true,"data":{"tool":"...',
+            },
+        })
+        const { mgr } = load({
+            toolRegistry: registry,
+            world: { rows: { [RUN_TABLE]: [seedRun()] } },
+        })
+
+        const res = mgr.collectBundle('run1')
+
+        expect(res.data.layers[1].data).toEqual({
+            truncated: true,
+            artifact_id: 'art1',
+            excerpt: '{"success":true,"data":{"tool":"...',
+            total_length: 5874,
+            page_size: 4000,
+            pages: 2,
+        })
+        // The layer is not reported null/absent — status still reflects the
+        // underlying dispatch's own success.
+        expect(res.data.layers[1].status).toBe('ok')
+    })
+
+    test('a truncated agent_config result hands the SAME artifact reference to layers 2, 3 and 7', () => {
+        const registry = fakeRegistry({
+            agent_config: {
+                success: true,
+                truncated: true,
+                tool: 'agent_config',
+                total_length: 12790,
+                artifact_id: 'art2',
+                page_size: 4000,
+                pages: 4,
+                excerpt: '{"success":true,"data":{"reads":...',
+            },
+        })
+        const { mgr } = load({
+            toolRegistry: registry,
+            world: { rows: { [RUN_TABLE]: [seedRun()] } },
+        })
+
+        const res = mgr.collectBundle('run1')
+        const layers = res.data.layers
+
+        for (const n of [2, 3, 7]) {
+            expect(layers[n].data).toEqual({
+                truncated: true,
+                artifact_id: 'art2',
+                excerpt: '{"success":true,"data":{"reads":...',
+                total_length: 12790,
+                page_size: 4000,
+                pages: 4,
+            })
+        }
+        // Each fanned layer still carries its own identity — a consumer can
+        // tell which of the three it is looking at.
+        expect(layers[2].name).toBe('Instructions')
+        expect(layers[3].name).toBe('Tool definitions')
+        expect(layers[7].name).toBe('Trigger and wiring')
+    })
+
+    test('an untruncated result is unaffected — pick() still runs against .data as before', () => {
+        const registry = fakeRegistry({
+            agent_trace: { success: true, data: { plan: 'header' } },
+        })
+        const { mgr } = load({
+            toolRegistry: registry,
+            world: { rows: { [RUN_TABLE]: [seedRun()] } },
+        })
+
+        const res = mgr.collectBundle('run1')
+        expect(res.data.layers[1].data).toEqual({ plan: 'header' })
+    })
+
     test('an UNKNOWN run id still runs the bundle — no run to read context from is not an error', () => {
         // No rows seeded at all: `_readRunContext` can't find 'ghost' and
         // degrades to empty context, same as any other absent-run read in

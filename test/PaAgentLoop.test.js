@@ -104,6 +104,12 @@ function fakeFixReport(validateResults) {
             renderCalls.json.push(normalized)
             return 'JSON(' + JSON.stringify(normalized) + ')'
         },
+        // Fix round (issue #64/#65): PaAgentLoop's own fix_report contract
+        // block reads this — single-sourced from PaFixReport, never a second
+        // hand-copied schema string. See test file header.
+        schemaText: function () {
+            return 'STUB_SCHEMA_TEXT'
+        },
     }
 }
 
@@ -169,6 +175,82 @@ describe('happy path', () => {
         expect(llm.calls[0]).toContain('MY PLAYBOOK TEXT')
         expect(llm.calls[0]).toContain('TOOLBLOCK')
         expect(llm.calls[0]).toContain('plan123')
+    })
+})
+
+// ===========================================================================
+// fix_report JSON contract block (fix round, issue #64/#65)
+//
+// Live-caught on gpinst01, Task 7 Step 4: 3/3 diagnose runs against the
+// smoke specimen produced a FIRST fix_report attempt using the playbook's
+// own markdown headings ("FAILURE SUMMARY") as JSON keys, because nothing
+// in the prompt ever stated the actual required snake_case field names. The
+// playbook itself is off limits (it is shared with the native harness's
+// benchmark comparison) — this block is the custom-harness-only fix,
+// single-sourced from PaFixReport.schemaText() rather than a second
+// hand-written schema string.
+// ===========================================================================
+
+describe('fix_report JSON contract block', () => {
+    test('the initial prompt states the fix_report schema, sourced from PaFixReport.schemaText()', () => {
+        const llm = fakeLlm([{ success: true, action: { action: 'answer', text: 'done' }, raw: 'r1' }])
+        const tools = fakeTools([])
+        const runs = fakeRunManager()
+        const fixReport = fakeFixReport([])
+        const loop = load({ llmProxy: llm, toolRegistry: tools, runManager: runs, fixReport: fixReport, playbook: 'P', now: () => 0 })
+
+        loop.run('run1', { execution: 'e1' })
+
+        expect(llm.calls[0]).toContain('STUB_SCHEMA_TEXT')
+    })
+
+    test('the initial prompt states the response-envelope requirement for fix_report submissions', () => {
+        const llm = fakeLlm([{ success: true, action: { action: 'answer', text: 'done' }, raw: 'r1' }])
+        const tools = fakeTools([])
+        const runs = fakeRunManager()
+        const fixReport = fakeFixReport([])
+        const loop = load({ llmProxy: llm, toolRegistry: tools, runManager: runs, fixReport: fixReport, playbook: 'P', now: () => 0 })
+
+        loop.run('run1', { execution: 'e1' })
+
+        expect(llm.calls[0]).toContain('{"action":"fix_report","report":')
+    })
+
+    test('every reasoning iteration carries the contract block, not just the first', () => {
+        const llm = fakeLlm([
+            { success: true, action: { action: 'tool_call', tool: 'agent_trace', args: {} }, raw: 'r1' },
+            { success: true, action: { action: 'answer', text: 'done' }, raw: 'r2' },
+        ])
+        const tools = fakeTools([{ success: true, data: {} }])
+        const runs = fakeRunManager()
+        const fixReport = fakeFixReport([])
+        const loop = load({ llmProxy: llm, toolRegistry: tools, runManager: runs, fixReport: fixReport, playbook: 'P', now: () => 0 })
+
+        loop.run('run1', { execution: 'e1' })
+
+        expect(llm.calls).toHaveLength(2)
+        llm.calls.forEach((prompt) => {
+            expect(prompt).toContain('STUB_SCHEMA_TEXT')
+        })
+    })
+
+    test('degrades gracefully (R-1) when no PaFixReport is available — never crashes the loop', () => {
+        // Deliberately NO fixReport injected, and this suite's sandbox never
+        // defines a global PaFixReport — the same "collaborator unavailable"
+        // shape every other Phase 1b component degrades from rather than
+        // throwing.
+        const llm = fakeLlm([{ success: true, action: { action: 'answer', text: 'done' }, raw: 'r1' }])
+        const tools = fakeTools([])
+        const runs = fakeRunManager()
+        const loop = load({ llmProxy: llm, toolRegistry: tools, runManager: runs, playbook: 'P', now: () => 0 })
+
+        let res
+        expect(() => {
+            res = loop.run('run1', { execution: 'e1' })
+        }).not.toThrow()
+
+        expect(res.success).toBe(true)
+        expect(res.outcome).toBe('answer')
     })
 })
 

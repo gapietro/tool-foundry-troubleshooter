@@ -455,6 +455,9 @@ PaAgentLoop.prototype = {
         lines.push('')
         lines.push(this._responseContract())
 
+        lines.push('')
+        lines.push(this._fixReportContract())
+
         return lines.join('\n')
     },
 
@@ -502,6 +505,79 @@ PaAgentLoop.prototype = {
             '  {"action":"answer","text":"<final answer, once no further tool call is needed>"}',
             '  {"action":"fix_report","report":{...}}',
         ].join('\n')
+    },
+
+    /**
+     * The fix_report JSON contract — CUSTOM-HARNESS-ONLY prompt content, not
+     * part of the shared playbook (fix round, issue #64/#65).
+     *
+     * WHY THIS EXISTS
+     * Live-caught on gpinst01, Task 7 Step 4: 3/3 diagnose runs against the
+     * smoke specimen produced a first fix_report attempt keyed on the
+     * playbook's own markdown headings ("FAILURE SUMMARY", "LAYERS SWEPT",
+     * ...) rather than the JSON schema `PaFixReport.validate` actually
+     * requires (`failure_summary`, `layers_swept`, ... lowercase
+     * snake_case). The playbook describes the Fix Report as HUMAN-READABLE
+     * prose sections — correctly, since it is shared verbatim with the
+     * native harness's `AiAgent` (`agent-doctor.now.ts`) for the Tasks 9-10
+     * benchmark comparison, and is explicitly off limits here (changing it
+     * changes the native agent's behaviour too and introduces a benchmark
+     * confound). The JSON key names are a CUSTOM-HARNESS-ONLY concern — the
+     * native harness never parses a `fix_report` action at all — so they
+     * belong in this class's own prompt layer, not the shared playbook.
+     *
+     * SINGLE-SOURCED, NOT A SECOND HAND-WRITTEN SCHEMA
+     * The field list comes from `PaFixReport.schemaText()` — the SAME text
+     * `PaFixReport.repairPrompt` embeds under "Required schema:" — via
+     * `_safeSchemaText()` below, never retyped here. If the schema ever
+     * changes, `PaFixReport.js` is the one place to change it.
+     *
+     * THE ENVELOPE REMINDER
+     * Also states, again, that a fix_report submission must be wrapped in
+     * the `{"action":"fix_report","report":{...}}` envelope
+     * `_responseContract()` already shows — repeated here because this
+     * block is exactly where a model reads the schema, and the two facts
+     * (these are the field names; wrap them in the envelope) belong
+     * together for the SAME reason `PaFixReport.repairPrompt`'s own
+     * envelope instruction sits right after ITS schema line.
+     */
+    _fixReportContract: function () {
+        var schema = this._safeSchemaText()
+        var lines = [
+            '## fix_report JSON contract',
+            '',
+            'When you submit a fix_report action, the report object MUST use exactly these lowercase ' +
+                'field names - NOT the section headings shown in the playbook above under "The Fix Report" ' +
+                '(do not use "FAILURE SUMMARY" or similar as a JSON key; use failure_summary, and so on):',
+            '',
+        ]
+        if (this._nonEmptyString(schema)) lines.push(schema)
+        lines.push('')
+        lines.push(
+            'The whole response must still be the response envelope from the Response format section above: ' +
+                '{"action":"fix_report","report":{...the object described here...}}. Never submit the report ' +
+                'object by itself.'
+        )
+        return lines.join('\n')
+    },
+
+    /**
+     * @returns {String} `PaFixReport.schemaText()`, or '' if no PaFixReport
+     *          is available. Degrades rather than throwing (R-1/R-9) — a
+     *          missing collaborator here must not crash the loop before it
+     *          can even attempt an answer/fix_report, same standard
+     *          `_safePromptBlock()` already applies to
+     *          `PaToolRegistry.promptBlock()`.
+     */
+    _safeSchemaText: function () {
+        try {
+            var text = this._reports().schemaText()
+            return typeof text === 'string' ? text : ''
+        } catch (e) {
+            // R-1: `e` untouched — a broken/absent PaFixReport must not
+            // crash the loop before it can even attempt an answer/fix_report.
+            return ''
+        }
     },
 
     // =======================================================================
