@@ -149,6 +149,27 @@ describe('the empty-result disambiguation', () => {
         expect(result.data.rows).toEqual([])
     })
 
+    it('does not claim the table name was confirmed when it never was', () => {
+        // sys_db_object denied + zero unfiltered count: an empty table and a
+        // typo'd name produce this identical shape, and the old verdict said
+        // "the table name is confirmed above, so this is not a lookup mistake"
+        // - a high-confidence DATA finding the tool never established, directly
+        // contradicting the earlier validation note.
+        const { result } = run('x_snc_tsbench_rule', world(), { denied: ['sys_db_object'] }, 0)
+
+        expect(result.data.table_exists).toBe('unknown')
+        expect(result.data.empty_result.verdict).toBe('unknown')
+        expect(result.data.empty_result.detail).toMatch(/NEVER CONFIRMED/)
+        expect(result.data.empty_result.detail).not.toMatch(/not a lookup mistake/)
+    })
+
+    it('still claims genuinely_empty when the table WAS confirmed', () => {
+        const { result } = run('x_snc_tsbench_rule', world(), null, 0)
+
+        expect(result.data.empty_result.verdict).toBe('genuinely_empty')
+        expect(result.data.empty_result.table_confirmed).toBe(true)
+    })
+
     it('says unknown rather than guessing when the count cannot be taken', () => {
         const { result } = run('x_snc_tsbench_rule', world(), null, null)
 

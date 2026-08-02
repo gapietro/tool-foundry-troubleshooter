@@ -454,7 +454,23 @@ PaToolQueryTable.prototype = {
             return out
         }
 
+        // A zero unfiltered count means "genuinely empty" ONLY when the table
+        // name was actually confirmed. With sys_db_object unreadable the name
+        // was never validated, and a typo'd table produces this exact shape —
+        // so the confident DATA finding would be issued over a lookup mistake,
+        // contradicting the note the validation path had already emitted.
+        if (data.table_exists !== true) {
+            out.verdict = 'unknown'
+            out.detail =
+                'No rows match, with or without ACL filtering — but sys_db_object could not be read, so ' +
+                'the table name was NEVER CONFIRMED. An empty table and a mistyped table name produce ' +
+                'this identical shape. Verify the name (schema_lookup, once sys_db_object is readable) ' +
+                'before treating this as a data finding.'
+            return out
+        }
+
         out.verdict = 'genuinely_empty'
+        out.table_confirmed = true
         out.detail =
             'No rows match, with or without ACL filtering. This is a DATA finding: the records the agent ' +
             'needed are not there. The query and the table name are both confirmed above, so this is not a ' +
