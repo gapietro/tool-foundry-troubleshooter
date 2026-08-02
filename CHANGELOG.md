@@ -11,6 +11,38 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0211 — 2026-08-02
+
+Phase 1b Task 6 (issue #62): `PaAgentLoop` (`src/server/PaAgentLoop.js`) — the async ReAct worker
+that drives every other Phase 1b collaborator. `run(runId, request)` is the Script Action entry
+point (Task 7 wires an async platform event to `new PaAgentLoop().run(run_id, request_json)`):
+it resolves the playbook and `PaToolRegistry.promptBlock()` once, then loops
+reason→act→observe via `PaLlmProxy.reason()`, `PaToolRegistry.dispatch()`, and
+`PaRunManager.appendTranscript()`. Bounds (`MAX_ITERATIONS:15`, `BUDGET_MS:300000`) are checked
+BEFORE each iteration begins reasoning, never mid-step; hitting either one closes the run
+`complete` but returns `outcome:'partial'` with an explicit `INCOMPLETE` transcript flag — the
+R-3 lesson that premature completion must never look like a silent, indistinguishable finish.
+An `answer` action closes the run `complete`; a `fix_report` action is validated via
+`PaFixReport.validate`, gets exactly ONE repair turn through `PaLlmProxy.reason()` when invalid
+(`PaFixReport.repairPrompt`), and on a second failure closes `failed` with the problems and the
+last draft preserved on the row. An LLM-layer failure (`reason() → {success:false}`) closes the
+run `failed` with error text that names both fallbacks — `mode: "collect"` (the LLM-free
+Evidence Bundle floor) and `/status` — rather than a bare error string. An unknown-tool
+`tool_call` is not a special case: `PaToolRegistry.dispatch`'s own `{success:false, error}` is
+digested into the transcript exactly like any other tool observation, so it is fed back on the
+NEXT reasoning prompt and the model gets to re-plan instead of crashing the run. The Phase 3
+confirmation flow (`awaiting_confirmation`, ADR Decision 0.5) is deliberately left as a comment
+inside `_step()`'s `tool_call` branch, not code — Phase 1b's registry fails closed on every tool
+not explicitly `destructive:false`, so no `tool_call` this loop can dispatch is capable of
+reaching a confirmation gate yet; a source-level test guards that the string never appears
+outside a comment. Every collaborator (`llmProxy`, `toolRegistry`, `runManager`, `fixReport`,
+the `now()` clock seam, the `playbook` text) is constructor-injected; the Rhino defaults are
+`new GlideDateTime().getNumericValue()` for the clock and a best-effort read of the installed
+`sn_aia_agent.instructions` row for the playbook (never a third hand-typed copy of the markdown
+playbook — see `test/agentDoctorInstructions.test.js`'s existing byte-for-byte guard on the
+Fluent copy), both degrading cleanly rather than throwing. 12 tests in
+`test/PaAgentLoop.test.js`, zero Glide.
+
 ## 2026.08.0210 — 2026-08-02
 
 Phase 1b Task 5 (issue #60): `PaRunManager` (`src/server/PaRunManager.js`) — the custom harness's

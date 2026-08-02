@@ -215,6 +215,10 @@ declare global {
                         table: 'sys_ws_version'
                         id: '75b650020ec04fd8a583813797f4e91c'
                     }
+                    src_server_PaAgentLoop_js: {
+                        table: 'sys_module'
+                        id: 'd3e4c8fa744e4a40bdabc6ffd4019363'
+                    }
                     src_server_PaArtifactStore_js: {
                         table: 'sys_module'
                         id: 'c3643d5da7cd404581a5fc2116ee5661'
@@ -223,6 +227,10 @@ declare global {
                         table: 'sys_module'
                         id: 'c858e2de4e114366a52544c1f671af59'
                     }
+                    src_server_PaFixReport_js: {
+                        table: 'sys_module'
+                        id: 'fe97ff415ce04e2c9175a7b9c3f218db'
+                    }
                     src_server_PaLlmProxy_js: {
                         table: 'sys_module'
                         id: 'd894b2b8ac994e1c8c41330b40b51d8a'
@@ -230,6 +238,10 @@ declare global {
                     src_server_PaRunAnchor_js: {
                         table: 'sys_module'
                         id: 'bb0b6de06e71450e9fbeec1f74f4fa3f'
+                    }
+                    src_server_PaRunManager_js: {
+                        table: 'sys_module'
+                        id: 'e2de7d6c839543c387a01c576b58b2dd'
                     }
                     src_server_PaScriptToolAdapter_js: {
                         table: 'sys_module'
