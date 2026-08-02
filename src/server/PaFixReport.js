@@ -311,15 +311,49 @@ PaFixReport.prototype = {
     },
 
     /**
+     * The verification relaxation is narrower than `_isInconclusiveShape`: a
+     * report that PROPOSES fixes still owes a verification step, even if it
+     * named no root cause. Only a fix-less inconclusive report has nothing
+     * to verify.
+     */
+    _isInconclusiveWithoutFixes: function (report) {
+        return this._isInconclusiveShape(report) && this._isArray(report.fixes) && report.fixes.length === 0
+    },
+
+    /**
+     * How many of the seven layers the report CLAIMS to have swept. Used to
+     * price the inconclusive path: a claim to have swept a layer is a claim
+     * to have looked at something, and looking at something is citable.
+     */
+    _countSweptLayers: function (report) {
+        var ls = this._isPlainObject(report.layers_swept) ? report.layers_swept : {}
+        var defs = this._layerDefs()
+        var count = 0
+        for (var i = 0; i < defs.length; i++) {
+            var entry = ls[defs[i].number]
+            if (this._isPlainObject(entry) && entry.status === 'SWEPT') count += 1
+        }
+        return count
+    },
+
+    /**
      * T4 (issue #72): an honest "I could not reach a conclusion" must be
      * expressible, or the only structurally valid output is an invented root
      * cause — which is pressure toward fabrication, not a validation floor.
      *
-     * But it must be EARNED, not cheap. Two costs sit on this path: the
-     * seven-layer `layers_swept` report with a reason on every un-swept layer
-     * (unchanged, `_checkLayersSwept`), and the `evidence_read` citations
-     * below. Writing an honest inconclusive report should cost more than
-     * diagnosing a defect the model actually found.
+     * But it must be EARNED, not cheap. `layers_swept` is charged identically
+     * on every path (`validate` runs `_checkLayersSwept` unconditionally), so
+     * it is NOT by itself a differential cost on the inconclusive path — a
+     * report claiming all seven layers SWEPT while citing only one thing in
+     * `evidence_read` would otherwise validate. The actual price is the
+     * `evidence_read` citations below, SIZED to the sweep claim: at least one
+     * citation per layer marked SWEPT (`_countSweptLayers`). Claim seven
+     * sweeps, cite seven things; honestly mark most layers NOT_SWEPT /
+     * UNAVAILABLE with a reason and the citation bill drops with it. Writing
+     * an honest inconclusive report should cost more than diagnosing a
+     * defect the model actually found — not because of the layer report
+     * (which every path pays), but because of this citation-per-claimed-
+     * sweep pricing.
      *
      * NOTE the evidence RULE (trace PLUS one of config/schema/data) is
      * deliberately NOT applied to `evidence_read`: that array is a record of
@@ -349,6 +383,16 @@ PaFixReport.prototype = {
             )
         } else {
             this._checkEvidenceEntries(ev, 'inconclusive.evidence_read', problems)
+
+            var swept = this._countSweptLayers(report)
+            if (ev.length < swept) {
+                problems.push(
+                    'inconclusive.evidence_read has ' + ev.length + ' citation(s) but layers_swept marks ' +
+                        swept + ' layer(s) SWEPT — cite at least one piece of evidence per layer you claim to ' +
+                        'have swept. If you did not actually sweep a layer, mark it NOT_SWEPT or UNAVAILABLE ' +
+                        'with a reason rather than claiming it.'
+                )
+            }
         }
 
         if (!this._nonEmptyString(inc.needed_to_conclude)) {
@@ -402,8 +446,10 @@ PaFixReport.prototype = {
 
     _checkVerification: function (report, problems) {
         // Nothing to verify when no fix was proposed — demanding a string
-        // here would only invite "n/a" boilerplate.
-        if (this._isInconclusiveShape(report)) return
+        // here would only invite "n/a" boilerplate. Note this is narrower
+        // than `_isInconclusiveShape`: an inconclusive report that DOES
+        // propose fixes still owes a verification step.
+        if (this._isInconclusiveWithoutFixes(report)) return
 
         if (!this._nonEmptyString(report.verification)) {
             problems.push('verification is required and must be a non-empty string')
