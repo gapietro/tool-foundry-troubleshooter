@@ -105,19 +105,26 @@ PaFixReport.prototype = {
     /**
      * @param {*} report candidate Fix Report — may be anything, including
      *        null/undefined (R-9).
+     * @param {Object} [context] {invokedTools:[String], auditAvailable:Boolean}
+     *        — what the RUN actually did, resolved by the caller and passed
+     *        in so this stays a pure function of its inputs (issue #79's own
+     *        design note). Absent or malformed disables the audit-backed
+     *        checks; see `_buildCheckContext`.
      * @returns {Object} {valid:true, normalized} | {valid:false, problems:[String]}
      *          `normalized` is a deep copy of `report` with every key —
      *          required and unknown alike — carried through untouched.
      */
-    validate: function (report) {
+    validate: function (report, context) {
         if (!this._isPlainObject(report)) {
             return { valid: false, problems: ['fix report must be a JSON object'] }
         }
 
+        var ctx = this._buildCheckContext(report, context)
+
         var problems = []
         this._checkFailureSummary(report, problems)
         this._checkLayersSwept(report, problems)
-        this._checkRootCauses(report, problems)
+        this._checkRootCauses(report, problems, ctx)
         this._checkFixes(report, problems)
         this._checkVerification(report, problems)
         this._checkDataMarkers(report, problems)
@@ -129,6 +136,51 @@ PaFixReport.prototype = {
         var normalized = this._clone(report)
         this._normalizeRootCauseLayers(normalized)
         return { valid: true, normalized: normalized }
+    },
+
+    /**
+     * Everything the checks need that is not in the report itself, resolved
+     * ONCE per validate() call.
+     *
+     * `auditEnabled` demands an EXPLICIT `true` plus an array of tools. A
+     * missing, malformed or degraded context fails toward NOT checking,
+     * because a broken audit trail convicting an honest report is a strictly
+     * worse outcome than an unverified citation — that is #78's defect, and
+     * reintroducing it through the back door would be worse than leaving #79
+     * unfixed.
+     */
+    _buildCheckContext: function (report, context) {
+        var c = this._isPlainObject(context) ? context : {}
+        var raw = this._isArray(c.invokedTools) ? c.invokedTools : []
+        var names = []
+        for (var i = 0; i < raw.length; i++) {
+            var name = this._normToolName(raw[i])
+            if (name && this._indexOf(names, name) === -1) names.push(name)
+        }
+
+        return {
+            traceUnavailable: this._isTraceUnavailable(report),
+            auditEnabled: c.auditAvailable === true && this._isArray(c.invokedTools),
+            invokedTools: names,
+        }
+    },
+
+    /**
+     * #78's trigger. The report has declared on the record — with a `reason`
+     * that `_checkLayersSwept` already makes mandatory for any non-SWEPT
+     * layer — that no execution trace exists to cite. Seed 05 is exactly this
+     * case: nothing fired, so there is no sn_aia_execution_plan row, and the
+     * old rule made a correct diagnosis structurally unreportable.
+     */
+    _isTraceUnavailable: function (report) {
+        var ls = this._isPlainObject(report.layers_swept) ? report.layers_swept : {}
+        var entry = ls[1]
+        return this._isPlainObject(entry) && entry.status === 'UNAVAILABLE'
+    },
+
+    /** Matches PaToolRegistry._normName / PaAuditLogger._normToolName. */
+    _normToolName: function (value) {
+        return String(value === null || value === undefined ? '' : value).replace(/^\s+|\s+$/g, '')
     },
 
     /**
@@ -193,7 +245,7 @@ PaFixReport.prototype = {
         }
     },
 
-    _checkRootCauses: function (report, problems) {
+    _checkRootCauses: function (report, problems, ctx) {
         var rcs = report.root_causes
         if (!this._isArray(rcs)) {
             problems.push('root_causes is required and must be an array')
@@ -201,16 +253,16 @@ PaFixReport.prototype = {
         }
         if (rcs.length === 0) {
             // T4 — the earned-inconclusive path. See `_checkInconclusive`.
-            this._checkInconclusive(report, problems)
+            this._checkInconclusive(report, problems, ctx)
             return
         }
 
         for (var i = 0; i < rcs.length; i++) {
-            this._checkRootCause(rcs[i], i, problems)
+            this._checkRootCause(rcs[i], i, problems, ctx)
         }
     },
 
-    _checkRootCause: function (rc, index, problems) {
+    _checkRootCause: function (rc, index, problems, ctx) {
         var label = 'root_causes[' + index + ']'
         if (!this._isPlainObject(rc)) {
             problems.push(label + ' must be an object')
@@ -230,7 +282,7 @@ PaFixReport.prototype = {
             return
         }
 
-        this._checkEvidenceRule(rc.evidence, label, causeName, problems)
+        this._checkEvidenceRule(rc.evidence, label, causeName, problems, ctx)
     },
 
     /**
@@ -249,9 +301,10 @@ PaFixReport.prototype = {
      * `_checkInconclusive` (evidence_read). Returns the source tally so the
      * caller can apply — or deliberately NOT apply — the evidence rule.
      */
-    _checkEvidenceEntries: function (evidence, label, problems) {
+    _checkEvidenceEntries: function (evidence, label, problems, ctx) {
         var sources = this._evidenceSources()
-        var tally = { hasTrace: false, hasOther: false }
+        var tally = { hasTrace: false, hasOther: false, distinctOther: 0 }
+        var otherSources = []
 
         for (var i = 0; i < evidence.length; i++) {
             var entry = evidence[i]
@@ -267,35 +320,78 @@ PaFixReport.prototype = {
                 problems.push(entryLabel + ' is missing a detail citation (table, sys_id, field, or value)')
             }
 
-            if (entry.source === 'trace') tally.hasTrace = true
-            else tally.hasOther = true
+            if (entry.source === 'trace') {
+                tally.hasTrace = true
+            } else {
+                tally.hasOther = true
+                // DISTINCT, not a count of entries: #78 relaxes the trace
+                // requirement in exchange for two INDEPENDENT sources, and two
+                // config citations are one source cited twice.
+                if (this._indexOf(otherSources, entry.source) === -1) otherSources.push(entry.source)
+            }
         }
 
+        tally.distinctOther = otherSources.length
         return tally
     },
 
     /**
-     * The evidence rule, enforced structurally: at least one 'trace' citation
-     * PLUS at least one 'config' | 'schema' | 'data' citation. Every problem
-     * this raises contains the literal phrase "evidence rule" (Task 4 brief,
-     * Step 1) and names the cause so a repair prompt — or a human — can find
-     * it without re-deriving which entry failed.
+     * The evidence rule, enforced structurally. Two ways to satisfy it:
+     *
+     *   (A) at least one 'trace' citation PLUS at least one config/schema/
+     *       data citation — the original rule, untouched;
+     *   (B) layer 1 UNAVAILABLE plus at least TWO DISTINCT non-trace sources
+     *       — the absence-diagnosis path (#78).
+     *
+     * B is an ADDITIONAL route, never a replacement: A returns first, so
+     * nothing that passes today can newly fail here. The rule's real content
+     * is "one layer is a candidate, not a conclusion" — two independent
+     * sources. B preserves that and relaxes only the PRIVILEGED STATUS of the
+     * trace label, and only where the report has already declared no trace
+     * exists. Seed 05 is why: the agent never ran, so there is no
+     * sn_aia_execution_plan row, and a correct diagnosis of that absence was
+     * structurally unreportable (issue #78 — the harness's one correct
+     * diagnosis in the 2026-08-02 re-run was rejected by this method).
+     *
+     * A 'trace' citation under B is not rejected; it simply does not count
+     * toward the two distinct sources.
+     *
+     * Every problem raised here contains the literal phrase "evidence rule"
+     * (Task 4 brief, Step 1) and names the cause, so a repair prompt — or a
+     * human — can find it without re-deriving which entry failed.
      */
-    _checkEvidenceRule: function (evidence, label, causeName, problems) {
-        var tally = this._checkEvidenceEntries(evidence, label + '.evidence', problems)
+    _checkEvidenceRule: function (evidence, label, causeName, problems, ctx) {
+        var tally = this._checkEvidenceEntries(evidence, label + '.evidence', problems, ctx)
+
+        // (A) — the original rule. Checked first so B can only ever widen.
+        if (tally.hasTrace && tally.hasOther) return
+
+        // (B) — the absence-diagnosis path.
+        if (ctx.traceUnavailable) {
+            if (tally.distinctOther >= 2) return
+            problems.push(
+                label + ' (' + causeName + '): evidence rule violation — layer 1 is UNAVAILABLE, so no ' +
+                    'trace citation is required, but a diagnosis of an absence still needs corroboration. ' +
+                    'Cite at least TWO DISTINCT sources from ' + this._nonTraceEvidenceSources().join('/') +
+                    ' — found ' + tally.distinctOther + '. Two citations of the same source are one source.'
+            )
+            return
+        }
 
         if (!tally.hasTrace) {
             problems.push(
                 label + ' (' + causeName + '): evidence rule violation — no trace citation found; ' +
-                    'a candidate resting on config/schema/data alone is not a confirmed root cause'
+                    'a candidate resting on config/schema/data alone is not a confirmed root cause. If no ' +
+                    'execution trace EXISTS for this target — nothing ever ran — mark layer 1 UNAVAILABLE ' +
+                    'with a reason and cite two DISTINCT config/schema/data sources instead.'
             )
+            return
         }
-        if (tally.hasTrace && !tally.hasOther) {
-            problems.push(
-                label + ' (' + causeName + '): evidence rule violation — evidence cites only the trace; ' +
-                    'at least one config, schema, or data citation is required'
-            )
-        }
+
+        problems.push(
+            label + ' (' + causeName + '): evidence rule violation — evidence cites only the trace; ' +
+                'at least one config, schema, or data citation is required'
+        )
     },
 
     /**
@@ -364,7 +460,7 @@ PaFixReport.prototype = {
      * citation from a run whose trace was unavailable is exactly the
      * pedantry this path exists to remove.
      */
-    _checkInconclusive: function (report, problems) {
+    _checkInconclusive: function (report, problems, ctx) {
         var inc = report.inconclusive
 
         if (!this._isPlainObject(inc)) {
@@ -385,7 +481,7 @@ PaFixReport.prototype = {
                     'from not having looked'
             )
         } else {
-            this._checkEvidenceEntries(ev, 'inconclusive.evidence_read', problems)
+            this._checkEvidenceEntries(ev, 'inconclusive.evidence_read', problems, ctx)
 
             var swept = this._countSweptLayers(report)
             if (ev.length < swept) {

@@ -951,3 +951,109 @@ describe('inconclusive reports', () => {
         expect(md).toContain('(not provided)')
     })
 })
+
+// =========================================================================
+// #78 — the absence-diagnosis path
+// =========================================================================
+
+/**
+ * A report diagnosing a defect where the agent NEVER RAN: layer 1 is
+ * UNAVAILABLE because no sn_aia_execution_plan row exists to read. This is
+ * seed 05's shape.
+ */
+function absenceReport(evidence) {
+    const layers = sweptLayers()
+    layers[1] = { status: 'UNAVAILABLE', reason: 'no sn_aia_execution_plan row exists — the agent never ran' }
+    return validReport({
+        layers_swept: layers,
+        root_causes: [
+            {
+                layer: 'layer 7',
+                component: 'sn_aia_trigger_configuration bfb77d6c64884500a80203ee029436ee',
+                finding: 'active=false, so the trigger never fires and no execution is ever created.',
+                evidence: evidence,
+            },
+        ],
+    })
+}
+
+describe('#78 absence-diagnosis', () => {
+    test('layer 1 UNAVAILABLE + two DISTINCT non-trace sources → valid', () => {
+        const reports = load()
+        const report = absenceReport([
+            { source: 'config', detail: 'sn_aia_trigger_configuration.active = false, sys_id bfb77d6c...' },
+            { source: 'schema', detail: 'sn_aia_trigger_configuration.active is a boolean, default true' },
+        ])
+
+        expect(reports.validate(report).valid).toBe(true)
+    })
+
+    test('layer 1 UNAVAILABLE + two citations of the SAME source → invalid; the relaxation is not a giveaway', () => {
+        const reports = load()
+        const report = absenceReport([
+            { source: 'config', detail: 'sn_aia_trigger_configuration.active = false' },
+            { source: 'config', detail: 'sn_aia_usecase.execution_mode = copilot' },
+        ])
+
+        const result = reports.validate(report)
+
+        expect(result.valid).toBe(false)
+        expect(result.problems.some((p) => p.indexOf('evidence rule') !== -1)).toBe(true)
+    })
+
+    test('layer 1 SWEPT + config only → still invalid; mode B is not triggered', () => {
+        const reports = load()
+        const report = validReport({
+            root_causes: [
+                {
+                    layer: 'layer 7',
+                    component: 'sn_aia_trigger_configuration',
+                    finding: 'active=false',
+                    evidence: [
+                        { source: 'config', detail: 'active = false' },
+                        { source: 'schema', detail: 'active is boolean' },
+                    ],
+                },
+            ],
+        })
+
+        const result = reports.validate(report)
+
+        expect(result.valid).toBe(false)
+        expect(result.problems.some((p) => p.indexOf('evidence rule') !== -1)).toBe(true)
+    })
+
+    test('MONOTONICITY: trace + config still passes via mode A even when layer 1 is UNAVAILABLE', () => {
+        const reports = load()
+        const report = absenceReport([
+            { source: 'trace', detail: 'sn_aia_execution_plan: no rows in 24h' },
+            { source: 'config', detail: 'sn_aia_trigger_configuration.active = false' },
+        ])
+
+        expect(reports.validate(report).valid).toBe(true)
+    })
+
+    test('the no-trace problem tells the model how to report an absence', () => {
+        const reports = load()
+        const report = validReport({
+            root_causes: [
+                {
+                    layer: 'layer 7',
+                    component: 'sn_aia_trigger_configuration',
+                    finding: 'active=false',
+                    evidence: [{ source: 'config', detail: 'active = false' }],
+                },
+            ],
+        })
+
+        const result = reports.validate(report)
+
+        expect(result.problems.some((p) => p.indexOf('UNAVAILABLE') !== -1)).toBe(true)
+    })
+
+    test('validate(report) with ONE argument is unchanged', () => {
+        const reports = load()
+
+        expect(reports.validate(validReport()).valid).toBe(true)
+    })
+})
