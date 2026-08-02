@@ -5,8 +5,9 @@ One row per scored run, **10 rows** — 2 runs per seed × 5 seeds (`benchmark/s
 gate run before scoring starts, not a scored row.
 
 **This is the filled Task 12 scorecard** (copied from `scorecard-template.md`; the template's
-column definitions and rules are preserved below unchanged — they are the scoring contract this
-file was filled against). Runs executed 2026-08-02 01:31–02:16 UTC on gpinst01, Agent Doctor
+column definitions and rules are preserved below as the scoring contract this file was filled
+against — with one post-fill wording update applied identically in both files: the §A3 seed-4
+void condition now describes the hardcoded-sys_id state, per PR #43 review). Runs executed 2026-08-02 01:31–02:16 UTC on gpinst01, Agent Doctor
 sys_id `e1392946828940e5a708fc51b0a5e954`, all 7 tools attached and active. The verdict and its
 caveats live in `DECISION.md`.
 
@@ -97,8 +98,15 @@ Known void conditions, both from the seed specs:
   post-install, so *both* activation gates were off and the seed isolated
   nothing. (Also void if the trigger fails to fire for the unresolved SDK 4.9.0
   run-as reason — see that seed's spec.)
-- **Seed 4** — `REPLACE_WITH_SEED_04_CAPABILITY_SYS_ID` was not substituted, so
-  the tool tested a malformed reference rather than an unmapped provider.
+- **Seed 4** — the capability sys_id in the installed `sn_aia_tool.script` does
+  not match the target instance's `sys_one_extend_capability` record (originally:
+  the `REPLACE_WITH_SEED_04_CAPABILITY_SYS_ID` placeholder was not substituted;
+  since Task 12 the Fluent source hardcodes **gpinst01's** sys_id
+  `92ff62af516741769c437feb88c80ef3`, which is equally void on any *other*
+  instance until re-substituted — see the seed spec's Setup step 2). Either way
+  the tool tests a malformed reference rather than an unmapped provider. A
+  hardcoded value that MATCHES the instance's record is a valid install, not a
+  void. *(This run: verified matching on gpinst01 — not void.)*
 
 **How to record one.** Put `void` in `passes_gate` — not `0` — write the reason
 in `notes`, and leave the four rubric columns blank. A blank rubric with a stated

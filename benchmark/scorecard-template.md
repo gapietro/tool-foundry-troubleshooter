@@ -86,8 +86,15 @@ Known void conditions, both from the seed specs:
   post-install, so *both* activation gates were off and the seed isolated
   nothing. (Also void if the trigger fails to fire for the unresolved SDK 4.9.0
   run-as reason — see that seed's spec.)
-- **Seed 4** — `REPLACE_WITH_SEED_04_CAPABILITY_SYS_ID` was not substituted, so
-  the tool tested a malformed reference rather than an unmapped provider.
+- **Seed 4** — the capability sys_id in the installed `sn_aia_tool.script` does
+  not match the target instance's `sys_one_extend_capability` record (originally:
+  the `REPLACE_WITH_SEED_04_CAPABILITY_SYS_ID` placeholder was not substituted;
+  since Task 12 the Fluent source hardcodes **gpinst01's** sys_id
+  `92ff62af516741769c437feb88c80ef3`, which is equally void on any *other*
+  instance until re-substituted — see the seed spec's Setup step 2). Either way
+  the tool tests a malformed reference rather than an unmapped provider. A
+  hardcoded value that MATCHES the instance's record is a valid install, not a
+  void.
 
 **How to record one.** Put `void` in `passes_gate` — not `0` — write the reason
 in `notes`, and leave the four rubric columns blank. A blank rubric with a stated

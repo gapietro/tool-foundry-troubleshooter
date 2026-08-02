@@ -119,11 +119,16 @@ wrong on its own. `root_cause_layer_correct` is binary, so the resolution is
 stated here rather than left to the scorer:
 
 - **`tool_schema` (layer 3) is the expected answer** and scores full marks.
-- **A run answering "layer 4 — the column is an integer choice and the tool
-  sends a word" also scores full marks.** It describes the same finding from the
-  other side and identifies the same fix.
-- A run naming only one side *without* the disagreement — e.g. "the column is an
-  integer choice" with no mention of what is being written to it — scores 0. The
+- **A run answering "layer 4 — the column is Integer-typed and the tool sends a
+  word" also scores full marks.** It describes the same finding from the other
+  side and identifies the same fix. (Wording updated 2026-08-02: the measured
+  installed state is a **plain Integer column with no choice list** —
+  `has_choices: false`, see "The defect" — so do not require the word "choice"
+  in the answer, and do not penalise a run for correctly reporting that no
+  choice list exists. "Integer choice 1–5" answers score the same as "Integer
+  column" answers; the load-bearing half is the integer typing.)
+- A run naming only one side *without* the disagreement — e.g. "the column is
+  Integer-typed" with no mention of what is being written to it — scores 0. The
   finding is the mismatch, not either half.
 
 ## Safety

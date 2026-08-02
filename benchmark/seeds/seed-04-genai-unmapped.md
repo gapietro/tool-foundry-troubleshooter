@@ -142,26 +142,39 @@ this seed's original defect and it was refuted — see "The defect".
 
 1. Install the fixture app (Task 12): `cd benchmark/seed-app && now-sdk install --alias gpinst01`
 
-2. **Substitute the capability sys_id into the tool script — mandatory.** The
-   tool ships with the placeholder `REPLACE_WITH_SEED_04_CAPABILITY_SYS_ID`
-   (the house pattern from Build Rule #33: the sys_id exists only after install,
-   and an unreplaced placeholder fails loudly rather than pointing silently at
-   the wrong record). Read the installed capability's sys_id:
+2. **Verify the capability sys_id in the tool script matches the installed
+   capability — mandatory.** *(State updated 2026-08-02: the Fluent source no
+   longer ships the placeholder.)* At Task 12 the placeholder
+   `REPLACE_WITH_SEED_04_CAPABILITY_SYS_ID` (the Build Rule #33 house pattern —
+   the sys_id exists only after install, and an unreplaced placeholder fails
+   loudly rather than pointing silently at the wrong record) was substituted
+   with **gpinst01's** installed capability sys_id
+   `92ff62af516741769c437feb88c80ef3`, and that value is now hardcoded in
+   `seed-app/src/fluent/seed-04-genai-unmapped.now.ts`. What to do depends on
+   the target instance:
 
-   ```
-   GET /api/now/table/sys_one_extend_capability
-       ?sysparm_query=name=x_snc_tsbench_unmapped_capability
-       &sysparm_fields=sys_id,name
-   ```
+   - **Reinstalling on gpinst01:** no substitution needed. Do NOT reintroduce
+     the placeholder. Verify only (below).
+   - **Installing on any other instance:** the hardcoded value is
+     instance-specific and will match nothing. Read the installed capability's
+     sys_id and replace the hardcoded value, then rebuild + reinstall (or patch
+     `sn_aia_tool.script` for `summarise_ticket` directly on the instance):
 
-   then replace the placeholder with that sys_id in
-   `seed-app/src/fluent/seed-04-genai-unmapped.now.ts` and rebuild + reinstall,
-   or patch `sn_aia_tool.script` for `summarise_ticket` directly on the instance.
-   Confirm the placeholder string no longer appears in the installed script.
+     ```
+     GET /api/now/table/sys_one_extend_capability
+         ?sysparm_query=name=x_snc_tsbench_unmapped_capability
+         &sysparm_fields=sys_id,name
+     ```
 
-   **If this is skipped the seed is void** — the tool cannot reach any
-   capability, and the run tests a malformed reference rather than an unmapped
-   provider.
+   - **Verify in either case:** the sys_id in the *installed*
+     `sn_aia_tool.script` equals the sys_id the GET above returns on the target
+     instance.
+
+   **If the installed script's sys_id does not match the instance's capability
+   record, the seed is void** — the tool cannot reach any capability, and the
+   run tests a malformed reference rather than an unmapped provider. (A
+   correctly-matching hardcoded value is a VALID install, not a skipped step —
+   do not record such a run as void.)
 
 3. Insert one bench ticket with `short_description` set. Record its sys_id.
    (Possible only because of the record ACLs and `allowWebServiceAccess` in
