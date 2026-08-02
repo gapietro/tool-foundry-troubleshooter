@@ -11,6 +11,25 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0214 — 2026-08-02
+
+Phase 1b Task 9 (docs, issue TBD): comparison re-run readiness gate — MCP-verified on gpinst01, plus
+one Fluent reinstall (the fixture app only, no product-app code changes). Verified all four Task 9
+preconditions with live evidence: reinstalled `benchmark/seed-app` to bring seed 2 v2 (bound
+`measure_request`, one weak tool) live — it was still v1 (zero tools) on the instance, its PR having
+deferred the install; confirmed `check_config` filter + playbook v2 already live on the product app
+byte-identical to the repo (both merged before Task 7's own reinstall); re-read both budget knobs
+fresh (`continuous_tool_execution_limit=25`, `max_auto_executions=10`, unchanged from Task 12);
+re-ran the smoke gate for both harnesses against the known specimen — native passed (correctly cites
+`context_processing_script` line 42), custom reached a structurally valid but substantively wrong Fix
+Report (reproducing Task 7's own finding, not a new defect). Along the way, run-verified the
+`sn_aia_gen_ai_m2m` native LLM-call-count linkage Task 8 had flagged unverified: `source_id` keys to
+the run's top-level `sn_aia_execution_task` (`type=agent`, `order=100`), not the execution plan or
+the per-turn `type=gen_ai` sub-tasks. `benchmark/README.md` gets the corrected linkage plus a new
+"Phase 1b comparison re-run protocol" section: same 5 seeds / doubled runs / blind / audit-derived
+scoring, custom harness scored fresh across all 10 rows, native re-runs seed 2 only (its other 8
+scored rows stand — re-running an unchanged construction would measure model drift, not the harness).
+
 ## 2026.08.0213 — 2026-08-02
 
 Phase 1b Task 8 (docs, issue TBD): assist-unit measurement source (DECISION.md §D5, LLD §8 item 11)
