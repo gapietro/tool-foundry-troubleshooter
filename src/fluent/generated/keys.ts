@@ -223,6 +223,10 @@ declare global {
                         table: 'sys_module'
                         id: 'c858e2de4e114366a52544c1f671af59'
                     }
+                    src_server_PaLlmProxy_js: {
+                        table: 'sys_module'
+                        id: 'd894b2b8ac994e1c8c41330b40b51d8a'
+                    }
                     src_server_PaRunAnchor_js: {
                         table: 'sys_module'
                         id: 'bb0b6de06e71450e9fbeec1f74f4fa3f'
@@ -234,6 +238,10 @@ declare global {
                     src_server_PaToolReadKit_js: {
                         table: 'sys_module'
                         id: 'b77434ce374d497d8337ca6c0484c564'
+                    }
+                    src_server_PaToolRegistry_js: {
+                        table: 'sys_module'
+                        id: '1cdeb056ba2a4c33ac23685fdfefbcdb'
                     }
                     src_server_script_ts: {
                         table: 'sys_module'
