@@ -105,19 +105,27 @@ PaFixReport.prototype = {
     /**
      * @param {*} report candidate Fix Report — may be anything, including
      *        null/undefined (R-9).
+     * @param {Object} [context] {invokedTools:[String], auditAvailable:Boolean}
+     *        — what the RUN actually did, resolved by the caller and passed
+     *        in so this stays a pure function of its inputs (issue #79's own
+     *        design note). Absent or malformed disables the audit-backed
+     *        checks; see `_buildCheckContext`.
      * @returns {Object} {valid:true, normalized} | {valid:false, problems:[String]}
      *          `normalized` is a deep copy of `report` with every key —
      *          required and unknown alike — carried through untouched.
      */
-    validate: function (report) {
+    validate: function (report, context) {
         if (!this._isPlainObject(report)) {
             return { valid: false, problems: ['fix report must be a JSON object'] }
         }
 
+        var ctx = this._buildCheckContext(report, context)
+
         var problems = []
         this._checkFailureSummary(report, problems)
         this._checkLayersSwept(report, problems)
-        this._checkRootCauses(report, problems)
+        this._checkSweptClaims(report, problems, ctx)
+        this._checkRootCauses(report, problems, ctx)
         this._checkFixes(report, problems)
         this._checkVerification(report, problems)
         this._checkDataMarkers(report, problems)
@@ -129,6 +137,55 @@ PaFixReport.prototype = {
         var normalized = this._clone(report)
         this._normalizeRootCauseLayers(normalized)
         return { valid: true, normalized: normalized }
+    },
+
+    /**
+     * Everything the checks need that is not in the report itself, resolved
+     * ONCE per validate() call.
+     *
+     * `auditEnabled` demands an EXPLICIT `true` plus a NON-EMPTY array of
+     * normalized tool names. A missing, malformed or degraded context fails
+     * toward NOT checking, because a broken audit trail convicting an honest
+     * report is a strictly worse outcome than an unverified citation — that
+     * is #78's defect, and reintroducing it through the back door would be
+     * worse than leaving #79 unfixed. The empty-array case is the same
+     * failure shape wearing a different hat: `{auditAvailable:true,
+     * invokedTools:[]}` (or an array of only blanks) matches NO citation and
+     * NO sweep claim, so every check would fail CLOSED at once instead of
+     * skipping — final whole-branch review, finding 3, 2026-08-02.
+     */
+    _buildCheckContext: function (report, context) {
+        var c = this._isPlainObject(context) ? context : {}
+        var raw = this._isArray(c.invokedTools) ? c.invokedTools : []
+        var names = []
+        for (var i = 0; i < raw.length; i++) {
+            var name = this._normToolName(raw[i])
+            if (name && this._indexOf(names, name) === -1) names.push(name)
+        }
+
+        return {
+            traceUnavailable: this._isTraceUnavailable(report),
+            auditEnabled: c.auditAvailable === true && names.length > 0,
+            invokedTools: names,
+        }
+    },
+
+    /**
+     * #78's trigger. The report has declared on the record — with a `reason`
+     * that `_checkLayersSwept` already makes mandatory for any non-SWEPT
+     * layer — that no execution trace exists to cite. Seed 05 is exactly this
+     * case: nothing fired, so there is no sn_aia_execution_plan row, and the
+     * old rule made a correct diagnosis structurally unreportable.
+     */
+    _isTraceUnavailable: function (report) {
+        var ls = this._isPlainObject(report.layers_swept) ? report.layers_swept : {}
+        var entry = ls[1]
+        return this._isPlainObject(entry) && entry.status === 'UNAVAILABLE'
+    },
+
+    /** Matches PaToolRegistry._normName / PaAuditLogger._normToolName. */
+    _normToolName: function (value) {
+        return String(value === null || value === undefined ? '' : value).replace(/^\s+|\s+$/g, '')
     },
 
     /**
@@ -193,7 +250,81 @@ PaFixReport.prototype = {
         }
     },
 
-    _checkRootCauses: function (report, problems) {
+    /**
+     * #79b. A layer marked SWEPT is a claim to have LOOKED at it; the audit
+     * trail says whether a tool that CAN look was ever invoked. In the
+     * 2026-08-02 re-run, 11 layer-sweep claims across 4 runs named a tool
+     * that was never invoked, and one rejected draft claimed all seven layers
+     * SWEPT on two tool calls — both reads of the same trace.
+     *
+     * Only SWEPT is checked. NOT_SWEPT and UNAVAILABLE are claims of NOT
+     * having looked, already priced by the `reason` `_checkLayersSwept`
+     * makes mandatory for them.
+     *
+     * ALL offenders collapse into ONE problem. Per-layer problems would put
+     * five near-identical entries into a repair prompt that also carries the
+     * citation problems, and burying the signal is how a repair turn gets
+     * wasted.
+     *
+     * This is complementary to `_checkInconclusive`'s citation-per-sweep
+     * pricing, not a replacement for it: `_countSweptLayers` prices honest
+     * sweeps, this falsifies dishonest ones. A report can no longer dodge the
+     * price by inflating its sweep claims.
+     */
+    _checkSweptClaims: function (report, problems, ctx) {
+        if (!ctx.auditEnabled) return
+
+        var ls = this._isPlainObject(report.layers_swept) ? report.layers_swept : {}
+        var defs = this._layerDefs()
+        var map = this._layerToolMap()
+        var unsupported = []
+
+        for (var i = 0; i < defs.length; i++) {
+            var def = defs[i]
+            var entry = ls[def.number]
+            if (!this._isPlainObject(entry) || entry.status !== 'SWEPT') continue
+
+            var supporting = map[def.number] || []
+            if (this._anyInvoked(supporting, ctx)) continue
+
+            unsupported.push(def.number + ' (' + def.name + ') needs one of: ' + supporting.join(', '))
+        }
+
+        if (unsupported.length === 0) return
+
+        problems.push(
+            'layers_swept: unsupported sweep claim — ' + unsupported.length + ' layer(s) are marked SWEPT ' +
+                'but this run never invoked a tool that reads them. ' + unsupported.join('. ') + '. Tools ' +
+                'invoked this run: ' + this._invokedList(ctx) + '. Mark a layer you did not actually sweep ' +
+                'NOT_SWEPT or UNAVAILABLE with a reason instead of claiming it.'
+        )
+    },
+
+    /**
+     * #79b layer -> tool map. Extends PaRunManager._collectionTools (the same
+     * seven-layer mapping the Evidence Bundle uses) with the one tool it does
+     * not cover (`log_analysis`). Layer 1 is kept aligned with the `trace`
+     * entry of `_citationToolMap`; the rest are layer-specific, because
+     * layers are finer-grained than the four evidence sources — EXCEPT layer
+     * 5 ("Data"), which is the same concept as the `data` citation source and
+     * is deliberately kept aligned with it too (finding 2 of the final
+     * whole-branch review, 2026-08-02): `_citationToolMap().data` already
+     * accepts `log_analysis` as valid data evidence, so a layer-5 sweep
+     * backed by the same tool must not be rejected.
+     */
+    _layerToolMap: function () {
+        return {
+            1: ['agent_trace', 'genai_log', 'log_analysis'],
+            2: ['agent_config'],
+            3: ['agent_config'],
+            4: ['schema_lookup'],
+            5: ['query_table', 'log_analysis'],
+            6: ['genai_log', 'log_analysis'],
+            7: ['agent_config'],
+        }
+    },
+
+    _checkRootCauses: function (report, problems, ctx) {
         var rcs = report.root_causes
         if (!this._isArray(rcs)) {
             problems.push('root_causes is required and must be an array')
@@ -201,16 +332,16 @@ PaFixReport.prototype = {
         }
         if (rcs.length === 0) {
             // T4 — the earned-inconclusive path. See `_checkInconclusive`.
-            this._checkInconclusive(report, problems)
+            this._checkInconclusive(report, problems, ctx)
             return
         }
 
         for (var i = 0; i < rcs.length; i++) {
-            this._checkRootCause(rcs[i], i, problems)
+            this._checkRootCause(rcs[i], i, problems, ctx)
         }
     },
 
-    _checkRootCause: function (rc, index, problems) {
+    _checkRootCause: function (rc, index, problems, ctx) {
         var label = 'root_causes[' + index + ']'
         if (!this._isPlainObject(rc)) {
             problems.push(label + ' must be an object')
@@ -230,7 +361,7 @@ PaFixReport.prototype = {
             return
         }
 
-        this._checkEvidenceRule(rc.evidence, label, causeName, problems)
+        this._checkEvidenceRule(rc.evidence, label, causeName, problems, ctx)
     },
 
     /**
@@ -249,9 +380,10 @@ PaFixReport.prototype = {
      * `_checkInconclusive` (evidence_read). Returns the source tally so the
      * caller can apply — or deliberately NOT apply — the evidence rule.
      */
-    _checkEvidenceEntries: function (evidence, label, problems) {
+    _checkEvidenceEntries: function (evidence, label, problems, ctx) {
         var sources = this._evidenceSources()
-        var tally = { hasTrace: false, hasOther: false }
+        var tally = { hasTrace: false, hasOther: false, distinctOther: 0 }
+        var otherSources = []
 
         for (var i = 0; i < evidence.length; i++) {
             var entry = evidence[i]
@@ -267,35 +399,149 @@ PaFixReport.prototype = {
                 problems.push(entryLabel + ' is missing a detail citation (table, sys_id, field, or value)')
             }
 
-            if (entry.source === 'trace') tally.hasTrace = true
-            else tally.hasOther = true
+            // #79a — the citation is checked against what the run ACTUALLY
+            // invoked, not against the label the model chose for it.
+            this._checkCitationSupported(entry.source, entryLabel, problems, ctx)
+
+            if (entry.source === 'trace') {
+                tally.hasTrace = true
+            } else {
+                tally.hasOther = true
+                // DISTINCT, not a count of entries: #78 relaxes the trace
+                // requirement in exchange for two INDEPENDENT sources, and two
+                // config citations are one source cited twice.
+                if (this._indexOf(otherSources, entry.source) === -1) otherSources.push(entry.source)
+            }
         }
 
+        tally.distinctOther = otherSources.length
         return tally
     },
 
     /**
-     * The evidence rule, enforced structurally: at least one 'trace' citation
-     * PLUS at least one 'config' | 'schema' | 'data' citation. Every problem
-     * this raises contains the literal phrase "evidence rule" (Task 4 brief,
-     * Step 1) and names the cause so a repair prompt — or a human — can find
-     * it without re-deriving which entry failed.
+     * #79a. Validation used to be uncorrelated with evidential honesty: a
+     * report that invented a citation passed, and one citing only what it
+     * genuinely read could fail. Live proof (2026-08-02 re-run, audit-
+     * verified): runs 100c8910... and ebdc4194... both cited `agent_config`
+     * as evidence and both PASSED, having never invoked that tool.
+     *
+     * A citation passes if ANY tool that can produce that kind of evidence
+     * appears in the run's audit trail. The map is deliberately PERMISSIVE —
+     * the goal is to stop fabrication, not to add new pedantry, which is the
+     * exact failure mode #78 exists to fix. `genai_log` supports `config`
+     * because seed 03's answer (a dangling `api`) is found through it and is
+     * legitimately configuration evidence; a strict 1:1 map would reject that
+     * honest citation.
+     *
+     * Skipped entirely when the audit trail is unavailable — see
+     * `_buildCheckContext`.
      */
-    _checkEvidenceRule: function (evidence, label, causeName, problems) {
-        var tally = this._checkEvidenceEntries(evidence, label + '.evidence', problems)
+    _checkCitationSupported: function (source, entryLabel, problems, ctx) {
+        if (!ctx.auditEnabled) return
+
+        var supporting = this._citationToolMap()[source]
+        // An unknown source already raised its own problem above.
+        if (!supporting) return
+        if (this._anyInvoked(supporting, ctx)) return
+
+        problems.push(
+            entryLabel + ': unsupported citation — cites "' + source + '" but this run never invoked a ' +
+                'tool that reads it (' + supporting.join(', ') + '). Either call one of those tools and ' +
+                'cite what it actually returned, or drop the claim. Tools invoked this run: ' +
+                this._invokedList(ctx) + '.'
+        )
+    },
+
+    /**
+     * #79a source -> tool map. Deliberately separate from `_layerToolMap`:
+     * layers are finer-grained than the four evidence sources (2, 3 and 7 all
+     * correspond to `config` but each is answered by a different section of
+     * agent_config's output). `read_artifact` supports NONE of these sources:
+     * it only pages an artifact a PRODUCING tool already wrote this run
+     * (`PaToolRegistry.dispatch` / `PaScriptToolAdapter.invoke` both audit
+     * that producing tool's `intent` before the call), so the producing tool
+     * — already in this map — is what actually carries the support. Treating
+     * `read_artifact` as a wildcard here would let a run pass every
+     * cross-check on nothing but `agent_trace` + `read_artifact` (the
+     * 2026-08-02 re-run's worst draft, see `_checkSweptClaims`).
+     */
+    _citationToolMap: function () {
+        return {
+            trace: ['agent_trace', 'genai_log', 'log_analysis'],
+            config: ['agent_config', 'genai_log'],
+            schema: ['schema_lookup'],
+            data: ['query_table', 'log_analysis'],
+        }
+    },
+
+    _anyInvoked: function (candidates, ctx) {
+        for (var i = 0; i < candidates.length; i++) {
+            if (this._indexOf(ctx.invokedTools, candidates[i]) !== -1) return true
+        }
+        return false
+    },
+
+    _invokedList: function (ctx) {
+        return ctx.invokedTools.length > 0 ? ctx.invokedTools.join(', ') : 'none'
+    },
+
+    /**
+     * The evidence rule, enforced structurally. Two ways to satisfy it:
+     *
+     *   (A) at least one 'trace' citation PLUS at least one config/schema/
+     *       data citation — the original rule, untouched;
+     *   (B) layer 1 UNAVAILABLE plus at least TWO DISTINCT non-trace sources
+     *       — the absence-diagnosis path (#78).
+     *
+     * B is an ADDITIONAL route, never a replacement: A returns first, so
+     * nothing that passes today can newly fail here. The rule's real content
+     * is "one layer is a candidate, not a conclusion" — two independent
+     * sources. B preserves that and relaxes only the PRIVILEGED STATUS of the
+     * trace label, and only where the report has already declared no trace
+     * exists. Seed 05 is why: the agent never ran, so there is no
+     * sn_aia_execution_plan row, and a correct diagnosis of that absence was
+     * structurally unreportable (issue #78 — the harness's one correct
+     * diagnosis in the 2026-08-02 re-run was rejected by this method).
+     *
+     * A 'trace' citation under B is not rejected; it simply does not count
+     * toward the two distinct sources.
+     *
+     * Every problem raised here contains the literal phrase "evidence rule"
+     * (Task 4 brief, Step 1) and names the cause, so a repair prompt — or a
+     * human — can find it without re-deriving which entry failed.
+     */
+    _checkEvidenceRule: function (evidence, label, causeName, problems, ctx) {
+        var tally = this._checkEvidenceEntries(evidence, label + '.evidence', problems, ctx)
+
+        // (A) — the original rule. Checked first so B can only ever widen.
+        if (tally.hasTrace && tally.hasOther) return
+
+        // (B) — the absence-diagnosis path.
+        if (ctx.traceUnavailable) {
+            if (tally.distinctOther >= 2) return
+            problems.push(
+                label + ' (' + causeName + '): evidence rule violation — layer 1 is UNAVAILABLE, so no ' +
+                    'trace citation is required, but a diagnosis of an absence still needs corroboration. ' +
+                    'Cite at least TWO DISTINCT sources from ' + this._nonTraceEvidenceSources().join('/') +
+                    ' — found ' + tally.distinctOther + '. Two citations of the same source are one source.'
+            )
+            return
+        }
 
         if (!tally.hasTrace) {
             problems.push(
                 label + ' (' + causeName + '): evidence rule violation — no trace citation found; ' +
-                    'a candidate resting on config/schema/data alone is not a confirmed root cause'
+                    'a candidate resting on config/schema/data alone is not a confirmed root cause. If no ' +
+                    'execution trace EXISTS for this target — nothing ever ran — mark layer 1 UNAVAILABLE ' +
+                    'with a reason and cite two DISTINCT config/schema/data sources instead.'
             )
+            return
         }
-        if (tally.hasTrace && !tally.hasOther) {
-            problems.push(
-                label + ' (' + causeName + '): evidence rule violation — evidence cites only the trace; ' +
-                    'at least one config, schema, or data citation is required'
-            )
-        }
+
+        problems.push(
+            label + ' (' + causeName + '): evidence rule violation — evidence cites only the trace; ' +
+                'at least one config, schema, or data citation is required'
+        )
     },
 
     /**
@@ -364,7 +610,7 @@ PaFixReport.prototype = {
      * citation from a run whose trace was unavailable is exactly the
      * pedantry this path exists to remove.
      */
-    _checkInconclusive: function (report, problems) {
+    _checkInconclusive: function (report, problems, ctx) {
         var inc = report.inconclusive
 
         if (!this._isPlainObject(inc)) {
@@ -385,7 +631,7 @@ PaFixReport.prototype = {
                     'from not having looked'
             )
         } else {
-            this._checkEvidenceEntries(ev, 'inconclusive.evidence_read', problems)
+            this._checkEvidenceEntries(ev, 'inconclusive.evidence_read', problems, ctx)
 
             var swept = this._countSweptLayers(report)
             if (ev.length < swept) {
@@ -562,7 +808,8 @@ PaFixReport.prototype = {
                 'where source is a string, one of ' + this._evidenceSources().join('|') + ', and detail is a ' +
                 'non-empty string citation (table, sys_id, field, or value); EVERY root cause needs at least one ' +
                 '"trace" evidence entry PLUS at least one of ' + this._nonTraceEvidenceSources().join('|') +
-                ' (the evidence rule); confidence, if present, is a string (e.g. CONFIRMED or UNCONFIRMED)'
+                ' (the evidence rule) — UNLESS nothing ever ran, in which case see the absence rule below; ' +
+                'confidence, if present, is a string (e.g. CONFIRMED or UNCONFIRMED)'
         )
         lines.push(
             'fixes: array of {target_type, target, current, proposed, rationale} — NON-EMPTY unless root_causes ' +
@@ -590,6 +837,36 @@ PaFixReport.prototype = {
                 'does NOT excuse a shallow sweep: layers_swept must still report all seven layers with a reason ' +
                 'on every one you did not sweep, and you should exhaust your tool budget before concluding you ' +
                 'cannot tell.'
+        )
+        lines.push(
+            'EVIDENCE IS CHECKED AGAINST WHAT YOU ACTUALLY CALLED. Every citation source is verified ' +
+                'against the tools this run actually invoked. Citing a source you did not read with a tool ' +
+                'in THIS run is rejected — trace comes from agent_trace/genai_log/log_analysis, config from ' +
+                'agent_config/genai_log, schema from schema_lookup, data from query_table/log_analysis. ' +
+                'read_artifact does NOT count on its own — cite the tool whose output you paged. Do not ' +
+                'label evidence you did not gather.'
+        )
+        var layerMap = this._layerToolMap()
+        var layerToolClauses = []
+        for (var k = 0; k < defs.length; k++) {
+            var ld = defs[k]
+            layerToolClauses.push(ld.number + ' (' + ld.name + ') needs one of: ' + (layerMap[ld.number] || []).join(', '))
+        }
+
+        lines.push(
+            'A LAYER MARKED SWEPT NEEDS A TOOL CALL BEHIND IT. layers_swept entries marked SWEPT are ' +
+                'verified independently, against the tools this run invoked: claiming a layer you never ran ' +
+                'a tool against is rejected. Marking a layer NOT_SWEPT or UNAVAILABLE with an honest reason is ' +
+                'always acceptable and costs you nothing — an inflated sweep claim costs you the whole report. ' +
+                'Per layer: ' + layerToolClauses.join('; ') + '.'
+        )
+        lines.push(
+            'IF NOTHING EVER RAN, SAY SO — you do not need a trace citation. When there is no execution ' +
+                'to trace (the agent never fired, so no execution plan exists), mark layer 1 UNAVAILABLE ' +
+                'with the reason and cite two distinct sources from ' +
+                this._nonTraceEvidenceSources().join('/') + ' instead. Two citations of the same source ' +
+                'are one source. This is a fully acceptable root cause — do NOT invent a trace citation to ' +
+                'satisfy the evidence rule.'
         )
 
         return lines.join('\n')

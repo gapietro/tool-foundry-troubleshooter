@@ -951,3 +951,560 @@ describe('inconclusive reports', () => {
         expect(md).toContain('(not provided)')
     })
 })
+
+// =========================================================================
+// #78 — the absence-diagnosis path
+// =========================================================================
+
+/**
+ * A report diagnosing a defect where the agent NEVER RAN: layer 1 is
+ * UNAVAILABLE because no sn_aia_execution_plan row exists to read. This is
+ * seed 05's shape.
+ */
+function absenceReport(evidence) {
+    const layers = sweptLayers()
+    layers[1] = { status: 'UNAVAILABLE', reason: 'no sn_aia_execution_plan row exists — the agent never ran' }
+    return validReport({
+        layers_swept: layers,
+        root_causes: [
+            {
+                layer: 'layer 7',
+                component: 'sn_aia_trigger_configuration bfb77d6c64884500a80203ee029436ee',
+                finding: 'active=false, so the trigger never fires and no execution is ever created.',
+                evidence: evidence,
+            },
+        ],
+    })
+}
+
+describe('#78 absence-diagnosis', () => {
+    test('layer 1 UNAVAILABLE + two DISTINCT non-trace sources → valid', () => {
+        const reports = load()
+        const report = absenceReport([
+            { source: 'config', detail: 'sn_aia_trigger_configuration.active = false, sys_id bfb77d6c...' },
+            { source: 'schema', detail: 'sn_aia_trigger_configuration.active is a boolean, default true' },
+        ])
+
+        expect(reports.validate(report).valid).toBe(true)
+    })
+
+    test('layer 1 UNAVAILABLE + two citations of the SAME source → invalid; the relaxation is not a giveaway', () => {
+        const reports = load()
+        const report = absenceReport([
+            { source: 'config', detail: 'sn_aia_trigger_configuration.active = false' },
+            { source: 'config', detail: 'sn_aia_usecase.execution_mode = copilot' },
+        ])
+
+        const result = reports.validate(report)
+
+        expect(result.valid).toBe(false)
+        expect(result.problems.some((p) => p.indexOf('evidence rule') !== -1)).toBe(true)
+    })
+
+    test('layer 1 SWEPT + config only → still invalid; mode B is not triggered', () => {
+        const reports = load()
+        const report = validReport({
+            root_causes: [
+                {
+                    layer: 'layer 7',
+                    component: 'sn_aia_trigger_configuration',
+                    finding: 'active=false',
+                    evidence: [
+                        { source: 'config', detail: 'active = false' },
+                        { source: 'schema', detail: 'active is boolean' },
+                    ],
+                },
+            ],
+        })
+
+        const result = reports.validate(report)
+
+        expect(result.valid).toBe(false)
+        expect(result.problems.some((p) => p.indexOf('evidence rule') !== -1)).toBe(true)
+    })
+
+    test('MONOTONICITY: trace + config still passes via mode A even when layer 1 is UNAVAILABLE', () => {
+        const reports = load()
+        const report = absenceReport([
+            { source: 'trace', detail: 'sn_aia_execution_plan: no rows in 24h' },
+            { source: 'config', detail: 'sn_aia_trigger_configuration.active = false' },
+        ])
+
+        expect(reports.validate(report).valid).toBe(true)
+    })
+
+    test('the no-trace problem tells the model how to report an absence', () => {
+        const reports = load()
+        const report = validReport({
+            root_causes: [
+                {
+                    layer: 'layer 7',
+                    component: 'sn_aia_trigger_configuration',
+                    finding: 'active=false',
+                    evidence: [{ source: 'config', detail: 'active = false' }],
+                },
+            ],
+        })
+
+        const result = reports.validate(report)
+
+        expect(result.problems.some((p) => p.indexOf('UNAVAILABLE') !== -1)).toBe(true)
+    })
+
+    test('validate(report) with ONE argument is unchanged', () => {
+        const reports = load()
+
+        expect(reports.validate(validReport()).valid).toBe(true)
+    })
+})
+
+// =========================================================================
+// #79a — citations cross-checked against what the run actually invoked
+// =========================================================================
+
+/** The context PaAgentLoop passes in. */
+function auditCtx(tools) {
+    return { auditAvailable: true, invokedTools: tools }
+}
+
+/** Every tool invoked — the shape that lets validReport() pass unchanged. */
+function allToolsCtx() {
+    return auditCtx([
+        'agent_trace',
+        'agent_config',
+        'schema_lookup',
+        'query_table',
+        'genai_log',
+        'log_analysis',
+        'read_artifact',
+    ])
+}
+
+describe('#79a citation cross-check', () => {
+    test('a citation naming a source no invoked tool reads → invalid, and names the source', () => {
+        const reports = load()
+        // The exact live shape: run 100c8910... cited agent_config having
+        // only ever invoked agent_trace.
+        const report = validReport({
+            root_causes: [
+                {
+                    layer: 'layer 7',
+                    component: 'sn_aia_trigger_configuration',
+                    finding: 'active=false',
+                    evidence: [
+                        { source: 'trace', detail: 'sn_aia_execution_plan: no rows' },
+                        { source: 'config', detail: 'sn_aia_trigger_configuration.active = false' },
+                    ],
+                },
+            ],
+        })
+
+        const result = reports.validate(report, auditCtx(['agent_trace']))
+
+        expect(result.valid).toBe(false)
+        expect(result.problems.some((p) => p.indexOf('unsupported citation') !== -1)).toBe(true)
+        expect(result.problems.some((p) => p.indexOf('config') !== -1)).toBe(true)
+    })
+
+    test('a citation supported through an ALTERNATE tool passes — the map is permissive', () => {
+        const reports = load()
+        const layers = sweptLayers()
+        // Only the layers genai_log and agent_trace can answer.
+        layers[2] = { status: 'NOT_SWEPT', reason: 'not reached' }
+        layers[3] = { status: 'NOT_SWEPT', reason: 'not reached' }
+        layers[4] = { status: 'NOT_SWEPT', reason: 'not reached' }
+        layers[5] = { status: 'NOT_SWEPT', reason: 'not reached' }
+        layers[7] = { status: 'NOT_SWEPT', reason: 'not reached' }
+        const report = validReport({
+            layers_swept: layers,
+            root_causes: [
+                {
+                    layer: 'layer 6',
+                    component: 'sys_generative_ai_capability api field',
+                    finding: 'api points at a definition that does not exist.',
+                    evidence: [
+                        { source: 'trace', detail: 'OneExtendUtil.execute status:error' },
+                        { source: 'config', detail: 'capability.api = 7c9f... which resolves to nothing' },
+                    ],
+                },
+            ],
+        })
+
+        // genai_log alone supports BOTH trace and config.
+        const result = reports.validate(report, auditCtx(['genai_log']))
+
+        expect(result.valid).toBe(true)
+    })
+
+    test('inconclusive.evidence_read is cross-checked identically', () => {
+        const reports = load()
+        const layers = sweptLayers()
+        Object.keys(layers).forEach((k) => {
+            layers[k] = { status: 'NOT_SWEPT', reason: 'no tool reached this layer' }
+        })
+        const report = validReport({
+            layers_swept: layers,
+            root_causes: [],
+            fixes: [],
+            verification: undefined,
+            inconclusive: {
+                evidence_read: [{ source: 'schema', detail: 'sys_dictionary for x_snc_troubleshoot_run' }],
+                needed_to_conclude: 'A schema read of the target table.',
+            },
+        })
+
+        const result = reports.validate(report, auditCtx(['agent_trace']))
+
+        expect(result.valid).toBe(false)
+        expect(result.problems.some((p) => p.indexOf('unsupported citation') !== -1)).toBe(true)
+    })
+
+    test('auditAvailable:false skips the cross-check entirely — a degraded trail convicts nobody', () => {
+        const reports = load()
+        const report = validReport()
+
+        const result = reports.validate(report, { auditAvailable: false, invokedTools: [] })
+
+        expect(result.valid).toBe(true)
+    })
+
+    test('a malformed context skips the cross-check rather than failing closed', () => {
+        const reports = load()
+
+        expect(reports.validate(validReport(), { auditAvailable: 'yes' }).valid).toBe(true)
+        expect(reports.validate(validReport(), null).valid).toBe(true)
+    })
+
+    test('a fully supported report passes with the audit check active', () => {
+        const reports = load()
+
+        expect(reports.validate(validReport(), allToolsCtx()).valid).toBe(true)
+    })
+})
+
+// =========================================================================
+// #79b — SWEPT claims cross-checked against what the run actually invoked
+// =========================================================================
+
+describe('#79b sweep-claim cross-check', () => {
+    test('layers marked SWEPT with no supporting tool → invalid', () => {
+        const reports = load()
+
+        // The re-run's worst draft: all seven layers SWEPT on two tool calls,
+        // both reads of the same trace.
+        const result = reports.validate(validReport(), auditCtx(['agent_trace', 'read_artifact']))
+
+        expect(result.valid).toBe(false)
+        expect(result.problems.some((p) => p.indexOf('unsupported sweep claim') !== -1)).toBe(true)
+    })
+
+    test('ONE collapsed problem, not one per layer', () => {
+        const reports = load()
+
+        const result = reports.validate(validReport(), auditCtx(['agent_trace']))
+        const sweepProblems = result.problems.filter((p) => p.indexOf('unsupported sweep claim') !== -1)
+
+        expect(sweepProblems.length).toBe(1)
+    })
+
+    test('the collapsed problem names every offending layer', () => {
+        const reports = load()
+
+        const result = reports.validate(validReport(), auditCtx(['agent_trace']))
+        const problem = result.problems.filter((p) => p.indexOf('unsupported sweep claim') !== -1)[0]
+
+        // agent_trace answers layer 1 only; 2-7 are all unsupported.
+        expect(problem.indexOf('2 (Instructions)')).not.toBe(-1)
+        expect(problem.indexOf('4 (Data schemas)')).not.toBe(-1)
+        expect(problem.indexOf('7 (Trigger and wiring)')).not.toBe(-1)
+        expect(problem.indexOf('1 (Execution trace)')).toBe(-1)
+    })
+
+    test('NOT_SWEPT and UNAVAILABLE are never cross-checked', () => {
+        const reports = load()
+        const layers = sweptLayers()
+        layers[2] = { status: 'NOT_SWEPT', reason: 'budget exhausted before instructions' }
+        layers[4] = { status: 'UNAVAILABLE', reason: 'schema read denied cross-scope' }
+        layers[5] = { status: 'NOT_SWEPT', reason: 'no data question arose' }
+        layers[6] = { status: 'NOT_SWEPT', reason: 'not reached' }
+        const report = validReport({ layers_swept: layers })
+
+        // agent_trace covers 1; agent_config covers 3 and 7. 2/4/5/6 are not SWEPT.
+        const result = reports.validate(report, auditCtx(['agent_trace', 'agent_config']))
+
+        expect(result.valid).toBe(true)
+    })
+
+    test('auditAvailable:false skips the sweep cross-check too', () => {
+        const reports = load()
+
+        const result = reports.validate(validReport(), { auditAvailable: false, invokedTools: [] })
+
+        expect(result.valid).toBe(true)
+    })
+
+    test('read_artifact alone supports NO layer — its producing tool is what counts', () => {
+        const reports = load()
+
+        const result = reports.validate(validReport(), auditCtx(['read_artifact']))
+        const sweepProblems = result.problems.filter((p) => p.indexOf('unsupported sweep claim') !== -1)
+
+        // All seven layers are SWEPT and none is supported: one collapsed problem.
+        expect(sweepProblems.length).toBe(1)
+        expect(sweepProblems[0].indexOf('7 layer(s)')).not.toBe(-1)
+    })
+
+    test('read_artifact alone supports NO citation either — the Task 3 map is corrected here', () => {
+        const reports = load()
+
+        const result = reports.validate(validReport(), auditCtx(['read_artifact']))
+
+        expect(result.problems.some((p) => p.indexOf('unsupported citation') !== -1)).toBe(true)
+    })
+})
+
+// =========================================================================
+// The contract the model is actually shown
+// =========================================================================
+
+describe('schemaText contract additions', () => {
+    test('tells the model citations are checked against tools actually called', () => {
+        const text = load().schemaText()
+
+        expect(text.indexOf('actually called') !== -1 || text.indexOf('actually invoked') !== -1).toBe(true)
+    })
+
+    test('tells the model a SWEPT layer needs a tool call behind it', () => {
+        const text = load().schemaText()
+
+        expect(text.indexOf('SWEPT')).not.toBe(-1)
+        expect(text.toLowerCase().indexOf('tool call')).not.toBe(-1)
+    })
+
+    test('tells the model how to report an absence', () => {
+        const text = load().schemaText()
+
+        expect(text.indexOf('UNAVAILABLE')).not.toBe(-1)
+        expect(text.indexOf('two distinct')).not.toBe(-1)
+    })
+
+    test('is still a single non-empty string', () => {
+        const text = load().schemaText()
+
+        expect(typeof text).toBe('string')
+        expect(text.length > 0).toBe(true)
+    })
+
+    // -----------------------------------------------------------------
+    // Regression net (fix round 1): the four tests above are presence-only
+    // and would survive a wrong tool mapping, a flipped read_artifact rule,
+    // or a "two citations" absence clause that no longer requires the
+    // sources to be DISTINCT. These derive their expectations from the
+    // enforcement code itself (_citationToolMap / _nonTraceEvidenceSources)
+    // so the test tracks the rule, not a hand-copied string, and fails on a
+    // wrong RULE rather than on harmless rewording.
+    // -----------------------------------------------------------------
+
+    test('the citation clause correctly maps each evidence source to the tools that actually support it (per _citationToolMap)', () => {
+        const fx = load()
+        const text = fx.schemaText()
+        const map = fx._citationToolMap()
+
+        // Isolate the citation-cross-check paragraph so a tool name that
+        // legitimately appears elsewhere in the schema (e.g. the SWEPT
+        // clause also names agent_config) can't produce a false pass.
+        const start = text.indexOf('EVIDENCE IS CHECKED AGAINST WHAT YOU ACTUALLY CALLED')
+        const end = text.indexOf('A LAYER MARKED SWEPT')
+        expect(start).not.toBe(-1)
+        expect(end).not.toBe(-1)
+        const clause = text.slice(start, end)
+
+        Object.keys(map).forEach((source) => {
+            // Capture whatever tool list follows "<source> from"/"<source>
+            // comes from" up to the next comma or period — tolerant of the
+            // exact connector wording and of '/' vs ', ' as the tool
+            // separator, but still positionally tied to THIS source.
+            const re = new RegExp(source + ' (?:comes from|from) ([^,.]+)', 'i')
+            const m = clause.match(re)
+            expect(m).not.toBeNull()
+
+            const mentioned = m[1]
+                .split(/[\/,]+/)
+                .map((s) => s.trim())
+                .filter(Boolean)
+                .sort()
+            const expected = map[source].slice().sort()
+
+            expect(mentioned).toEqual(expected)
+        })
+    })
+
+    test('states read_artifact does NOT count as evidence on its own (the negation, not just the token)', () => {
+        const text = load().schemaText()
+
+        expect(text.indexOf('read_artifact does NOT count')).not.toBe(-1)
+        // A flip to "read_artifact DOES count" or "also counts" would still
+        // contain the bare token "read_artifact" — assert the negated
+        // guidance, not merely that the tool name is mentioned somewhere.
+        expect(text.indexOf('read_artifact DOES count')).toBe(-1)
+    })
+
+    test('the SWEPT cross-check is stated as independent from the citation tool-map, not "the same way"', () => {
+        const text = load().schemaText()
+
+        // #79b's _layerToolMap is deliberately finer-grained than #79a's
+        // _citationToolMap (layers 2/3/7 require agent_config specifically,
+        // where the "config" evidence source also accepts genai_log) — the
+        // schema text must not claim the two checks share one map, or a
+        // model could conclude a genai_log-only run supports a layer-2
+        // SWEPT claim.
+        expect(text.indexOf('verified independently')).not.toBe(-1)
+        expect(text.indexOf('verified the same way')).toBe(-1)
+    })
+
+    test('the absence clause requires two DISTINCT non-trace sources (from _nonTraceEvidenceSources), not merely two citations', () => {
+        const fx = load()
+        const text = fx.schemaText()
+
+        // The exact source list is derived from the same helper the
+        // enforcement code (_checkEvidenceRule) calls, so a change to what
+        // counts as a non-trace source is caught here too.
+        expect(text.indexOf('cite two distinct sources from ' + fx._nonTraceEvidenceSources().join('/'))).not.toBe(
+            -1
+        )
+        expect(text.indexOf('Two citations of the same source are one source')).not.toBe(-1)
+    })
+
+    // -----------------------------------------------------------------
+    // Final whole-branch review (2026-08-02), finding 1: the SWEPT clause
+    // told the model claims are "verified independently, against the tools
+    // this run invoked" without ever saying WHICH tool backs WHICH layer —
+    // only the citation clause spelled its map out. A model that swept a
+    // layer with a real, audited tool call outside `_layerToolMap`'s
+    // per-layer choice (e.g. `query_table` directly against `sn_aia_agent`
+    // for layer 2/3) had no way to predict the rejection, and the only
+    // repair available in the one allowed repair turn is downgrading an
+    // honest SWEPT to NOT_SWEPT/UNAVAILABLE — teaching the model to
+    // under-report itself, the inverse of what this check exists to
+    // protect (same class of defect as issue #78). Derived from
+    // `_layerToolMap()`/`_layerDefs()`, exactly like the existing citation-
+    // clause test derives from `_citationToolMap()`, so this fails on a
+    // wrong RULE rather than surviving a silent drift between the map and
+    // the prose.
+    // -----------------------------------------------------------------
+
+    test('the SWEPT clause lists the per-layer tool map, generated from _layerToolMap (finding 1 — an honest sweep must be predictable, not a repair-turn trap)', () => {
+        const fx = load()
+        const text = fx.schemaText()
+        const map = fx._layerToolMap()
+        const defs = fx._layerDefs()
+
+        const start = text.indexOf('A LAYER MARKED SWEPT')
+        const end = text.indexOf('IF NOTHING EVER RAN')
+        expect(start).not.toBe(-1)
+        expect(end).not.toBe(-1)
+        const clause = text.slice(start, end)
+
+        defs.forEach((def) => {
+            const re = new RegExp(def.number + ' \\(' + def.name + '\\) needs one of: ([^;.]+)', 'i')
+            const m = clause.match(re)
+            expect(m).not.toBeNull()
+
+            const mentioned = m[1]
+                .split(/[\/,]+/)
+                .map((s) => s.trim())
+                .filter(Boolean)
+                .sort()
+            const expected = (map[def.number] || []).slice().sort()
+
+            expect(mentioned).toEqual(expected)
+        })
+    })
+})
+
+// =========================================================================
+// Final whole-branch review (2026-08-02), finding 2: `_citationToolMap().data`
+// and `_layerToolMap()[5]` are the same concept (layer 1 was already kept
+// aligned with the `trace` source) and should agree, so a `log_analysis`
+// read that is valid `data` evidence is also valid layer-5 ("Data") sweep
+// support.
+// =========================================================================
+
+describe('finding 2 — layer 5 (Data) is aligned with the data citation source', () => {
+    test('_layerToolMap()[5] matches _citationToolMap().data exactly', () => {
+        const fx = load()
+
+        const layerFive = fx._layerToolMap()[5].slice().sort()
+        const citationData = fx._citationToolMap().data.slice().sort()
+
+        expect(layerFive).toEqual(citationData)
+    })
+
+    test('log_analysis alone supports a layer-5 (Data) SWEPT claim, matching its role as a data citation', () => {
+        const reports = load()
+        const layers = sweptLayers()
+        layers[2] = { status: 'NOT_SWEPT', reason: 'not reached' }
+        layers[3] = { status: 'NOT_SWEPT', reason: 'not reached' }
+        layers[4] = { status: 'NOT_SWEPT', reason: 'not reached' }
+        layers[6] = { status: 'NOT_SWEPT', reason: 'not reached' }
+        layers[7] = { status: 'NOT_SWEPT', reason: 'not reached' }
+        // Layers 1 and 5 stay SWEPT; both are answerable by log_analysis alone.
+        const report = validReport({
+            layers_swept: layers,
+            root_causes: [
+                {
+                    layer: 'layer 5',
+                    component: 'sn_aia_execution_plan payload row',
+                    finding: 'the row referenced by the trace is malformed.',
+                    evidence: [
+                        { source: 'trace', detail: 'log analysis: malformed payload row flagged' },
+                        { source: 'data', detail: 'log analysis: same row, raw value dump' },
+                    ],
+                },
+            ],
+        })
+
+        const result = reports.validate(report, auditCtx(['log_analysis']))
+
+        expect(result.valid).toBe(true)
+    })
+})
+
+// =========================================================================
+// Final whole-branch review (2026-08-02), finding 3: `_buildCheckContext`
+// enabled the cross-checks whenever `auditAvailable === true` and
+// `invokedTools` was an array — including an empty one, or one containing
+// only blanks. `_anyInvoked` then matches nothing, so EVERY citation and
+// EVERY SWEPT claim is rejected at once — a fail-CLOSED outcome for a
+// context that should fail OPEN exactly like `auditAvailable:false` does.
+// =========================================================================
+
+describe('finding 3 — auditAvailable:true with an empty invokedTools list fails OPEN, not closed', () => {
+    test('an empty invokedTools array disables the audit-backed checks entirely, same as auditAvailable:false', () => {
+        const reports = load()
+
+        const result = reports.validate(validReport(), { auditAvailable: true, invokedTools: [] })
+
+        expect(result.valid).toBe(true)
+    })
+
+    test('an invokedTools array of only blanks/whitespace/null also disables the checks', () => {
+        const reports = load()
+
+        const result = reports.validate(validReport(), {
+            auditAvailable: true,
+            invokedTools: ['', '   ', null, undefined],
+        })
+
+        expect(result.valid).toBe(true)
+    })
+
+    test('a genuinely non-empty invokedTools array still enables the checks as before (no over-correction)', () => {
+        const reports = load()
+
+        // Only agent_trace invoked; validReport()'s other SWEPT layers are unsupported.
+        const result = reports.validate(validReport(), auditCtx(['agent_trace']))
+
+        expect(result.valid).toBe(false)
+    })
+})
