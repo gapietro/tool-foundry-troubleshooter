@@ -140,6 +140,40 @@ describe('check_config — the refuted heuristic (R-22)', () => {
         expect(result.data.notes.join(' ')).toMatch(/identical to an instance where every definition is healthy/)
     })
 
+    it('reports a truncated audit as partial, never ok', () => {
+        // On a typical instance this mode reads 100 of ~2026 definitions, so
+        // the audit is almost always a sample. `ok` with zero findings in the
+        // first page is indistinguishable from a complete clean audit, and the
+        // dangling-api or mandatory-binding defect lives in the unaudited
+        // tail. The note already said "sample rather than a sweep"; the
+        // status is what a consumer gates on, and it contradicted the note in
+        // the same result object.
+        const many = []
+        for (let i = 0; i < 105; i++) {
+            many.push({
+                sys_id: 'def' + i,
+                name: 'Cap ' + i,
+                capability: 'cap1',
+                api_type: 'sys_hub_flow',
+                api: 'flow1',
+                connection: '',
+            })
+        }
+
+        const { result } = run(
+            { mode: 'check_config' },
+            world({
+                sys_one_extend_capability_definition: many,
+                sys_one_extend_capability: [{ sys_id: 'cap1', name: 'Summarize' }],
+            })
+        )
+
+        expect(result.data.truncated_at).toBe(100)
+        expect(result.data.audit_status).toBe('partial')
+        expect(result.data.findings).toEqual([])
+        expect(result.data.notes.join(' ')).toMatch(/sample rather than a sweep/)
+    })
+
     it('reports a genuinely clean audit as ok', () => {
         const { result } = run(
             { mode: 'check_config' },
