@@ -915,12 +915,26 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ### Task 4: #79b — cross-check `layers_swept` SWEPT claims
 
 **Files:**
-- Modify: `src/server/PaFixReport.js` — add `_checkSweptClaims` and `_layerToolMap` (the `validate` call site already exists from Task 2)
+- Modify: `src/server/PaFixReport.js` — add `_checkSweptClaims` and `_layerToolMap`, **and add the call site in `validate`**
 - Test: `test/PaFixReport.test.js`
 
 **Interfaces:**
 - Consumes: `_anyInvoked(candidates, ctx)` and `_invokedList(ctx)` from Task 3; `_layerDefs()` (existing, `:71`).
-- Produces: `_checkSweptClaims(report, problems, ctx)`, already called from `validate`.
+- Produces: `_checkSweptClaims(report, problems, ctx)`, called from `validate`.
+
+> **Plan correction (made after Task 2's review).** Task 2's Step 3a code block listed
+> `this._checkSweptClaims(report, problems, ctx)` inside `validate`, but that method does not exist
+> until this task — including it in Task 2 would have thrown `TypeError` on every `validate` call and
+> failed the entire suite. Task 2 correctly omitted it. **This task therefore owns the call site.**
+> Add it to `validate` between `_checkLayersSwept` and `_checkRootCauses`:
+>
+> ```javascript
+>         this._checkLayersSwept(report, problems)
+>         this._checkSweptClaims(report, problems, ctx)
+>         this._checkRootCauses(report, problems, ctx)
+> ```
+>
+> Without this line the new methods are dead code and this task's tests will fail.
 
 - [ ] **Step 1: Write the failing tests**
 
