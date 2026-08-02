@@ -13,13 +13,19 @@
  *      scoped app fails silently — so this record has to exist for
  *      `/analyze` to actually queue anything.
  *   2. The `ScriptAction` that listens for it and drives the diagnosis:
- *      `new PaAgentLoop().run(String(event.parm1), String(event.parm2))` —
- *      `parm1` is the run_id, `parm2` the JSON-stringified diagnostic
- *      request, exactly as queued. Both are coerced with `String()` before
- *      the call — belt and braces alongside `PaAgentLoop._normRequest`'s own
- *      fix, since the platform delivers these as Rhino Java Strings, not JS
- *      strings (issue #77). INLINE, not `Now.include`d, and that is
- *      deliberate: a
+ *      `new PaAgentLoop().run(event.parm1, requestJson)` where `requestJson`
+ *      is `String(event.parm2)` guarded against null/undefined — `parm1` is
+ *      the run_id, passed through UNCOERCED so `PaAgentLoop.run`'s own
+ *      `_str()` guard (null-safe, and correctly converts a Rhino Java
+ *      String) can fail fast on a missing run id instead of being handed the
+ *      literal string `"null"`. `parm2` is the JSON-stringified diagnostic
+ *      request; it still needs an explicit `String()` — the platform
+ *      delivers it as a Rhino Java String, not a JS string (issue #77) — but
+ *      only when it is actually present, so a missing `parm2` yields `''`
+ *      (which `_normRequest` correctly turns into `{}`) rather than the
+ *      string `"null"` (which `_normRequest` would JSON-parse into a
+ *      fabricated `{description: "null"}`). INLINE, not `Now.include`d, and
+ *      that is deliberate: a
  *      `Now.include`d module is run through the build's platform-API
  *      linter, which flags the bare identifier `event` as the browser DOM
  *      global ("Unexpected use of 'event' ... Web APIs are not supported",
@@ -110,16 +116,18 @@ export const runStartWorker = ScriptAction({
     name: 'Troubleshooter Run Start Worker',
     active: true,
     description:
-        'Drives one diagnostic run to completion: new PaAgentLoop().run(String(event.parm1), String(event.parm2)) where parm1 is the run_id and parm2 is the JSON-stringified diagnostic request',
+        'Drives one diagnostic run to completion: new PaAgentLoop().run(event.parm1, requestJson) where parm1 is the run_id (passed uncoerced so run()._str() can fail fast on a missing id) and requestJson is event.parm2 coerced with String() only when present, so a missing parm2 yields empty string rather than the literal "null"',
     eventName: 'x_snc_troubleshoot.run.start',
     order: 100,
     // Inline, not Now.include'd — see the file header's note on why the
     // platform-documented `event` global fails the module linter when
     // pulled in through Now.include. No backtick, no escape sequence.
     script: script`(function () {
-    var runId = String(event.parm1);
-    var requestJson = String(event.parm2);
-    new PaAgentLoop().run(runId, requestJson);
+    var requestJson = '';
+    if (event.parm2 !== null && event.parm2 !== undefined) {
+        requestJson = String(event.parm2);
+    }
+    new PaAgentLoop().run(event.parm1, requestJson);
 })();`,
 })
 
