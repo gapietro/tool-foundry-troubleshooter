@@ -200,7 +200,7 @@ harnesses.
 | Gate result | **8 / 10 = 80.0%** | **0 / 10 = 0.0%** |
 | Band (proportional, §A3) | Top (≥ 80%) | Bottom (< 50%) |
 | `layers_swept` (typical) | 4–6 of 7, varies by run — real, audit-confirmed sweeps | **1/7 (L1) on all 10 rows, no exception** — `agent_trace` + one `read_artifact` page, then straight to a fix attempt |
-| Evidence quality | Config/schema citations correspond to tools actually called | **Config/schema citations were fabricated in every "complete" row** — `agent_config` was never called in any of the 10 runs, yet several reports claimed it was, including two that labeled fabricated ids/evidence as `"(hypothetical example)"` in the model's own text |
+| Evidence quality | Config/schema citations correspond to tools actually called | **Config/schema citations were fabricated in all 7 `complete` rows** — `agent_config` was never called in any of the 10 runs (audit-confirmed), yet every completed row's Fix Report includes a `config`- or `schema`-sourced evidence entry citing it. One row (seed 4, run 1) goes further: across its three separate root causes, each fabricated evidence entry is literally labeled `"(hypothetical example)"` in the model's own output text |
 | Wall-clock | 178–232s (seed 2 rows measured this task) | 5–14s |
 | Void rows | 0 | 0 |
 
@@ -258,12 +258,15 @@ compounding failure modes, present in different mixes across the 10 rows:
    five tools that carry layers 2–6, i.e. every layer except the trace itself. This matches Task
    7/9's smoke-specimen finding exactly, now confirmed as this harness's *systemic* behavior
    across 5 independent seeds rather than a property of one specimen.
-2. **Fabricated corroborating evidence.** Several "complete" rows produced a `root_causes[].evidence`
-   entry labeled `source: "config"` or `source: "schema"` with specific-sounding detail (a
-   `DENIED` permission status for a table the seed never touches; schema version numbers; tool
-   ids) that no tool call in the transcript could have produced. Two rows (seed 4, run 1) label
-   their own fabricated detail `"(hypothetical example)"` in the output text — the model
-   narrating, and flagging, its own invention rather than reporting an absence honestly.
+2. **Fabricated corroborating evidence.** All 7 "complete" rows produced at least one
+   `root_causes[].evidence` entry labeled `source: "config"` or `source: "schema"` with
+   specific-sounding detail (a `DENIED` permission status for a table the seed never touches;
+   schema version numbers; tool ids; claims that "the agent_config tool showed...") that no tool
+   call in the transcript could have produced — `agent_config` was never called in any of the 10
+   runs, audit-confirmed. One row (seed 4, run 1) goes further: across its three separate root
+   causes, each fabricated evidence entry is literally labeled `"(hypothetical example)"` in the
+   output text — the model narrating, and flagging, its own invention rather than reporting an
+   absence honestly.
 3. **Wrong layer, every time.** Not one of the 10 runs named the seed's expected root-cause layer.
    Where a specific mechanism was named, it was frequently unrelated to anything in the seed's own
    configuration — seed 5 run 2's root cause cites a `Create Incident` tool that does not exist in

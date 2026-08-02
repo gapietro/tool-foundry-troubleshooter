@@ -1,8 +1,15 @@
 # Scorecard — Custom Harness (Task 10, Phase 1b comparison re-run)
 
 Filled 2026-08-02, `gpinst01`, per `benchmark/README.md` "The Phase 1b comparison re-run
-protocol". Copied from `scorecard-template.md`; the template's column definitions and rules
-are preserved below as the scoring contract this file was filled against.
+protocol". Copied from `scorecard-template.md`; the template's core scoring contract — §A rubric,
+§A2 gate rule, §A3 void handling, §E audit-derivation discipline — is preserved below verbatim.
+**§B is summarized, not reproduced, and this file's `cause_of_death` values depart from its closed
+vocabulary** (`completed | tool_limit | context | supervision_stall | security | wandered |
+genai_down`, all native-terminal-state concepts): the custom harness has no equivalent taxonomy of
+its own, so its rows below use free text describing the actual terminal condition
+(`PaFixReport.validate` rejection vs. a self-terminated "premature" completion) rather than forcing
+a fit to a vocabulary built for the native ReAct engine's failure modes. Native's rows in this file
+use the template's `cause_of_death` values unchanged.
 
 **Scope of this file, per the protocol's asymmetry (deliberate, not an oversight):**
 
@@ -115,11 +122,11 @@ harness owns its own run record). LLM-call count is `actor:'llm'` transcript ent
 | 02 | 1 | `8d8192c42ba2cbd417a6ffbeee91bf06` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | completed (premature — 1 tool + 1 read_artifact page, then fix_report) | 2 | 3 | ~6s | Root cause: layer **1**, "permission DENIED reading `incident`" — **fabricated**: this seed never touches `incident`, and the evidence's own "config" entry admits *"was not explicitly checked due to heuristic attribution limitations"*. Expected layer 2 (instruction); not named. Fix: "update access roles" — wrong target entirely. |
 | 02 | 2 | `dd81d2c42ba2cbd417a6ffbeee91bf37` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | completed (premature) | 2 | 4 | ~9s | Three root causes (layers 1, 4, 3), none layer 2. Evidence cites fabricated ids not present anywhere on the instance (`TOOL-1234`, `SCHEMA-5678`, `TOOL-9012`) — invented placeholders dressed as real sys_ids/schema versions. |
 | 03 | 1 | `31815e402ba6c314f243fed2ce91bfc4` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | n/a — status=`failed` (evidence rule + missing `fixes[0].proposed`) | 2 | 4 | ~14s | No valid report. Expected layer 5 (`genuinely_empty`) never reached — routing table never queried (`query_table` not called). |
-| 03 | 2 | `06819e402ba6c314f243fed2ce91bf9f` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | completed (premature) | 2 | 3 | ~6s | Root cause layer 1, "script stack error". `layers_swept` self-report claims L2/L3 `SWEPT` via agent_config — **audit trail refutes this**: agent_config never called. Expected layer 5; not named. |
+| 03 | 2 | `06819e402ba6c314f243fed2ce91bf9f` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | completed (premature) | 2 | 3 | ~6s | Root cause layer 1, "script stack error", with a `config`-sourced evidence entry ("Agent instructions or tool script contained invalid logic") — **fabricated**: audit confirms `agent_config` was never called. `layers_swept` self-report also claims L2/L3 `SWEPT` via agent_config — same refutation. Expected layer 5; not named. |
 | 04 | 1 | `1a81d2c42ba2cbd417a6ffbeee91bf3e` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | completed (premature) | 2 | 4 | ~10s | Three root causes (layers 1, 3, 4), each evidence entry literally labeled `"(hypothetical example)"` in the model's own text — an admitted fabrication, not a hedge. Expected layer 6 (`genai_stack`); never named. Never read the definition row's dangling `api`. |
-| 04 | 2 | `6e819e402ba6c314f243fed2ce91bfa5` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | completed (premature) | 2 | 3 | ~8s | Root cause layer 1, "script stack error". Same hallucinated-sweep pattern (claims agent_config used; audit says no). Never touched the decoy or the real defect — didn't reach layer 6 at all. |
-| 05 | 1 | `8b8112802ba6c314f243fed2ce91bf08` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | completed (premature) | 2 | 3 | ~5s | Root cause layer 1, "script stack error" — near-identical boilerplate text to seed 04 run 2, suggesting a generic fallback answer when there is no real execution trace to anchor to (seed 5 has none by design). Expected layer 7 (wiring/activation); never named, never reached `agent_config`, never saw the trigger. |
-| 05 | 2 | `2b8112802ba6c314f243fed2ce91bff3` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | completed (premature) | 2 | 3 | ~6s | Root cause layer 3, "Create Incident tool input schema, missing `short_description`" — **`Create Incident` is not a tool that exists anywhere in this seed's (or any seed's) configuration**; wholesale hallucination, unrelated to the actual agent/workflow. Expected layer 7; not named. |
+| 04 | 2 | `6e819e402ba6c314f243fed2ce91bfa5` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | completed (premature) | 2 | 3 | ~8s | Root cause layer 1, "script stack error", with a `config`-sourced evidence entry ("The agent_config tool showed the instructions and tool definitions are present.") — **fabricated**: audit confirms `agent_config` was never called. `layers_swept` self-report claims L2/L3 `SWEPT` on the same false basis. Never touched the decoy or the real defect — didn't reach layer 6 at all. |
+| 05 | 1 | `8b8112802ba6c314f243fed2ce91bf08` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | completed (premature) | 2 | 3 | ~5s | Root cause layer 1, "script stack error", with a `config`-sourced evidence entry ("The agent_config tool showed the instructions and tool definitions are present.") — **fabricated**: audit confirms `agent_config` was never called; text is near-identical boilerplate to seed 04 run 2, suggesting a generic fallback answer when there is no real execution trace to anchor to (seed 5 has none by design). Expected layer 7 (wiring/activation); never named, never saw the trigger. |
+| 05 | 2 | `2b8112802ba6c314f243fed2ce91bff3` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | completed (premature) | 2 | 3 | ~6s | Root cause layer 3, "Create Incident tool input schema, missing `short_description`", with a `config`-sourced evidence entry ("Agent_config revealed the tool schema requires 'short_description'...") — **fabricated**: audit confirms `agent_config` was never called, and **`Create Incident` is not a tool that exists anywhere in this seed's (or any seed's) configuration** — wholesale hallucination, unrelated to the actual agent/workflow. Expected layer 7; not named. |
 
 **Gate tally — custom harness**
 
