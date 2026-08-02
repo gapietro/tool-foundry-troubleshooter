@@ -839,9 +839,9 @@ PaFixReport.prototype = {
         )
         lines.push(
             'A LAYER MARKED SWEPT NEEDS A TOOL CALL BEHIND IT. layers_swept entries marked SWEPT are ' +
-                'verified the same way: claiming a layer you never ran a tool against is rejected. Marking a ' +
-                'layer NOT_SWEPT or UNAVAILABLE with an honest reason is always acceptable and costs you ' +
-                'nothing — an inflated sweep claim costs you the whole report.'
+                'verified independently, against the tools this run invoked: claiming a layer you never ran ' +
+                'a tool against is rejected. Marking a layer NOT_SWEPT or UNAVAILABLE with an honest reason is ' +
+                'always acceptable and costs you nothing — an inflated sweep claim costs you the whole report.'
         )
         lines.push(
             'IF NOTHING EVER RAN, SAY SO — you do not need a trace citation. When there is no execution ' +

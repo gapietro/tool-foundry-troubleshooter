@@ -1294,4 +1294,84 @@ describe('schemaText contract additions', () => {
         expect(typeof text).toBe('string')
         expect(text.length > 0).toBe(true)
     })
+
+    // -----------------------------------------------------------------
+    // Regression net (fix round 1): the four tests above are presence-only
+    // and would survive a wrong tool mapping, a flipped read_artifact rule,
+    // or a "two citations" absence clause that no longer requires the
+    // sources to be DISTINCT. These derive their expectations from the
+    // enforcement code itself (_citationToolMap / _nonTraceEvidenceSources)
+    // so the test tracks the rule, not a hand-copied string, and fails on a
+    // wrong RULE rather than on harmless rewording.
+    // -----------------------------------------------------------------
+
+    test('the citation clause correctly maps each evidence source to the tools that actually support it (per _citationToolMap)', () => {
+        const fx = load()
+        const text = fx.schemaText()
+        const map = fx._citationToolMap()
+
+        // Isolate the citation-cross-check paragraph so a tool name that
+        // legitimately appears elsewhere in the schema (e.g. the SWEPT
+        // clause also names agent_config) can't produce a false pass.
+        const start = text.indexOf('EVIDENCE IS CHECKED AGAINST WHAT YOU ACTUALLY CALLED')
+        const end = text.indexOf('A LAYER MARKED SWEPT')
+        expect(start).not.toBe(-1)
+        expect(end).not.toBe(-1)
+        const clause = text.slice(start, end)
+
+        Object.keys(map).forEach((source) => {
+            // Capture whatever tool list follows "<source> from"/"<source>
+            // comes from" up to the next comma or period — tolerant of the
+            // exact connector wording and of '/' vs ', ' as the tool
+            // separator, but still positionally tied to THIS source.
+            const re = new RegExp(source + ' (?:comes from|from) ([^,.]+)', 'i')
+            const m = clause.match(re)
+            expect(m).not.toBeNull()
+
+            const mentioned = m[1]
+                .split(/[\/,]+/)
+                .map((s) => s.trim())
+                .filter(Boolean)
+                .sort()
+            const expected = map[source].slice().sort()
+
+            expect(mentioned).toEqual(expected)
+        })
+    })
+
+    test('states read_artifact does NOT count as evidence on its own (the negation, not just the token)', () => {
+        const text = load().schemaText()
+
+        expect(text.indexOf('read_artifact does NOT count')).not.toBe(-1)
+        // A flip to "read_artifact DOES count" or "also counts" would still
+        // contain the bare token "read_artifact" — assert the negated
+        // guidance, not merely that the tool name is mentioned somewhere.
+        expect(text.indexOf('read_artifact DOES count')).toBe(-1)
+    })
+
+    test('the SWEPT cross-check is stated as independent from the citation tool-map, not "the same way"', () => {
+        const text = load().schemaText()
+
+        // #79b's _layerToolMap is deliberately finer-grained than #79a's
+        // _citationToolMap (layers 2/3/7 require agent_config specifically,
+        // where the "config" evidence source also accepts genai_log) — the
+        // schema text must not claim the two checks share one map, or a
+        // model could conclude a genai_log-only run supports a layer-2
+        // SWEPT claim.
+        expect(text.indexOf('verified independently')).not.toBe(-1)
+        expect(text.indexOf('verified the same way')).toBe(-1)
+    })
+
+    test('the absence clause requires two DISTINCT non-trace sources (from _nonTraceEvidenceSources), not merely two citations', () => {
+        const fx = load()
+        const text = fx.schemaText()
+
+        // The exact source list is derived from the same helper the
+        // enforcement code (_checkEvidenceRule) calls, so a change to what
+        // counts as a non-trace source is caught here too.
+        expect(text.indexOf('cite two distinct sources from ' + fx._nonTraceEvidenceSources().join('/'))).not.toBe(
+            -1
+        )
+        expect(text.indexOf('Two citations of the same source are one source')).not.toBe(-1)
+    })
 })
