@@ -49,6 +49,10 @@ declare global {
                         table: 'sys_script_client'
                         id: 'af760ca041894ddd9b914b5af65cb766'
                     }
+                    'pa-agent-loop': {
+                        table: 'sys_script_include'
+                        id: '63cde457a0a34165ab4dc227797dfd16'
+                    }
                     'pa-artifact-store': {
                         table: 'sys_script_include'
                         id: 'fb2d4b7e7c794f8b956cc1a8eb3871f6'
@@ -57,10 +61,18 @@ declare global {
                         table: 'sys_script_include'
                         id: '2fc5b74bb9f4425b846022e1572ed294'
                     }
+                    'pa-fix-report': {
+                        table: 'sys_script_include'
+                        id: '02e215b1cf424baeb7f13a3fd5145ae3'
+                    }
                     'pa-llm-input-prompt': {
                         table: 'sys_one_extend_definition_attribute'
                         id: 'd045f44fadb4411c94d114edc67c7218'
                         deleted: true
+                    }
+                    'pa-llm-proxy': {
+                        table: 'sys_script_include'
+                        id: 'ed5c865ceab74581af9040b28c9e86b2'
                     }
                     'pa-llm-reason-acl': {
                         table: 'sys_security_acl'
@@ -134,9 +146,17 @@ declare global {
                         table: 'sys_one_extend_definition_attribute'
                         id: 'f657ed16599b48a7a6ffc8301e18bf01'
                     }
+                    'pa-rest-handlers': {
+                        table: 'sys_script_include'
+                        id: 'bb56fbba83d6439a9a786dbbffcde463'
+                    }
                     'pa-run-anchor': {
                         table: 'sys_script_include'
                         id: '442109ddbf1c459d919c2b04ffa9e71f'
+                    }
+                    'pa-run-manager': {
+                        table: 'sys_script_include'
+                        id: 'fa5ff2c04df6474ea45b8d909133bb5d'
                     }
                     'pa-script-tool-adapter': {
                         table: 'sys_script_include'
@@ -170,6 +190,10 @@ declare global {
                         table: 'sys_script_include'
                         id: 'a1dabd22816640edbcc43b3d87422997'
                     }
+                    'pa-tool-registry': {
+                        table: 'sys_script_include'
+                        id: '4971ec9e558d4c5695103c5726c546ee'
+                    }
                     'pa-tool-schema-lookup': {
                         table: 'sys_script_include'
                         id: '7637530d904841498691b27cd923c90e'
@@ -177,6 +201,14 @@ declare global {
                     package_json: {
                         table: 'sys_module'
                         id: '296e46a72ad14ef5a7f123411966e86e'
+                    }
+                    'run-start-event': {
+                        table: 'sysevent_register'
+                        id: '0d32b2c4557446f09def2634cd9342f6'
+                    }
+                    'run-start-worker': {
+                        table: 'sysevent_script_action'
+                        id: '0e5d43bca3a64ecba031985a7d1c7559'
                     }
                     'scope-probe-adapter': {
                         table: 'sys_ws_operation'
@@ -214,6 +246,10 @@ declare global {
                     'scope-probe-v1': {
                         table: 'sys_ws_version'
                         id: '75b650020ec04fd8a583813797f4e91c'
+                    }
+                    'src_server_async_sweep-stale-runs_js': {
+                        table: 'sys_module'
+                        id: 'e0fe3faf665743c4ac95cc3b6116e93b'
                     }
                     src_server_PaAgentLoop_js: {
                         table: 'sys_module'
@@ -255,6 +291,10 @@ declare global {
                         table: 'sys_module'
                         id: '1cdeb056ba2a4c33ac23685fdfefbcdb'
                     }
+                    src_server_rest_PaRestHandlers_js: {
+                        table: 'sys_module'
+                        id: '6408eb2d707249398414e5da462ac24d'
+                    }
                     src_server_script_ts: {
                         table: 'sys_module'
                         id: 'd8226c63fd0d44bea250580a81a4424c'
@@ -286,6 +326,46 @@ declare global {
                     src_server_tools_PaToolSchemaLookup_js: {
                         table: 'sys_module'
                         id: '604cba00d49c43589337e55b3552f19a'
+                    }
+                    'stale-run-sweep': {
+                        table: 'sysauto_script'
+                        id: '6121cda46e784c16a2572c8a941e315c'
+                    }
+                    'troubleshooter-api': {
+                        table: 'sys_ws_definition'
+                        id: '4c8c96efa69c494db3b5856c10cd2c01'
+                    }
+                    'troubleshooter-api-v1': {
+                        table: 'sys_ws_version'
+                        id: '7033cfc6657e469587981dec3829b83e'
+                    }
+                    'troubleshooter-param-get-run-id': {
+                        table: 'sys_ws_query_parameter'
+                        id: 'c34e2406b9304346878e80d48ce7f8eb'
+                    }
+                    'troubleshooter-param-message-run-id': {
+                        table: 'sys_ws_query_parameter'
+                        id: '1ed0981679814f4e91b00d21abad10a6'
+                    }
+                    'troubleshooter-route-analyze': {
+                        table: 'sys_ws_operation'
+                        id: '2dfdea5c21c94f618239d50317e8f8e2'
+                    }
+                    'troubleshooter-route-get-run': {
+                        table: 'sys_ws_operation'
+                        id: 'f08a2179378041a288e8e4c859cbd346'
+                    }
+                    'troubleshooter-route-message': {
+                        table: 'sys_ws_operation'
+                        id: '7dcee59300d04fef95bb1850f33d1b22'
+                    }
+                    'troubleshooter-route-status': {
+                        table: 'sys_ws_operation'
+                        id: 'dc54175c37cd417fb84b44870d45e8a7'
+                    }
+                    'troubleshooter-route-tools': {
+                        table: 'sys_ws_operation'
+                        id: '923fc0c586fe4844ae7457cfe7e07589'
                     }
                     'xsp-syslog-read': {
                         table: 'sys_scope_privilege'
@@ -932,6 +1012,14 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_ws_query_parameter_map'
+                        id: '8c257819820c4feda4201778f4159092'
+                        key: {
+                            web_service_operation: '7dcee59300d04fef95bb1850f33d1b22'
+                            web_service_query_parameter: '1ed0981679814f4e91b00d21abad10a6'
+                        }
+                    },
+                    {
                         table: 'sys_documentation'
                         id: '8f0b2570c0b54f74af0c194bd2ec4e87'
                         key: {
@@ -1199,6 +1287,14 @@ declare global {
                                     skill_id: '0bf0bc13a7414399a1482d21de01231d'
                                 }
                             }
+                        }
+                    },
+                    {
+                        table: 'sys_ws_query_parameter_map'
+                        id: 'dda23265e76044a9adfa70fb47e4a741'
+                        key: {
+                            web_service_operation: 'f08a2179378041a288e8e4c859cbd346'
+                            web_service_query_parameter: 'c34e2406b9304346878e80d48ce7f8eb'
                         }
                     },
                     {

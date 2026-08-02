@@ -442,7 +442,7 @@ PaRunManager.prototype = {
                     name: ldef.name,
                     tool: t.name,
                     status: status,
-                    data: ldef.pick(result && result.data),
+                    data: this._pickLayerData(result, ldef.pick),
                 }
             }
         }
@@ -555,6 +555,43 @@ PaRunManager.prototype = {
         }
 
         return 'ok'
+    },
+
+    /**
+     * R-11, extended (review fix round, issue #64/#65 — live-caught on
+     * gpinst01 Task 7 Step 4): a TRUNCATED dispatch result
+     * (`PaToolRegistry.dispatch` via `PaArtifactStore.applyThreshold`) has NO
+     * `.data` key at all — it is `{success, truncated:true, tool,
+     * total_length, artifact_id, page_size, pages, excerpt, note}`. Handing
+     * `result.data` (`undefined`) to a layer's `pick()` silently reports the
+     * layer as `null` — indistinguishable from "genuinely nothing here" even
+     * though the real content exists, paged, behind `artifact_id`. That is a
+     * truncated read reported as an absence, exactly what R-11 forbids for a
+     * DENIED read; the same standard applies here. `pick()` is only
+     * meaningful against an UNtruncated `.data` shape (it reaches INTO the
+     * tool's own result, e.g. `data.instructions`), so it is skipped
+     * entirely when truncated — the truncated envelope IS the layer's
+     * honest content in that case, and a consumer pages the rest via
+     * `read_artifact`. The agent_config fan-out (layers 2/3/7 share one
+     * dispatch) hands the SAME envelope reference to all three layers when
+     * agent_config truncates — each still carries its own `name`/`tool` so
+     * a consumer can tell which of the three it is looking at while knowing
+     * they all page through the one artifact.
+     *
+     * @returns {*} the truncated envelope subset, or `pick(result.data)`
+     */
+    _pickLayerData: function (result, pick) {
+        if (result && result.truncated === true) {
+            return {
+                truncated: true,
+                artifact_id: result.artifact_id,
+                excerpt: result.excerpt,
+                total_length: result.total_length,
+                page_size: result.page_size,
+                pages: result.pages,
+            }
+        }
+        return pick(result && result.data)
     },
 
     _readRunContext: function (runId) {

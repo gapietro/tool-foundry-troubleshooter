@@ -11,6 +11,39 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0212 — 2026-08-02
+
+Phase 1b Task 7 (issue #64): async wiring + Scripted REST API — the custom harness's first
+end-to-end run on gpinst01. `src/server/rest/PaRestHandlers.js` is the new REST business-logic
+layer (28 zero-Glide Jest tests): `analyze`/`getRun`/`message`/`status`/`tools`, each a plain
+`{body, pathParams, userId} -> {status, body}` function backing `src/fluent/rest-api.now.ts`'s
+5 one-line-delegation routes (`POST /analyze`, `GET /runs/{run_id}`, `POST
+/runs/{run_id}/message`, `GET /status`, `GET /tools`, all under
+`/api/x_snc_troubleshoot/v1/troubleshooter`). `src/fluent/async-wiring.now.ts` adds the
+`x_snc_troubleshoot.run.start` event registration, the ScriptAction worker (`new
+PaAgentLoop().run(event.parm1, event.parm2)`), and the daily `PaRunManager.sweepStaleNative({})`
+sweep. `src/fluent/script-includes.now.ts` gets six new registrations — PaLlmProxy,
+PaToolRegistry, PaFixReport, PaRunManager, PaAgentLoop and PaRestHandlers were pure logic +
+tests through Task 6; this is where all six first become resolvable on-instance.
+
+Live-verified end-to-end on gpinst01: `mode:"collect"` returns the Evidence Bundle synchronously
+and closes the run; `mode:"diagnose"` queues the async worker, which ran the full reason→act→
+observe loop against the Task 12 smoke specimen and closed every run cleanly (no run left
+`running`); `/status` reports `ready:true` across all six deep checks (plugins, own-skill
+existence+activation, capability-provider mapping, a live micro-invocation, section-2 table
+readability, stuck-run count) after fixing a live-caught defect of its own — the Now Assist Core
+plugin API name in `now-assist-platform.md`'s "Required Plugins" table is wrong for this
+instance (`com.now_assist_core`, not `com.snc.now_assist`; confirmed against `v_plugin`). Also
+surfaced, and left unmodified per the task's own instruction, two pre-existing defects in
+already-merged Task 2/4 components that make the Fix Report path's one-repair-retry
+mechanically incapable of succeeding: the playbook's Fix Report section never states the
+required JSON's lowercase snake_case keys, and `PaFixReport.repairPrompt`'s wording never asks
+for the `{"action":"fix_report",...}` envelope `PaLlmProxy.reason()` strictly requires — see
+`.superpowers/sdd/2026-08-02-phase1b-harness/task-7-report.md` for the full reproduction and
+root-cause trail.
+
+---
+
 ## 2026.08.0211 — 2026-08-02
 
 Phase 1b Task 6 (issue #62): `PaAgentLoop` (`src/server/PaAgentLoop.js`) — the async ReAct worker

@@ -219,6 +219,48 @@ describe('PaFixReport.validate — structural matrix', () => {
         expect(result.problems.some((p) => p.indexOf('finding') !== -1)).toBe(true)
     })
 
+    // Fix round (issue #64/#65, controller ruling on the third live-caught
+    // defect): a bare JSON number (1-7) is a completely reasonable way for a
+    // model to answer "which layer" — root_causes[].layer is keyed the same
+    // 1-7 range layers_swept already uses, and rejecting the number was
+    // validator pedantry, not a real defect. Live-caught on gpinst01: once
+    // the key-casing and envelope defects were fixed, the model's repair
+    // draft used `"layer":1` / `"layer":4` and both were rejected as
+    // "missing layer".
+    test('a numeric layer (JSON number 1-7) is accepted, not rejected as missing', () => {
+        const fx = load()
+        const report = validReport()
+        report.root_causes[0].layer = 1
+
+        const result = fx.validate(report)
+
+        expect(result.valid).toBe(true)
+        expect(result.problems).toBeUndefined()
+    })
+
+    test('a numeric layer is normalized to its string form in the normalized output', () => {
+        const fx = load()
+        const report = validReport()
+        report.root_causes[0].layer = 4
+
+        const result = fx.validate(report)
+
+        expect(result.valid).toBe(true)
+        expect(result.normalized.root_causes[0].layer).toBe('4')
+        expect(typeof result.normalized.root_causes[0].layer).toBe('string')
+    })
+
+    test('a string layer passes through the normalized output unchanged', () => {
+        const fx = load()
+        const report = validReport()
+        report.root_causes[0].layer = 'layer 7'
+
+        const result = fx.validate(report)
+
+        expect(result.valid).toBe(true)
+        expect(result.normalized.root_causes[0].layer).toBe('layer 7')
+    })
+
     test('the evidence rule: a root cause whose evidence cites ONLY the trace → "evidence rule" problem naming the cause', () => {
         const fx = load()
         const report = validReport()
@@ -514,5 +556,47 @@ describe('PaFixReport.repairPrompt', () => {
         expect(() => fx.repairPrompt(undefined, undefined)).not.toThrow()
         expect(() => fx.repairPrompt(null, null)).not.toThrow()
         expect(() => fx.repairPrompt({}, [])).not.toThrow()
+    })
+
+    // Fix round (issue #64/#65): live-caught on gpinst01 — a model that
+    // perfectly fixes every structural problem on repair still failed,
+    // because the repair prompt never told it to keep the
+    // {"action":"fix_report","report":{...}} envelope PaLlmProxy.reason()
+    // unconditionally requires. This is the instruction that closes that
+    // gap.
+    test('contains the response envelope instruction, not just the bare report shape', () => {
+        const fx = load()
+
+        const prompt = fx.repairPrompt({}, ['some problem'])
+
+        expect(prompt).toEqual(expect.stringContaining('{"action":"fix_report","report":'))
+        expect(prompt).toEqual(expect.stringContaining('Do not return the report object by itself'))
+    })
+})
+
+// ===========================================================================
+// schemaText — single-sourced schema prose (fix round, issue #64/#65):
+// PaAgentLoop's own fix_report contract block reads this SAME method, so the
+// required JSON key names are authored in exactly one place rather than
+// copied by hand into two prompts that can drift apart.
+// ===========================================================================
+
+describe('PaFixReport.schemaText', () => {
+    test('is public and mentions every required top-level field', () => {
+        const fx = load()
+
+        const text = fx.schemaText()
+
+        ;['failure_summary', 'layers_swept', 'root_causes', 'fixes', 'verification', 'data_markers'].forEach(
+            (field) => {
+                expect(text).toEqual(expect.stringContaining(field))
+            }
+        )
+    })
+
+    test('is what repairPrompt embeds verbatim under "Required schema:"', () => {
+        const fx = load()
+
+        expect(fx.repairPrompt({}, ['x'])).toEqual(expect.stringContaining(fx.schemaText()))
     })
 })

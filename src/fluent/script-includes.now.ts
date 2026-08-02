@@ -299,3 +299,82 @@ export const paScriptToolAdapter = ScriptInclude({
     accessibleFrom: 'public',
     script: Now.include('../server/PaScriptToolAdapter.js'),
 })
+
+// ---------------------------------------------------------------------------
+// Phase 1b custom harness (Tasks 1-7) — PaLlmProxy, PaToolRegistry,
+// PaFixReport, PaRunManager and PaAgentLoop are the custom ReAct loop's own
+// collaborators (see each .js file's own header for what it does). None of
+// them were wired as a Fluent ScriptInclude until now: Tasks 1-6 shipped
+// pure logic + Jest tests only, and Task 7 ("async wiring") is deliberately
+// where they first become resolvable on-instance, alongside PaRestHandlers
+// (the REST business-logic layer, src/server/rest/PaRestHandlers.js) which
+// backs src/fluent/rest-api.now.ts.
+//
+// accessibleFrom 'public' for the standing reason (DESIGN.md R-5) and for
+// consistency with every other entry in this file — PaAgentLoop is invoked
+// from a ScriptAction (src/server/async/run-start-worker.js) and
+// PaRunManager's sweep from a ScheduledScript
+// (src/server/async/sweep-stale-runs.js), both same-scope callers, but
+// 'public' carries no risk here and keeps one convention for the whole file
+// rather than a scope-conditional one.
+// ---------------------------------------------------------------------------
+
+export const paLlmProxy = ScriptInclude({
+    $id: Now.ID['pa-llm-proxy'],
+    name: 'PaLlmProxy',
+    // Build Rule #29: ONE literal, no `+` concatenation.
+    description: `Agent Doctor infrastructure: the custom harness's sole NASK touchpoint. reason(prompt) calls the pa llm reason skill, parses the model's plain-text answer against the strict tool_call/answer/fix_report JSON contract, and gives the model exactly one retry with the parse failure fed back before giving up. summarize(prompt) is a free-form passthrough to pa llm summarize, no JSON contract. Above this class nothing in the custom harness deals in raw model text.`,
+    active: true,
+    accessibleFrom: 'public',
+    script: Now.include('../server/PaLlmProxy.js'),
+})
+
+export const paToolRegistry = ScriptInclude({
+    $id: Now.ID['pa-tool-registry'],
+    name: 'PaToolRegistry',
+    // Build Rule #29: ONE literal, no `+` concatenation.
+    description: `Agent Doctor infrastructure: the custom harness's dispatch layer over the same seven diagnostic tool cores the native agent uses. dispatch(name, args, runCtx) resolves a tool by name, refuses anything not explicitly registered destructive:false, runs it, applies the artifact threshold, and returns the result object directly rather than a stringified envelope. promptBlock() generates the reasoning prompt's tools section from the same registry metadata list() reports - one authored description per tool, never duplicated.`,
+    active: true,
+    accessibleFrom: 'public',
+    script: Now.include('../server/PaToolRegistry.js'),
+})
+
+export const paFixReport = ScriptInclude({
+    $id: Now.ID['pa-fix-report'],
+    name: 'PaFixReport',
+    // Build Rule #29: ONE literal, no `+` concatenation.
+    description: `Agent Doctor infrastructure: the structural floor under the Fix Report JSON the LLM produces at the end of a diagnosis. validate(report) checks the required shape including the evidence rule - every root cause needs a trace citation plus at least one config/schema/data citation - and returns either a normalized report or a list of named problems. repairPrompt(report, problems) builds the one allowed repair turn. renderMarkdown/renderJson turn a validated report into the two stored/displayed shapes. Pure object-walking, touches no Glide API.`,
+    active: true,
+    accessibleFrom: 'public',
+    script: Now.include('../server/PaFixReport.js'),
+})
+
+export const paRunManager = ScriptInclude({
+    $id: Now.ID['pa-run-manager'],
+    name: 'PaRunManager',
+    // Build Rule #29: ONE literal, no `+` concatenation.
+    description: `Agent Doctor infrastructure: the custom harness's run lifecycle. createRun/appendTranscript/loadContext/maybeSummarize/close manage a x_snc_troubleshoot_run row end to end - create at status queued, append transcript entries, summarize once the transcript outgrows its budget, close to complete or failed with an illegal-transition guard that names both the from and to state. collectBundle runs the five layer-bearing tool cores with NO LLM in the call path - the Evidence Bundle floor. sweepStaleNative closes native runs abandoned past a budget window, citing R-20 in the transcript it appends.`,
+    active: true,
+    accessibleFrom: 'public',
+    script: Now.include('../server/PaRunManager.js'),
+})
+
+export const paAgentLoop = ScriptInclude({
+    $id: Now.ID['pa-agent-loop'],
+    name: 'PaAgentLoop',
+    // Build Rule #29: ONE literal, no `+` concatenation.
+    description: `Agent Doctor infrastructure: the custom harness's async ReAct worker, and the ScriptAction entry point for x_snc_troubleshoot.run.start. run(runId, request) resolves the playbook and the tool prompt block once, then loops reason via PaLlmProxy, act via PaToolRegistry.dispatch, observe by appending the transcript, until the model answers, produces a validated Fix Report, or a bound (15 iterations / 300000ms) is hit - a bound-triggered stop closes the run complete but reports outcome:partial with an explicit INCOMPLETE transcript flag, never a silent stop.`,
+    active: true,
+    accessibleFrom: 'public',
+    script: Now.include('../server/PaAgentLoop.js'),
+})
+
+export const paRestHandlers = ScriptInclude({
+    $id: Now.ID['pa-rest-handlers'],
+    name: 'PaRestHandlers',
+    // Build Rule #29: ONE literal, no `+` concatenation.
+    description: `Agent Doctor infrastructure: the REST business-logic layer behind /api/x_snc_troubleshoot/troubleshooter. analyze/getRun/message/status/tools each take {body, pathParams, userId} and return {status, body}; every Fluent route script in rest-api.now.ts is a one-line adapter calling into this class. Enforces the owner gate on run reads (a non-owner and a nonexistent run get the byte-identical 404), the 409-on-non-complete rule for the message follow-up route, and the /status deep-check aggregation whose top-level ready is false when any check fails.`,
+    active: true,
+    accessibleFrom: 'public',
+    script: Now.include('../server/rest/PaRestHandlers.js'),
+})
