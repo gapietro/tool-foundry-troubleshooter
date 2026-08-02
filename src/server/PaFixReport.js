@@ -197,7 +197,8 @@ PaFixReport.prototype = {
             return
         }
         if (rcs.length === 0) {
-            problems.push('root_causes must include at least one entry')
+            // T4 — the earned-inconclusive path. See `_checkInconclusive`.
+            this._checkInconclusive(report, problems)
             return
         }
 
@@ -241,20 +242,17 @@ PaFixReport.prototype = {
     },
 
     /**
-     * The evidence rule, enforced structurally: at least one 'trace' citation
-     * PLUS at least one 'config' | 'schema' | 'data' citation. Every problem
-     * this raises contains the literal phrase "evidence rule" (Task 4 brief,
-     * Step 1) and names the cause so a repair prompt — or a human — can find
-     * it without re-deriving which entry failed.
+     * Per-entry shape check, shared by `_checkEvidenceRule` (root causes) and
+     * `_checkInconclusive` (evidence_read). Returns the source tally so the
+     * caller can apply — or deliberately NOT apply — the evidence rule.
      */
-    _checkEvidenceRule: function (evidence, label, causeName, problems) {
+    _checkEvidenceEntries: function (evidence, label, problems) {
         var sources = this._evidenceSources()
-        var hasTrace = false
-        var hasOther = false
+        var tally = { hasTrace: false, hasOther: false }
 
         for (var i = 0; i < evidence.length; i++) {
             var entry = evidence[i]
-            var entryLabel = label + '.evidence[' + i + ']'
+            var entryLabel = label + '[' + i + ']'
 
             if (!this._isPlainObject(entry) || this._indexOf(sources, entry.source) === -1) {
                 problems.push(
@@ -266,20 +264,97 @@ PaFixReport.prototype = {
                 problems.push(entryLabel + ' is missing a detail citation (table, sys_id, field, or value)')
             }
 
-            if (entry.source === 'trace') hasTrace = true
-            else hasOther = true
+            if (entry.source === 'trace') tally.hasTrace = true
+            else tally.hasOther = true
         }
 
-        if (!hasTrace) {
+        return tally
+    },
+
+    /**
+     * The evidence rule, enforced structurally: at least one 'trace' citation
+     * PLUS at least one 'config' | 'schema' | 'data' citation. Every problem
+     * this raises contains the literal phrase "evidence rule" (Task 4 brief,
+     * Step 1) and names the cause so a repair prompt — or a human — can find
+     * it without re-deriving which entry failed.
+     */
+    _checkEvidenceRule: function (evidence, label, causeName, problems) {
+        var tally = this._checkEvidenceEntries(evidence, label + '.evidence', problems)
+
+        if (!tally.hasTrace) {
             problems.push(
                 label + ' (' + causeName + '): evidence rule violation — no trace citation found; ' +
                     'a candidate resting on config/schema/data alone is not a confirmed root cause'
             )
         }
-        if (hasTrace && !hasOther) {
+        if (tally.hasTrace && !tally.hasOther) {
             problems.push(
                 label + ' (' + causeName + '): evidence rule violation — evidence cites only the trace; ' +
                     'at least one config, schema, or data citation is required'
+            )
+        }
+    },
+
+    /**
+     * True when the report is CLAIMING the inconclusive path — an empty
+     * `root_causes` plus an `inconclusive` object. Whether that claim is
+     * VALID is `_checkInconclusive`'s job; this predicate only decides
+     * whether `fixes` may be empty and `verification` may be absent, so it
+     * must NOT re-raise the problems that method already raises.
+     */
+    _isInconclusiveShape: function (report) {
+        return (
+            this._isArray(report.root_causes) &&
+            report.root_causes.length === 0 &&
+            this._isPlainObject(report.inconclusive)
+        )
+    },
+
+    /**
+     * T4 (issue #72): an honest "I could not reach a conclusion" must be
+     * expressible, or the only structurally valid output is an invented root
+     * cause — which is pressure toward fabrication, not a validation floor.
+     *
+     * But it must be EARNED, not cheap. Two costs sit on this path: the
+     * seven-layer `layers_swept` report with a reason on every un-swept layer
+     * (unchanged, `_checkLayersSwept`), and the `evidence_read` citations
+     * below. Writing an honest inconclusive report should cost more than
+     * diagnosing a defect the model actually found.
+     *
+     * NOTE the evidence RULE (trace PLUS one of config/schema/data) is
+     * deliberately NOT applied to `evidence_read`: that array is a record of
+     * what was READ, not a claim about a cause, and demanding a trace
+     * citation from a run whose trace was unavailable is exactly the
+     * pedantry this path exists to remove.
+     */
+    _checkInconclusive: function (report, problems) {
+        var inc = report.inconclusive
+
+        if (!this._isPlainObject(inc)) {
+            problems.push(
+                'root_causes is empty, which is allowed ONLY for an honest inconclusive report — and such a ' +
+                    'report must carry an `inconclusive` object of {evidence_read, needed_to_conclude}. Either ' +
+                    'name at least one root cause with evidence, or add that object. Do NOT invent a root cause ' +
+                    'to satisfy this check.'
+            )
+            return
+        }
+
+        var ev = inc.evidence_read
+        if (!this._isArray(ev) || ev.length === 0) {
+            problems.push(
+                'inconclusive.evidence_read is required and must be a non-empty array of {source, detail} ' +
+                    'recording what you actually read — an uncited inconclusive report is not distinguishable ' +
+                    'from not having looked'
+            )
+        } else {
+            this._checkEvidenceEntries(ev, 'inconclusive.evidence_read', problems)
+        }
+
+        if (!this._nonEmptyString(inc.needed_to_conclude)) {
+            problems.push(
+                'inconclusive.needed_to_conclude is required and must be a non-empty string naming what would ' +
+                    'be needed to reach a conclusion'
             )
         }
     },
@@ -291,7 +366,12 @@ PaFixReport.prototype = {
             return
         }
         if (fixes.length === 0) {
-            problems.push('fixes must include at least one entry')
+            // Empty `fixes` rides on the inconclusive path ONLY. A NAMED root
+            // cause with nothing proposed is still a defect — the report
+            // claims to know what broke and declines to say what to do.
+            if (!this._isInconclusiveShape(report)) {
+                problems.push('fixes must include at least one entry')
+            }
             return
         }
 
@@ -321,6 +401,10 @@ PaFixReport.prototype = {
     },
 
     _checkVerification: function (report, problems) {
+        // Nothing to verify when no fix was proposed — demanding a string
+        // here would only invite "n/a" boilerplate.
+        if (this._isInconclusiveShape(report)) return
+
         if (!this._nonEmptyString(report.verification)) {
             problems.push('verification is required and must be a non-empty string')
         }

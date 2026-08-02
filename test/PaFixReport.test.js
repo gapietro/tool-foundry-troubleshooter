@@ -600,3 +600,182 @@ describe('PaFixReport.schemaText', () => {
         expect(fx.repairPrompt({}, ['x'])).toEqual(expect.stringContaining(fx.schemaText()))
     })
 })
+
+// ===========================================================================
+// The earned-inconclusive path (T4, bundled into issue #72)
+// ===========================================================================
+
+describe('inconclusive reports', () => {
+    function allSevenSwept(status, reason) {
+        const ls = {}
+        for (let i = 1; i <= 7; i++) {
+            ls[i] = status === 'SWEPT' ? { status: 'SWEPT' } : { status: status, reason: reason }
+        }
+        return ls
+    }
+
+    function inconclusiveReport(overrides) {
+        return Object.assign(
+            {
+                failure_summary: 'The execution failed but the cause could not be isolated.',
+                layers_swept: allSevenSwept('UNAVAILABLE', 'the trace record was purged before diagnosis'),
+                root_causes: [],
+                fixes: [],
+                data_markers: [],
+                inconclusive: {
+                    evidence_read: [
+                        { source: 'trace', detail: 'sn_aia_execution_plan 8f2c… returned zero task rows' },
+                        { source: 'config', detail: 'sn_aia_agent "Order Triage" instructions read, 4200 chars' },
+                    ],
+                    needed_to_conclude: 'the sn_aia_execution_task rows for this plan, which no longer exist',
+                },
+            },
+            overrides || {}
+        )
+    }
+
+    test('empty root_causes and fixes VALIDATE when the inconclusive block is present and cited', () => {
+        const res = load().validate(inconclusiveReport())
+
+        expect(res.valid).toBe(true)
+        expect(res.normalized.inconclusive.needed_to_conclude).toContain('sn_aia_execution_task')
+    })
+
+    test('empty root_causes WITHOUT an inconclusive block is still rejected, and the problem says not to invent one', () => {
+        const res = load().validate(inconclusiveReport({ inconclusive: undefined }))
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.join('\n')).toContain('inconclusive')
+        expect(res.problems.join('\n')).toContain('Do NOT invent a root cause')
+    })
+
+    test('empty fixes alongside a NAMED root cause is still rejected — a cause with no fix is a defect', () => {
+        const res = load().validate(
+            inconclusiveReport({
+                root_causes: [
+                    {
+                        layer: '3',
+                        component: 'sn_aia_tool "lookup_order"',
+                        finding: 'input schema omits order_number',
+                        evidence: [
+                            { source: 'trace', detail: 'task 3 error: missing required input' },
+                            { source: 'schema', detail: 'sn_aia_tool.inputs has no order_number key' },
+                        ],
+                    },
+                ],
+                inconclusive: undefined,
+            })
+        )
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.join('\n')).toContain('fixes must include at least one entry')
+    })
+
+    test('inconclusive.evidence_read is mandatory and must be non-empty — an uncited "I could not tell" is not earned', () => {
+        const res = load().validate(
+            inconclusiveReport({
+                inconclusive: { evidence_read: [], needed_to_conclude: 'more data' },
+            })
+        )
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.join('\n')).toContain('inconclusive.evidence_read')
+    })
+
+    test('an evidence_read entry with a source outside the vocabulary is rejected', () => {
+        const res = load().validate(
+            inconclusiveReport({
+                inconclusive: {
+                    evidence_read: [{ source: 'vibes', detail: 'it felt wrong' }],
+                    needed_to_conclude: 'more data',
+                },
+            })
+        )
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.join('\n')).toContain('inconclusive.evidence_read[0]')
+    })
+
+    test('inconclusive.needed_to_conclude is mandatory', () => {
+        const res = load().validate(
+            inconclusiveReport({
+                inconclusive: {
+                    evidence_read: [{ source: 'trace', detail: 'zero rows' }],
+                    needed_to_conclude: '   ',
+                },
+            })
+        )
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.join('\n')).toContain('needed_to_conclude')
+    })
+
+    test('the evidence RULE does not bind evidence_read — a record of what was read is not a claim about a cause', () => {
+        const res = load().validate(
+            inconclusiveReport({
+                inconclusive: {
+                    evidence_read: [{ source: 'config', detail: 'agent instructions, 4200 chars' }],
+                    needed_to_conclude: 'the purged trace',
+                },
+            })
+        )
+
+        expect(res.valid).toBe(true)
+    })
+
+    test('verification may be omitted on the inconclusive path — there is nothing to verify', () => {
+        const res = load().validate(inconclusiveReport({ verification: undefined }))
+
+        expect(res.valid).toBe(true)
+    })
+
+    test('verification is STILL required when real root causes are named', () => {
+        const res = load().validate(
+            inconclusiveReport({
+                root_causes: [
+                    {
+                        layer: '3',
+                        component: 'sn_aia_tool "lookup_order"',
+                        finding: 'input schema omits order_number',
+                        evidence: [
+                            { source: 'trace', detail: 'task 3 error: missing required input' },
+                            { source: 'schema', detail: 'sn_aia_tool.inputs has no order_number key' },
+                        ],
+                    },
+                ],
+                fixes: [
+                    {
+                        target_type: 'tool schema',
+                        target: 'sn_aia_tool "lookup_order"',
+                        current: '',
+                        proposed: 'add order_number',
+                        rationale: 'the tool cannot run without it',
+                    },
+                ],
+                inconclusive: undefined,
+                verification: undefined,
+            })
+        )
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.join('\n')).toContain('verification is required')
+    })
+
+    test('layers_swept is still fully enforced on the inconclusive path — the escape hatch is not a bypass', () => {
+        const res = load().validate(
+            inconclusiveReport({ layers_swept: { 1: { status: 'SWEPT' } } })
+        )
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.join('\n')).toContain('layers_swept is missing layer 2')
+    })
+
+    test('an un-swept layer with no reason is still rejected on the inconclusive path', () => {
+        const ls = {}
+        for (let i = 1; i <= 7; i++) ls[i] = { status: 'NOT_SWEPT' }
+        const res = load().validate(inconclusiveReport({ layers_swept: ls }))
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.join('\n')).toContain('has no reason')
+    })
+})
