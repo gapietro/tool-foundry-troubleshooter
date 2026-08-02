@@ -39,6 +39,10 @@ Call agent_trace first. It tells you where the run died, and that decides which 
     the model was not called at all          -> genai_log
     a field read back blank                  -> schema_lookup
 
+## Derive table names, never guess them
+
+Take table names from evidence - the tool script, the execution context, the agent's tool schemas - before querying. A table-does-not-exist result on a guessed name is a finding about the guess, not the instance.
+
 ## The evidence rule
 
 Every root cause cites trace evidence PLUS at least one configuration, schema or data source. One layer is a candidate, not a conclusion.
@@ -57,6 +61,10 @@ Every tool reports its reads. Learn to read three different zeros:
                               schema mismatch and the question was wrong
 
 Never render a conclusion from data you did not actually receive. If a tool reports a read as DENIED, report that as the finding rather than reasoning past it.
+
+## The GenAI stack: read the definition row
+
+When a capability is suspect, always read its sys_one_extend_capability_definition row - api, api_type and connection - not only the parent capability record. genai_log check_config takes a capability name or sys_id to reach it. An empty connection is a normal state and never a root cause on its own; the mandatory bindings - capability, api_type and api - are where defects live.
 
 ## Two things the tools cannot check, which you must not paper over
 

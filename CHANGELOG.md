@@ -11,6 +11,18 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0204 — 2026-08-02
+
+Phase 1b pre-work, **playbook/instructions v2** (issue #47, DECISION.md §D3/§D4 preconditions of
+the comparison re-run). Two benchmark-measured diagnosis failures encoded as instruction rules,
+in both renderings (markdown + Fluent, byte-for-byte sync test-enforced): **derive table names
+from evidence, never guess** — a table-does-not-exist result on a guessed name is a finding
+about the guess (three Task 12 runs guessed; one produced a false secondary finding and a fix
+proposing to create a table that exists) — and **read the definition row when a capability is
+suspect** — `sys_one_extend_capability_definition` `api`/`api_type`/`connection`, reachable via
+`check_config`'s new capability argument; an empty `connection` is normal and never a root
+cause on its own (the S4R2 decoy fail, the canonical 2/0/1/0 row). Word budget honored: 1166 of
+the 1200-word instruction-bloat cap. Two new guard tests; build clean.
 ## 2026.08.0203 — 2026-08-02
 
 Phase 1b pre-work, **`check_config` capability filter** (issue #46, DECISION.md §D3 precondition
