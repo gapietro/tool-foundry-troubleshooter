@@ -1,0 +1,532 @@
+/**
+ * PaFixReport — the structural floor under the Fix Report JSON the LLM
+ * produces at the end of a diagnosis run (ARCHITECTURE_DECISIONS.md "Layer 3:
+ * Orchestration", Phase 1b Task 4).
+ *
+ * WHAT THIS EXISTS FOR
+ * The playbook (docs/agent/agent-doctor-instructions.md, "The Fix Report")
+ * asks the model for a specific shape, INCLUDING the evidence rule — every
+ * root cause needs a trace citation PLUS at least one config/schema/data
+ * citation. Prompt language is a request; this class is the check. PaAgentLoop
+ * (Task 6) calls `validate`, gets back either a normalized report or a list of
+ * named problems, feeds problems into ONE `repairPrompt` retry through
+ * PaLlmProxy, and either accepts the repaired report or fails the run with the
+ * best invalid draft attached and the problems stated. There is no second
+ * repair attempt — see the header of PaLlmProxy for the same one-retry
+ * philosophy applied to the parse layer; this is the analogous policy for the
+ * schema layer, enforced by the caller, not by this class (validate() itself
+ * has no retry logic — it is a pure function of one report).
+ *
+ * THE TWO RENDERINGS DESCRIBE THE SAME REPORT
+ * `renderMarkdown` and `renderJson` both take the SAME `normalized` object
+ * validate() produced. The markdown section order is copied verbatim from the
+ * playbook's "The Fix Report" section: FAILURE SUMMARY, LAYERS SWEPT, ROOT
+ * CAUSES, FIXES, VERIFICATION, DATA MARKERS — six headings, in that order. If
+ * the playbook's section order ever changes, LAYOUT below is the one place to
+ * change it to keep the two in sync.
+ *
+ * VALIDATION IS A FLOOR, NOT A CEILING
+ * `validate` checks that the REQUIRED shape is present and internally
+ * consistent (the evidence rule, the seven layers, the enum values). It never
+ * strips unknown keys — the model may add insight beyond the required shape
+ * (an extra `confidence_narrative`, a nested detail block), and `normalized`
+ * carries every key from the input report through untouched. This is a
+ * structural gate, not a schema-enforcing serializer.
+ *
+ * THE SEVEN LAYERS AND THE EVIDENCE RULE (playbook, verbatim source of truth)
+ * Layers, in playbook order: 1 Execution trace, 2 Instructions, 3 Tool
+ * definitions, 4 Data schemas, 5 Data, 6 GenAI stack, 7 Trigger and wiring.
+ * `layers_swept` must report on ALL SEVEN, each SWEPT / NOT_SWEPT /
+ * UNAVAILABLE — NOT_SWEPT and UNAVAILABLE both require a `reason` (the
+ * playbook: "why you chose not to" / "what would make it available"). The
+ * evidence rule: every `root_causes[]` entry cites trace evidence PLUS AT
+ * LEAST ONE of config, schema or data evidence — one layer is a candidate, not
+ * a conclusion. `evidence[]` entries are `{source, detail}` with `source` one
+ * of `trace` | `config` | `schema` | `data`.
+ *
+ * STANDING RULES THIS FILE IS BUILT AROUND
+ * R-1 Never touch the exception object in a catch. The only try/catch here
+ *     guards a JSON round-trip against a pathological input; the catch names
+ *     its own reason and falls back, it does not read what JSON threw.
+ * R-9 Every input may be absent — a null/undefined/non-object report is an
+ *     INVALID report (a normal `validate()` outcome), never a crash. Render
+ *     and repairPrompt degrade the same way rather than throwing on a partial
+ *     or missing object.
+ *
+ * This class touches no Glide API at all — pure ES5 object-walking.
+ */
+var PaFixReport = Class.create()
+
+PaFixReport.prototype = {
+    initialize: function () {},
+
+    // =======================================================================
+    // Layer + evidence-source vocabulary — single source for validate + render
+    // =======================================================================
+
+    /** Playbook order, "The seven-layer sweep" section — do not reorder. */
+    _layerDefs: function () {
+        return [
+            { number: 1, name: 'Execution trace' },
+            { number: 2, name: 'Instructions' },
+            { number: 3, name: 'Tool definitions' },
+            { number: 4, name: 'Data schemas' },
+            { number: 5, name: 'Data' },
+            { number: 6, name: 'GenAI stack' },
+            { number: 7, name: 'Trigger and wiring' },
+        ]
+    },
+
+    _sweepStatuses: function () {
+        return ['SWEPT', 'NOT_SWEPT', 'UNAVAILABLE']
+    },
+
+    /** Playbook "The evidence rule" — trace PLUS at least one of these three. */
+    _nonTraceEvidenceSources: function () {
+        return ['config', 'schema', 'data']
+    },
+
+    _evidenceSources: function () {
+        return ['trace'].concat(this._nonTraceEvidenceSources())
+    },
+
+    /** Playbook FIXES section: "instruction, tool schema, data, configuration, or wiring". */
+    _fixTargetTypes: function () {
+        return ['instruction', 'tool schema', 'data', 'configuration', 'wiring']
+    },
+
+    // =======================================================================
+    // validate
+    // =======================================================================
+
+    /**
+     * @param {*} report candidate Fix Report — may be anything, including
+     *        null/undefined (R-9).
+     * @returns {Object} {valid:true, normalized} | {valid:false, problems:[String]}
+     *          `normalized` is a deep copy of `report` with every key —
+     *          required and unknown alike — carried through untouched.
+     */
+    validate: function (report) {
+        if (!this._isPlainObject(report)) {
+            return { valid: false, problems: ['fix report must be a JSON object'] }
+        }
+
+        var problems = []
+        this._checkFailureSummary(report, problems)
+        this._checkLayersSwept(report, problems)
+        this._checkRootCauses(report, problems)
+        this._checkFixes(report, problems)
+        this._checkVerification(report, problems)
+        this._checkDataMarkers(report, problems)
+
+        if (problems.length > 0) {
+            return { valid: false, problems: problems }
+        }
+
+        return { valid: true, normalized: this._clone(report) }
+    },
+
+    _checkFailureSummary: function (report, problems) {
+        if (!this._nonEmptyString(report.failure_summary)) {
+            problems.push('failure_summary is required and must be a non-empty string')
+        }
+    },
+
+    _checkLayersSwept: function (report, problems) {
+        var ls = report.layers_swept
+        if (!this._isPlainObject(ls)) {
+            problems.push(
+                'layers_swept is required and must be an object mapping each of the seven layers (1-7) to a status'
+            )
+            return
+        }
+
+        var defs = this._layerDefs()
+        var statuses = this._sweepStatuses()
+        for (var i = 0; i < defs.length; i++) {
+            var def = defs[i]
+            var entry = ls[def.number]
+            var label = 'layer ' + def.number + ' (' + def.name + ')'
+
+            if (!this._isPlainObject(entry)) {
+                problems.push('layers_swept is missing ' + label)
+                continue
+            }
+
+            var status = entry.status
+            if (this._indexOf(statuses, status) === -1) {
+                problems.push('layers_swept ' + label + ' has an unknown status: ' + this._describe(status))
+                continue
+            }
+
+            if (status !== 'SWEPT' && !this._nonEmptyString(entry.reason)) {
+                problems.push('layers_swept ' + label + ' is ' + status + ' but has no reason')
+            }
+        }
+    },
+
+    _checkRootCauses: function (report, problems) {
+        var rcs = report.root_causes
+        if (!this._isArray(rcs)) {
+            problems.push('root_causes is required and must be an array')
+            return
+        }
+        if (rcs.length === 0) {
+            problems.push('root_causes must include at least one entry')
+            return
+        }
+
+        for (var i = 0; i < rcs.length; i++) {
+            this._checkRootCause(rcs[i], i, problems)
+        }
+    },
+
+    _checkRootCause: function (rc, index, problems) {
+        var label = 'root_causes[' + index + ']'
+        if (!this._isPlainObject(rc)) {
+            problems.push(label + ' must be an object')
+            return
+        }
+
+        if (!this._nonEmptyString(rc.layer)) problems.push(label + ' is missing layer')
+        if (!this._nonEmptyString(rc.component)) problems.push(label + ' is missing component')
+        if (!this._nonEmptyString(rc.finding)) problems.push(label + ' is missing finding')
+
+        // Prefer the component name in problem text once it exists — it is a
+        // more useful pointer back into the report than a bare array index.
+        var causeName = this._nonEmptyString(rc.component) ? rc.component : label
+
+        if (!this._isArray(rc.evidence) || rc.evidence.length === 0) {
+            problems.push(label + ' (' + causeName + ') is missing evidence')
+            return
+        }
+
+        this._checkEvidenceRule(rc.evidence, label, causeName, problems)
+    },
+
+    /**
+     * The evidence rule, enforced structurally: at least one 'trace' citation
+     * PLUS at least one 'config' | 'schema' | 'data' citation. Every problem
+     * this raises contains the literal phrase "evidence rule" (Task 4 brief,
+     * Step 1) and names the cause so a repair prompt — or a human — can find
+     * it without re-deriving which entry failed.
+     */
+    _checkEvidenceRule: function (evidence, label, causeName, problems) {
+        var sources = this._evidenceSources()
+        var hasTrace = false
+        var hasOther = false
+
+        for (var i = 0; i < evidence.length; i++) {
+            var entry = evidence[i]
+            var entryLabel = label + '.evidence[' + i + ']'
+
+            if (!this._isPlainObject(entry) || this._indexOf(sources, entry.source) === -1) {
+                problems.push(
+                    entryLabel + ' has an invalid or missing source (must be one of: ' + sources.join(', ') + ')'
+                )
+                continue
+            }
+            if (!this._nonEmptyString(entry.detail)) {
+                problems.push(entryLabel + ' is missing a detail citation (table, sys_id, field, or value)')
+            }
+
+            if (entry.source === 'trace') hasTrace = true
+            else hasOther = true
+        }
+
+        if (!hasTrace) {
+            problems.push(
+                label + ' (' + causeName + '): evidence rule violation — no trace citation found; ' +
+                    'a candidate resting on config/schema/data alone is not a confirmed root cause'
+            )
+        }
+        if (hasTrace && !hasOther) {
+            problems.push(
+                label + ' (' + causeName + '): evidence rule violation — evidence cites only the trace; ' +
+                    'at least one config, schema, or data citation is required'
+            )
+        }
+    },
+
+    _checkFixes: function (report, problems) {
+        var fixes = report.fixes
+        if (!this._isArray(fixes)) {
+            problems.push('fixes is required and must be an array')
+            return
+        }
+        if (fixes.length === 0) {
+            problems.push('fixes must include at least one entry')
+            return
+        }
+
+        var targetTypes = this._fixTargetTypes()
+        for (var i = 0; i < fixes.length; i++) {
+            var fix = fixes[i]
+            var label = 'fixes[' + i + ']'
+
+            if (!this._isPlainObject(fix)) {
+                problems.push(label + ' must be an object')
+                continue
+            }
+
+            if (this._indexOf(targetTypes, fix.target_type) === -1) {
+                problems.push(
+                    label + ' has an invalid target_type (must be one of: ' + targetTypes.join(', ') + '), got: ' +
+                        this._describe(fix.target_type)
+                )
+            }
+            if (!this._nonEmptyString(fix.target)) problems.push(label + ' is missing target')
+            if (!this._nonEmptyString(fix.proposed)) problems.push(label + ' is missing proposed')
+            if (!this._nonEmptyString(fix.rationale)) problems.push(label + ' is missing rationale')
+            // `current` may legitimately be an empty string (the current
+            // value genuinely is blank) — only its TYPE is checked.
+            if (typeof fix.current !== 'string') problems.push(label + ' current must be a string (may be empty)')
+        }
+    },
+
+    _checkVerification: function (report, problems) {
+        if (!this._nonEmptyString(report.verification)) {
+            problems.push('verification is required and must be a non-empty string')
+        }
+    },
+
+    _checkDataMarkers: function (report, problems) {
+        if (!this._isArray(report.data_markers)) {
+            problems.push('data_markers is required and must be an array (it may be empty)')
+        }
+    },
+
+    // =======================================================================
+    // repairPrompt — the one allowed repair turn
+    // =======================================================================
+
+    /**
+     * @param {*} report the invalid draft (whatever was passed to validate()).
+     * @param {Array} problems the `problems` array validate() returned.
+     * @returns {String} the problems verbatim + the required schema + the
+     *          literal instruction to return corrected JSON only. PaAgentLoop
+     *          sends this through PaLlmProxy.reason() for exactly one retry.
+     */
+    repairPrompt: function (report, problems) {
+        var probs = this._isArray(problems) ? problems : []
+        var lines = []
+
+        lines.push(
+            'The fix_report you returned failed validation. Fix every problem below and return the ' +
+                'corrected fix_report JSON only.'
+        )
+        lines.push('')
+        lines.push('Problems:')
+        for (var i = 0; i < probs.length; i++) {
+            lines.push('- ' + this._str(probs[i]))
+        }
+        lines.push('')
+        lines.push('Required schema:')
+        lines.push(this._schemaText())
+        lines.push('')
+        lines.push('Previous draft:')
+        lines.push(this.renderJson(report))
+        lines.push('')
+        lines.push(
+            'Return the corrected fix_report JSON only — no prose, no markdown fence, matching the schema exactly.'
+        )
+
+        return lines.join('\n')
+    },
+
+    _schemaText: function () {
+        var defs = this._layerDefs()
+        var layerList = []
+        for (var i = 0; i < defs.length; i++) {
+            layerList.push(defs[i].number + '=' + defs[i].name)
+        }
+
+        var lines = []
+        lines.push('failure_summary: non-empty string')
+        lines.push(
+            'layers_swept: object keyed 1-7 (' + layerList.join(', ') + '), each {status, reason?} — status is ' +
+                'one of ' + this._sweepStatuses().join('|') + '; reason is REQUIRED when status is not SWEPT'
+        )
+        lines.push(
+            'root_causes: non-empty array of {layer, component, finding, evidence, confidence?} — evidence is a ' +
+                'non-empty array of {source, detail}, source one of ' + this._evidenceSources().join('|') + '; ' +
+                'EVERY root cause needs at least one "trace" evidence entry PLUS at least one of ' +
+                this._nonTraceEvidenceSources().join('|') + ' (the evidence rule)'
+        )
+        lines.push(
+            'fixes: non-empty array of {target_type, target, current, proposed, rationale} — target_type one of ' +
+                this._fixTargetTypes().join('|') + '; current may be an empty string but must be present'
+        )
+        lines.push('verification: non-empty string')
+        lines.push('data_markers: array (may be empty, must be present)')
+
+        return lines.join('\n')
+    },
+
+    // =======================================================================
+    // Rendering — both take the SAME normalized report
+    // =======================================================================
+
+    /**
+     * @param {Object} normalized the object validate() returned as `normalized`.
+     * @returns {String} markdown with the six playbook section headings, in
+     *          playbook order. Defensive against a sparse/missing object
+     *          (R-9) — this is a rendering path, not a second validation.
+     */
+    renderMarkdown: function (normalized) {
+        var r = this._isPlainObject(normalized) ? normalized : {}
+        var lines = []
+
+        lines.push('## FAILURE SUMMARY')
+        lines.push('')
+        lines.push(this._nonEmptyString(r.failure_summary) ? r.failure_summary : '(not provided)')
+        lines.push('')
+
+        lines.push('## LAYERS SWEPT')
+        lines.push('')
+        var ls = this._isPlainObject(r.layers_swept) ? r.layers_swept : {}
+        var defs = this._layerDefs()
+        for (var i = 0; i < defs.length; i++) {
+            var def = defs[i]
+            var entry = this._isPlainObject(ls[def.number]) ? ls[def.number] : {}
+            var status = this._nonEmptyString(entry.status) ? entry.status : 'UNKNOWN'
+            var line = def.number + '. ' + def.name + ': ' + status
+            if (status !== 'SWEPT' && this._nonEmptyString(entry.reason)) {
+                line += ' — ' + entry.reason
+            }
+            lines.push(line)
+        }
+        lines.push('')
+
+        lines.push('## ROOT CAUSES')
+        lines.push('')
+        var rcs = this._isArray(r.root_causes) ? r.root_causes : []
+        if (rcs.length === 0) lines.push('(none)')
+        for (var j = 0; j < rcs.length; j++) {
+            var rc = this._isPlainObject(rcs[j]) ? rcs[j] : {}
+            lines.push((j + 1) + '. layer: ' + this._str(rc.layer))
+            lines.push('   component: ' + this._str(rc.component))
+            lines.push('   finding: ' + this._str(rc.finding))
+            lines.push('   evidence:')
+            var ev = this._isArray(rc.evidence) ? rc.evidence : []
+            for (var k = 0; k < ev.length; k++) {
+                var e = this._isPlainObject(ev[k]) ? ev[k] : {}
+                lines.push('     - ' + this._str(e.source) + ': ' + this._str(e.detail))
+            }
+            lines.push('   confidence: ' + this._str(rc.confidence))
+            lines.push('')
+        }
+
+        lines.push('## FIXES')
+        lines.push('')
+        var fixes = this._isArray(r.fixes) ? r.fixes : []
+        if (fixes.length === 0) lines.push('(none)')
+        for (var m = 0; m < fixes.length; m++) {
+            var f = this._isPlainObject(fixes[m]) ? fixes[m] : {}
+            lines.push((m + 1) + '. target type: ' + this._str(f.target_type))
+            lines.push('   target: ' + this._str(f.target))
+            lines.push('   current: ' + this._str(f.current))
+            lines.push('   proposed: ' + this._str(f.proposed))
+            lines.push('   rationale: ' + this._str(f.rationale))
+            lines.push('')
+        }
+
+        lines.push('## VERIFICATION')
+        lines.push('')
+        lines.push(this._nonEmptyString(r.verification) ? r.verification : '(not provided)')
+        lines.push('')
+
+        lines.push('## DATA MARKERS')
+        lines.push('')
+        var markers = this._isArray(r.data_markers) ? r.data_markers : []
+        if (markers.length === 0) {
+            lines.push('(none)')
+        } else {
+            for (var n = 0; n < markers.length; n++) {
+                lines.push('- ' + this._str(markers[n]))
+            }
+        }
+
+        return lines.join('\n')
+    },
+
+    /**
+     * @param {*} normalized
+     * @returns {String} JSON.stringify(normalized, null, 2); '{}' on a
+     *          pathological input rather than a thrown error (R-1/R-9).
+     */
+    renderJson: function (normalized) {
+        try {
+            return JSON.stringify(normalized === undefined ? null : normalized, null, 2)
+        } catch (e) {
+            // R-1: `e` deliberately not inspected.
+            return '{}'
+        }
+    },
+
+    // =======================================================================
+    // Internals
+    // =======================================================================
+
+    _isPlainObject: function (value) {
+        return (
+            value !== null &&
+            value !== undefined &&
+            typeof value === 'object' &&
+            !this._isArray(value)
+        )
+    },
+
+    _isArray: function (value) {
+        return Object.prototype.toString.call(value) === '[object Array]'
+    },
+
+    _nonEmptyString: function (value) {
+        return typeof value === 'string' && this._trim(value).length > 0
+    },
+
+    _trim: function (value) {
+        return String(value).replace(/^\s+|\s+$/g, '')
+    },
+
+    _indexOf: function (arr, value) {
+        for (var i = 0; i < arr.length; i++) {
+            if (arr[i] === value) return i
+        }
+        return -1
+    },
+
+    _describe: function (value) {
+        if (value === undefined) return 'undefined'
+        if (value === null) return 'null'
+        if (typeof value === 'string') return '"' + value + '"'
+        try {
+            return JSON.stringify(value)
+        } catch (e) {
+            // R-1: `e` deliberately not inspected.
+            return String(value)
+        }
+    },
+
+    _str: function (value) {
+        if (value === null || value === undefined) return ''
+        return String(value)
+    },
+
+    /**
+     * Deep copy via JSON round-trip — the report is already plain JSON data
+     * (it came from PaLlmProxy's strict-JSON parse), so this is safe in the
+     * normal case. Falls back to the original reference rather than throwing
+     * on a pathological input (R-1: the catch does not inspect what failed).
+     */
+    _clone: function (value) {
+        try {
+            return JSON.parse(JSON.stringify(value))
+        } catch (e) {
+            // R-1: `e` deliberately not inspected.
+            return value
+        }
+    },
+
+    type: 'PaFixReport',
+}
