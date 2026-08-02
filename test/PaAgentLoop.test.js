@@ -640,3 +640,78 @@ describe('issue #77: Rhino Java String request (typeof "object", not a plain obj
         expect(llm.calls[0]).not.toContain('no specific target supplied')
     })
 })
+
+// ===========================================================================
+// Issue #77 fix round — two defects the review found in the first pass
+//
+// 1. `_looksLikeJavaObject` read `.getClass` unguarded. ServiceNow's
+//    sandboxed LiveConnect can THROW on member access against a restricted
+//    Java object rather than returning `undefined` — precisely the shape
+//    this guard exists to survive. An unguarded read would crash the whole
+//    diagnostic run in exactly the case #77 was filed for.
+// 2. The coercion path in the first pass ran for ANY non-plain-object,
+//    non-string value, not just foreign-object-shaped ones — silently
+//    changing behaviour for genuine arrays/numbers/booleans/functions
+//    (previously `{}`, now a bogus `{description: ...}`, including a
+//    function's own SOURCE TEXT for the function case). Both are now
+//    pinned back to `{}`.
+// ===========================================================================
+
+describe('issue #77 fix round: getClass access itself throws', () => {
+    test('_normRequest degrades to a plain object instead of propagating the throw', () => {
+        // A double whose `getClass` accessor throws — simulating a
+        // restricted LiveConnect member read, not merely an absent one.
+        const hostile = {
+            get getClass() {
+                throw new Error('restricted LiveConnect member access')
+            },
+            toString: function () {
+                return 'hostile toString output'
+            },
+        }
+        const loop = load()
+
+        expect(() => loop._normRequest(hostile)).not.toThrow()
+        expect(loop._normRequest(hostile)).toEqual({ description: 'hostile toString output' })
+    })
+
+    test('the same double reaching run() still produces a normal (non-crashing) close, not a thrown error', () => {
+        const hostile = {
+            get getClass() {
+                throw new Error('restricted LiveConnect member access')
+            },
+            toString: function () {
+                return '{"execution":"e-hostile"}'
+            },
+        }
+        const llm = fakeLlm([{ success: true, action: { action: 'answer', text: 'done' }, raw: 'r1' }])
+        const tools = fakeTools([])
+        const runs = fakeRunManager()
+        const loop = load({ llmProxy: llm, toolRegistry: tools, runManager: runs, playbook: 'PLAYBOOK', now: () => 0 })
+
+        expect(() => loop.run('run1', hostile)).not.toThrow()
+        expect(llm.calls[0]).toContain('execution: e-hostile')
+    })
+})
+
+describe('issue #77 fix round: non-string, non-plain-object inputs stay {} (never coerced to a description)', () => {
+    test('a real array normalizes to {}, not a coerced description', () => {
+        expect(load()._normRequest([1, 2, 3])).toEqual({})
+    })
+
+    test('a real number normalizes to {}, not a coerced description', () => {
+        expect(load()._normRequest(42)).toEqual({})
+    })
+
+    test('a real boolean normalizes to {}, not a coerced description', () => {
+        expect(load()._normRequest(true)).toEqual({})
+    })
+
+    test('a real function normalizes to {} — its source text must never reach a prompt', () => {
+        const fn = function shouldNeverAppearInAPrompt() {
+            return 'source text leak check'
+        }
+
+        expect(load()._normRequest(fn)).toEqual({})
+    })
+})

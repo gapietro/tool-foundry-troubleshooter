@@ -620,12 +620,19 @@ PaAgentLoop.prototype = {
      *        `undefined`. `_looksLikeJavaObject` below is what tells the two
      *        apart. See issue #77.
      * @returns {Object} always a plain object (R-9) — `{}` when nothing
-     *          usable was supplied, `{description: request}` when it was a
-     *          non-JSON, non-empty string (or string-shaped value — see
-     *          `_looksLikeJavaObject`).
+     *          usable was supplied (including a real array/number/boolean/
+     *          function — those are NEVER coerced to a description, see the
+     *          fix-round note below), `{description: <text>}` when a real
+     *          JS string or a Java-object-shaped value coerced to text that
+     *          was non-JSON and non-empty.
      */
     _normRequest: function (request) {
         if (request === null || request === undefined) return {}
+
+        // Computed once, used twice below. Safe on every input shape —
+        // see `_looksLikeJavaObject`'s own header for why member access is
+        // itself guarded.
+        var isForeignObject = this._looksLikeJavaObject(request)
 
         // A genuine plain object (a `{...}` literal a direct in-process
         // caller passed, or a prior `JSON.parse` result) is trusted as-is —
@@ -635,48 +642,89 @@ PaAgentLoop.prototype = {
         // any dispatch on `_isPlainObject` — a branch added only after that
         // check would never fire, since the Java String already returns
         // true there (issue #77).
-        if (this._isPlainObject(request) && !this._looksLikeJavaObject(request)) return request
+        if (this._isPlainObject(request) && !isForeignObject) return request
 
-        // Anything else — a genuine JS string, OR a value Rhino handed us
-        // that only masquerades as an object (a Java String, `typeof`
-        // `'object'`, coerces via `String()`/`.toString()` to its real
-        // text) — is coerced to a JS string and handled exactly like the
-        // historical string branch: valid JSON wins, otherwise it becomes a
-        // free-form description. `String()` on an actual JS string is a
-        // no-op, so this one path covers both cases without duplicating
-        // the JSON-parse/description logic.
-        var coerced = String(request)
-        if (this._nonEmptyString(coerced)) {
-            try {
-                var parsed = JSON.parse(coerced)
-                if (this._isPlainObject(parsed)) return parsed
-            } catch (e) {
-                // R-1: `e` untouched — not JSON, fall through to a
-                // free-form description instead.
-            }
-            return { description: coerced }
+        // A genuine JS string: parsed as JSON if possible, else wrapped as
+        // a free-form description.
+        if (typeof request === 'string') {
+            return this._nonEmptyString(request) ? this._parseRequestText(request) : {}
+        }
+
+        // Fix-round note (issue #77 review): ONLY a value that actually
+        // looks foreign is coerced through `String()` below. Earlier this
+        // branch ran for ANY non-plain-object, non-string value, which
+        // silently changed behaviour for genuine arrays/numbers/booleans/
+        // functions — e.g. `String([1,2])` -> `{description:'1,2'}`,
+        // and a function's SOURCE TEXT would have landed verbatim in an
+        // LLM prompt. Those four now fall straight through to the `{}`
+        // below, unchanged from pre-#77 behaviour.
+        if (isForeignObject) {
+            var coerced = String(request)
+            return this._nonEmptyString(coerced) ? this._parseRequestText(coerced) : {}
         }
 
         return {}
     },
 
     /**
-     * @param {*} value Anything `_isPlainObject(value)` already returned
-     *        `true` for.
+     * @param {String} text A non-empty string — either a genuine JS string
+     *        request, or a Java-object-shaped value already coerced via
+     *        `String()`.
+     * @returns {Object} the parsed object if `text` is JSON for a plain
+     *          object, else `{description: text}`. Shared by both
+     *          `_normRequest` branches that reach this point so the JSON-
+     *          parse-or-describe logic exists exactly once.
+     */
+    _parseRequestText: function (text) {
+        try {
+            var parsed = JSON.parse(text)
+            if (this._isPlainObject(parsed)) return parsed
+        } catch (e) {
+            // R-1: `e` untouched — not JSON, fall through to a free-form
+            // description instead.
+        }
+        return { description: text }
+    },
+
+    /**
+     * @param {*} value Any `_normRequest` input except `null`/`undefined`
+     *        (those return before this is called).
      * @returns {Boolean} true if `value` looks like a Rhino LiveConnect
      *          wrapper around a Java object (e.g. `event.parm2` as the
      *          platform actually delivers it) rather than a genuine JS
-     *          object literal. LiveConnect always exposes the underlying
-     *          `java.lang.Object` methods on a wrapped Java value —
-     *          `getClass()` chief among them — which no ordinary JS object
-     *          carries unless something deliberately added it. A plain
-     *          object built by `JSON.parse` or a `{...}` literal never has
-     *          this, so this check adds no false positives for the
-     *          existing "real object" path (R-9: only narrows what used to
-     *          be an unconditional `true`, never widens it).
+     *          value. LiveConnect exposes the underlying `java.lang.Object`
+     *          methods on a wrapped Java value — `getClass()` chief among
+     *          them — which no ordinary JS object/array/number/boolean/
+     *          function carries unless something deliberately added it.
+     *
+     *          KNOWN LIMITATION (fix-round review): this hallmark is
+     *          UNVERIFIED against a real scoped-app `event.parm2` — it has
+     *          only been exercised against a Jest double built to expose
+     *          `getClass()`. A genuine Rhino value that does not happen to
+     *          expose `getClass` would still slip past this check
+     *          entirely. The LOAD-BEARING fix for issue #77 is the
+     *          ScriptAction's own `String(event.parm2)` coercion in
+     *          `async-wiring.now.ts` (review-confirmed byte-correct in the
+     *          generated dist XML) — this helper is defence-in-depth for
+     *          direct in-process callers that bypass that ScriptAction,
+     *          not a verified mechanism in its own right. Do not mistake
+     *          it for one.
+     *
+     *          Reading `.getClass` off a genuinely restricted/foreign
+     *          object could itself throw inside ServiceNow's sandboxed
+     *          LiveConnect — exactly the situation this guard exists to
+     *          survive. A throw here is treated as "yes, foreign" (R-9:
+     *          degrade, never propagate a throw out of `_normRequest`)
+     *          rather than left to crash the run.
      */
     _looksLikeJavaObject: function (value) {
-        return typeof value.getClass === 'function'
+        try {
+            return typeof value.getClass === 'function'
+        } catch (e) {
+            // R-1: `e` untouched — the property access itself threw, which
+            // alone means `value` is not an ordinary JS request object.
+            return true
+        }
     },
 
     // =======================================================================
