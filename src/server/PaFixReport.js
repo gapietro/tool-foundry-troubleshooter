@@ -123,7 +123,32 @@ PaFixReport.prototype = {
             return { valid: false, problems: problems }
         }
 
-        return { valid: true, normalized: this._clone(report) }
+        var normalized = this._clone(report)
+        this._normalizeRootCauseLayers(normalized)
+        return { valid: true, normalized: normalized }
+    },
+
+    /**
+     * `root_causes[].layer` is accepted as either a non-empty string OR a
+     * finite JSON number (see `_hasLayerValue` below) — normalized here to a
+     * STRING so every consumer of `normalized` (renderMarkdown, renderJson,
+     * a caller comparing it against `_layerDefs()`) sees one consistent
+     * type regardless of which shape the model used. Fix round, issue
+     * #64/#65 — live-caught on gpinst01: a repair draft that had already
+     * fixed both the key-casing and envelope defects still failed
+     * validation on `{"layer":1,...}` / `{"layer":4,...}`, which is a
+     * perfectly reasonable answer to "which layer" (root_causes shares the
+     * same 1-7 range `layers_swept` already keys on) and rejecting it was
+     * validator pedantry, not a real defect.
+     */
+    _normalizeRootCauseLayers: function (normalized) {
+        var rcs = this._isArray(normalized.root_causes) ? normalized.root_causes : []
+        for (var i = 0; i < rcs.length; i++) {
+            var rc = rcs[i]
+            if (this._isPlainObject(rc) && typeof rc.layer === 'number') {
+                rc.layer = String(rc.layer)
+            }
+        }
     },
 
     _checkFailureSummary: function (report, problems) {
@@ -188,7 +213,7 @@ PaFixReport.prototype = {
             return
         }
 
-        if (!this._nonEmptyString(rc.layer)) problems.push(label + ' is missing layer')
+        if (!this._hasLayerValue(rc.layer)) problems.push(label + ' is missing layer')
         if (!this._nonEmptyString(rc.component)) problems.push(label + ' is missing component')
         if (!this._nonEmptyString(rc.finding)) problems.push(label + ' is missing finding')
 
@@ -202,6 +227,17 @@ PaFixReport.prototype = {
         }
 
         this._checkEvidenceRule(rc.evidence, label, causeName, problems)
+    },
+
+    /**
+     * `layer` accepts a non-empty string ("layer 7", "7") OR a finite JSON
+     * number (7) — see `_normalizeRootCauseLayers` above for why a number is
+     * normalized to a string on the way out rather than rejected on the way
+     * in.
+     */
+    _hasLayerValue: function (value) {
+        if (this._nonEmptyString(value)) return true
+        return typeof value === 'number' && isFinite(value)
     },
 
     /**
@@ -358,6 +394,17 @@ PaFixReport.prototype = {
      * ONE place. Public (not `_schemaText`) precisely because it now has a
      * second caller outside this file (fix round, issue #64/#65) — see
      * PaAgentLoop.js's `_fixReportContract`/`_safeSchemaText`.
+     *
+     * EVERY FIELD'S TYPE IS STATED EXPLICITLY (fix round, issue #64/#65,
+     * controller ruling on the third live-caught defect). Two of the three
+     * live defects this task found were exactly this shape: the validator
+     * enforces a type or key spelling the schema text never actually
+     * states, and a model reasonably guesses wrong — root_causes[].layer
+     * being rejected for arriving as the JSON number 1-7 rather than the
+     * string "1"-"7" was the second occurrence of that class, not the
+     * first. Rather than patch the one field, every field below now states
+     * its type, so the next field with an unstated type is not the next bug
+     * report.
      */
     schemaText: function () {
         var defs = this._layerDefs()
@@ -370,17 +417,23 @@ PaFixReport.prototype = {
         lines.push('failure_summary: non-empty string')
         lines.push(
             'layers_swept: object keyed 1-7 (' + layerList.join(', ') + '), each {status, reason?} — status is ' +
-                'one of ' + this._sweepStatuses().join('|') + '; reason is REQUIRED when status is not SWEPT'
+                'a string, one of ' + this._sweepStatuses().join('|') + '; reason is a non-empty string, ' +
+                'REQUIRED when status is not SWEPT'
         )
         lines.push(
-            'root_causes: non-empty array of {layer, component, finding, evidence, confidence?} — evidence is a ' +
-                'non-empty array of {source, detail}, source one of ' + this._evidenceSources().join('|') + '; ' +
-                'EVERY root cause needs at least one "trace" evidence entry PLUS at least one of ' +
-                this._nonTraceEvidenceSources().join('|') + ' (the evidence rule)'
+            'root_causes: non-empty array of {layer, component, finding, evidence, confidence?} — layer is the ' +
+                'layer number as a string "1".."7" (a bare JSON number 1-7 is also accepted and normalized to a ' +
+                'string); component is a non-empty string naming the specific record/table/field; finding is a ' +
+                'non-empty string describing what is wrong; evidence is a non-empty array of {source, detail} ' +
+                'where source is a string, one of ' + this._evidenceSources().join('|') + ', and detail is a ' +
+                'non-empty string citation (table, sys_id, field, or value); EVERY root cause needs at least one ' +
+                '"trace" evidence entry PLUS at least one of ' + this._nonTraceEvidenceSources().join('|') +
+                ' (the evidence rule); confidence, if present, is a string (e.g. CONFIRMED or UNCONFIRMED)'
         )
         lines.push(
-            'fixes: non-empty array of {target_type, target, current, proposed, rationale} — target_type one of ' +
-                this._fixTargetTypes().join('|') + '; current may be an empty string but must be present'
+            'fixes: non-empty array of {target_type, target, current, proposed, rationale} — target_type is a ' +
+                'string, one of ' + this._fixTargetTypes().join('|') + '; target, proposed and rationale are ' +
+                'each non-empty strings; current is a string and may be empty but must be present'
         )
         lines.push('verification: non-empty string')
         lines.push('data_markers: array (may be empty, must be present)')
