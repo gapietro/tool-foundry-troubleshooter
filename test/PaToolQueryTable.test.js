@@ -138,6 +138,28 @@ describe('the empty-result disambiguation', () => {
         expect(finding.next_step).toMatch(/ZERO ACLs/)
     })
 
+    it('caveats the acl_filtered verdict when the table name was never validated', () => {
+        // The zero-count branch refuses to call the name confirmed when
+        // sys_db_object is unreadable; the positive-count branch implicitly
+        // claimed it by omission. The substantive verdict survives - the count
+        // found rows the secure read could not see - but the confirmation
+        // language has to be earned the same way on both branches.
+        const { result } = run('x_snc_tsbench_rule', world(), { denied: ['sys_db_object'] }, 7)
+
+        expect(result.data.empty_result.verdict).toBe('acl_filtered')
+        expect(result.data.empty_result.table_confirmed).toBe(false)
+        expect(result.data.empty_result.detail).toMatch(/NAME itself was never\s+validated/)
+        const finding = result.data.findings.find((f) => f.finding === 'rows_exist_but_are_not_visible')
+        expect(finding.why).toMatch(/not independently validated/)
+    })
+
+    it('omits the caveat when the table was confirmed', () => {
+        const { result } = run('x_snc_tsbench_rule', world(), null, 7)
+
+        expect(result.data.empty_result.table_confirmed).toBe(true)
+        expect(result.data.empty_result.detail).not.toMatch(/never\s+validated/)
+    })
+
     it('returns a count and never row content from the unfiltered read', () => {
         const { result } = run('x_snc_tsbench_rule', world(), null, 7)
         const rendered = JSON.stringify(result.data.empty_result)

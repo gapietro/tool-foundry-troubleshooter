@@ -429,12 +429,24 @@ PaToolQueryTable.prototype = {
 
         if (total.count > 0) {
             out.verdict = 'acl_filtered'
+            // The SUBSTANTIVE claim survives an unconfirmed table name: the
+            // count ran against the name as given and found rows the secure
+            // read could not see, which is an access gap on that table
+            // whatever sys_db_object says. What does NOT survive is the
+            // confirmation language — the zero-count branch already refuses to
+            // call the name confirmed when sys_db_object was unreadable, and
+            // this branch claimed it implicitly by omission.
+            out.table_confirmed = data.table_exists === true
             out.detail =
                 'The rows EXIST — ' +
                 total.count +
                 ' match this query — but none of them are visible to the caller. This is an ACCESS defect, ' +
                 'not a data defect, and the fix is a record-read ACL rather than seeding data. Note the ' +
-                'count comes from an unfiltered read; no row content was returned.'
+                'count comes from an unfiltered read; no row content was returned.' +
+                (out.table_confirmed
+                    ? ''
+                    : ' CAVEAT: sys_db_object could not be read, so the table NAME itself was never ' +
+                      'validated — the count ran against the name exactly as given.')
             data.findings = (data.findings || []).concat([
                 {
                     finding: 'rows_exist_but_are_not_visible',
@@ -443,7 +455,10 @@ PaToolQueryTable.prototype = {
                     why:
                         'GlideRecordSecure returned 0 rows while an unfiltered count returned ' +
                         total.count +
-                        '. A missing record-read ACL is the documented cause.',
+                        '. A missing record-read ACL is the documented cause.' +
+                        (data.table_exists === true
+                            ? ''
+                            : ' (Table name not independently validated — sys_db_object was unreadable.)'),
                     next_step:
                         'Add an Acl({type: "record", table, operation: "read"}) for the role that needs it. ' +
                         'Note a Fluent Table() installs with ZERO ACLs, which denies everyone including ' +
