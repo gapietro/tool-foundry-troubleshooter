@@ -229,6 +229,54 @@ describe('field detail', () => {
     })
 })
 
+describe('absence is earned by a complete walk (round 3)', () => {
+    it('answers UNKNOWN, not false, when the dictionary could not be read', () => {
+        // A denied dictionary yields zero columns; `exists: false` over that
+        // is the empty-result overconfidence this tool exists to prevent -
+        // QueryTable's verdict got the same guard one round earlier.
+        const { result } = run({ table: 'sn_aia_agent', field: 'sys_created_on' }, world(), {
+            denied: ['sys_dictionary'],
+        })
+
+        expect(result.data.field.exists).toBe('unknown')
+        expect(result.data.field.note).toMatch(/UNKNOWN/)
+        expect(result.data.field.note).toMatch(/must not be\s+treated as a schema mismatch/)
+        const findings = result.data.findings.map((f) => f.finding)
+        expect(findings).toContain('field_existence_unknown')
+        expect(findings).not.toContain('field_does_not_exist')
+    })
+
+    it('answers UNKNOWN when the ancestor walk was incomplete', () => {
+        // sys_db_object denied: the walk covers one level at best, so "not
+        // declared on ANY ancestor" is a claim about tables never read.
+        const { result } = run({ table: 'sn_aia_agent', field: 'nonexistent_col' }, world(), {
+            denied: ['sys_db_object'],
+        })
+
+        expect(result.data.field.exists).toBe('unknown')
+        expect(result.data.findings.map((f) => f.finding)).not.toContain('field_does_not_exist')
+    })
+
+    it('still answers false over a complete walk with rows read', () => {
+        const { result } = run({ table: 'sn_aia_agent', field: 'chanel' }, world())
+
+        expect(result.data.field.exists).toBe(false)
+        expect(result.data.field.note).toMatch(/complete chain/)
+        expect(result.data.findings.map((f) => f.finding)).toContain('field_does_not_exist')
+    })
+
+    it('reports a denied choice read as unavailable, never as verified absence', () => {
+        const { result } = run({ table: 'sn_aia_agent', field: 'channel' }, world(), {
+            denied: ['sys_choice'],
+        })
+
+        expect(result.data.field.choices).toEqual([])
+        expect(result.data.field.choice_read_status).toBe('DENIED')
+        expect(result.data.field.choice_note).toMatch(/UNAVAILABLE/)
+        expect(result.data.field.choice_note).toMatch(/permission gap/)
+    })
+})
+
 describe('caller_access — the cross-scope fact', () => {
     it('spells out what a caller restriction means for a denied read', () => {
         const { result } = run('syslog', world())
