@@ -1181,3 +1181,84 @@ describe('#79a citation cross-check', () => {
         expect(reports.validate(validReport(), allToolsCtx()).valid).toBe(true)
     })
 })
+
+// =========================================================================
+// #79b — SWEPT claims cross-checked against what the run actually invoked
+// =========================================================================
+
+describe('#79b sweep-claim cross-check', () => {
+    test('layers marked SWEPT with no supporting tool → invalid', () => {
+        const reports = load()
+
+        // The re-run's worst draft: all seven layers SWEPT on two tool calls,
+        // both reads of the same trace.
+        const result = reports.validate(validReport(), auditCtx(['agent_trace', 'read_artifact']))
+
+        expect(result.valid).toBe(false)
+        expect(result.problems.some((p) => p.indexOf('unsupported sweep claim') !== -1)).toBe(true)
+    })
+
+    test('ONE collapsed problem, not one per layer', () => {
+        const reports = load()
+
+        const result = reports.validate(validReport(), auditCtx(['agent_trace']))
+        const sweepProblems = result.problems.filter((p) => p.indexOf('unsupported sweep claim') !== -1)
+
+        expect(sweepProblems.length).toBe(1)
+    })
+
+    test('the collapsed problem names every offending layer', () => {
+        const reports = load()
+
+        const result = reports.validate(validReport(), auditCtx(['agent_trace']))
+        const problem = result.problems.filter((p) => p.indexOf('unsupported sweep claim') !== -1)[0]
+
+        // agent_trace answers layer 1 only; 2-7 are all unsupported.
+        expect(problem.indexOf('2 (Instructions)')).not.toBe(-1)
+        expect(problem.indexOf('4 (Data schemas)')).not.toBe(-1)
+        expect(problem.indexOf('7 (Trigger and wiring)')).not.toBe(-1)
+        expect(problem.indexOf('1 (Execution trace)')).toBe(-1)
+    })
+
+    test('NOT_SWEPT and UNAVAILABLE are never cross-checked', () => {
+        const reports = load()
+        const layers = sweptLayers()
+        layers[2] = { status: 'NOT_SWEPT', reason: 'budget exhausted before instructions' }
+        layers[4] = { status: 'UNAVAILABLE', reason: 'schema read denied cross-scope' }
+        layers[5] = { status: 'NOT_SWEPT', reason: 'no data question arose' }
+        layers[6] = { status: 'NOT_SWEPT', reason: 'not reached' }
+        const report = validReport({ layers_swept: layers })
+
+        // agent_trace covers 1; agent_config covers 3 and 7. 2/4/5/6 are not SWEPT.
+        const result = reports.validate(report, auditCtx(['agent_trace', 'agent_config']))
+
+        expect(result.valid).toBe(true)
+    })
+
+    test('auditAvailable:false skips the sweep cross-check too', () => {
+        const reports = load()
+
+        const result = reports.validate(validReport(), { auditAvailable: false, invokedTools: [] })
+
+        expect(result.valid).toBe(true)
+    })
+
+    test('read_artifact alone supports NO layer — its producing tool is what counts', () => {
+        const reports = load()
+
+        const result = reports.validate(validReport(), auditCtx(['read_artifact']))
+        const sweepProblems = result.problems.filter((p) => p.indexOf('unsupported sweep claim') !== -1)
+
+        // All seven layers are SWEPT and none is supported: one collapsed problem.
+        expect(sweepProblems.length).toBe(1)
+        expect(sweepProblems[0].indexOf('7 layer(s)')).not.toBe(-1)
+    })
+
+    test('read_artifact alone supports NO citation either — the Task 3 map is corrected here', () => {
+        const reports = load()
+
+        const result = reports.validate(validReport(), auditCtx(['read_artifact']))
+
+        expect(result.problems.some((p) => p.indexOf('unsupported citation') !== -1)).toBe(true)
+    })
+})

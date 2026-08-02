@@ -124,6 +124,7 @@ PaFixReport.prototype = {
         var problems = []
         this._checkFailureSummary(report, problems)
         this._checkLayersSwept(report, problems)
+        this._checkSweptClaims(report, problems, ctx)
         this._checkRootCauses(report, problems, ctx)
         this._checkFixes(report, problems)
         this._checkVerification(report, problems)
@@ -242,6 +243,75 @@ PaFixReport.prototype = {
             if (status !== 'SWEPT' && !this._nonEmptyString(entry.reason)) {
                 problems.push('layers_swept ' + label + ' is ' + status + ' but has no reason')
             }
+        }
+    },
+
+    /**
+     * #79b. A layer marked SWEPT is a claim to have LOOKED at it; the audit
+     * trail says whether a tool that CAN look was ever invoked. In the
+     * 2026-08-02 re-run, 11 layer-sweep claims across 4 runs named a tool
+     * that was never invoked, and one rejected draft claimed all seven layers
+     * SWEPT on two tool calls — both reads of the same trace.
+     *
+     * Only SWEPT is checked. NOT_SWEPT and UNAVAILABLE are claims of NOT
+     * having looked, already priced by the `reason` `_checkLayersSwept`
+     * makes mandatory for them.
+     *
+     * ALL offenders collapse into ONE problem. Per-layer problems would put
+     * five near-identical entries into a repair prompt that also carries the
+     * citation problems, and burying the signal is how a repair turn gets
+     * wasted.
+     *
+     * This is complementary to `_checkInconclusive`'s citation-per-sweep
+     * pricing, not a replacement for it: `_countSweptLayers` prices honest
+     * sweeps, this falsifies dishonest ones. A report can no longer dodge the
+     * price by inflating its sweep claims.
+     */
+    _checkSweptClaims: function (report, problems, ctx) {
+        if (!ctx.auditEnabled) return
+
+        var ls = this._isPlainObject(report.layers_swept) ? report.layers_swept : {}
+        var defs = this._layerDefs()
+        var map = this._layerToolMap()
+        var unsupported = []
+
+        for (var i = 0; i < defs.length; i++) {
+            var def = defs[i]
+            var entry = ls[def.number]
+            if (!this._isPlainObject(entry) || entry.status !== 'SWEPT') continue
+
+            var supporting = map[def.number] || []
+            if (this._anyInvoked(supporting, ctx)) continue
+
+            unsupported.push(def.number + ' (' + def.name + ') needs one of: ' + supporting.join(', '))
+        }
+
+        if (unsupported.length === 0) return
+
+        problems.push(
+            'layers_swept: unsupported sweep claim — ' + unsupported.length + ' layer(s) are marked SWEPT ' +
+                'but this run never invoked a tool that reads them. ' + unsupported.join('. ') + '. Tools ' +
+                'invoked this run: ' + this._invokedList(ctx) + '. Mark a layer you did not actually sweep ' +
+                'NOT_SWEPT or UNAVAILABLE with a reason instead of claiming it.'
+        )
+    },
+
+    /**
+     * #79b layer -> tool map. Extends PaRunManager._collectionTools (the same
+     * seven-layer mapping the Evidence Bundle uses) with the two tools it does
+     * not cover. Layer 1 is kept aligned with the `trace` entry of
+     * `_citationToolMap`; the rest are layer-specific, because layers are
+     * finer-grained than the four evidence sources.
+     */
+    _layerToolMap: function () {
+        return {
+            1: ['agent_trace', 'genai_log', 'log_analysis'],
+            2: ['agent_config'],
+            3: ['agent_config'],
+            4: ['schema_lookup'],
+            5: ['query_table'],
+            6: ['genai_log', 'log_analysis'],
+            7: ['agent_config'],
         }
     },
 
@@ -377,16 +447,21 @@ PaFixReport.prototype = {
      * #79a source -> tool map. Deliberately separate from `_layerToolMap`:
      * layers are finer-grained than the four evidence sources (2, 3 and 7 all
      * correspond to `config` but each is answered by a different section of
-     * agent_config's output). `read_artifact` supports every source because it
-     * pages an artifact produced by an earlier tool in the same run — and that
-     * earlier call is itself audited.
+     * agent_config's output). `read_artifact` supports NONE of these sources:
+     * it only pages an artifact a PRODUCING tool already wrote this run
+     * (`PaToolRegistry.dispatch` / `PaScriptToolAdapter.invoke` both audit
+     * that producing tool's `intent` before the call), so the producing tool
+     * — already in this map — is what actually carries the support. Treating
+     * `read_artifact` as a wildcard here would let a run pass every
+     * cross-check on nothing but `agent_trace` + `read_artifact` (the
+     * 2026-08-02 re-run's worst draft, see `_checkSweptClaims`).
      */
     _citationToolMap: function () {
         return {
-            trace: ['agent_trace', 'genai_log', 'log_analysis', 'read_artifact'],
-            config: ['agent_config', 'genai_log', 'read_artifact'],
-            schema: ['schema_lookup', 'read_artifact'],
-            data: ['query_table', 'log_analysis', 'read_artifact'],
+            trace: ['agent_trace', 'genai_log', 'log_analysis'],
+            config: ['agent_config', 'genai_log'],
+            schema: ['schema_lookup'],
+            data: ['query_table', 'log_analysis'],
         }
     },
 
