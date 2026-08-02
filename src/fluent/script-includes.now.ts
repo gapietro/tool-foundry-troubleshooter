@@ -164,6 +164,78 @@ export const paToolGenAiLog = ScriptInclude({
 })
 
 /**
+ * PaToolSchemaLookup — LLD §4.4, the schema tool core (diagnostic layer 4).
+ *
+ * The behaviour to preserve when editing the .js is the super_class walk.
+ * sys_dictionary rows live on the table that DECLARES a column, and every AIA
+ * table extends sys_metadata — so a single-level lookup reports sys_created_on
+ * as ABSENT and produces a confident "that field does not exist" about a real
+ * column. That is the exact false diagnosis this tool exists to prevent, so the
+ * walk is load-bearing rather than a refinement.
+ *
+ * accessibleFrom 'public' for the standing reason (DESIGN.md R-5). Read-only.
+ */
+export const paToolSchemaLookup = ScriptInclude({
+    $id: Now.ID['pa-tool-schema-lookup'],
+    name: 'PaToolSchemaLookup',
+    // Build Rule #29: ONE literal, no `+` concatenation.
+    description: `Agent Doctor tool core: table and field schema. execute(args) takes a table name, optionally a field, and returns the table record plus every column declared on it or on any ancestor - each marked with the table that declares it, because dictionary rows live on the declaring table and a single-level lookup reports every inherited column as missing. Checks sys_db_object first so table does not exist is a distinct finding from table exists but no columns are readable, which is a cross-scope privilege gap with the opposite fix. Returns choice values for a choice column, near-miss suggestions for an unknown column, and spells out what a caller restriction means for a denied read. Read-only, GlideRecordSecure throughout.`,
+    active: true,
+    accessibleFrom: 'public',
+    script: Now.include('../server/tools/PaToolSchemaLookup.js'),
+})
+
+/**
+ * PaToolQueryTable — LLD §4.4, the record-read tool core (diagnostic layer 5).
+ *
+ * Contains the ONE deliberate ACL bypass in this application, and it is bounded
+ * on purpose: when — and only when — the GlideRecordSecure read returns zero
+ * rows, an unfiltered COUNT is taken so an empty table can be told apart from
+ * an ACL-filtered one. A count is returned and nothing else; no field values,
+ * no sys_ids. Without it a missing read ACL is indistinguishable from missing
+ * data by the very tool meant to find it. Read the .js header before widening
+ * it — this is LLM-callable.
+ *
+ * accessibleFrom 'public' for the standing reason (DESIGN.md R-5).
+ */
+export const paToolQueryTable = ScriptInclude({
+    $id: Now.ID['pa-tool-query-table'],
+    name: 'PaToolQueryTable',
+    // Build Rule #29: ONE literal, no `+` concatenation.
+    description: `Agent Doctor tool core: bounded record reads. execute(args) takes a table, an optional encoded query, an optional field list and a limit defaulting to 20 and capped at 100, validates the table exists before querying, and returns rows read through GlideRecordSecure with every value digested. When the result is empty it distinguishes the two causes that look identical - the rows are not there, or the rows are there and the caller cannot see them - by taking an unfiltered COUNT and returning only that number, never row content. A denied read is reported as a privilege gap that says nothing about whether the data exists. Read-only.`,
+    active: true,
+    accessibleFrom: 'public',
+    script: Now.include('../server/tools/PaToolQueryTable.js'),
+})
+
+/**
+ * PaToolLogAnalysis — LLD §4.4, the platform-log tool core.
+ *
+ * BLOCKED AT THE DATA SOURCE AND SHIPPED ANYWAY. syslog carries
+ * caller_access = Caller Restriction (re-confirmed 2026-08-01), and the Fluent
+ * CrossScopePrivilege this app declares for it installs correctly and does NOT
+ * lift the denial — an application cannot grant itself access to a
+ * caller-restricted table. Measured twice; do not re-attempt the grant
+ * (DESIGN.md R-12, R-19).
+ *
+ * It ships because dropping to six tools would make the gap INVISIBLE: an agent
+ * with no log tool cannot tell you the log layer was skipped. The read is
+ * attempted for real and degrades with a stated reason, so an admin lifting the
+ * restriction makes it work with no code change.
+ *
+ * accessibleFrom 'public' for the standing reason (DESIGN.md R-5). Read-only.
+ */
+export const paToolLogAnalysis = ScriptInclude({
+    $id: Now.ID['pa-tool-log-analysis'],
+    name: 'PaToolLogAnalysis',
+    // Build Rule #29: ONE literal, no `+` concatenation.
+    description: `Agent Doctor tool core: scoped platform log reads. execute(args) takes an execution plan sys_id - from which it derives the time window and the message filter - or a source and message filter with a time window. Every query MUST carry a bounded window and at least one contains-filter, and an insufficiently scoped query is refused before it reaches the database, because an unfiltered syslog read can slow or time out an instance. This table is currently denied to this scope by a caller restriction that an application cannot lift for itself, so the tool attempts the read and, when denied, returns a stated unavailable result naming the cause, what has already been tried, and the instance-admin action required - never an empty result that would read as a clean log layer. Read-only.`,
+    active: true,
+    accessibleFrom: 'public',
+    script: Now.include('../server/tools/PaToolLogAnalysis.js'),
+})
+
+/**
  * PaToolAgentTrace — LLD §4.1, the first Agent Doctor tool core.
  *
  * accessibleFrom is 'public' deliberately. DESIGN.md R-5 established that an AI
