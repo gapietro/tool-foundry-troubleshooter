@@ -11,6 +11,62 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0220 — 2026-08-02
+
+### Fixed
+- **Fix Report validation checked evidence LABELS, not whether the cited source was ever read
+  (issue #79).** `PaFixReport.validate` enforced that each root cause carried legal, diverse
+  `source` labels and never verified them, so validation was uncorrelated with evidential honesty.
+  Audit-verified against `x_snc_troubleshoot_audit`: runs `100c8910…` and `ebdc4194…` both cited
+  `agent_config` and PASSED having never invoked it, while `a66d0118…`, citing only what it
+  genuinely read, FAILED. Citations and `layers_swept: SWEPT` claims are now cross-checked against
+  the tools the run actually invoked, resolved by the new `PaAuditLogger.invokedTools` and passed
+  **into** `validate` as an optional second argument so it stays a pure function of its inputs.
+- **The evidence rule structurally rejected a correct absence-diagnosis (issue #78).** Seed 05 is a
+  defect where the agent never runs, so no `sn_aia_execution_plan` row exists and no `trace`
+  citation is possible — and the rule had no exemption, so it rejected the harness's one correct
+  diagnosis. Layer 1 `UNAVAILABLE` plus **two distinct** non-trace sources is now a second way to
+  satisfy the rule. Specified as a widening: the original rule is evaluated and returns first, so
+  nothing that previously validated can newly fail. The pre-existing `PaFixReport` suite passing
+  entirely untouched is the proof.
+- **A rejected draft was invisible over the API (issue #78, side-defect).** `_finishFailedFixReport`
+  already stored the draft in `x_snc_troubleshoot_run.fix_report` and the problems in the same row's
+  `error`, but `GET /runs/{id}` gated on status and returned `null` for both — so the correct
+  diagnosis above had to be read out of the table by hand. Adds a sibling `fix_report_rejected`
+  field; `fix_report` keeps meaning "a report that PASSED validation" so no consumer can mistake a
+  draft for a diagnosis. No table change.
+
+### Added
+- `PaAuditLogger.invokedTools(runId)` — the only reader of `x_snc_troubleshoot_audit` in the
+  codebase. Returns a **tagged** result rather than a bare array so that "no tools were called" and
+  "the trail is unreadable" stay distinguishable: a degraded trail disables the cross-checks
+  entirely (fail open) and the degradation is recorded in the run transcript, because a check that
+  silently skipped would leave a passing report's evidential guarantee unfalsifiable.
+- `schemaText()` now states all three new rules, with the per-layer tool list generated from
+  `_layerToolMap()` at render time so the contract cannot drift from what is enforced.
+
+### Notes
+- **`read_artifact` supports no evidence source and no layer.** Artifacts are only created inside
+  audited tool dispatches, so `read_artifact` can only page an artifact whose producing tool is
+  already in the trail — making a wildcard redundant when a citation is honest and a blanket pass
+  when it is not. Under an earlier draft that treated it as a wildcard, the re-run's worst
+  fabricated report (all seven layers `SWEPT` on two reads of the same trace) passed both new
+  checks.
+- **Benchmark confound, recorded before the next measurement rather than after it.**
+  `benchmark/DECISION.md` §H7-5: `schemaText()` changed again here, so the 0 → 1 → *n* sequence
+  across three passes has three different contracts behind it and must not be read as a trend. The
+  categorical trace-plus-one statement at `docs/agent/agent-doctor-instructions.md:48` was
+  deliberately left unedited — that file is also the native harness's instruction source, and
+  changing it would move the baseline §H7-4 already flags as unmeasured.
+- **Does not fix diagnostic depth.** Two live seed-05 runs on this version were still rejected: each
+  made one tool call, never reached `agent_config`, and so had zero distinct non-trace sources. Sweep
+  inflation did disappear — both marked layers 2–7 `NOT_SWEPT` with reasons naming the tool they had
+  not invoked, where the historical run claimed three layers `SWEPT` with empty reasons. Follow-ups:
+  #81 (the repair turn has no tool access, so a citation-shortfall rejection is unfixable by
+  construction) and #82 (were these runs shallower *because* of the contract change? n=2).
+
+---
+
 ## 2026.08.0219 — 2026-08-02
 
 ### Fixed
