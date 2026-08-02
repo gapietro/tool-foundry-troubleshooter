@@ -176,24 +176,31 @@ turn can either go get the evidence or drop the claim.
 ### #79b — layers_swept cross-check
 
 The layer→tool map extends `PaRunManager._collectionTools` (`src/server/PaRunManager.js:511`) with
-the two tools it does not cover. `read_artifact` is a wildcard, matching its role above.
+the one tool it does not cover (`log_analysis`). `read_artifact` supports nothing here either, for
+the same reason it supports nothing in the citation map above — it is never a wildcard.
 
 ```
 1 Execution trace   ← agent_trace, genai_log, log_analysis
 2 Instructions      ← agent_config
 3 Tool definitions  ← agent_config
 4 Data schemas      ← schema_lookup
-5 Data              ← query_table
+5 Data              ← query_table, log_analysis
 6 GenAI stack       ← genai_log, log_analysis
 7 Trigger + wiring  ← agent_config
 ```
+
+*(Layer 5 corrected 2026-08-02, final whole-branch review finding 2: it is the same concept as the
+`data` citation source below and had drifted from it — a `log_analysis` read was valid `data`
+evidence but not a valid layer-5 sweep, which could reject an honest sweep performed with a real
+tool call. Layer 1 was already deliberately kept aligned with `trace`; layer 5 now is too.)*
 
 `read_artifact` is absent here for the same reason it is absent from the citation map above.
 
 **The two maps are separate by design, not duplicates.** Layers are finer-grained than the four
 evidence sources — layers 2, 3 and 7 all correspond to the `config` source but each is answered by a
-specific section of `agent_config`'s output. Layer 1 is kept aligned with the `trace` source
-(same concept, same tool set); the rest are layer-specific. Neither map is derived from the other.
+specific section of `agent_config`'s output. Layers 1 and 5 are kept aligned with the `trace` and
+`data` sources respectively (same concept, same tool set); the rest are layer-specific. Neither map
+is derived from the other.
 
 Only `SWEPT` is checked. `NOT_SWEPT` and `UNAVAILABLE` are claims of *not* having looked, already
 priced by their mandatory `reason`.
@@ -214,12 +221,20 @@ sweep claims.
 
 ### Fail open, and say so
 
-The #79 checks run **only** when `context.auditAvailable === true` and `context.invokedTools` is an
-array. Anything else — no second argument, a malformed context, `auditAvailable` absent or falsy —
-skips both checks entirely and runs today's rules unchanged. The flag is tested for explicit `true`
-rather than truthiness so that a missing flag fails toward *not* checking. A degraded audit trail
-must not convict an honest report. #78's mode B does not depend on the audit trail and stays active
-in every case.
+The #79 checks run **only** when `context.auditAvailable === true` and `context.invokedTools`
+normalizes to a **non-empty** list of tool names. Anything else — no second argument, a malformed
+context, `auditAvailable` absent or falsy, or an `invokedTools` array that is empty or contains only
+blanks — skips both checks entirely and runs today's rules unchanged. The flag is tested for explicit
+`true` rather than truthiness so that a missing flag fails toward *not* checking. A degraded audit
+trail must not convict an honest report. #78's mode B does not depend on the audit trail and stays
+active in every case.
+
+*(Empty-array case corrected 2026-08-02, final whole-branch review finding 3: `auditAvailable:true`
+with `invokedTools:[]` originally still counted as "enabled," and an enabled check with nothing in
+its allow-list matches no citation and no sweep claim — every check fails CLOSED at once instead of
+skipping. Not reachable from `PaAgentLoop` today, since `invokedTools()` only reports
+`available:true` when it found at least one tool, but `validate` is public and this branch's own
+on-instance verification step builds a context by hand.)*
 
 The critical corollary: **a skipped check must be visible, or a passing report's evidential guarantee
 is unfalsifiable.** When the trail is unavailable, `_handleFixReport` appends a transcript entry

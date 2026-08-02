@@ -143,12 +143,16 @@ PaFixReport.prototype = {
      * Everything the checks need that is not in the report itself, resolved
      * ONCE per validate() call.
      *
-     * `auditEnabled` demands an EXPLICIT `true` plus an array of tools. A
-     * missing, malformed or degraded context fails toward NOT checking,
-     * because a broken audit trail convicting an honest report is a strictly
-     * worse outcome than an unverified citation — that is #78's defect, and
-     * reintroducing it through the back door would be worse than leaving #79
-     * unfixed.
+     * `auditEnabled` demands an EXPLICIT `true` plus a NON-EMPTY array of
+     * normalized tool names. A missing, malformed or degraded context fails
+     * toward NOT checking, because a broken audit trail convicting an honest
+     * report is a strictly worse outcome than an unverified citation — that
+     * is #78's defect, and reintroducing it through the back door would be
+     * worse than leaving #79 unfixed. The empty-array case is the same
+     * failure shape wearing a different hat: `{auditAvailable:true,
+     * invokedTools:[]}` (or an array of only blanks) matches NO citation and
+     * NO sweep claim, so every check would fail CLOSED at once instead of
+     * skipping — final whole-branch review, finding 3, 2026-08-02.
      */
     _buildCheckContext: function (report, context) {
         var c = this._isPlainObject(context) ? context : {}
@@ -161,7 +165,7 @@ PaFixReport.prototype = {
 
         return {
             traceUnavailable: this._isTraceUnavailable(report),
-            auditEnabled: c.auditAvailable === true && this._isArray(c.invokedTools),
+            auditEnabled: c.auditAvailable === true && names.length > 0,
             invokedTools: names,
         }
     },
@@ -298,10 +302,15 @@ PaFixReport.prototype = {
 
     /**
      * #79b layer -> tool map. Extends PaRunManager._collectionTools (the same
-     * seven-layer mapping the Evidence Bundle uses) with the two tools it does
-     * not cover. Layer 1 is kept aligned with the `trace` entry of
-     * `_citationToolMap`; the rest are layer-specific, because layers are
-     * finer-grained than the four evidence sources.
+     * seven-layer mapping the Evidence Bundle uses) with the one tool it does
+     * not cover (`log_analysis`). Layer 1 is kept aligned with the `trace`
+     * entry of `_citationToolMap`; the rest are layer-specific, because
+     * layers are finer-grained than the four evidence sources — EXCEPT layer
+     * 5 ("Data"), which is the same concept as the `data` citation source and
+     * is deliberately kept aligned with it too (finding 2 of the final
+     * whole-branch review, 2026-08-02): `_citationToolMap().data` already
+     * accepts `log_analysis` as valid data evidence, so a layer-5 sweep
+     * backed by the same tool must not be rejected.
      */
     _layerToolMap: function () {
         return {
@@ -309,7 +318,7 @@ PaFixReport.prototype = {
             2: ['agent_config'],
             3: ['agent_config'],
             4: ['schema_lookup'],
-            5: ['query_table'],
+            5: ['query_table', 'log_analysis'],
             6: ['genai_log', 'log_analysis'],
             7: ['agent_config'],
         }
@@ -837,11 +846,19 @@ PaFixReport.prototype = {
                 'read_artifact does NOT count on its own — cite the tool whose output you paged. Do not ' +
                 'label evidence you did not gather.'
         )
+        var layerMap = this._layerToolMap()
+        var layerToolClauses = []
+        for (var k = 0; k < defs.length; k++) {
+            var ld = defs[k]
+            layerToolClauses.push(ld.number + ' (' + ld.name + ') needs one of: ' + (layerMap[ld.number] || []).join(', '))
+        }
+
         lines.push(
             'A LAYER MARKED SWEPT NEEDS A TOOL CALL BEHIND IT. layers_swept entries marked SWEPT are ' +
                 'verified independently, against the tools this run invoked: claiming a layer you never ran ' +
                 'a tool against is rejected. Marking a layer NOT_SWEPT or UNAVAILABLE with an honest reason is ' +
-                'always acceptable and costs you nothing — an inflated sweep claim costs you the whole report.'
+                'always acceptable and costs you nothing — an inflated sweep claim costs you the whole report. ' +
+                'Per layer: ' + layerToolClauses.join('; ') + '.'
         )
         lines.push(
             'IF NOTHING EVER RAN, SAY SO — you do not need a trace citation. When there is no execution ' +

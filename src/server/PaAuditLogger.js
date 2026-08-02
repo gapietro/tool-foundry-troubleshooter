@@ -130,6 +130,21 @@ PaAuditLogger.prototype = {
      * Every degraded branch still carries `tools: []` so callers never need a
      * null check.
      *
+     * WHAT THIS CANNOT DETECT: a PARTIAL trail. `_write` swallows a per-row
+     * `insert_failed` (R-10 — it degrades rather than throwing), so if 3 of 5
+     * rows for a run land and 2 silently don't, this method has no way to
+     * distinguish that from "all 5 landed" — it only ever sees the 3 that
+     * made it and reports them as the complete picture. A citation resting on
+     * the 2 missing rows would be treated as unsupported (fails toward NOT
+     * checking that tool, never toward a false convict), and a citation
+     * resting on one of the 3 that landed still passes correctly — so this
+     * gap cannot turn an honest report invalid, but it CAN let a genuinely
+     * unsupported claim through unnoticed if the row that would have proven
+     * it is exactly the one that didn't land. Only a SYSTEMATIC failure (every
+     * row for a run lost) is caught here, because that degrades to zero rows
+     * and `_noTools('no_audit_rows')` fails open correctly. Do not assume
+     * `tools.length > 0` implies total coverage of everything the run did.
+     *
      * Build Rule #42: plain GlideRecord — the table has no ACLs, so
      * GlideRecordSecure would deny this app read access to its own trail.
      *

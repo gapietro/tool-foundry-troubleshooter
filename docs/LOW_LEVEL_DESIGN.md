@@ -191,6 +191,15 @@ Artifacts = **attachments on this record** (`GlideSysAttachment`), named `artifa
 | target_table / target_record | string |
 | confirmed_by_user | boolean |
 
+**Two independent readers count rows here differently, and both are correct for their own
+question — do not reconcile them.** R-20's derived-completeness metric (§3.1 above) counts
+**distinct `tool_name` over `action_type=result`** — it answers "how many distinct tools finished
+successfully," so a tool that only ever produced an `intent`/`error` row does not count. `PaAuditLogger
+.invokedTools` (§4.6) counts **all** `action_type`s — `intent`, `result` and `error` alike —
+deliberately: it answers "did the model ever look," and an `intent` row (written *before* the tool
+runs) already proves that even if the tool then failed. A tool a run merely attempted can move
+`invokedTools`'s count without moving R-20's.
+
 ---
 
 ## 4. Component Specifications
@@ -277,6 +286,7 @@ As specified in `IMPLEMENTATION_PLAN.md` Task 8. ⚠ **The "unchanged by instanc
 
 - `PaRunAnchor.getOrCreate({harness, executionRef?, conversationId?})`: for native harness, key = **`_agentic_context_.conversation_id`** (⚠ **CLOSED by R-2**: a script tool receives an undocumented global `_agentic_context_` — a **JSON string**, so `JSON.parse` it — carrying `agent_id`, `conversation_id`, `usecase_id`, `execution_plan_id`. `conversation_id` was stable across all 19 calls of a conversation and matches `sn_aia_execution_plan.conversation`; `execution_plan_id` is available as a finer second key. Note `gs.getSessionID()` returns the literal `"SYSTEM"`, so anything keyed on session ID collides across conversations). ⚠ **The "one anchor per user per 30 min" fallback that stood here is DELETED, not merely discouraged** — R-2 removed time-window keying from the design entirely so it cannot be reached by accident; it interleaves two benchmark runs onto one run record and lets run 2 read run 1's artifacts, breaking the blind-run independence the doubled-run protocol exists to measure (DESIGN.md §2.4). R-2's closure is API-path-provisional: re-confirm `_agentic_context_` on the Now Assist panel path before the benchmark. Creates `x_snc_troubleshoot_run` with `harness=native`, `status=running`
 - `PaAuditLogger.logIntent/logResult/logError(params)` → `x_snc_troubleshoot_audit` insert; called by the adapter around every tool execution
+- `PaAuditLogger.invokedTools(runId)` → the only **reader** of `x_snc_troubleshoot_audit` in the codebase, added for #79 (fixreport-evidence-validation): returns which tools a run actually invoked, so `PaFixReport` can cross-check a citation or a `layers_swept` claim against what the run genuinely called rather than trusting the model's own label. See §3.2's note for how its coverage differs from R-20's derived-completeness metric above.
 
 ✅ **BUILT AND VERIFIED on gpinst01 (issue #20 / PR #21, 2026-07-31).** Four points where the shipped
 component is more specific than the text above, all of them decisions rather than details:
