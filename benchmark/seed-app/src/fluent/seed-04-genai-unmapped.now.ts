@@ -201,8 +201,15 @@ export const seed04Agent = AiAgent({
             // an unreplaced placeholder fails loudly and obviously rather than
             // silently pointing somewhere wrong. Substitute it during seed-04
             // setup - see benchmark/seeds/seed-04-genai-unmapped.md.
+            //
+            // Task 12 (2026-08-02): substituted with the gpinst01 install's
+            // capability sys_id and verified in the installed sn_aia_tool.script.
+            // This value is INSTANCE-SPECIFIC - re-read sys_one_extend_capability
+            // (name=x_snc_tsbench_unmapped_capability) and re-substitute before
+            // installing on any other instance, or the seed's failure signature
+            // changes from "unmapped provider" to "capability not found".
             script: `(function (inputs) {
-    var capabilityId = 'REPLACE_WITH_SEED_04_CAPABILITY_SYS_ID';
+    var capabilityId = '92ff62af516741769c437feb88c80ef3';
     var resp = sn_one_extend.OneExtendUtil.execute({
         executionRequests: [{
             capabilityId: capabilityId,

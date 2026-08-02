@@ -1,11 +1,25 @@
-# Scorecard template
+# Scorecard — Agent Doctor (Task 12, filled 2026-08-02)
 
 One row per scored run, **10 rows** — 2 runs per seed × 5 seeds (`benchmark/seeds/seed-01` through
 `seed-05`). The smoke-test run (see `benchmark/README.md`) is not one of the 10; it is a pass/fail
 gate run before scoring starts, not a scored row.
 
-Copy this file to `benchmark/scorecard-agent-doctor.md` (Task 12) and fill it in per run. Every
-column below exists for a stated reason — read the reason before skipping a column, not after.
+**This is the filled Task 12 scorecard** (copied from `scorecard-template.md`; the template's
+column definitions and rules are preserved below as the scoring contract this file was filled
+against — with two post-fill wording updates applied identically in both files per PR #43 review:
+the §A3 seed-4 void condition now describes the hardcoded-sys_id state, and §E3's expected
+`layers_available` now reads `7/7`, superseding the pre-Tasks-7/8 `1/7` expectation). Runs
+executed 2026-08-02 01:31–02:16 UTC on gpinst01, Agent Doctor sys_id
+`e1392946828940e5a708fc51b0a5e954`, all 7 tools attached and active. The verdict and its caveats
+live in `DECISION.md`.
+
+**Smoke-test gate (pre-scoring): PASS.** Execution `4e2cc5c82b2a4bd417a6ffbeee91bf87`
+(conversation `742c45c82b2a4bd417a6ffbeee91bf45`, 190s, 9 tool calls) diagnosed the specimen
+`c9d63a932bda8b9417a6ffbeee91bfd0` correctly: RC-3 named `context_processing_script` line 42
+`InternalError`, CONFIRMED, with the `sn_aia_message` script_errors evidence — found despite the
+plan header reading `state=Completed`, empty `state_reason`, all tasks Success. The report also
+identified the specimen's prompt-injection objective and empty tool input schema (both genuinely
+present), and explicitly listed unswept layers.
 
 ## A. The 6-point rubric
 
@@ -94,7 +108,7 @@ Known void conditions, both from the seed specs:
   instance until re-substituted — see the seed spec's Setup step 2). Either way
   the tool tests a malformed reference rather than an unmapped provider. A
   hardcoded value that MATCHES the instance's record is a valid install, not a
-  void.
+  void. *(This run: verified matching on gpinst01 — not void.)*
 
 **How to record one.** Put `void` in `passes_gate` — not `0` — write the reason
 in `notes`, and leave the four rubric columns blank. A blank rubric with a stated
@@ -273,25 +287,43 @@ the only column the Task 12 gate consumes.
 
 | seed | run # | run_id (conversation_id) | root_cause_layer_correct | fix_target_correct | evidence_cites_trace_and_config | fix_usable_unedited | total /6 | **passes_gate** | layers_swept (n/7, which) | layers_available (n/7, which) | cause_of_death | continuous_tool_execution_limit | max_auto_executions (per tool) | tool_calls | assists_consumed | wall_clock | failure_behavior | notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 01 | 1 | | | | | | | | | | | | | | | | | |
-| 01 | 2 | | | | | | | | | | | | | | | | | |
-| 02 | 1 | | | | | | | | | | | | | | | | | |
-| 02 | 2 | | | | | | | | | | | | | | | | | |
-| 03 | 1 | | | | | | | | | | | | | | | | | |
-| 03 | 2 | | | | | | | | | | | | | | | | | |
-| 04 | 1 | | | | | | | | | | | | | | | | | |
-| 04 | 2 | | | | | | | | | | | | | | | | | |
-| 05 | 1 | | | | | | | | | | | | | | | | | |
-| 05 | 2 | | | | | | | | | | | | | | | | | |
+| 01 | 1 | `715e41c42b6a4bd417a6ffbeee91bf29` | 2 | 2 | 1 | 1 | 6 | **1** | 4/7 (L1,L3,L4,L5) | 7/7 (measured) | completed | 25 | 10 × all 7 tools | 8 | not measurable (see §F) | 145s | n/a — success; unswept layers stated | Word→Integer mismatch found from both sides (M18 full credit). One `query_table` probe hit `incident` (wrong table), self-corrected. ~6 LLM calls. |
+| 01 | 2 | `2fdf8d0c2baa4314f243fed2ce91bfa3` | 2 | 2 | 1 | 1 | 6 | **1** | 4/7 (L1,L3,L4,L5) | 7/7 (measured) | completed | 25 | 10 × all 7 tools | 11 | not measurable | 224s | n/a — success | Full structured Fix Report incl. complete word→int map code + post-write guard + negative test; DATA MARKERS section. `log_analysis` called; syslog unavailability reported honestly. ~8 LLM calls. |
+| 02 | 1 | `86015dc42baa4bd417a6ffbeee91bf51` | 0 | 1 | 1 | 0 | 2 | **0** | 4/7 (L1,L2,L3,L7) | 7/7 (measured) | completed | 25 | 10 × all 7 tools | 5 | not measurable | 102s | graceful_partial | Named L3 "zero tools bound" (runtime-accurate) vs expected L2 instruction. `fix_target` 1 (partial): "supply a lookup tool" is half of the seed's own sanctioned fix; instruction half absent. Fix is an outline, not appliable → 0. See seed-2 construction finding in DECISION.md §D2. |
+| 02 | 2 | `cff195842b2e4314f243fed2ce91bfd1` | 0 | 1 | 1 | 0 | 2 | **0** | 4/7 (L1,L2,L3,L7) | 7/7 (measured) | completed | 25 | 10 × all 7 tools | 7 | not measurable | 151s | graceful_partial | Identical diagnosis to run 1 — consistent across the doubled runs. Same scoring rationale. |
+| 03 | 1 | `f3a2950c2baa4bd417a6ffbeee91bfb4` | 2 | 2 | 1 | 1 | 6 | **1** | 4/7 (L1,L3,L5,L6) | 7/7 (measured) | completed | 25 | 10 × all 7 tools | 9 | not measurable | 172s | n/a — success | `genuinely_empty` verdict CONFIRMED by two independent reads. Report claims 6/7 swept; E2 strict derivation credits 4/7 (L2 "instructions section not pulled" by its own admission; L4 claimed implicit via query_table, schema_lookup not called). K26 tool smells as secondary findings. |
+| 03 | 2 | `e1c319c02b6e4314f243fed2ce91bf68` | 2 | 2 | 1 | 1 | 6 | **1** | 5/7 (L1,L2,L3,L5,L6) | 7/7 (measured) | completed | 25 | 10 × all 7 tools | 8 | not measurable | 150s | n/a — success | Consistent with run 1. genai_log identified 2 successful LLM calls (model `claude-sonnet-4-6`). L4 again claimed implicit — not credited. |
+| 04 | 1 | `228411882b6e4314f243fed2ce91bf24` | 2 | 2 | 1 | 1 | 6 | **1** | 5/7 (L1,L3,L4,L5,L6) | 7/7 (measured) | completed | 25 | 10 × all 7 tools | 14 | not measurable | 211s | n/a — success | Found the dangling `api` on definition `904c0485…` and proposed repointing to `936e514a53b3b110f028ddeeff7b128c` — the exact healthy value, discovered independently from working definitions. Decoy partially bit (empty `connection` named co-cause, co-fix) but did NOT displace the api fix → not the "connection and nothing else" case. |
+| 04 | 2 | `ecc5dd482bea4bd417a6ffbeee91bf2d` | 2 | 0 | 1 | 0 | 3 | **0** | 6/7 (L1,L2,L3,L5,L6,L7) | 7/7 (measured) | completed | 25 | 10 × all 7 tools | 10 | not measurable | 206s | n/a — completed with wrong fix | **Canonical decoy row (2/0/1/0).** Named empty `connection` as PRIMARY cause reading the capability parent record; never read the definition row's `api`. Also hallucinated table name `sn_tsbench_ticket` → false "table does not exist" RC-2. Doubled runs SPLIT (run 1 hit / run 2 decoy) — the measured inconsistent-behavior specimen. |
+| 05 | 1 | `1b37994c2b2e4bd417a6ffbeee91bf5a` | 2 | 2 | 1 | 1 | 6 | **1** | 4/7 (L1,L2,L3,L7) | 7/7 (measured) | completed | 25 | 10 × all 7 tools | 5 | not measurable | 92s | n/a — success | Named the SPECIFIC gate — `sn_aia_trigger_configuration.active=0` on `bfb77d6c…` — with m2m link verified intact (`m2m_active=1`) → full 2/2 under the two-gates rule, not partial. Bonus: flagged missing run-as identity as UNCONFIRMED advisory (the seed spec's own open SDK 4.9.0 concern). |
+| 05 | 2 | `d818dd4c2bae4314f243fed2ce91bf7c` | 2 | 2 | 1 | 1 | 6 | **1** | 4/7 (L1,L2,L3,L7) | 7/7 (measured) | completed | 25 | 10 × all 7 tools | 5 | not measurable | 95s | n/a — success | Consistent with run 1: same gate, same fix, same run-as advisory. Anchor race observed: 2 run rows created for this conversation (TR1000047/48); all audit rows adopted the deterministic winner — R-3 handling worked; loser row left as designed. |
 
-**Gate tally** — fill in when all rows are complete:
+**Gate tally**
 
 | | |
 |---|---|
-| Valid runs (not void) | ___ / 10 |
-| `sum(passes_gate)` | ___ |
-| Gate result | ___ / ___ ( ___ % ) — read against the `IMPLEMENTATION_PLAN.md` Task 12 gate table |
-| Void runs and why | ___ |
+| Valid runs (not void) | **10** / 10 |
+| `sum(passes_gate)` | **7** |
+| Gate result | **7 / 10 (70.0%)** — middle band (≥ 50% and < 80%) of the `IMPLEMENTATION_PLAN.md` Task 12 gate table |
+| Void runs and why | **None.** Both seed-4 setup conditions held (placeholder substituted and verified in the installed script; primary construction installed, no fallback needed) and seed 5's m2m gate was PATCHed on and re-read `true` before its runs. |
+
+## F. Measurement caveats for this filled scorecard
+
+- **`assists_consumed` is recorded "not measurable"** — `sn_value_ai_consumption` (the only
+  assist-ledger table found) had zero rows in the benchmark window, and no other live per-run
+  assist-unit source was identified. LLM call counts per run (from the execution task tree) are
+  recorded in `notes` as the nearest proxy. This is an honest absence, not a skipped column.
+- **`layers_swept` derivation:** every row was derived by the §E1 two-step audit query (conversation
+  → `x_snc_troubleshoot_run.conversation_ref` → `x_snc_troubleshoot_audit` `action_type=result`
+  distinct tools), then mapped through §E2 with the used-layers discipline for `agent_config`.
+  Where a run's own sweep table claimed more than the derivation supports, the derivation won and
+  the claim is noted (seed 3 rows).
+- **`layers_available`** was read fresh per run via the §E3 m2m query; all runs returned the same
+  7 active bindings → 7/7. This differs from the template's forward-looking expectation of 1/7,
+  which described the pre-Tasks-7/8 build; #32's blocker was cleared before this benchmark ran.
+- **Run anchor status:** every scored conversation's `x_snc_troubleshoot_run` row remains
+  `status=running` after the conversation ends — the native adapter opens the anchor but nothing
+  closes it. Recorded as a harness observation for Phase 1b; does not affect scoring.
 
 If valid runs < 8, record **gate not met — insufficient data** and stop; do not compute a verdict
-from the survivors (§A3).
+from the survivors (§A3). *(Not triggered: 10 valid runs.)*

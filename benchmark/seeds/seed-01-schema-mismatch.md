@@ -19,12 +19,13 @@
 
 The instructions require the agent to express priority as a **word**
 ("critical", "high", …), and `set_ticket_priority` passes that word straight
-through to `x_snc_tsbench_ticket.priority`, which is an **integer** choice
-column, 1–5. `'critical'` is not an integer, so the requested priority is **not
-what ends up in the column** (a non-numeric string on an integer field typically
-settles at `0` — see "Expected diagnosis" for why no literal value is scored) —
-while `gr.update()` still reports success, so the agent tells the user the ticket
-was prioritised.
+through to `x_snc_tsbench_ticket.priority`, an **Integer** column (declared
+with choices 1–5 in the Fluent source, but the choice list did not install —
+measured `has_choices: false`; the integer typing alone carries the defect).
+`'critical'` is not an integer, so the requested priority is **not what ends up
+in the column** (measured at Task 12: `priority_stored` = `null` — see the
+measurement note under "Expected diagnosis") — while `gr.update()` still
+reports success, so the agent tells the user the ticket was prioritised.
 
 **Where the declaration actually lives — and where it does not.** Script-tool
 inputs have no `type` property in Fluent. The emitted `sn_aia_tool.input_schema`
@@ -47,7 +48,11 @@ originally declared with `ChoiceColumn`, which emits `internal_type=choice`,
 happily. The mechanism above was false as shipped. The column is now
 `IntegerColumn` + choices, emitting `internal_type=integer` (the shape
 `task.priority` itself uses on gpinst01), which makes the mismatch real. See
-`../seed-app/src/fluent/seed-01-schema-mismatch.now.ts`.
+`../seed-app/src/fluent/seed-01-schema-mismatch.now.ts`. **Installed-state
+addendum (Task 12, 2026-08-02):** the Fluent source declares the choices, but
+the install did not create them — `schema_lookup` reads the installed column as
+`type: Integer`, `has_choices: false`. The integer typing carried the defect
+regardless; treat "plain Integer column" as the ground truth for scoring.
 
 ## Why it is built this way
 
@@ -84,7 +89,8 @@ is down for all customers, no workaround"*. Capture the resulting
 ## Expected diagnosis
 
 Root cause in `tool_schema`: the tool accepts and forwards a priority **word**
-while the target column is an integer choice 1–5, so the value is never stored.
+while the target column is Integer-typed (measured installed state: plain
+Integer, no choice list — `has_choices: false`), so the value is never stored.
 
 Fix target: **the tool's word-typed contract** — map the word to its integer
 value inside the script before `setValue`, or change the tool description and
@@ -97,18 +103,19 @@ Evidence a correct diagnosis should cite: the trace showing `priority_stored`
 **disagreeing with `priority_requested`** in the tool result, plus the
 `x_snc_tsbench_ticket.priority` dictionary entry showing `internal_type=integer`.
 
-**What `priority_stored` will actually read — do not score on a literal value.**
-The criterion above deliberately does not name one. A ServiceNow integer field
-handed a non-numeric string typically settles at **`0`**, not empty, and the
-column is now genuinely integer-typed; `''`, `0` and `null` are all plausible,
-and which one appears depends on platform coercion this benchmark has not
-measured. **Any value that is not the requested word scores as correct
-evidence** — the finding is the mismatch between `priority_requested:
-"critical"` and whatever `priority_stored` came back as. Only
-`priority_stored == "critical"` would refute the seed, and that outcome means
-the column is not integer-backed after all: record it in `notes` and treat the
-run as a **refutation of the seed**, not a miss by the diagnosing agent. Replace
-this paragraph with the measured value once Task 12 has run one.
+**`priority_stored` measured at Task 12 (2026-08-02): `null`.** The seed
+execution `b07dc9082baa4314f243fed2ce91bf4b` called `set_ticket_priority` with
+`priority: "critical"` and the tool returned `{ok: true, priority_requested:
+"critical", priority_stored: null}` while the record's `priority` column read
+back empty over REST. GlideRecord silently discarded the non-numeric string —
+the seed's mechanism is confirmed as built. (Pre-measurement guidance, kept for
+the record: any value that is not the requested word scores as correct
+evidence; only `priority_stored == "critical"` would have refuted the seed.)
+One correction surfaced by the de-risk pass: the **choice list did not
+install** — `schema_lookup` reports `has_choices: false` on the installed
+column — so the defect as measured is "word written to a plain Integer column",
+not "integer choice 1–5". The integer typing is the operative half and the
+seed's diagnosis target is unchanged.
 
 ### Scoring note — layers 3 and 4 (M18)
 
@@ -118,11 +125,16 @@ wrong on its own. `root_cause_layer_correct` is binary, so the resolution is
 stated here rather than left to the scorer:
 
 - **`tool_schema` (layer 3) is the expected answer** and scores full marks.
-- **A run answering "layer 4 — the column is an integer choice and the tool
-  sends a word" also scores full marks.** It describes the same finding from the
-  other side and identifies the same fix.
-- A run naming only one side *without* the disagreement — e.g. "the column is an
-  integer choice" with no mention of what is being written to it — scores 0. The
+- **A run answering "layer 4 — the column is Integer-typed and the tool sends a
+  word" also scores full marks.** It describes the same finding from the other
+  side and identifies the same fix. (Wording updated 2026-08-02: the measured
+  installed state is a **plain Integer column with no choice list** —
+  `has_choices: false`, see "The defect" — so do not require the word "choice"
+  in the answer, and do not penalise a run for correctly reporting that no
+  choice list exists. "Integer choice 1–5" answers score the same as "Integer
+  column" answers; the load-bearing half is the integer typing.)
+- A run naming only one side *without* the disagreement — e.g. "the column is
+  Integer-typed" with no mention of what is being written to it — scores 0. The
   finding is the mismatch, not either half.
 
 ## Safety
