@@ -77,6 +77,27 @@ describe('agent-doctor-instructions.md is safe to embed in a Fluent template', (
         expect(text).toMatch(/Never report that both lists check out/)
     })
 
+    it('carries the derive-the-table rule (DECISION.md §D4)', () => {
+        // Measured at Task 12: three runs guessed table names instead of
+        // deriving them; one produced a false secondary finding ("table does
+        // not exist" for a name the instance holds under its real prefix) plus
+        // a fix proposing to create a table that exists. The tools behaved
+        // correctly — the diagnosis layer misused them.
+        expect(text).toMatch(/Derive table names/i)
+        expect(text).toMatch(/finding about the guess/)
+    })
+
+    it('carries the definition-row rule (DECISION.md §D3)', () => {
+        // Measured at Task 12: S4's doubled runs split on exactly this — run 2
+        // read only the parent capability record, declared the empty
+        // connection the primary cause, and proposed a well-formed no-op fix.
+        // The definition row is where the mandatory bindings live, and the
+        // capability argument (issue #46) is what makes it reachable.
+        expect(text).toContain('sys_one_extend_capability_definition')
+        expect(text).toMatch(/never a root cause on its own/)
+        expect(text).toMatch(/capability name or sys_id/)
+    })
+
     it('is short enough not to be instruction bloat', () => {
         // K26 Lab 2: high latency on ReAct-engine steps means instruction
         // bloat, because the prompt is reprocessed every loop iteration. The
