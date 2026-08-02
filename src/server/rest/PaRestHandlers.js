@@ -432,10 +432,22 @@ PaRestHandlers.prototype = {
      *  "Required Plugins". `sys_scope` was the corrected instrument
      *  (PREFLIGHT_FINDINGS.md P1); `GlidePluginManager.isActive()` is the
      *  documented, scriptable equivalent, checked per-plugin so one missing
-     *  dependency is named rather than folded into a single boolean. */
+     *  dependency is named rather than folded into a single boolean.
+     *
+     *  ⚠ `com.now_assist_core` (NOT `com.snc.now_assist`, despite
+     *  now-assist-platform.md's "Required Plugins" table) — live-verified
+     *  against `v_plugin` on gpinst01, SDK 4.9.2 (Task 7, Step 4): the
+     *  documented API name resolves `GlidePluginManager.isActive()` to
+     *  `false` even though the plugin IS active, because it is simply the
+     *  wrong id — `v_plugin` shows the real plugin as `com.now_assist_core`
+     *  (name "Now Assist Core", active). A `/status` check built to the
+     *  doc's name reports a healthy plugin as down with no other signal
+     *  saying why. This is the same "instrument, not the instance" trap
+     *  PREFLIGHT_FINDINGS.md P1 already found for `v_plugin` visibility
+     *  filtering — a different id string, same failure family. */
     _checkPlugins: function () {
         var plugins = {
-            'com.snc.now_assist': 'Now Assist Core',
+            'com.now_assist_core': 'Now Assist Core',
             sn_genai_platform: 'Now Assist for Platform',
             'com.sn.generative.ai': 'Generative AI Controller',
             sn_aia: 'AI Agent Studio',

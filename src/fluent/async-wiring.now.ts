@@ -58,6 +58,34 @@ export const runStartEvent = Record({
 // ---------------------------------------------------------------------------
 // 2. ScriptAction — the async ReAct worker
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// DEFERRED: PaRunManager.maybeSummarize(runId) is NOT hooked in here.
+//
+// The natural hook is BETWEEN PaAgentLoop's reasoning iterations — summarize
+// once, keep the newest few verbatim, before the transcript feeds the next
+// prompt. But `run(runId, request)` is a single synchronous call from this
+// ScriptAction's point of view: there is no seam between iterations for
+// glue code sitting OUTSIDE PaAgentLoop to hook into without modifying
+// `_step()`/`run()` itself, which Task 7 is explicitly forbidden from doing
+// (PaAgentLoop is review-approved, Tasks 1-6). Calling maybeSummarize()
+// BEFORE `run()` is a no-op (nothing written yet this call) and calling it
+// AFTER is too late (the whole diagnosis, and its transcript, is already
+// finished by the time the ScriptAction gets control back).
+//
+// Deferring is also empirically safe for Phase 1b's bound: MAX_ITERATIONS
+// is 15, each iteration appends at most two transcript entries (llm + tool,
+// or llm + system), each digested to <=200 chars (PaRunManager.DIGEST_CHARS)
+// — worst case ~15 * 2 * 200 = 6,000 characters, well inside the `transcript`
+// column's 65,536-char ceiling (tables.now.ts). Live-verified on gpinst01
+// (Task 7, Step 4): three real diagnose runs against the Task 12 smoke
+// specimen produced 7 transcript entries each. The unbounded-growth risk
+// the brief names is real across MANY runs accumulating on one row, which
+// does not happen here (`createRun` always manufactures a fresh row,
+// PaRunAnchor.js header) — it is a single-run risk, and the single-run
+// bound already caps it. Revisit if MAX_ITERATIONS grows, or wire the hook
+// inside PaAgentLoop itself in a future task.
+// ---------------------------------------------------------------------------
+
 export const runStartWorker = ScriptAction({
     $id: Now.ID['run-start-worker'],
     name: 'Troubleshooter Run Start Worker',
