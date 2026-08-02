@@ -899,4 +899,42 @@ describe('inconclusive reports', () => {
 
         expect(res.valid).toBe(true)
     })
+
+    // -----------------------------------------------------------------------
+    // Advertising and rendering the path (T6, issue #72): the escape hatch
+    // above changes nothing if the model is never told it exists.
+    // -----------------------------------------------------------------------
+
+    test('schemaText documents the inconclusive field so the model knows the path exists', () => {
+        const text = load().schemaText()
+
+        expect(text).toContain('inconclusive')
+        expect(text).toContain('evidence_read')
+        expect(text).toContain('needed_to_conclude')
+        // and it must say the honest path is preferred over invention
+        expect(text.toLowerCase()).toContain('preferred')
+    })
+
+    test('renderMarkdown emits an INCONCLUSIVE section between LAYERS SWEPT and ROOT CAUSES', () => {
+        const md = load().renderMarkdown(inconclusiveReport())
+
+        expect(md).toContain('## INCONCLUSIVE')
+        expect(md).toContain('needed to conclude: the sn_aia_execution_task rows')
+        expect(md).toContain('- trace: sn_aia_execution_plan')
+        expect(md.indexOf('## LAYERS SWEPT')).toBeLessThan(md.indexOf('## INCONCLUSIVE'))
+        expect(md.indexOf('## INCONCLUSIVE')).toBeLessThan(md.indexOf('## ROOT CAUSES'))
+    })
+
+    test('renderMarkdown marks verification not-applicable on the inconclusive path', () => {
+        const md = load().renderMarkdown(inconclusiveReport({ verification: undefined }))
+
+        expect(md).toContain('(not applicable — inconclusive)')
+    })
+
+    test('renderMarkdown on a normal report is unchanged — no INCONCLUSIVE section, verification reads (not provided)', () => {
+        const md = load().renderMarkdown({ failure_summary: 'x', root_causes: [], fixes: [] })
+
+        expect(md).not.toContain('## INCONCLUSIVE')
+        expect(md).toContain('(not provided)')
+    })
 })

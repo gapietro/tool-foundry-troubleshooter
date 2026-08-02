@@ -21,9 +21,11 @@
  * `renderMarkdown` and `renderJson` both take the SAME `normalized` object
  * validate() produced. The markdown section order is copied verbatim from the
  * playbook's "The Fix Report" section: FAILURE SUMMARY, LAYERS SWEPT, ROOT
- * CAUSES, FIXES, VERIFICATION, DATA MARKERS — six headings, in that order. If
- * the playbook's section order ever changes, LAYOUT below is the one place to
- * change it to keep the two in sync.
+ * CAUSES, FIXES, VERIFICATION, DATA MARKERS — six headings, in that order,
+ * plus a seventh INCONCLUSIVE section rendered between LAYERS SWEPT and ROOT
+ * CAUSES ONLY when the report took the earned-inconclusive path (T4, issue
+ * #72). If the playbook's section order ever changes, LAYOUT below is the one
+ * place to change it to keep the two in sync.
  *
  * VALIDATION IS A FLOOR, NOT A CEILING
  * `validate` checks that the REQUIRED shape is present and internally
@@ -551,7 +553,8 @@ PaFixReport.prototype = {
                 'REQUIRED when status is not SWEPT'
         )
         lines.push(
-            'root_causes: non-empty array of {layer, component, finding, evidence, confidence?} — layer is the ' +
+            'root_causes: array of {layer, component, finding, evidence, confidence?} — NON-EMPTY unless you ' +
+                'supply the `inconclusive` object described below; layer is the ' +
                 'layer number as a string "1".."7" (a bare JSON number 1-7 is also accepted and normalized to a ' +
                 'string); component is a non-empty string naming the specific record/table/field; finding is a ' +
                 'non-empty string describing what is wrong; evidence is a non-empty array of {source, detail} ' +
@@ -561,12 +564,26 @@ PaFixReport.prototype = {
                 ' (the evidence rule); confidence, if present, is a string (e.g. CONFIRMED or UNCONFIRMED)'
         )
         lines.push(
-            'fixes: non-empty array of {target_type, target, current, proposed, rationale} — target_type is a ' +
+            'fixes: array of {target_type, target, current, proposed, rationale} — NON-EMPTY unless root_causes ' +
+                'is empty and you supply `inconclusive`; target_type is a ' +
                 'string, one of ' + this._fixTargetTypes().join('|') + '; target, proposed and rationale are ' +
                 'each non-empty strings; current is a string and may be empty but must be present'
         )
-        lines.push('verification: non-empty string')
+        lines.push('verification: non-empty string — may be omitted ONLY on the inconclusive path')
         lines.push('data_markers: array (may be empty, must be present)')
+        lines.push(
+            'inconclusive: OPTIONAL object {evidence_read, needed_to_conclude} — supply it ONLY when you could ' +
+                'not isolate a cause. When present, root_causes and fixes may both be empty arrays and ' +
+                'verification may be omitted. evidence_read is a non-empty array of {source, detail} in the same ' +
+                'shape as root_causes[].evidence, recording what you ACTUALLY read (the trace-plus-one evidence ' +
+                'rule does NOT apply to it); needed_to_conclude is a non-empty string naming what would be ' +
+                'required to conclude. evidence_read must contain AT LEAST AS MANY entries as the number of ' +
+                'layers marked SWEPT in layers_swept — claim seven sweeps, cite seven things; mark a layer ' +
+                'NOT_SWEPT or UNAVAILABLE with a reason instead and fewer citations are required. An honest ' +
+                'inconclusive report is always preferred to an invented root cause. It does NOT excuse a shallow ' +
+                'sweep: layers_swept must still report all seven layers with a reason on every one you did not ' +
+                'sweep, and you should exhaust your tool budget before concluding you cannot tell.'
+        )
 
         return lines.join('\n')
     },
@@ -578,8 +595,10 @@ PaFixReport.prototype = {
     /**
      * @param {Object} normalized the object validate() returned as `normalized`.
      * @returns {String} markdown with the six playbook section headings, in
-     *          playbook order. Defensive against a sparse/missing object
-     *          (R-9) — this is a rendering path, not a second validation.
+     *          playbook order, plus a seventh INCONCLUSIVE section between
+     *          LAYERS SWEPT and ROOT CAUSES when the report took that path.
+     *          Defensive against a sparse/missing object (R-9) — this is a
+     *          rendering path, not a second validation.
      */
     renderMarkdown: function (normalized) {
         var r = this._isPlainObject(normalized) ? normalized : {}
@@ -605,6 +624,27 @@ PaFixReport.prototype = {
             lines.push(line)
         }
         lines.push('')
+
+        // Rendered only when present — a normal report is byte-identical to
+        // before. Placed after LAYERS SWEPT because it explains the sweep the
+        // reader has just looked at, before the (empty) causes below.
+        var inc = this._isPlainObject(r.inconclusive) ? r.inconclusive : null
+        if (inc) {
+            lines.push('## INCONCLUSIVE')
+            lines.push('')
+            lines.push('evidence read:')
+            var read = this._isArray(inc.evidence_read) ? inc.evidence_read : []
+            if (read.length === 0) {
+                lines.push('  (none)')
+            } else {
+                for (var p = 0; p < read.length; p++) {
+                    var re = this._isPlainObject(read[p]) ? read[p] : {}
+                    lines.push('  - ' + this._str(re.source) + ': ' + this._str(re.detail))
+                }
+            }
+            lines.push('needed to conclude: ' + this._str(inc.needed_to_conclude))
+            lines.push('')
+        }
 
         lines.push('## ROOT CAUSES')
         lines.push('')
@@ -641,7 +681,13 @@ PaFixReport.prototype = {
 
         lines.push('## VERIFICATION')
         lines.push('')
-        lines.push(this._nonEmptyString(r.verification) ? r.verification : '(not provided)')
+        lines.push(
+            this._nonEmptyString(r.verification)
+                ? r.verification
+                : inc
+                  ? '(not applicable — inconclusive)'
+                  : '(not provided)'
+        )
         lines.push('')
 
         lines.push('## DATA MARKERS')
