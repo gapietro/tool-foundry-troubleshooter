@@ -256,6 +256,15 @@ function makeQueryingGlideRecordSecure(tables, options) {
  *   throwOnQuery  same, for query()
  *   failUpdate    update() returns null, as a denied or rejected write does
  *   throwOnUpdate same, for update() — R-1
+ *   failUpdateIf  OPTIONAL function(table, row, pendingFields) -> Boolean.
+ *                 When it returns true, THAT ONE update() call fails (same
+ *                 shape as failUpdate) while every other update — including
+ *                 other writes to the SAME row — proceeds normally. This is
+ *                 what `failUpdate`/`throwOnUpdate` cannot express: they gate
+ *                 every update() call in the whole world, so a scenario like
+ *                 "the transcript write succeeds but the status write fails"
+ *                 is unreachable with them alone. Opt-in and additive — omit
+ *                 it and behavior is identical to before this option existed.
  */
 function makeWritableWorld(options) {
     var opts = options || {}
@@ -319,6 +328,9 @@ function makeWritableWorld(options) {
         var row = (this._matched || [])[this._i]
         if (!row) return null
         var pending = this._pending || {}
+        if (typeof opts.failUpdateIf === 'function' && opts.failUpdateIf(this._table, row, pending)) {
+            return null
+        }
         Object.keys(pending).forEach(function (k) {
             row[k] = pending[k]
         })

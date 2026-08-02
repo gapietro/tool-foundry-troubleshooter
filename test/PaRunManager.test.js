@@ -205,6 +205,30 @@ describe('createRun', () => {
         expect(res.run_id).toBeNull()
         expect(res.degraded).toBeTruthy()
     })
+
+    test('a run_id is still returned when forcing status:queued fails, with a note rather than a silent claim', () => {
+        // Review minor: createRun used to ignore _forceStatus's result
+        // entirely — a failed status write was indistinguishable from a
+        // successful one from the caller's side, which is the same
+        // "status contradicts what actually happened" shape R-19b forbids
+        // elsewhere in this file. The row is still real and usable (the
+        // anchor DID insert it), so this must not be reported as `degraded`
+        // — only flagged.
+        const anchor = fakeAnchor({ run_id: 'run1', number: 'TR0001042' })
+        const { mgr } = load({
+            runAnchor: anchor,
+            world: {
+                rows: { [RUN_TABLE]: [seedRun({ status: 'running' })] },
+                failUpdate: true,
+            },
+        })
+
+        const res = mgr.createRun({})
+
+        expect(res.run_id).toBe('run1')
+        expect(res.number).toBe('TR0001042')
+        expect(res.note).toEqual(expect.stringContaining('could not be forced to queued'))
+    })
 })
 
 // ===========================================================================
@@ -664,6 +688,31 @@ describe('collectBundle', () => {
         const traceCall = registry.calls.filter((c) => c.name === 'agent_trace')[0]
         expect(traceCall.args.execution).toBeUndefined()
     })
+
+    test('an UNKNOWN run id still runs the bundle — no run to read context from is not an error', () => {
+        // No rows seeded at all: `_readRunContext` can't find 'ghost' and
+        // degrades to empty context, same as any other absent-run read in
+        // this class (R-9). The bundle itself is still worth collecting —
+        // it doesn't depend on the run row existing, only on the registry.
+        const registry = fakeRegistry({})
+        const { mgr } = load({ toolRegistry: registry, world: {} })
+
+        let res
+        expect(() => {
+            res = mgr.collectBundle('ghost')
+        }).not.toThrow()
+
+        expect(res.success).toBe(true)
+        expect(Object.keys(res.data.layers)).toHaveLength(7)
+
+        const names = registry.calls.map((c) => c.name).sort()
+        expect(names).toEqual(['agent_config', 'agent_trace', 'genai_log', 'query_table', 'schema_lookup'])
+        registry.calls.forEach((c) => {
+            expect(c.runCtx.run_id).toBe('ghost')
+            expect(c.args.execution).toBeUndefined()
+            expect(c.args.agent).toBeUndefined()
+        })
+    })
 })
 
 // ===========================================================================
@@ -860,5 +909,44 @@ describe('sweepStaleNative', () => {
         const { mgr } = load({ noGlide: true, now: now })
         expect(() => mgr.sweepStaleNative({})).not.toThrow()
         expect(mgr.sweepStaleNative({})).toEqual({ closed: [] })
+    })
+
+    // -----------------------------------------------------------------------
+    // Regression (review finding): a failed close() must never leave the
+    // R-20 note behind. `close()` and `appendTranscript` write different
+    // fields (`status` vs `transcript`), so a scenario where ONE of the two
+    // updates fails and the other succeeds needs a PER-CALL failure hook —
+    // the global `failUpdate`/`throwOnUpdate` flags fail every update() in
+    // the world and cannot isolate just the close's status write.
+    // -----------------------------------------------------------------------
+
+    test('REGRESSION: a failed close() never leaves the stale-closed note in the transcript', () => {
+        const { mgr, world } = load({
+            now: now,
+            world: {
+                rows: {
+                    [RUN_TABLE]: [
+                        seedRun({ sys_id: 'stale6', harness: 'native', status: 'running', sys_created_on: '2026-07-01 00:00:00' }),
+                    ],
+                },
+                // Fail ONLY the update that sets `status` — i.e. close()'s
+                // write — never the transcript-only update appendTranscript
+                // makes on its own. Under the pre-fix ordering (note first,
+                // unconditionally, THEN close) this reproduces exactly what
+                // the review found: the note lands even though the row's
+                // status is untouched. Under the fix (close first, note only
+                // on success) the note must never be written here.
+                failUpdateIf: (table, row, pending) =>
+                    table === RUN_TABLE && Object.prototype.hasOwnProperty.call(pending, 'status'),
+            },
+        })
+
+        const res = mgr.sweepStaleNative({ maxAgeHours: 24 })
+
+        expect(res.closed).toEqual([])
+        expect(world.tables[RUN_TABLE][0].status).toBe('running')
+
+        const transcript = JSON.parse(world.tables[RUN_TABLE][0].transcript || '[]')
+        expect(transcript.filter((e) => e.actor === 'system')).toHaveLength(0)
     })
 })

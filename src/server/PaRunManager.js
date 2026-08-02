@@ -176,6 +176,11 @@ PaRunManager.prototype = {
      *        for the native path, and a caller-supplied value here would be
      *        silently discarded by the anchor anyway.
      * @returns {Object} {run_id, number} | {run_id:null, degraded:<reason>}
+     *          — a run whose status could not be forced to `queued` still
+     *          returns its `run_id` (the row is real and usable) but carries
+     *          a `note` saying so, rather than silently claiming `queued`
+     *          for a row that may still read `running` (R-19b: the caller
+     *          must never be handed a claim the row itself would contradict).
      */
     createRun: function (params) {
         var p = params && typeof params === 'object' ? params : {}
@@ -196,9 +201,15 @@ PaRunManager.prototype = {
             }
         }
 
-        this._forceStatus(created.run_id, 'queued')
+        var out = { run_id: created.run_id, number: created.number || '' }
+        if (!this._forceStatus(created.run_id, 'queued')) {
+            out.note =
+                'The run record was created but its status could not be forced to queued — ' +
+                'it may still read as running until the next successful write. The run_id is real ' +
+                'and usable regardless.'
+        }
 
-        return { run_id: created.run_id, number: created.number || '' }
+        return out
     },
 
     // =======================================================================
@@ -624,13 +635,28 @@ PaRunManager.prototype = {
         }
     },
 
-    /** Appends the R-20 citation, then closes via the SAME guarded
-     *  transition `close()` uses everywhere else — no second code path that
-     *  could drift from the ordinary close semantics. */
+    /**
+     * Closes via the SAME guarded transition `close()` uses everywhere else
+     * — no second code path that could drift from the ordinary close
+     * semantics — and appends the R-20 citation ONLY once that close
+     * actually succeeded.
+     *
+     * ORDER IS LOAD-BEARING (R-19b, fixed in review). This used to append
+     * the note FIRST, unconditionally, then attempt the close. If `close()`
+     * refused — the row concurrently moved to `awaiting_confirmation`, or
+     * the status write failed for a reason unrelated to the transcript
+     * write — the transcript still carried "stale-closed by lifecycle
+     * sweep" while the row's actual status was never touched: a status
+     * that contradicts its own notes, which is exactly what R-19b forbids.
+     * Closing first and gating the note on `result.success` means the note
+     * can never be written unless the claim it makes is true.
+     */
     _closeStale: function (runId) {
-        this.appendTranscript(runId, { actor: 'system', result_digest: this.STALE_CLOSE_NOTE })
         var result = this.close(runId, 'complete', {})
-        return !!(result && result.success === true)
+        if (!result || result.success !== true) return false
+
+        this.appendTranscript(runId, { actor: 'system', result_digest: this.STALE_CLOSE_NOTE })
+        return true
     },
 
     _cutoffString: function (hours) {
