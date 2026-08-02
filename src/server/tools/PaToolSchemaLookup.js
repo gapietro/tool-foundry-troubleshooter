@@ -290,7 +290,7 @@ PaToolSchemaLookup.prototype = {
                 name: row.name,
                 label: row.label,
                 super_class: k.refValue(row.super_class),
-                super_class_name: row.super_class_display || null,
+                super_class_label: row.super_class_display || null,
                 scope: row.sys_scope_display || k.refValue(row.sys_scope),
                 is_extendable: row.is_extendable,
                 // ws_access gates the REST surface; it is NOT security. The
@@ -327,26 +327,31 @@ PaToolSchemaLookup.prototype = {
         )
     },
 
-    /** The table and every ancestor, nearest first. */
+    /**
+     * The table and every ancestor, nearest first.
+     *
+     * THE WALK ADVANCES BY SYS_ID, NOT BY DISPLAY VALUE. `super_class` is a
+     * reference, and a reference's display value is the parent's LABEL —
+     * measured on gpinst01: sn_aia_agent's super_class displays as
+     * "Application File", not "sys_metadata". A walk that feeds that label
+     * into the next name= query dies after one hop and reports every
+     * inherited column as absent — the false schema mismatch this tool exists
+     * to prevent, produced by the tool. The first version did exactly that,
+     * and its unit test hid it by seeding the stub's display with the name
+     * (R-8: a stub is not evidence). The raw reference value is the parent's
+     * sys_id, which is the one identifier the next lookup can trust.
+     */
     _hierarchy: function (table, data) {
         var k = this._k()
         var chain = []
         var seen = {}
-        var current = table
+        var lookup = { field: 'name', value: table }
         var depth = 0
 
-        while (current && depth < this.MAX_DEPTH) {
-            if (seen[current]) {
-                data.notes.push(
-                    'The super_class chain revisits "' + current + '"; the walk stopped to avoid a cycle.'
-                )
-                break
-            }
-            seen[current] = true
-
+        while (lookup.value && depth < this.MAX_DEPTH) {
             var read = k.readRows(
                 'sys_db_object',
-                k.eqQuery('name', current),
+                k.eqQuery(lookup.field, lookup.value),
                 ['sys_id', 'name', 'label', 'super_class'],
                 ['super_class'],
                 1,
@@ -355,20 +360,29 @@ PaToolSchemaLookup.prototype = {
             )
 
             if (read.status === 'DENIED' || !read.rows.length) {
-                chain.push({ table: current, label: null, read_status: read.status, parent: null })
+                chain.push({ table: lookup.value, label: null, read_status: read.status, parent: null })
                 break
             }
 
             var row = read.rows[0]
-            var parentName = row.super_class_display || null
+            if (seen[row.sys_id]) {
+                data.notes.push(
+                    'The super_class chain revisits "' + row.name + '"; the walk stopped to avoid a cycle.'
+                )
+                break
+            }
+            seen[row.sys_id] = true
+
+            var parentId = k.refValue(row.super_class)
             chain.push({
                 table: row.name,
                 label: row.label,
                 read_status: read.status,
-                parent: parentName,
+                // The LABEL, for the reader. The walk itself never uses it.
+                parent: parentId ? row.super_class_display || parentId : null,
             })
 
-            current = parentName
+            lookup = { field: 'sys_id', value: parentId }
             depth++
         }
 

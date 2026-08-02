@@ -626,4 +626,19 @@ A second defect in the same function: on a mid-probe throw it returned before re
 
 ---
 
+**R-27 — R-23 verified field NAMES; nothing verified field VALUES. Two high defects shipped through that gap, and both were masked by fixtures that seeded the assumption under test. (2026-08-02)**
+
+**Found:** PR #39 review, both findings high, both measured on gpinst01 before fixing:
+
+1. **A reference's display value is the target's LABEL, not its name.** `PaToolSchemaLookup`'s hierarchy walk advanced with `super_class_display` and fed it into the next `name=` query. Measured: `sn_aia_agent.super_class` displays as **"Application File"**, not `sys_metadata` — so the walk died after one hop and reported every inherited column as absent. That is the false schema mismatch the tool exists to prevent, produced by the tool, on its primary path (every AIA table extends `sys_metadata`). The walk now advances by the raw reference value — the sys_id — which is the one identifier the next lookup can trust; the label is carried for the reader only.
+2. **A choice field stores the VALUE, not the label.** `PaToolLogAnalysis` filtered `syslog.level IN ('Error','Warning')`. Measured against `sys_choice` (name=syslog, element=level, all 6 rows): Trace=−2, Debug=−1, Information=0, **Warning=1, Error=2, Fatal=3**. The label filter matches nothing, ever — so on the one instance where the syslog read IS permitted, the tool returns an empty log layer over logs that exist. Defaults are now the stored values for Warning-and-worse; a caller's label maps through the measured table, and anything else passes through with a note.
+
+**Why R-23's rule did not catch either.** R-23's standing rule — *a field list written from a design document is unverified until `sys_dictionary` has been asked* — was followed for both tools, and it answers only *does this column exist and what type is it*. `sys_dictionary` says `level` is a string and `super_class` is a reference; it says nothing about what a reference **displays as** or what a choice field **stores**. Names and values are different axes, and only the first had a rule.
+
+**The masking, which is the R-8 lesson a third time.** Both defects had green unit tests, because both fixtures seeded the assumption under test: the schema fixture put the parent's *name* in the display field, the log fixture put the *label* in the level column. A stub built from the code's own beliefs verifies nothing but internal consistency. The fixtures now encode the measured semantics — raw ref = sys_id, display = label, level = stored value — so the wrong implementation *fails against realistic data*, which is the only kind of unit test that carries information about this class.
+
+**Standing rule, extending R-23:** for every reference column a tool dot-walks, joins on, or feeds into a subsequent query, and for every choice column a tool filters on, the **runtime value shape** must be measured — one display-value read, one `sys_choice` read — before the code is written. And the fixture must encode the measured shape, not the convenient one: *a fixture that agrees with the code by construction is a second copy of the bug.*
+
+---
+
 *Next steps agreed in spar: fold changes 2.1–2.4 into `docs/IMPLEMENTATION_PLAN.md` (new collector task; scorecard field; anchor keying rule) and `docs/LOW_LEVEL_DESIGN.md` (§4.6 anchor spec, §7 protocol, §8 items). Drift review after Phase 1a build compares the built system to this record.*

@@ -22,7 +22,12 @@ const { makeQueryingGlideRecordSecure } = require('./_glideStub')
 function world(overrides) {
     const base = {
         sys_db_object: [
-            { sys_id: 't1', name: 'sn_aia_agent', label: 'AI Agent', super_class: 'meta', super_class__display: 'sys_metadata' },
+            // Reference semantics as MEASURED on gpinst01: the raw value is the
+            // parent's sys_id and the display is the parent's LABEL - not its
+            // name. The first fixture seeded the display with the name, which
+            // let a display-based walk pass its tests while dying after one
+            // hop on real data (R-8: a stub is not evidence).
+            { sys_id: 't1', name: 'sn_aia_agent', label: 'AI Agent', super_class: 't2', super_class__display: 'Application File' },
             { sys_id: 't2', name: 'sys_metadata', label: 'Application File', super_class: '' },
             { sys_id: 't3', name: 'syslog', label: 'Log Entry', super_class: '', caller_access: '2', caller_access__display: 'Caller Restriction' },
         ],
@@ -120,6 +125,10 @@ describe('the inheritance walk', () => {
         const { result } = run('sn_aia_agent', world())
 
         expect(result.data.hierarchy.map((h) => h.table)).toEqual(['sn_aia_agent', 'sys_metadata'])
+        // The parent is reported by LABEL for the reader; the walk itself must
+        // have resolved the real table name above, which only the sys_id can
+        // give it - the label matches no sys_db_object.name.
+        expect(result.data.hierarchy[0].parent).toBe('Application File')
     })
 
     it('skips the collection row, which describes the table rather than a column', () => {
@@ -139,8 +148,8 @@ describe('the inheritance walk', () => {
             'a',
             world({
                 sys_db_object: [
-                    { sys_id: 'x', name: 'a', super_class: 'y', super_class__display: 'b' },
-                    { sys_id: 'y', name: 'b', super_class: 'x', super_class__display: 'a' },
+                    { sys_id: 'x', name: 'a', super_class: 'y', super_class__display: 'B Label' },
+                    { sys_id: 'y', name: 'b', super_class: 'x', super_class__display: 'A Label' },
                 ],
                 sys_dictionary: [],
             })

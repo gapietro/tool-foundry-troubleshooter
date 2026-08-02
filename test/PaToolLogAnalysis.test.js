@@ -84,6 +84,34 @@ describe('mandatory scoping', () => {
         expect(fields).toContain('level')
     })
 
+    it('filters on the stored choice values, not the labels', () => {
+        // syslog.level holds Warning=1, Error=2, Fatal=3 (sys_choice, measured
+        // on gpinst01). A filter built from the labels matches nothing, ever -
+        // an empty log layer over logs that exist, on the one instance where
+        // the read is actually permitted.
+        const { result, queries } = run({ message: 'boom' }, world())
+        const q = queries.find((x) => x.table === 'syslog')
+        const levelFilter = q.filters.find((f) => f.field === 'level')
+
+        expect(levelFilter.op).toBe('IN')
+        expect(String(levelFilter.value)).toBe('1,2,3')
+        expect(result.data.scope.levels_meaning).toMatch(/stored choice values/)
+    })
+
+    it('maps a label the caller passes to its stored value', () => {
+        const { queries } = run({ message: 'boom', level: 'Error' }, world())
+        const q = queries.find((x) => x.table === 'syslog')
+
+        expect(String(q.filters.find((f) => f.field === 'level').value)).toBe('2')
+    })
+
+    it('passes a stored value or unknown level through unchanged', () => {
+        const { queries } = run({ message: 'boom', level: '3' }, world())
+        const q = queries.find((x) => x.table === 'syslog')
+
+        expect(String(q.filters.find((f) => f.field === 'level').value)).toBe('3')
+    })
+
     it('clamps an oversized window', () => {
         const { result } = run({ source: 'x_snc', minutes_ago: 99999 }, world())
 
@@ -171,7 +199,11 @@ describe('the R-19 degradation', () => {
                     {
                         sys_id: 'l1',
                         sys_created_on: '2026-08-01 12:30:00',
-                        level: 'Error',
+                        // The STORED value, as measured: Error=2. A fixture
+                        // holding the label here is what let the label-based
+                        // filter pass its tests while matching nothing real.
+                        level: '2',
+                        level__display: 'Error',
                         source: 'x_snc_troubleshoot.PaToolAgentTrace',
                         message: 'SyntaxError: Unterminated string constant',
                     },

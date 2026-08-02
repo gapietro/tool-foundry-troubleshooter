@@ -63,8 +63,27 @@ PaToolLogAnalysis.prototype = {
     /** Padding either side of an execution window, per LLD §4.4. */
     EXECUTION_PAD_SECONDS: 120,
 
-    /** Levels kept by default — the guidebook's "level <= Warning". */
-    DEFAULT_LEVELS: ['Error', 'Warning'],
+    /**
+     * syslog.level stores the choice VALUE, not the label — measured against
+     * sys_choice (name=syslog, element=level) on gpinst01, all 6 choices:
+     * Trace=-2, Debug=-1, Information=0, Warning=1, Error=2, Fatal=3. The
+     * first version filtered on the labels ('Error','Warning'), which match
+     * no row ever: on an instance where the read IS permitted, the tool
+     * returned an empty log layer over logs that existed. Label != stored
+     * value is the choice-field twin of display != name (R-27).
+     */
+    LEVEL_VALUES: {
+        trace: '-2',
+        debug: '-1',
+        information: '0',
+        info: '0',
+        warning: '1',
+        error: '2',
+        fatal: '3',
+    },
+
+    /** Warning and worse — stored values for Warning, Error, Fatal. */
+    DEFAULT_LEVELS: ['1', '2', '3'],
 
     initialize: function (options) {
         var o = options || {}
@@ -201,7 +220,7 @@ PaToolLogAnalysis.prototype = {
         var execution = k.str(raw.execution || raw.execution_plan || raw.plan)
         var source = k.str(raw.source)
         var message = k.str(raw.message || raw.contains || raw.keyword)
-        var level = k.str(raw.level)
+        var level = this._normalizeLevel(k.str(raw.level), null)
 
         if (execution) out.execution = execution
         if (source) out.source = source
@@ -215,6 +234,28 @@ PaToolLogAnalysis.prototype = {
         if (limit > 0) out.limit = limit
 
         return out
+    },
+
+    /**
+     * A caller says 'Error'; the table stores '2'. Labels map through the
+     * measured table (case-insensitive); anything else — a stored value, or a
+     * custom level this instance added — passes through unchanged, with a note
+     * when a data envelope is available to carry one.
+     */
+    _normalizeLevel: function (level, data) {
+        if (!level) return ''
+        var mapped = this.LEVEL_VALUES[String(level).toLowerCase()]
+        if (mapped !== undefined) return mapped
+        if (data && !/^-?\d+$/.test(level)) {
+            data.notes.push(
+                'level "' +
+                    level +
+                    '" is not one of the measured syslog level labels and is not numeric; it was passed ' +
+                    'through as-is. syslog.level stores choice VALUES (Warning=1, Error=2, Fatal=3), so a ' +
+                    'label the mapping does not know will match nothing.'
+            )
+        }
+        return level
     },
 
     // =======================================================================
@@ -236,6 +277,9 @@ PaToolLogAnalysis.prototype = {
             source_contains: a.source || null,
             message_contains: a.message || null,
             levels: a.level ? [a.level] : this.DEFAULT_LEVELS,
+            levels_meaning:
+                'stored choice values (measured: Warning=1, Error=2, Fatal=3) — the table does not hold ' +
+                'the labels',
             derived_from_execution: false,
         }
 
