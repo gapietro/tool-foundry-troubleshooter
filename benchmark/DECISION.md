@@ -670,3 +670,120 @@ A re-run of this same benchmark, under the same doubled-run blind audit-derived 
 re-measured on the same day to close the H7-4 gap, is the evidence that would justify revisiting the
 verdict. Until then, native stays the recommended path for both triage and deep diagnosis on this
 instance.
+
+---
+
+## I. The v3 pass (`2026.08.0220`) — #82 answered
+
+Scored 2026-08-02 on `gpinst01`, 10 rows, custom harness only. Full rows and protocol notes:
+`scorecard-custom-harness.md` § "Custom harness scorecard — v3". Raw evidence:
+`raw-evidence-v3.md`.
+
+### I1. The answer to #82
+
+#82 asked whether the `2026.08.0220` contract change made runs shallower, and said the thing that
+would answer it is *"a scored pass over all ten rows, with per-run tool-call counts derived from
+`x_snc_troubleshoot_audit` rather than from the reports."* That is what this pass is.
+
+**Answer: yes — measurably, and uniformly.** Depth did not merely fail to improve; it fell to the
+floor.
+
+| | Task 10 (0216) | v2 (0218) | **v3 (0220)** |
+|---|---|---|---|
+| Mean tool calls / run | 2.0 | 1.4 | **1.0** |
+| Runs reaching `read_artifact` | 10 / 10 | 3 / 10 | **0 / 10** |
+| Runs reaching `agent_config` | 0 / 10 | 2 / 10 | **0 / 10** |
+| `sum(passes_gate)` | 0 | 1 | **0** |
+| Rubric points | 0 / 60 | 6 / 60 | **4 / 60** |
+
+**Every one of the ten runs invoked exactly one tool — `agent_trace` — and stopped.** The n=2 smoke
+observation that prompted #82 holds at n=10 across all five seeds.
+
+Note what this costs specifically: v2's single passing row passed *because* it called `agent_config`
+and could therefore cite a real config source alongside the trace. In v3 no run calls `agent_config`
+at all, so that row's mechanism is gone, and with it the pass.
+
+### I2. The direction of the trade, stated precisely
+
+The branch was built to stop the harness claiming sweeps and citations it had not earned. On that
+axis it worked, and the evidence is unambiguous — **no run over-claimed a sweep**, 7 of 10 carry no
+fabrication at all, and all 3 that still fabricated were **rejected** by the new cross-check with the
+actual tool roster named back to them. Under the pre-#79 validator all three would have passed.
+
+But #82's hypothesis was that "do not claim what you did not do" might be read as **"claim less"**
+rather than **"do more"**, and the rows say it was read as claim less:
+
+- **five runs took the inconclusive path** and named no root cause at all — every single report that
+  passed validation in this pass is a non-diagnosis;
+- the NOT_SWEPT reasons are frequently *self-justifying* — layer 4 skipped because "reads showed 'ok'
+  status", layer 6 because "no LLM errors were observed" — where the trace-only channel is exactly
+  what hid the error;
+- the honest reports name the tool they did not call (`needed_to_conclude`: "analysis of agent
+  configuration") and then do not call it.
+
+**So on this version the harness delivered zero actionable diagnoses across ten runs.** That is a
+stronger and more useful statement than 0/10 on the gate.
+
+### I3. #81, now with its clearest live instance
+
+Seed 05 run 1 (`ee3a71dc2baecfd417a6ffbeee91bfe5`) named layer **7** — the expected layer — reasoning
+correctly that with no execution plan the failure must be upstream of execution. Its sweep report is
+scrupulously honest. It was rejected by mode B for citing **zero** distinct non-trace sources, because
+it had made one tool call, and its repair turn had no way to make a second. Its proposed fix reads
+`current: "Unknown (requires agent_config inspection)"` — the model writing down the exact tool call
+that would have saved the report, in a turn where it could not make it.
+
+This is #81 exactly as filed, and it is no longer a structural argument — it is a measured row that
+cost the pass its only correct layer call. Of the two options in #81, the rows favour **routing
+citation-shortfall rejections back into the main loop** over letting the repair turn call tools: the
+loop had 13 of 15 iterations and ~292 of 300 seconds still unspent at rejection.
+
+### I4. Confounds — what this pass does and does not establish
+
+**Does establish** (custom-vs-custom, same seeds, same targets, same rubric, audit-derived counts):
+depth fell from 0218 to 0220, and no run reached beyond layer 1.
+
+**Does not establish** that the contract change *caused* it. Unchanged from §H7-3/§H7-5:
+
+1. **Third different contract across three passes.** `schemaText()` changed again in 0220, so
+   attribution to any single clause is impossible from the score.
+2. **`agent-doctor-instructions.md:48` still contradicts the contract block** — categorical
+   trace-plus-one at prompt position #1 versus the amended rule at prompt position #last. This pass
+   deliberately did not touch it (editing it would move the unmeasured native baseline). It remains a
+   live candidate explanation for the seed-05 rejections specifically, and §H7-5's instruction to
+   check the rendered prompt before concluding the branch failed still stands.
+3. **Native was not re-measured**, so §H7-4's different-day gap is untouched. Native's 8/10 and this
+   0/10 come from different days.
+4. **Model drift is unmeasured and unbounded** across all three passes.
+
+One methodological difference from the earlier passes, recorded rather than buried: **v3's scoring
+was delegated to ten independent blind agents** because the operator had read the v2 rows before
+firing. Task 10 and v2 were scored by an operator who had not. The audit derivation and the
+highest-scoring row were verified directly by the operator.
+
+### I5. What this changes about the roadmap
+
+§H8's list had three items. Items 1 and 2 (#78, #79) are **done and verified working** — the
+absence-diagnosis path fires, and citation fabrication is caught. Item 3, **depth**, is not merely
+still open; this pass shows it is the *only* thing left and that it moved backwards.
+
+The acceptance test §H8 set is unchanged and still unmet: *a run that reaches `schema_lookup`,
+`query_table` or `genai_log` on the seed that needs it.* Twenty-three scored runs and one smoke run
+across three versions have now produced **zero** such runs. Four of seven tools have never been
+invoked once.
+
+**Native remains the recommended path** for both triage and deep diagnosis on this instance. The
+Phase 1b milestone remains **not met**.
+
+Two concrete follow-ups the rows point at, beyond #81:
+
+- **A tool-output defect, new in this pass.** Six of ten runs (and the smoke run) built their entire
+  diagnosis on "27 tasks vs 19 tool calls" — a **generic note in `agent_trace`'s own output** whose
+  text is *"Execution tasks are NOT 1:1 with tool calls (27 tasks / 19 calls in a measured run)…
+  do not reconcile them."* The model is reading a documentation note about a different, illustrative
+  run as a finding about the run under diagnosis, and then proposing fixes for it. The note is
+  actively harmful in its current form and should be removed or restated so it cannot be mistaken for
+  run data.
+- **The gate's honesty premise now holds, so the score is worth more than it was.** A passing v3 report
+  cannot rest on a fabricated citation. That makes "0/10 with 5 inconclusive" a trustworthy number in
+  a way the earlier passes' numbers were not.
