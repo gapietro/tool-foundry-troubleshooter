@@ -433,3 +433,108 @@ describe('field hygiene', () => {
         expect(rows(world)[0].user || '').toBe('')
     })
 })
+
+// =========================================================================
+// invokedTools — the read side (#79)
+// =========================================================================
+
+/** Audit rows as the writable-world stub stores them. */
+function auditRow(run, tool, actionType) {
+    return { sys_id: 'a' + tool + actionType, run: run, tool_name: tool, action_type: actionType }
+}
+
+describe('invokedTools', () => {
+    test('returns the deduplicated tool names for the run', () => {
+        const { logger } = load({
+            world: {
+                rows: {
+                    [AUDIT_TABLE]: [
+                        auditRow(RUN, 'agent_trace', 'intent'),
+                        auditRow(RUN, 'agent_trace', 'result'),
+                        auditRow(RUN, 'agent_config', 'intent'),
+                    ],
+                },
+            },
+        })
+
+        const res = logger.invokedTools(RUN)
+
+        expect(res.available).toBe(true)
+        expect(res.tools.sort()).toEqual(['agent_config', 'agent_trace'])
+    })
+
+    test('counts intent, result and error rows alike — a tool that failed was still invoked', () => {
+        const { logger } = load({
+            world: { rows: { [AUDIT_TABLE]: [auditRow(RUN, 'query_table', 'error')] } },
+        })
+
+        expect(logger.invokedTools(RUN).tools).toEqual(['query_table'])
+    })
+
+    test('ignores rows belonging to another run', () => {
+        const { logger } = load({
+            world: {
+                rows: {
+                    [AUDIT_TABLE]: [
+                        auditRow(RUN, 'agent_trace', 'intent'),
+                        auditRow('otherrun0000000000000000000000', 'schema_lookup', 'intent'),
+                    ],
+                },
+            },
+        })
+
+        expect(logger.invokedTools(RUN).tools).toEqual(['agent_trace'])
+    })
+
+    test('zero rows is UNAVAILABLE, not an empty success — a run that reached a fix report called something', () => {
+        const { logger } = load({ world: { rows: { [AUDIT_TABLE]: [] } } })
+
+        const res = logger.invokedTools(RUN)
+
+        expect(res.available).toBe(false)
+        expect(res.degraded).toBe('no_audit_rows')
+        expect(res.tools).toEqual([])
+    })
+
+    test('absent runId degrades rather than returning every row in the table', () => {
+        const { logger } = load({
+            world: { rows: { [AUDIT_TABLE]: [auditRow(RUN, 'agent_trace', 'intent')] } },
+        })
+
+        const res = logger.invokedTools(undefined)
+
+        expect(res.available).toBe(false)
+        expect(res.degraded).toBe('no_run_id')
+    })
+
+    test('a throwing query degrades without touching the exception object (R-1)', () => {
+        const { logger } = load({ world: { throwOnQuery: hostileException() } })
+
+        const res = logger.invokedTools(RUN)
+
+        expect(res.available).toBe(false)
+        expect(res.degraded).toBe('query_failed')
+        expect(res.tools).toEqual([])
+    })
+
+    test('no GlideRecord at all degrades rather than throwing', () => {
+        const { logger } = load({ noGlide: true })
+
+        expect(logger.invokedTools(RUN).degraded).toBe('glide_unavailable')
+    })
+
+    test('blank tool_name values are skipped, not recorded as empty names', () => {
+        const { logger } = load({
+            world: {
+                rows: {
+                    [AUDIT_TABLE]: [
+                        { sys_id: 'a1', run: RUN, tool_name: '', action_type: 'intent' },
+                        auditRow(RUN, 'agent_trace', 'intent'),
+                    ],
+                },
+            },
+        })
+
+        expect(logger.invokedTools(RUN).tools).toEqual(['agent_trace'])
+    })
+})

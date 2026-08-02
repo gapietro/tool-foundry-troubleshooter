@@ -108,6 +108,84 @@ PaAuditLogger.prototype = {
     },
 
     // =======================================================================
+    // The read side
+    // =======================================================================
+
+    /**
+     * The ONLY reader of this table in the codebase. #79: a Fix Report
+     * citation names a source; this answers which tools the run actually
+     * invoked, so PaFixReport can tell a real citation from an invented one.
+     *
+     * EVERY action_type counts — intent, result and error alike. The intent
+     * row is written BEFORE the tool runs (see the header), so a tool that
+     * hung or threw still means the model looked. This answers exactly one
+     * question — was this tool ever invoked in this run — which is the
+     * question fabrication fails. Whether what the tool returned supports the
+     * claim is the model's problem, not this method's.
+     *
+     * A TAGGED result, not a bare array: "no tools were called" and "the
+     * trail is unreadable" must not be the same value. A run that reached a
+     * fix report necessarily called at least one tool, so zero rows means the
+     * trail failed — and a failed trail must not convict an honest report.
+     * Every degraded branch still carries `tools: []` so callers never need a
+     * null check.
+     *
+     * Build Rule #42: plain GlideRecord — the table has no ACLs, so
+     * GlideRecordSecure would deny this app read access to its own trail.
+     *
+     * @param {*} runId sys_id of the run row; may be absent or non-string (R-9)
+     * @returns {Object} {available:true, tools:[String]}
+     *                 | {available:false, degraded:String, tools:[]}
+     */
+    invokedTools: function (runId) {
+        try {
+            var id = this._trim(this._norm(runId), this.MAX_RECORD_ID_CHARS)
+            // Without a run filter the query would return the whole table —
+            // every other run's tools, read as this run's evidence.
+            if (!id) return this._noTools('no_run_id')
+            if (typeof GlideRecord === 'undefined') return this._noTools('glide_unavailable')
+
+            var gr = new GlideRecord(this.AUDIT_TABLE)
+            gr.addQuery('run', id)
+            gr.query()
+
+            var tools = []
+            while (gr.next()) {
+                var name = this._normToolName(gr.getValue('tool_name'))
+                if (name && this._indexOfTool(tools, name) === -1) tools.push(name)
+            }
+
+            if (tools.length === 0) return this._noTools('no_audit_rows')
+            return { available: true, tools: tools }
+        } catch (e) {
+            // R-1: `e` is deliberately not inspected.
+            return this._noTools('query_failed')
+        }
+    },
+
+    _noTools: function (reason) {
+        return { available: false, degraded: reason, tools: [] }
+    },
+
+    /**
+     * Normalized the way PaToolRegistry._normName normalizes — the registry
+     * and this trail already share one tool vocabulary by construction
+     * (PaToolRegistry.js:25), and #79 is the first thing that would break if
+     * they ever drift, which is a feature.
+     */
+    _normToolName: function (value) {
+        return String(value === null || value === undefined ? '' : value).replace(/^\s+|\s+$/g, '')
+    },
+
+    /** ES5: no Array.prototype.indexOf assumptions on Rhino. */
+    _indexOfTool: function (list, value) {
+        for (var i = 0; i < list.length; i++) {
+            if (list[i] === value) return i
+        }
+        return -1
+    },
+
+    // =======================================================================
     // Internals
     // =======================================================================
 
