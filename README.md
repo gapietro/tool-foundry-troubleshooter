@@ -1,6 +1,6 @@
 # Foundry Troubleshooter
 
-![Version](https://img.shields.io/badge/version-2026.08.0218-blue)
+![Version](https://img.shields.io/badge/version-2026.08.0219-blue)
 
 An AI-powered diagnostic agent that runs **entirely within ServiceNow**. When an AI Agent built with Foundry fails on a customer instance — where external AI tools are prohibited — the Troubleshooter ingests the failing execution, systematically inspects the agent's instructions, tools, schemas, data, and GenAI stack, finds the root cause, and produces a structured **Fix Report** to feed back into the builder AI.
 

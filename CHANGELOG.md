@@ -11,6 +11,29 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0219 — 2026-08-02
+
+### Fixed
+- **Unconditional `String()` on the async worker's event parms defeated the run-id guard** (PR #80
+  review). `String(null)` is `"null"` and `String(undefined)` is `"undefined"` — both non-empty — so
+  a missing `event.parm1` no longer failed fast with "run id is required" and instead drove the full
+  agent loop under the literal run id `"null"`, invoking the LLM while every `appendTranscript` and
+  `close` silently no-opped against a non-existent run row. The `parm1` coercion is removed outright
+  rather than guarded: `PaAgentLoop._str` already returns `''` for null/undefined *and* correctly
+  converts a Rhino Java String, so it was never needed. The `parm2` coercion is load-bearing (it is
+  the fix for #77) and is retained, but null-guarded — previously a missing `parm2` became the string
+  `"null"`, which `_normRequest` turned into a fabricated `{description: "null"}` instead of `{}`.
+- No effect on the `benchmark/DECISION.md` §H measurement: the two forms differ only when `parm1` or
+  `parm2` is null/undefined, and all ten scored runs carried real values on both.
+
+### Added
+- `test/asyncWiring.test.js` — extracts the `ScriptAction` body from `src/fluent/async-wiring.now.ts`
+  and evaluates it against a fake `event` and a recording fake `PaAgentLoop`, pinning the pass-through
+  and both null cases. Nothing previously covered this script, which is why the regression above was
+  reviewable only by eye.
+
+---
+
 ## 2026.08.0218 — 2026-08-02
 
 ### Fixed
