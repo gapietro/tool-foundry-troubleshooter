@@ -196,3 +196,22 @@ Deliberately **not** in scope: reinstalling either app on gpinst01 (the comparis
 install + on-instance verification), the harness components themselves (planned in the
 companion plan doc), and the §D5 assist-unit measurement source (a plan-doc question, since it
 gates only the comparison's bookkeeping, not the build).
+
+---
+
+## 6. Outcome (recorded post-merge, same day)
+
+Shipped as PRs #48 (seed 2 v2, 2026.08.0202), #49 (filter, .0203), #50 (playbook v2, .0204),
+each subagent-code-reviewed before merge. Deltas from the design above, all review-driven:
+
+- **Filter:** a DENIED filtered read reports `matched: null` (never 0 — R-11 at field
+  granularity); a truncated *filtered* read scopes its note to the matched set with a floor
+  marker instead of the whole-table denominator; the zero-match note names the table the
+  interpretation actually searched; the `definition` alias was dropped (a stray LLM key must
+  not silently narrow an audit meant to be whole-table). The "honest trail in the reads block"
+  rationale was corrected — the reads block keys by table and only upgrades status, so
+  `filter.matched_on` is the runtime record of which read matched.
+- **Seed 2 v2 guard:** the exactly-one-tool count anchors on `type:` entries in the tools slice
+  (covers every tool shape, not only `script`); the backslash guard is total.
+- **Process note:** the companion harness plan doc reached `main` inside PR #50's rebase rather
+  than this docs PR — content identical, attribution recorded here.

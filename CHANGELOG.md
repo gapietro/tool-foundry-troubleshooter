@@ -11,6 +11,21 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0205 — 2026-08-02
+
+Phase 1b kickoff docs (issue #44). The pre-work design spec
+(`docs/superpowers/specs/2026-08-02-phase1b-prework-design.md`) with its post-merge outcome
+section, companioning the harness implementation plan
+(`docs/superpowers/plans/2026-08-02-phase1b-harness.md`, which reached main inside PR #50's
+rebase — attribution recorded in the spec). The plan sequences ten tasks: NASK skills with an
+invocation-path probe FIRST, PaLlmProxy (strict-JSON + one retry), PaToolRegistry (destructive
+gate now, flow in Phase 3), PaFixReport (structural evidence-rule enforcement), PaRunManager
+(lifecycle close-out per DECISION.md §D5 — custom runs get real terminal states; native
+anchors get a stale sweep that leaves completeness audit-derived per R-20), PaAgentLoop
+(15 iterations / 5-minute budget, partial-result guarantee), async event + ScriptAction + REST
+API with deep `/status`, the §D5 assist-unit probe, and the comparison re-run on identical
+evidence.
+
 ## 2026.08.0204 — 2026-08-02
 
 Phase 1b pre-work, **playbook/instructions v2** (issue #47, DECISION.md §D3/§D4 preconditions of
