@@ -11,6 +11,66 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0221 — 2026-08-02
+
+### Measured
+- **v3 scored benchmark pass on `2026.08.0220` — 0/10, and #82 answered: runs got shallower
+  (issue #82).** Ten scored rows, five seeds, doubled runs, custom harness only, targets and rubric
+  identical to the v2 pass. **Every one of the ten runs invoked exactly one tool — `agent_trace` —
+  and stopped.** Mean tool calls per run across the three passes: 2.0 (0216) → 1.4 (0218) → **1.0
+  (0220)**; runs reaching `agent_config`: 0 → 2 → **0**; runs reaching `read_artifact`: 10 → 3 →
+  **0**. The n=2 smoke observation that prompted #82 holds at n=10 across all five seeds. Gate
+  **0/10**, rubric **4/60**. Budget was never the constraint — 3 LLM turns and 8 seconds against
+  bounds of 15 and 300s. Full rows: `benchmark/scorecard-custom-harness.md` § v3; raw evidence:
+  `benchmark/raw-evidence-v3.md`; reading: `benchmark/DECISION.md` §I.
+- **The #78/#79 branch works as designed, and the trade is now visible.** No run over-claimed a
+  sweep (v2 had a run claiming all seven layers SWEPT on two reads of one trace); 7 of 10 rows carry
+  zero fabrications; and all 3 runs that still invented `config` citations were **rejected**, each
+  told the actual tool roster. Under the pre-#79 validator all three would have passed on their
+  source labels. But the emphasis converted over-claiming into **claim-avoidance rather than
+  evidence-gathering**: five runs took the inconclusive path, so **every report that passed
+  validation in this pass names no root cause, no fix target and no appliable change**. Across ten
+  runs the harness delivered zero actionable diagnoses.
+- **#81 now has a measured instance, not just a structural argument.** Seed 05 run 1
+  (`ee3a71dc2baecfd417a6ffbeee91bfe5`) named layer **7** — the expected layer — with a scrupulously
+  honest sweep report, and was rejected for citing zero distinct non-trace sources it had no
+  remaining way to gather. Its own proposed fix reads `current: "Unknown (requires agent_config
+  inspection)"`. The rows favour #81's option 2 (route citation-shortfall rejections back into the
+  main loop, which had 13 of 15 iterations unspent) over giving the repair turn tools.
+
+### Added
+- `benchmark/raw-evidence-v3.md` — deploy verification, the six seed-fixture precondition reads, the
+  post-install sanity run, the ten run ids, and the audit-derived tool roster.
+
+### Fixed
+- Nothing in the product app. **This version is a measurement and its write-up**; no `src/` change.
+
+### Notes
+- **The instance was running the wrong version when the pass opened.** `sys_app.version` read
+  `2026.08.0219` despite `main` being at `2026.08.0220`; the pass began with a clean build + install
+  and re-verified both the version field and two content markers in the deployed code.
+  **`sys_updated_on` on `sys_script_include` is not bumped by an SDK install** and must not be used
+  to tell what is deployed — check the version field, then grep the deployed script for a marker.
+- **Scoring was blind by delegation.** The operator had read the v2 rows before firing, so the ten
+  rows were scored by ten independent agents barred from every scorecard, `DECISION.md`,
+  `README.md` and `CHANGELOG.md`. The audit derivation and the highest-scoring row were verified
+  directly. This differs from how Task 10 and v2 were scored, and is recorded in the scorecard.
+- **New defect found by this pass, filed as #85:** `agent_trace`'s own explanatory note — *"27 tasks
+  / 19 calls in a measured run"* — is illustrative text about a different run, and six of ten runs
+  plus the smoke run diagnosed it as the defect. One proposed, as its fix, adding the note it had
+  misread. Plausible contributor to the one-call-and-stop pattern: a run that thinks it found a
+  CONFIRMED layer-1 defect in its first result has no reason to sweep further.
+- **Confounds unchanged and still open:** third different contract text across three passes; the
+  categorical trace-plus-one rule at `docs/agent/agent-doctor-instructions.md:48` still contradicts
+  the amended contract block and was deliberately left unedited; native not re-measured (§H7-4);
+  model drift unbounded. This pass establishes that depth fell, not that the contract change caused it.
+- **Roadmap:** §H8 items 1 and 2 are done and verified working. Item 3 (depth) is the only one left,
+  and it moved backwards. Twenty-three scored runs across three versions have produced **zero** runs
+  reaching `schema_lookup`, `query_table` or `genai_log`. Native stays the recommended path; the
+  Phase 1b milestone remains **not met**.
+
+---
+
 ## 2026.08.0220 — 2026-08-02
 
 ### Fixed

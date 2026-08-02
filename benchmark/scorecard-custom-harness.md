@@ -361,3 +361,119 @@ instruction defect, and native found it (1 of 2 runs, full credit). This is not 
 better" — it is the seed-2 confound being repaired, exactly as the protocol intended, and it is the
 reason seed 2 is the one seed re-run for native at all. See `DECISION.md` §G for the full accounting
 of what changed and why it is on the record rather than absorbed silently into the new percentage.
+
+---
+
+## Custom harness scorecard — v3 (10 rows, version 2026.08.0220, 2026-08-02)
+
+**Third measurement of the same harness**, taken after the #78 / #79 evidence-validation branch
+(PR #83) and the CHANGELOG entry (PR #84) landed on `main`. Installed to `gpinst01` as version
+**2026.08.0220**. The Task 10 rows (0216) and the v2 rows (0218) above are **unchanged and still
+stand**. Raw per-run evidence: `benchmark/raw-evidence-v3.md`.
+
+This pass exists to answer **issue #82** — *did the 2026.08.0220 contract change make runs
+shallower?* — which two unscored smoke runs raised at n=2 and could not settle.
+
+### Protocol notes for the v3 pass
+
+1. **Same rubric, same gate, same discipline.** Scored against §A, §A2, §A3 and §E above, unchanged.
+2. **The deployed version was wrong when the pass opened, and was corrected first.** `sys_app.version`
+   read `2026.08.0219`; the pass began with a clean `now-sdk build` + `now-sdk install` from `main`
+   and re-verified `2026.08.0220` plus two content markers in the deployed code. Details and the
+   reason `sys_updated_on` cannot be used for this check are in `raw-evidence-v3.md`.
+3. **The same five diagnostic targets as v2, reused verbatim** — identical request bodies. Doubled
+   runs, executed **one at a time, sequentially, no parallelism**.
+4. **Seed-fixture preconditions re-verified live** before any row was scored (all six checks in
+   `raw-evidence-v3.md`). **10 valid rows, 0 void.**
+5. **Native was NOT re-measured.** Native's **8 / 10** stands as recorded. The §H7-4 different-day
+   confound is therefore still open, deliberately: #82 asks a custom-vs-custom depth question, whose
+   control is the 0218 custom rows, not native.
+6. **`docs/agent/agent-doctor-instructions.md:48` was deliberately left unedited**, per §H7-5 — the
+   categorical trace-plus-one rule still sits at prompt position #1 while the amended contract sits
+   at prompt position #last. This pass measures the system as `2026.08.0220` actually shipped.
+7. **Scoring was blind, and delegated to keep it that way.** The operator of this pass had read the
+   v2 rows in full before the runs were fired, so scoring was dispatched to ten independent agents,
+   each given the §A rubric, one run id, one seed spec, and the audit-derived tool roster — and
+   explicitly barred from reading any scorecard, `DECISION.md`, `README.md` or `CHANGELOG.md`. The
+   operator independently verified the audit derivation and re-read the highest-scoring row's report
+   directly against its score.
+8. **`cause_of_death`** uses the same free-text departure from §B's closed vocabulary as the earlier
+   custom rows, for the same reason.
+
+### v3 rows (10)
+
+`layers_swept` is **audit-derived per §E**. `tool_calls` is the count of distinct tool invocations in
+`x_snc_troubleshoot_audit`. `LLM calls` is `actor:'llm'` transcript entries. `wall_clock` is the
+transcript-internal span (first entry → terminal).
+
+| seed | run # | run_id | root_cause_layer_correct | fix_target_correct | evidence_cites_trace_and_config | fix_usable_unedited | total /6 | **passes_gate** | layers_swept | layers_available | cause_of_death | tool_calls | LLM calls | wall_clock | notes |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 01 | 1 | `75797d142baecfd417a6ffbeee91bf71` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | `failed` — rejected, unrepairable (two unsupported `config` citations) | 1 | 3 | 8s | Claimed layer **1**, "27 tasks vs 19 tool calls" — an artefact of the trace tool's own counters, not a defect. **FABRICATED EVIDENCE:** two entries cite `agent_config` output; audit shows `agent_trace` only. Caught by the new #79 check, which named the tool roster back to the model. Never saw `priority_stored: null`. Fix proposed: add a documentation note. |
+| 01 | 2 | `9699fdd82baecfd417a6ffbeee91bfff` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | `complete` — **inconclusive path** (validated) | 1 | 2 | 4s | **Names no root cause.** Honest: only L1 claimed SWEPT, no fabrication. Its own NOT_SWEPT reasons are self-defeating — L4 skipped because "reads showed 'ok' status", L3 because there was no "explicit tool failure evidence" — which is exactly the silent-success shape this seed is built from. `needed_to_conclude` names `agent_config`; it never called it. |
+| 02 | 1 | `9eb9b91c2baecfd417a6ffbeee91bf54` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | `complete` — **inconclusive path** (validated) | 1 | 2 | 4s | **Names no root cause.** Rules out layer 2 on trace evidence alone ("No configuration issues observed in the trace") — not evidence about instruction text. One `agent_config` call would have surfaced "assign it to the right group" against a lone `measure_request` tool. No fabrication. |
+| 02 | 2 | `09d9f15c2baecfd417a6ffbeee91bf07` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | `complete` — **inconclusive path** (validated) | 1 | 2 | 4s | **Names no root cause.** `needed_to_conclude` reads "No further investigation required as execution completed successfully with no errors" — the harness treated absence of a hard error as absence of a defect, the precise blind spot seed 02 targets. No fabrication. |
+| 03 | 1 | `20e9755c2baecfd417a6ffbeee91bfe8` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | `failed` — rejected, unrepairable | 1 | 3 | 8s | Claimed layer **1**, same task/tool-count artefact, elevated to `CONFIRMED` and duplicated as two identical root causes. **FABRICATED EVIDENCE:** both cite `config`; audit shows `agent_trace` only. The seed's answer (`matched:false`, `rules_in_table:0`) was in the trace it read; layer 5 dismissed as "Data existence not questioned in trace". |
+| 03 | 2 | `8d0a75902b6a0b14f243fed2ce91bf0f` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | `failed` — rejected, unrepairable | 1 | 3 | 8s | Same wrong layer 1 / same artefact, independently. **FABRICATED EVIDENCE:** one `config` citation, audit-refuted. Never mentions the routing table, the empty read, or data at all. |
+| 04 | 1 | `5b1a7d902b6a0b14f243fed2ce91bffd` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | `complete` — **inconclusive path** (validated) | 1 | 2 | 4s | **Names no root cause**, and reads a failing execution as a success: "completed successfully with no errors… normal LLM latency", where the real signature is `OneExtendUtil.execute` → `status:"error"`, "Plan invalid", tool `ok:false`. Every NOT_SWEPT reason is circular — the incorrect premise that execution succeeded justifies not looking. No fabrication. |
+| 04 | 2 | `b22af99c2baecfd417a6ffbeee91bf28` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | `complete` — **inconclusive path** (validated) | 1 | 2 | 4s | **Names no root cause.** Same false-negative read as run 7, independently. L6 NOT_SWEPT reason — "no LLM errors were observed" — is self-justifying: the single channel it used is the one that hid the error. No fabrication. |
+| 05 | 1 | `ee3a71dc2baecfd417a6ffbeee91bfe5` | **2** | **1** | 0 | 0 | **3** | **0** | 1/7 (L1 UNAVAILABLE) | 7/7 | `failed` — rejected by **mode B** ("cite at least TWO DISTINCT sources — found 0") | 1 | 3 | 7s | **The most consequential row in the pass.** Names layer **7**, the expected layer, reasoning correctly that with no execution plan the failure is upstream of execution. `layers_swept` is scrupulously honest — L1 `UNAVAILABLE`, L2–7 `NOT_SWEPT` each naming the tool it did not invoke. It was rejected because it had **zero** non-trace sources to cite, having made one tool call. Fix names the right area but the wrong gate, and `current` reads *"Unknown (requires agent_config inspection)"* — a request to investigate, not an appliable change. Operator-verified against the stored report. **This is issue #81 in its purest form: correct reasoning, rejected for corroboration it had no remaining way to gather.** |
+| 05 | 2 | `734a7dd02b6a0b14f243fed2ce91bf73` | 0 | **1** | 0 | 0 | **1** | **0** | 1/7 (L1 UNAVAILABLE) | 7/7 | `failed` — rejected by **mode B** (same) | 1 | 3 | 8s | Reported the **absence itself** as the root cause ("layer 1 / Execution trace / No execution plan exists") rather than diagnosing why nothing fired, so it never reached layer 7 — the divergence from run 9 on identical input is the documented inconsistent-behaviour failure mode. Fix points at "Agent trigger configuration" (partial credit) with `current` again "Unknown". Honest sweep report, no fabrication. |
+
+**Gate tally — custom harness, v3**
+
+| | |
+|---|---|
+| Valid runs (not void) | **10** / 10 |
+| `sum(passes_gate)` | **0** |
+| Gate result | **0 / 10 (0.0%)** |
+| Rubric points | **4 / 60** (3 from seed 05 run 1, 1 from seed 05 run 2) |
+| Band (proportional, §A3) | **Bottom (< 50%)** |
+| Void runs and why | **None** |
+| Per-seed pass/fail | 01 **0/2** · 02 **0/2** · 03 **0/2** · 04 **0/2** · 05 **0/2** |
+| Prior measurements | v2 (0218) **1 / 10**, 6/60 · Task 10 (0216) **0 / 10**, 0/60 |
+
+### Tool reach — v3, and the three-pass comparison
+
+**Every run in this pass invoked exactly one tool, `agent_trace`, and stopped.** Not one run paged
+an artifact; not one reached a configuration, schema, data or GenAI tool.
+
+| | Task 10 (0216) | v2 (0218) | **v3 (0220)** |
+|---|---|---|---|
+| Mean tool calls / run | 2.0 | 1.4 | **1.0** |
+| Runs reaching `read_artifact` | 10 / 10 | 3 / 10 | **0 / 10** |
+| Runs reaching `agent_config` | 0 / 10 | 2 / 10 | **0 / 10** |
+| Runs reaching any of `schema_lookup` / `query_table` / `genai_log` / `log_analysis` | 0 / 10 | 0 / 10 | **0 / 10** |
+| Mean LLM calls / run | ~3.4 | ~2.6 | **2.5** |
+| Mean wall clock | ~8.7s | ~6.7s | **5.9s** |
+| `sum(passes_gate)` | 0 | 1 | **0** |
+| Rubric points | 0 / 60 | 6 / 60 | **4 / 60** |
+
+Budget was never the constraint: `PaAgentLoop.MAX_ITERATIONS = 15` and `BUDGET_MS = 300000`, against
+a measured maximum of 3 LLM turns and 8 seconds. **No row came within an order of magnitude of
+either bound.**
+
+### Honesty — where the branch demonstrably worked
+
+Set against the depth result, the evidence-validation branch did exactly what it was built to do:
+
+- **Sweep inflation is gone.** In v2, runs claimed up to **all seven layers SWEPT on two reads of the
+  same trace**. In v3, **not one run over-claimed a sweep**: every row's `layers_swept` marks L2–L7
+  `NOT_SWEPT` (or L1 `UNAVAILABLE`) with reasons that frequently name the specific tool not invoked
+  — *"No agent_config tool was invoked to inspect instructions"*.
+- **Fabricated citations are caught rather than passed.** Three of ten runs still invented `config`
+  citations (rows 1, 5, 6). **All three were rejected**, each with a message naming the actual tool
+  roster back to the model. Under the pre-#79 validator all three would have passed on their source
+  *labels* — which is precisely the defect #79 was filed for.
+- **7 of 10 rows carry zero fabrications**, against a v2 pass where fabrication was pervasive.
+
+The branch converted over-claiming into honesty. It did not convert it into evidence-gathering.
+
+### What the validated reports actually contain
+
+**All five `complete` runs took the inconclusive path.** Every report that passed validation in this
+pass names **no root cause, no fix target, and no appliable change**. The two runs that named the
+correct layer (seed 05) were both rejected. So on this version, across ten runs:
+
+> **the harness delivered zero actionable diagnoses to a consumer.**
+
+That is a stronger statement than 0/10 on the gate, and it is the finding to carry forward.
