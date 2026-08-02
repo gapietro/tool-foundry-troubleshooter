@@ -848,12 +848,21 @@ PaToolAgentConfig.prototype = {
                 severity: 'medium',
                 confidence: 'high',
                 subject: table + '[' + sysId + '].context_processing_script',
+                // The specimen's LINE NUMBER used to be quoted here ("threw at
+                // line 42"). It is the worst place in this tool for a
+                // remembered number: a finding, beside a `subject` naming the
+                // real record, with a `next_step` pointing at agent_trace's
+                // script_errors — which carry a genuine `line`. Six of ten v3
+                // benchmark runs misread a far weaker instance of this shape
+                // as run data (issue #85). What the anecdote is FOR is that a
+                // populated body has thrown in practice; the line it threw at
+                // adds nothing and invites the misread.
                 detail:
                     'The script is populated (' +
                     entry.context_processing_script.length +
                     ' chars). Fluent omission does not leave this field empty — the platform writes ' +
-                    'boilerplate into it — and an auto-populated body on this instance threw at line 42, ' +
-                    'terminating a run that reported state=Completed with an empty state_reason.',
+                    'boilerplate into it — and an auto-populated body on the reference instance has thrown ' +
+                    'at runtime, terminating a run that reported state=Completed with an empty state_reason.',
                 next_step:
                     'Cross-check agent_trace script_errors for a source matching this record. A run can ' +
                     'throw here and still look healthy in the plan header.',
@@ -1698,13 +1707,21 @@ PaToolAgentConfig.prototype = {
             usecases_walked: ctx.trigger_usecase_ids || [],
             wiring_findings: findings,
             access_alignment: this._accessAlignment(ctx, links, data),
+            // The 38/40 below sits immediately beside `branches`, which holds
+            // THIS agent's real per-branch link counts — so it needs the
+            // REFERENCE_STAT label, not merely the "measured over the whole
+            // table" phrasing it already had. Two of the six sites the #85
+            // audit found were already scoped that way and were misread
+            // anyway; the label has to say what the number is NOT about.
             traversal_note:
                 'sn_aia_trigger_agent_usecase_m2m has no agent and no usecase column — it is a polymorphic ' +
                 'trigger-to-resource link. Both branches are walked from related_resource_record: ' +
-                'agent-direct, and the team/usecase chain. Measured over the whole table on gpinst01 ' +
-                '(2026-08-01): 38 of 40 rows (95%) carry related_resource_table=sn_aia_usecase and only 2 ' +
-                'carry sn_aia_agent — so a traversal walking only the agent-direct branch misses 95% of ' +
-                'the wiring and reports a wired agent as unwired (DESIGN.md R-18a).',
+                'agent-direct, and the team/usecase chain. ' +
+                this._k().REFERENCE_STAT +
+                'Over the whole table on gpinst01 (2026-08-01), 38 of 40 rows (95%) carry ' +
+                'related_resource_table=sn_aia_usecase and only 2 carry sn_aia_agent — so a traversal ' +
+                'walking only the agent-direct branch misses 95% of the wiring and reports a wired agent ' +
+                'as unwired (DESIGN.md R-18a). For this agent, see branches above.',
         }
     },
 
@@ -1746,11 +1763,15 @@ PaToolAgentConfig.prototype = {
             statement:
                 'The platform enforces two independent access gates and the invoking role must satisfy ' +
                 'both. This tool reports ONE combined role set because no field distinguishes them.',
+            // The 638/703 sits beside role_rows — THIS agent's own rows, each
+            // carrying a description a reader can see for themselves. Labelled
+            // per issue #85.
             caveat:
                 'Attributing any role below to User Access rather than Data Access is HEURISTIC — the ' +
-                'only signal is the free-text description on each row, and on the instance this tool was ' +
-                'built against that description is empty on 638 of 703 rows (91%), so usually there is no ' +
-                'signal at all. Confirm the split in AI Agent Studio\'s Define User Access / Define Data ' +
+                'only signal is the free-text description on each row, and it is usually blank. ' +
+                k.REFERENCE_STAT +
+                'On the instance this tool was built against, that description is empty on 638 of 703 ' +
+                'rows (91%). Confirm the split in AI Agent Studio\'s Define User Access / Define Data ' +
                 'Access panels before acting on it.',
             config_fields_probed: this.ACCESS_CONFIG_CANDIDATES,
             config_fields_valid: probe.valid,

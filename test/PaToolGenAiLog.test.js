@@ -1002,3 +1002,64 @@ describe('read failures', () => {
         expect(result.data.evidence_basis.statement).toMatch(/DENIED/)
     })
 })
+
+// ---------------------------------------------------------------------------
+// Reference statistics are labelled, never mistakable for the audited set (#85)
+//
+// Both notes below state counts measured over the whole
+// sys_one_extend_capability_definition table on the reference instance, and
+// both are emitted next to `stats.definitions_checked` — the count of what
+// this call actually audited. R-22 item 4 requires the denominator to travel
+// with the count, so the numbers stay; what they needed was a label saying
+// they are not about the audited set.
+// ---------------------------------------------------------------------------
+describe('reference statistics are labelled (issue #85)', () => {
+    function definition(over) {
+        return Object.assign(
+            {
+                sys_id: 'def1',
+                name: 'Now LLM Generic',
+                capability: 'cap1',
+                api_type: 'sys_hub_flow',
+                api: 'flow1',
+                connection: '',
+            },
+            over || {}
+        )
+    }
+
+    function marker() {
+        const kit = loadScriptInclude('PaToolReadKit.js', {})
+        return new kit.PaToolReadKit().REFERENCE_STAT
+    }
+
+    it('the connection note labels its whole-table measurement', () => {
+        const { result } = run({ mode: 'check_config' }, world({
+            sys_one_extend_capability_definition: [definition()],
+            sys_one_extend_capability: [{ sys_id: 'cap1', name: 'Summarize' }],
+        }))
+
+        expect(result.data.connection_note).toContain(marker())
+        // R-22 item 4 still holds: the denominator survives the labelling.
+        expect(result.data.connection_note).toContain('318')
+        expect(result.data.connection_note).toContain('2026')
+    })
+
+    it('the mandatory-binding finding labels the rarity claim inside it', () => {
+        const { result } = run(
+            { mode: 'check_config' },
+            world({
+                sys_one_extend_capability_definition: [Object.assign(definition(), { api: '' })],
+                sys_one_extend_capability: [{ sys_id: 'cap1', name: 'Summarize' }],
+            })
+        )
+        const finding = result.data.findings.filter((f) => f.finding === 'mandatory_binding_empty')[0]
+
+        // "exactly 1 of 2026 rows is missing a mandatory binding" sat inside a
+        // high-severity finding about a specific row. A reader counting
+        // findings in this very result has every reason to read the 1 as this.
+        expect(finding).toBeDefined()
+        expect(finding.why).toContain(marker())
+        expect(finding.why).toContain('2026')
+    })
+})

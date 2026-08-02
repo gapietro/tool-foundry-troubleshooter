@@ -11,6 +11,52 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0222 — 2026-08-02
+
+### Fixed
+- **`agent_trace`'s own explanatory note was being diagnosed as a defect (issue #85).** Every
+  payload carried *"Execution tasks are NOT 1:1 with tool calls (27 tasks / 19 calls in a measured
+  run)"*. The 27 and the 19 described an illustrative run measured once during the build, not the
+  run under diagnosis. In the v3 scored pass **six of ten scored runs plus the smoke run** read them
+  as findings about the run they were looking at, elevated the supposed discrepancy to a CONFIRMED
+  layer-1 root cause, and stopped; one proposed, as its fix, *"add note clarifying task_stats vs
+  tool_call_stats measurement differences"* — the note it had itself misread. Seed 03's real answer
+  (`matched:false`, `rules_in_table:0`) was sitting in the same payload those runs were reading.
+  The note now carries **this run's own counts**, taken from the same reads that fill `task_stats`
+  and `tool_call_stats`, so a reader who treats them as run data is correct. The guidance also
+  moved into the `agent_trace` tool description, where it is read once at tool-selection time
+  rather than re-read on every call.
+- **Five more reference statistics in sibling tools, found by the audit that followed.** Each stated
+  a count measured on the reference instance while sitting in a payload beside the real counts for
+  the thing being diagnosed: `agent_config`'s trigger `traversal_note` (`38 of 40 rows (95%)`, next
+  to this agent's `branches`), its access `caveat` (`638 of 703 rows (91%)`, next to this agent's
+  `role_rows`), its `context_processing_script_populated` finding (**`threw at line 42`** — a
+  remembered stack line inside a finding whose `next_step` points at `agent_trace`'s `script_errors`,
+  which carry a genuine `line`), and `genai_log`'s `connection_note` (`318 of 2026`) and
+  `mandatory_binding_empty` finding (`exactly 1 of 2026 rows`, inside a high-severity finding about
+  a specific row). The line number is gone; the counts stay and are now prefixed with the new
+  `PaToolReadKit.REFERENCE_STAT` label, because **DESIGN.md R-22 item 4 requires the denominator to
+  travel with every stated count** — deleting them was not an option, labelling them was. Two of the
+  six sites already said "measured over the whole table on gpinst01" and were misread anyway, so the
+  label names what the number is *not* about rather than only where it came from.
+
+### Added
+- `test/referenceStatistics.test.js` — a source-scan tripwire over all seven tool cores plus the
+  read kit. It fails the build if a hard-coded statistic (`X of Y`, a literal percentage, a
+  remembered stack line) reaches a payload without `REFERENCE_STAT`. A source scan rather than an
+  output assertion because the risk is a *future* hard-coded number, in a note nobody thought to
+  test. Payload text is asserted in the three per-tool test files.
+
+### Not established by this version
+- **That this fixes the depth collapse (#82).** The note is a plausible contributor — a run that
+  believes it found a confirmed layer-1 defect in its first tool result has no reason to open a
+  second layer — but six of ten runs misreading it is a correlation, not a demonstrated cause, and
+  §I4's four confounds (three different contracts, the `agent-doctor-instructions.md:48`
+  contradiction, an unre-measured native baseline, unbounded model drift) are all untouched. §H8's
+  acceptance test is unchanged and still unmet.
+- **Anything live.** This version is build-verified only (SDK 4.9.2, clean) with 844 unit tests
+  passing. No install to gpinst01 and no smoke run were performed.
+
 ## 2026.08.0221 — 2026-08-02
 
 ### Measured

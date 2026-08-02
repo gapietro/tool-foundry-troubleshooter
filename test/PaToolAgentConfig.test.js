@@ -1403,3 +1403,82 @@ describe('evidence basis', () => {
         expect(basis).toHaveProperty('trigger_link_rows')
     })
 })
+
+// ---------------------------------------------------------------------------
+// Reference statistics may not be readable as facts about THIS agent (#85).
+//
+// `agent_trace` shipped an illustrative "27 tasks / 19 calls" in every payload
+// and six of ten v3 benchmark runs diagnosed it as a defect in the run they
+// were looking at. The audit that followed found the same shape here: three
+// emitted strings stating numbers measured on the reference instance, sitting
+// beside the real numbers for the agent under diagnosis.
+//
+// The rule these pin: a reference number is allowed (DESIGN.md R-22 item 4
+// requires the denominator to travel with every count) but must be labelled
+// with PaToolReadKit.REFERENCE_STAT, which says outright that the number is
+// not about anything in the result.
+// ---------------------------------------------------------------------------
+describe('reference statistics are labelled, never mistakable for this agent (issue #85)', () => {
+    function marker() {
+        const kit = loadScriptInclude('PaToolReadKit.js', {})
+        return new kit.PaToolReadKit().REFERENCE_STAT
+    }
+
+    it('the trigger traversal note labels its whole-table measurement', () => {
+        const { result } = run({ agent: 'Seed Agent', section: 'triggers' }, world())
+        const note = result.data.triggers.traversal_note
+
+        // The note sits directly beside `branches`, which holds THIS agent's
+        // real per-branch link counts. Unlabelled, "38 of 40 rows (95%)" reads
+        // as though it described them.
+        expect(note).toContain(marker())
+        expect(note).toContain('38')
+        expect(note).toContain('40')
+    })
+
+    it('the access-alignment caveat labels its whole-table measurement', () => {
+        const { result } = run(
+            { agent: 'Seed Agent', section: 'triggers' },
+            world({
+                sys_agent_access_role_configuration: [
+                    {
+                        sys_id: 'acc1',
+                        agent: AGENT,
+                        agent_table: 'sn_aia_agent',
+                        description: 'User access for the seed agent',
+                        role_list: 'role_itil',
+                    },
+                ],
+            })
+        )
+        const caveat = result.data.triggers.access_alignment.caveat
+
+        // Sits beside role_rows — this agent's own rows, each carrying a
+        // description. "638 of 703 rows (91%) empty" is about neither.
+        expect(caveat).toContain(marker())
+        expect(caveat).toMatch(/heuristic/i)
+    })
+
+    it('the populated-script finding carries no remembered stack line', () => {
+        const { result } = run(
+            { agent: 'Seed Agent', section: 'instructions' },
+            world({
+                sn_aia_agent: [
+                    Object.assign({}, world().sn_aia_agent[0], { context_processing_script: 'boilerplate' }),
+                ],
+            })
+        )
+        const finding = result.data.instructions.script_findings.filter(
+            (f) => f.finding === 'context_processing_script_populated'
+        )[0]
+
+        // The worst instance of the family: "threw at line 42" inside a
+        // FINDING, next to a `subject` naming the real record, with
+        // agent_trace's script_errors — which carry a real `line` — cited in
+        // the very next sentence. Nothing about that anecdote needed a line
+        // number; only that it has thrown in practice.
+        expect(finding).toBeDefined()
+        expect(finding.detail).not.toMatch(/at line \d+/i)
+        expect(finding.detail).toMatch(/state=Completed/)
+    })
+})

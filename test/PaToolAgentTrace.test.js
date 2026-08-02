@@ -759,3 +759,67 @@ describe('ordering is applied at the database', () => {
         expect(cs).toEqual(['sequence', 'sys_created_on', 'sys_id'])
     })
 })
+
+// ---------------------------------------------------------------------------
+// The task-vs-tool-call note (issue #85).
+//
+// This note used to read "Execution tasks are NOT 1:1 with tool calls (27
+// tasks / 19 calls in a measured run)". The 27 and the 19 came from an
+// illustrative run measured once during the build, and they shipped in every
+// payload. In the v3 scored benchmark pass six of ten scored runs plus the
+// smoke run read them as findings about the run under diagnosis and built
+// their whole root cause on the supposed discrepancy; one proposed, as its
+// fix, adding the very note it had misread.
+//
+// The counts are now this run's own. A reader who treats them as run data is
+// now RIGHT, which is the only version of this note that cannot backfire.
+// ---------------------------------------------------------------------------
+describe('task-vs-tool-call note carries this run\'s counts (issue #85)', () => {
+    const { makeGlideRecordSecure, makeGlideDateTime } = require('./_glideStub')
+
+    test('states the counts it is given, whatever they are', () => {
+        expect(trace._taskVsToolCallNote(27, 19)).toContain('27')
+        expect(trace._taskVsToolCallNote(27, 19)).toContain('19')
+        expect(trace._taskVsToolCallNote(4, 4)).toContain('4')
+    })
+
+    test('a run with nothing in it reports zero, not a remembered run', () => {
+        const note = trace._taskVsToolCallNote(0, 0)
+        expect(note).toMatch(/\b0\b/)
+        expect(note).not.toMatch(/\b(27|19)\b/)
+    })
+
+    test('says the gap between the two counts is not a finding', () => {
+        // The v3 runs did not merely notice the difference — they reported it
+        // as a CONFIRMED layer-1 defect. Telling a reader the counts differ is
+        // not enough; the note has to forbid the conclusion.
+        expect(trace._taskVsToolCallNote(9, 3).toLowerCase()).toContain('not a finding')
+    })
+
+    test('the emitted note matches the run\'s own task_stats and tool_call_stats', () => {
+        const ctx = loadScriptInclude('tools/PaToolAgentTrace.js', {
+            GlideRecordSecure: makeGlideRecordSecure({
+                sn_aia_execution_plan: [{ sys_id: 'plan0000000000000000000000000001' }],
+                sn_aia_execution_task: [
+                    { sys_id: 'task0000000000000000000000000001', order: '100', type: 'tool', status: 'success' },
+                    { sys_id: 'task0000000000000000000000000002', order: '200', type: 'gen_ai', status: 'success' },
+                    { sys_id: 'task0000000000000000000000000003', order: '300', type: 'tool', status: 'success' },
+                ],
+                sn_aia_tools_execution: [{ sys_id: 'te000000000000000000000000000001', execution_plan_id: 'plan0000000000000000000000000001' }],
+            }),
+            GlideDateTime: makeGlideDateTime(),
+        })
+
+        const r = new ctx.PaToolAgentTrace().execute({ execution: 'plan0000000000000000000000000001' })
+        const note = r.data.notes.join(' ')
+
+        expect(r.data.task_stats.total).toBe(3)
+        expect(r.data.tool_call_stats.total).toBe(1)
+        // The numbers in the note and the numbers in the stats blocks are the
+        // same numbers, from the same read. Nothing else may appear.
+        expect(note).toContain('3')
+        expect(note).toContain('1')
+        expect(note).not.toContain('27')
+        expect(note).not.toContain('19')
+    })
+})

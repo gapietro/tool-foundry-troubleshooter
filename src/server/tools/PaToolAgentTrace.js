@@ -41,6 +41,10 @@
  *      calls in a measured run. Tasks and tool calls are read and reported
  *      independently; no join between them is attempted.
  *
+ *      Those two numbers belong HERE and nowhere else. Emitting them in the
+ *      payload cost six of ten v3 benchmark runs their diagnosis — see
+ *      _taskVsToolCallNote and issue #85.
+ *
  * Trap: `plan.agent` is often EMPTY on real rows. Agent-name resolution goes
  *      through BOTH `sn_aia_agent` and `sn_aia_usecase` — the usecase is the
  *      reliable anchor.
@@ -226,8 +230,7 @@ PaToolAgentTrace.prototype = {
                 truncated_at: toolCallRead.rows.length >= this.MAX_TOOL_CALLS ? this.MAX_TOOL_CALLS : null,
             }
             data.notes.push(
-                'Execution tasks are NOT 1:1 with tool calls (27 tasks / 19 calls in a measured run). ' +
-                    'task_stats and tool_call_stats count different things; do not reconcile them.'
+                this._taskVsToolCallNote(data.task_stats.total, data.tool_call_stats.total)
             )
 
             // ---- Step 4: messages + conversation context -----------------
@@ -1046,6 +1049,45 @@ PaToolAgentTrace.prototype = {
             kept[i].flags_omitted = total - kept.length
         }
         return kept
+    },
+
+    /**
+     * The task-vs-tool-call note, built from THIS run's counts (issue #85).
+     *
+     * The note used to carry the counts of an illustrative run — "Execution
+     * tasks are NOT 1:1 with tool calls (27 tasks / 19 calls in a measured
+     * run)" — and shipped them in every payload. In the v3 scored benchmark
+     * pass (2026.08.0220) SIX OF TEN scored runs plus the smoke run read those
+     * two numbers as findings about the run under diagnosis, elevated the
+     * supposed discrepancy to a CONFIRMED layer-1 root cause, and stopped
+     * looking; one proposed, as its fix, adding a note clarifying task_stats
+     * vs tool_call_stats — the note it had itself misread. Seed 03's real
+     * answer was sitting in the same payload those runs were reading.
+     *
+     * A note written to PREVENT a misreading was reliably causing one, and it
+     * is a plausible contributor to the depth collapse in #82: a run that
+     * believes it found a confirmed defect in its first tool result has no
+     * reason to open a second layer.
+     *
+     * The counts are now the run's own, taken from the same reads that fill
+     * task_stats and tool_call_stats. A reader who treats them as run data is
+     * now correct, which is the only version of this note that cannot
+     * backfire. The guidance itself also sits in the agent_trace tool
+     * description, where it is read once at tool-selection time rather than
+     * re-read on every call.
+     */
+    _taskVsToolCallNote: function (taskTotal, toolCallTotal) {
+        return (
+            'This run recorded ' +
+            taskTotal +
+            ' execution task(s) and ' +
+            toolCallTotal +
+            ' tool call(s). The two are not 1:1 and are not expected to match: task_stats counts ' +
+            'sn_aia_execution_task rows — the reasoning engine\'s own steps, including orchestrator ' +
+            'and access-verification tasks that call no tool — while tool_call_stats counts ' +
+            'sn_aia_tools_execution rows. The difference between them is NOT a finding and must not ' +
+            'be reported as one.'
+        )
     },
 
     _detailDeferredNotice: function (step) {

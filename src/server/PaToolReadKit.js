@@ -46,6 +46,34 @@ PaToolReadKit.prototype = {
     /** Default digest ceiling. Callers pass their own for larger payloads. */
     DIGEST_CHARS: 200,
 
+    /**
+     * Prefix for any number measured on the reference instance rather than
+     * read from the thing being diagnosed (issue #85).
+     *
+     * `agent_trace` shipped a note in every payload reading "Execution tasks
+     * are NOT 1:1 with tool calls (27 tasks / 19 calls in a measured run)".
+     * The two numbers came from an illustrative run measured once during the
+     * build. In the v3 scored benchmark pass SIX OF TEN scored runs plus the
+     * smoke run read them as findings about the run under diagnosis and built
+     * their entire root cause on the supposed discrepancy — one then proposed,
+     * as its fix, adding the very note it had misread. A note written to
+     * prevent a misreading was causing one.
+     *
+     * Deleting these numbers is not the fix: R-22 item 4 requires the
+     * denominator to travel with every stated count, and R-22 exists because a
+     * 10-row sample went unchallenged for want of one. So the numbers stay and
+     * the LABEL does the work — and it has to name what the number is NOT
+     * about, because "measured on gpinst01" demonstrably was not enough.
+     *
+     * Emitted counts about the caller's own subject must be live values
+     * computed from the rows actually read. This prefix is only for the other
+     * kind, and test/referenceStatistics.test.js fails the build if a
+     * hard-coded statistic reaches a payload without it.
+     */
+    REFERENCE_STAT:
+        'REFERENCE STATISTIC, measured on the instance this tool was built against: it is NOT a count of ' +
+        'anything in this result and must never be reported as a finding. ',
+
     initialize: function () {},
 
     // =======================================================================

@@ -1042,10 +1042,14 @@ PaToolGenAiLog.prototype = {
             )
         }
 
-        // R-22 item 4: state the denominator every time a count is stated.
+        // R-22 item 4: state the denominator every time a count is stated —
+        // which is exactly why issue #85's fix labels these numbers rather
+        // than deleting them. This note sits beside stats.definitions_checked,
+        // the count of what THIS call audited.
         data.connection_note =
-            'An EMPTY connection is NOT a defect and is not reported as one. Measured over the whole ' +
-            'sys_one_extend_capability_definition table on the reference instance: ' +
+            'An EMPTY connection is NOT a defect and is not reported as one. ' +
+            this._k().REFERENCE_STAT +
+            'Over the whole sys_one_extend_capability_definition table on the reference instance, ' +
             this.CONNECTION_EMPTY_COUNT +
             ' of ' +
             this.DEFINITION_ROW_COUNT +
@@ -1103,11 +1107,17 @@ PaToolGenAiLog.prototype = {
             definition_name: entry.name,
             field: field,
             value: '',
+            // "exactly 1 of 2026 rows" inside a high-severity finding about a
+            // specific row: a reader counting the findings in this very result
+            // has every reason to read the 1 as one of them. Labelled per #85.
             why:
                 field +
-                ' is mandatory=true in sys_dictionary and this row has it empty. Measured on the reference ' +
-                'instance, exactly 1 of 2026 rows is missing a mandatory binding, so this is genuinely ' +
-                'anomalous rather than a common state.',
+                ' is mandatory=true in sys_dictionary and this row has it empty. ' +
+                this._k().REFERENCE_STAT +
+                'Across the whole table on the reference instance, exactly 1 of ' +
+                this.DEFINITION_ROW_COUNT +
+                ' rows is missing a mandatory binding, so this is genuinely anomalous rather than a ' +
+                'common state.',
             next_step: 'Populate ' + field + ' on the capability definition.',
         })
     },
