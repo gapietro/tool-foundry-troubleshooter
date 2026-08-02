@@ -77,13 +77,16 @@ function fakeRunManager() {
 
 function fakeFixReport(validateResults) {
     const calls = []
+    const contextCalls = []
     const renderCalls = { markdown: [], json: [] }
     let i = 0
     return {
         calls: calls,
+        contextCalls: contextCalls,
         renderCalls: renderCalls,
-        validate: function (report) {
+        validate: function (report, context) {
             calls.push(report)
+            contextCalls.push(context)
             const r = validateResults[i]
             i += 1
             return r === undefined ? { valid: false, problems: ['no more stubbed validations'] } : r
@@ -119,6 +122,18 @@ function fakeClock(sequence) {
         const v = sequence[i]
         i += 1
         return v === undefined ? sequence[sequence.length - 1] : v
+    }
+}
+
+function fakeAuditLogger(result) {
+    const calls = []
+    return {
+        calls: calls,
+        invokedTools: function (runId) {
+            calls.push(runId)
+            if (result instanceof Error) throw result
+            return result
+        },
     }
 }
 
@@ -713,5 +728,78 @@ describe('issue #77 fix round: non-string, non-plain-object inputs stay {} (neve
         }
 
         expect(load()._normRequest(fn)).toEqual({})
+    })
+})
+
+// ===========================================================================
+// #79 — the audit context handed to PaFixReport.validate
+// ===========================================================================
+
+describe('audit context plumbing', () => {
+    test('passes the invoked tools from the audit trail into validate', () => {
+        const runs = fakeRunManager()
+        const fixReport = fakeFixReport([{ valid: true, normalized: { ok: 1 } }])
+        const audit = fakeAuditLogger({ available: true, tools: ['agent_trace', 'agent_config'] })
+
+        const loop = load({ runManager: runs, fixReport: fixReport, auditLogger: audit })
+        loop._handleFixReport('run1', { failure_summary: 'x' })
+
+        expect(fixReport.contextCalls[0].auditAvailable).toBe(true)
+        expect(fixReport.contextCalls[0].invokedTools).toEqual(['agent_trace', 'agent_config'])
+        expect(audit.calls).toEqual(['run1'])
+    })
+
+    test('queries the trail ONCE and reuses the same context across the repair turn', () => {
+        const runs = fakeRunManager()
+        const fixReport = fakeFixReport([
+            { valid: false, problems: ['unsupported citation — cites "config"'] },
+            { valid: true, normalized: { ok: 2 } },
+        ])
+        const audit = fakeAuditLogger({ available: true, tools: ['agent_trace'] })
+        const llm = fakeLlm([
+            {
+                success: true,
+                action: { action: 'fix_report', report: { failure_summary: 'repaired' } },
+                raw: 'r1',
+                retried: false,
+            },
+        ])
+
+        const loop = load({ runManager: runs, fixReport: fixReport, auditLogger: audit, llmProxy: llm })
+        loop._handleFixReport('run1', { failure_summary: 'x' })
+
+        expect(audit.calls.length).toBe(1)
+        expect(fixReport.contextCalls.length).toBe(2)
+        // The SAME object, not merely an equal one — proves it was not re-queried.
+        expect(fixReport.contextCalls[1]).toBe(fixReport.contextCalls[0])
+    })
+
+    test('a degraded trail disables the checks AND is recorded in the transcript', () => {
+        const runs = fakeRunManager()
+        const fixReport = fakeFixReport([{ valid: true, normalized: { ok: 1 } }])
+        const audit = fakeAuditLogger({ available: false, degraded: 'no_audit_rows', tools: [] })
+
+        const loop = load({ runManager: runs, fixReport: fixReport, auditLogger: audit })
+        loop._handleFixReport('run1', { failure_summary: 'x' })
+
+        expect(fixReport.contextCalls[0].auditAvailable).toBe(false)
+
+        const notes = runs.transcript.filter(
+            (e) => String(e.result_digest).indexOf('audit trail unavailable') !== -1
+        )
+        expect(notes.length).toBe(1)
+        expect(notes[0].result_digest.indexOf('no_audit_rows')).not.toBe(-1)
+    })
+
+    test('an audit logger that throws degrades the CHECK, never the diagnosis', () => {
+        const runs = fakeRunManager()
+        const fixReport = fakeFixReport([{ valid: true, normalized: { ok: 1 } }])
+        const audit = fakeAuditLogger(new Error('boom'))
+
+        const loop = load({ runManager: runs, fixReport: fixReport, auditLogger: audit })
+
+        expect(() => loop._handleFixReport('run1', { failure_summary: 'x' })).not.toThrow()
+        expect(fixReport.contextCalls[0].auditAvailable).toBe(false)
+        expect(fixReport.contextCalls[0].invokedTools).toEqual([])
     })
 })

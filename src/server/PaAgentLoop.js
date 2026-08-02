@@ -129,7 +129,8 @@ PaAgentLoop.prototype = {
 
     /**
      * @param {Object} [options] {llmProxy, toolRegistry, runManager,
-     *        fixReport, now, playbook, maxIterations, budgetMs} — every
+     *        fixReport, auditLogger, now, playbook, maxIterations,
+     *        budgetMs} — every
      *        collaborator is an injection point; tests inject all of them
      *        and touch no Glide API. `now` is a zero-arg clock function —
      *        the Rhino default is `new GlideDateTime().getNumericValue()`
@@ -143,6 +144,7 @@ PaAgentLoop.prototype = {
         this._toolRegistry = o.toolRegistry || null
         this._runManager = o.runManager || null
         this._fixReport = o.fixReport || null
+        this._auditLogger = o.auditLogger || null
         this._nowFn = typeof o.now === 'function' ? o.now : null
         this._playbook = typeof o.playbook === 'string' ? o.playbook : null
 
@@ -289,7 +291,9 @@ PaAgentLoop.prototype = {
      * final; there is no second repair attempt.
      */
     _handleFixReport: function (runId, report) {
-        var validated = this._reports().validate(report)
+        var context = this._auditContext(runId)
+
+        var validated = this._reports().validate(report, context)
         if (validated.valid) {
             return this._completeFixReport(runId, validated.normalized)
         }
@@ -313,12 +317,54 @@ PaAgentLoop.prototype = {
             return this._finishFailedFixReport(runId, validated.problems, report)
         }
 
-        var validated2 = this._reports().validate(repairedAction.report)
+        var validated2 = this._reports().validate(repairedAction.report, context)
         if (validated2.valid) {
             return this._completeFixReport(runId, validated2.normalized)
         }
 
         return this._finishFailedFixReport(runId, validated2.problems, repairedAction.report)
+    },
+
+    /**
+     * Resolve the run's audit trail ONCE per fix-report handling and reuse the
+     * SAME object across the repair turn — a repair turn makes no tool calls,
+     * so a second query would return the same set at twice the cost.
+     *
+     * A degraded trail is RECORDED, not swallowed. #79's whole point is that a
+     * passing Fix Report should carry an evidential guarantee; a cross-check
+     * that silently skipped would leave that guarantee unfalsifiable, which is
+     * the same defect one layer down. The transcript note is what lets a later
+     * audit tell "citations verified" from "citations unverified".
+     *
+     * Total by construction: a broken audit logger degrades the CHECK, never
+     * the diagnosis. Same reasoning as PaAuditLogger's own write path — a
+     * diagnosis that fails because its audit query threw is strictly worse
+     * than a diagnosis with an unverified citation.
+     */
+    _auditContext: function (runId) {
+        var res = null
+        try {
+            res = this._audits().invokedTools(runId)
+        } catch (e) {
+            // R-1: `e` is deliberately not inspected.
+            res = null
+        }
+
+        var available = !!(res && res.available === true)
+        if (!available) {
+            this._runs().appendTranscript(runId, {
+                actor: 'system',
+                result_digest:
+                    'audit trail unavailable (' +
+                    this._str(res && res.degraded ? res.degraded : 'query_failed') +
+                    ') — citation and sweep cross-checks SKIPPED for this report',
+            })
+        }
+
+        return {
+            auditAvailable: available,
+            invokedTools: res && this._isArray(res.tools) ? res.tools : [],
+        }
     },
 
     /**
@@ -745,6 +791,10 @@ PaAgentLoop.prototype = {
 
     _reports: function () {
         return this._fixReport || new PaFixReport()
+    },
+
+    _audits: function () {
+        return this._auditLogger || new PaAuditLogger()
     },
 
     _safePromptBlock: function () {
