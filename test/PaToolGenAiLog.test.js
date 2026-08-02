@@ -279,6 +279,35 @@ describe('check_config — the refuted heuristic (R-22)', () => {
         expect(result.data.findings.map((f) => f.finding)).toContain('capability_unresolvable')
     })
 
+    it('names the real capability argument in the truncation note', () => {
+        // The pre-filter note promised "once that argument exists" — a promise
+        // in shipped output. The argument exists now (issue #46), so the note
+        // must name it rather than a future.
+        const many = []
+        for (let i = 0; i < 105; i++) {
+            many.push({
+                sys_id: 'def' + i,
+                name: 'Cap ' + i,
+                capability: 'cap1',
+                api_type: 'sys_hub_flow',
+                api: 'flow1',
+                connection: '',
+            })
+        }
+
+        const { result } = run(
+            { mode: 'check_config' },
+            world({
+                sys_one_extend_capability_definition: many,
+                sys_one_extend_capability: [{ sys_id: 'cap1', name: 'Summarize' }],
+            })
+        )
+
+        const notes = result.data.notes.join(' ')
+        expect(notes).toMatch(/capability argument/)
+        expect(notes).not.toMatch(/once that argument exists/)
+    })
+
     it('states how many definitions it checked, not just how many were bad', () => {
         const { result } = run(
             { mode: 'check_config' },
@@ -290,6 +319,169 @@ describe('check_config — the refuted heuristic (R-22)', () => {
 
         expect(result.data.stats.definitions_checked).toBe(2)
         expect(result.data.stats.findings).toBe(0)
+    })
+})
+
+describe('check_config capability filter (DECISION.md §D3, issue #46)', () => {
+    // Task 12 S4: check_config reads the first 100 of ~2026 definitions
+    // ordered by name, so an x_* capability can never appear in the audit —
+    // run 1 only found the dangling api because the model pivoted to
+    // query_table. The filter is what makes a named capability reachable.
+    //
+    // Semantics avoid OR queries on purpose: the stub's addOrCondition is a
+    // no-op, and two sequential real queries are observable (here via the
+    // recorded queries; at runtime via filter.matched_on — the reads block
+    // keys by table and only upgrades, so it shows one entry). A sys_id is
+    // tried as the definition row first, then as the parent capability
+    // reference; anything else is a contains-match on the definition name.
+    const DEF_SYS_ID = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    const CAP_SYS_ID = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+
+    function fixtures() {
+        return world({
+            sys_one_extend_capability_definition: [
+                {
+                    sys_id: DEF_SYS_ID,
+                    name: 'x_snc_probe capability',
+                    capability: CAP_SYS_ID,
+                    api_type: 'sys_hub_flow',
+                    api: 'flow1',
+                    connection: '',
+                },
+                {
+                    sys_id: 'cccccccccccccccccccccccccccccccc',
+                    name: 'Now LLM Generic',
+                    capability: 'cap-other',
+                    api_type: 'sys_hub_flow',
+                    api: 'flow1',
+                    connection: '',
+                },
+            ],
+            sys_one_extend_capability: [
+                { sys_id: CAP_SYS_ID, name: 'Probe Capability' },
+                { sys_id: 'cap-other', name: 'Summarize' },
+            ],
+        })
+    }
+
+    it('audits only the definition row a sys_id names', () => {
+        const { result } = run({ mode: 'check_config', capability: DEF_SYS_ID }, fixtures())
+
+        expect(result.data.definitions.map((d) => d.sys_id)).toEqual([DEF_SYS_ID])
+        expect(result.data.filter.interpretation).toBe('sys_id')
+        expect(result.data.filter.matched_on).toBe('definition_sys_id')
+        expect(result.data.filter.matched).toBe(1)
+    })
+
+    it('falls back to the parent-capability reference when the sys_id is not a definition', () => {
+        const { result, queries } = run({ mode: 'check_config', capability: CAP_SYS_ID }, fixtures())
+
+        expect(result.data.definitions.map((d) => d.sys_id)).toEqual([DEF_SYS_ID])
+        expect(result.data.filter.matched_on).toBe('capability_reference')
+
+        // Both interpretations were actually asked of the database — the
+        // fallback is a second read, not a guess.
+        const defQueries = queries.filter((q) => q.table === 'sys_one_extend_capability_definition')
+        expect(defQueries.length).toBeGreaterThanOrEqual(2)
+    })
+
+    it('contains-matches a name and audits every match', () => {
+        const { result } = run({ mode: 'check_config', capability: 'x_snc_probe' }, fixtures())
+
+        expect(result.data.definitions.map((d) => d.sys_id)).toEqual([DEF_SYS_ID])
+        expect(result.data.filter.interpretation).toBe('name_contains')
+    })
+
+    it('echoes the filter in requested', () => {
+        const { result } = run({ mode: 'check_config', capability: 'x_snc_probe' }, fixtures())
+
+        expect(result.data.requested.capability).toBe('x_snc_probe')
+    })
+
+    it('never reads absence into a filter that matched nothing', () => {
+        // R-6/R-11: a zero-match filtered audit has two live explanations —
+        // the filter is misspelled (the question was wrong), or the
+        // capability genuinely has no definition row (itself a candidate
+        // finding). The output must state both and conclude neither.
+        const { result } = run({ mode: 'check_config', capability: 'no_such_capability' }, fixtures())
+
+        expect(result.data.definitions).toEqual([])
+        expect(result.data.findings).toEqual([])
+        expect(result.data.audit_status).toBe('empty')
+        const notes = result.data.notes.join(' ')
+        expect(notes).toMatch(/matched no definition/i)
+        expect(notes).toMatch(/misspelled|wrong/i)
+        expect(notes).toMatch(/no definition row/i)
+    })
+
+    it('still reports a denied filtered audit as unavailable, not clean', () => {
+        const { result, queries } = run({ mode: 'check_config', capability: DEF_SYS_ID }, fixtures(), {
+            denied: ['sys_one_extend_capability_definition'],
+        })
+
+        expect(result.data.audit_status).toBe('unavailable')
+        expect(result.data.notes.join(' ')).toMatch(/NOTHING was audited/)
+
+        // A denied read did not measure the match count — 0 here would be an
+        // absence claim from a question that was never answered (R-11 at
+        // field granularity, PR #49 review).
+        expect(result.data.filter.matched).toBeNull()
+
+        // And DENIED must not trigger the capability-reference fallback: the
+        // second read would be denied identically and only double the noise.
+        // (The stub throws at construction on a denied table, so no query is
+        // recorded at all — the point is there are not two attempts.)
+        const defQueries = queries.filter((q) => q.table === 'sys_one_extend_capability_definition')
+        expect(defQueries.length).toBeLessThanOrEqual(1)
+    })
+
+    it('scopes the truncation note to the matched set when a filter is truncated', () => {
+        // A broad substring can match more than MAX_DEFINITIONS. The
+        // unfiltered note's whole-table denominator (~2026) and its "narrow
+        // with the capability argument" advice are both wrong then: the
+        // caller already narrowed, and the matched count is a floor.
+        const many = []
+        for (let i = 0; i < 105; i++) {
+            many.push({
+                sys_id: ('d' + i + '00000000000000000000000000000000').slice(0, 32),
+                name: 'x_snc_probe capability ' + i,
+                capability: CAP_SYS_ID,
+                api_type: 'sys_hub_flow',
+                api: 'flow1',
+                connection: '',
+            })
+        }
+
+        const { result } = run(
+            { mode: 'check_config', capability: 'x_snc_probe' },
+            world({
+                sys_one_extend_capability_definition: many,
+                sys_one_extend_capability: [{ sys_id: CAP_SYS_ID, name: 'Probe Capability' }],
+            })
+        )
+
+        expect(result.data.audit_status).toBe('partial')
+        const notes = result.data.notes.join(' ')
+        expect(notes).toMatch(/sample of the MATCHED set/)
+        expect(notes).toMatch(/FLOOR/)
+        expect(notes).not.toMatch(/around 2026/)
+    })
+
+    it('leaves the unfiltered call unfiltered', () => {
+        const { queries, result } = run({ mode: 'check_config' }, fixtures())
+
+        expect(result.data.definitions).toHaveLength(2)
+        expect(result.data.filter).toBeNull()
+        const defQueries = queries.filter((q) => q.table === 'sys_one_extend_capability_definition')
+        expect(defQueries).toHaveLength(1)
+        expect(defQueries[0].filters).toEqual([])
+    })
+
+    it('states the filtered scope so ok cannot be read as a whole-table sweep', () => {
+        const { result } = run({ mode: 'check_config', capability: DEF_SYS_ID }, fixtures())
+
+        expect(result.data.audit_status).toBe('ok')
+        expect(result.data.notes.join(' ')).toMatch(/only the definitions matching/i)
     })
 })
 

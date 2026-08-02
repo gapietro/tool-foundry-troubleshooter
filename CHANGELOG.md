@@ -11,6 +11,22 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0203 — 2026-08-02
+
+Phase 1b pre-work, **`check_config` capability filter** (issue #46, DECISION.md §D3 precondition
+of the comparison re-run). `PaToolGenAiLog` `check_config` takes an optional `capability`
+argument: a sys_id is tried as the definition row first, then as the parent-capability
+reference (two sequential reads — no OR query — with `filter.matched_on` recording which step
+matched); anything else contains-matches the definition name. Without it the mode still reads
+its 100-row name-ordered sample — which can never reach an `x_*` capability, the measured
+reason S4R1 only found the dangling `api` by pivoting to `query_table`. A zero-match filter
+states both live explanations (misspelled filter vs genuinely no definition row) and concludes
+neither (R-6/R-11); a denied filtered read reports `matched: null`, never 0; a truncated
+filtered read scopes its note to the matched set with a floor marker; a filtered clean audit
+says its `ok` speaks for the matched set, not the table. The truncation note now names the real
+argument instead of promising a future one. `genai_log`'s Fluent tool description advertises
+the argument. Eleven new Jest cases; build clean.
+
 ## 2026.08.0202 — 2026-08-02
 
 Phase 1b pre-work, **Seed 2 v2** (issue #45, DECISION.md §D2 precondition of the comparison
