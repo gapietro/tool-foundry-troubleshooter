@@ -612,25 +612,71 @@ PaAgentLoop.prototype = {
     /**
      * @param {Object|String} request Task 7's `gs.eventQueue` parm2 arrives
      *        as a JSON string; direct in-process callers may pass an object.
+     *        On the platform (Rhino), `event.parm2` is instead delivered as
+     *        a Java String — `typeof` on it is `'object'`, so a plain-object
+     *        check run FIRST (the pre-#77 order) mistook it for an
+     *        already-parsed request and handed it back untouched, with
+     *        every field read off it (`request.execution` etc.) coming back
+     *        `undefined`. `_looksLikeJavaObject` below is what tells the two
+     *        apart. See issue #77.
      * @returns {Object} always a plain object (R-9) — `{}` when nothing
      *          usable was supplied, `{description: request}` when it was a
-     *          non-JSON, non-empty string.
+     *          non-JSON, non-empty string (or string-shaped value — see
+     *          `_looksLikeJavaObject`).
      */
     _normRequest: function (request) {
-        if (this._isPlainObject(request)) return request
+        if (request === null || request === undefined) return {}
 
-        if (typeof request === 'string' && this._nonEmptyString(request)) {
+        // A genuine plain object (a `{...}` literal a direct in-process
+        // caller passed, or a prior `JSON.parse` result) is trusted as-is —
+        // UNLESS it looks like a LiveConnect-wrapped Java object (a Rhino
+        // java.lang.String satisfies `_isPlainObject`: `typeof` is
+        // `'object'`, and it is not an array). This check has to run before
+        // any dispatch on `_isPlainObject` — a branch added only after that
+        // check would never fire, since the Java String already returns
+        // true there (issue #77).
+        if (this._isPlainObject(request) && !this._looksLikeJavaObject(request)) return request
+
+        // Anything else — a genuine JS string, OR a value Rhino handed us
+        // that only masquerades as an object (a Java String, `typeof`
+        // `'object'`, coerces via `String()`/`.toString()` to its real
+        // text) — is coerced to a JS string and handled exactly like the
+        // historical string branch: valid JSON wins, otherwise it becomes a
+        // free-form description. `String()` on an actual JS string is a
+        // no-op, so this one path covers both cases without duplicating
+        // the JSON-parse/description logic.
+        var coerced = String(request)
+        if (this._nonEmptyString(coerced)) {
             try {
-                var parsed = JSON.parse(request)
+                var parsed = JSON.parse(coerced)
                 if (this._isPlainObject(parsed)) return parsed
             } catch (e) {
                 // R-1: `e` untouched — not JSON, fall through to a
                 // free-form description instead.
             }
-            return { description: request }
+            return { description: coerced }
         }
 
         return {}
+    },
+
+    /**
+     * @param {*} value Anything `_isPlainObject(value)` already returned
+     *        `true` for.
+     * @returns {Boolean} true if `value` looks like a Rhino LiveConnect
+     *          wrapper around a Java object (e.g. `event.parm2` as the
+     *          platform actually delivers it) rather than a genuine JS
+     *          object literal. LiveConnect always exposes the underlying
+     *          `java.lang.Object` methods on a wrapped Java value —
+     *          `getClass()` chief among them — which no ordinary JS object
+     *          carries unless something deliberately added it. A plain
+     *          object built by `JSON.parse` or a `{...}` literal never has
+     *          this, so this check adds no false positives for the
+     *          existing "real object" path (R-9: only narrows what used to
+     *          be an unconditional `true`, never widens it).
+     */
+    _looksLikeJavaObject: function (value) {
+        return typeof value.getClass === 'function'
     },
 
     // =======================================================================

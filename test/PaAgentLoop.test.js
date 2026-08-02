@@ -561,3 +561,82 @@ describe('_renderTranscript prompt_digest rendering', () => {
         expect(load()._renderTranscript([])).toContain('first reasoning step')
     })
 })
+
+// ===========================================================================
+// Rhino Java String request (issue #77)
+//
+// On the platform, `event.parm2` arrives as a Rhino java.lang.String, not a
+// JS string: `typeof` on it is 'object', so the pre-#77 `_normRequest` — its
+// plain-object check run FIRST — mistook it for an already-parsed request
+// object and handed it back as-is, leaving every field read off it
+// (`request.execution` etc.) `undefined`. `_renderRequest` then rendered the
+// "(no specific target supplied ...)" fallback, and the model invented a
+// placeholder sys_id and fabricated a diagnosis from nothing.
+//
+// `FakeJavaString` below simulates exactly that shape: `typeof` on an
+// instance reports 'object' (so it satisfies `_isPlainObject`, same as the
+// real Rhino value), `.toString()` (therefore `String(...)`) yields the
+// original JSON/text payload, AND it exposes a `getClass()` method — the
+// LiveConnect hallmark `_looksLikeJavaObject` keys off, since that is what a
+// real wrapped `java.lang.String` carries and an ordinary `{...}` literal or
+// `JSON.parse` result never does. A test that instead passed a real JS
+// string would reproduce NOTHING: `_normRequest`'s existing
+// `typeof request === 'string'` handling already covered that case
+// correctly, which is exactly why the Jest suite never caught this in
+// production (see the issue).
+//
+// The property under test is NOT "`_normRequest` returns something" — it is
+// that the diagnostic target survives all the way into the rendered prompt
+// handed to the LLM, since that is the artifact that was actually broken in
+// production (`sys_generative_ai_log.prompt`).
+// ===========================================================================
+
+function FakeJavaString(text) {
+    this._text = text
+}
+FakeJavaString.prototype.toString = function () {
+    return this._text
+}
+// The LiveConnect hallmark a real wrapped java.lang.String carries and a
+// plain JS object never does — see `_looksLikeJavaObject`.
+FakeJavaString.prototype.getClass = function () {
+    return 'java.lang.String'
+}
+
+describe('issue #77: Rhino Java String request (typeof "object", not a plain object)', () => {
+    test('_normRequest parses a Java-String-shaped request into a real object, not the wrapper itself', () => {
+        const loop = load()
+        const request = new FakeJavaString('{"execution":"b07dc9082baa4314f243fed2ce91bf4b"}')
+
+        const normalized = loop._normRequest(request)
+
+        expect(normalized).toEqual({ execution: 'b07dc9082baa4314f243fed2ce91bf4b' })
+    })
+
+    test('the diagnostic target survives all the way into the rendered prompt handed to the LLM', () => {
+        const llm = fakeLlm([{ success: true, action: { action: 'answer', text: 'done' }, raw: 'r1' }])
+        const tools = fakeTools([])
+        const runs = fakeRunManager()
+        const loop = load({ llmProxy: llm, toolRegistry: tools, runManager: runs, playbook: 'PLAYBOOK', now: () => 0 })
+        const request = new FakeJavaString('{"execution":"b07dc9082baa4314f243fed2ce91bf4b"}')
+
+        loop.run('run1', request)
+
+        expect(llm.calls).toHaveLength(1)
+        expect(llm.calls[0]).toContain('execution: b07dc9082baa4314f243fed2ce91bf4b')
+        expect(llm.calls[0]).not.toContain('no specific target supplied')
+    })
+
+    test('a Java-String-shaped free-form (non-JSON) description also survives into the prompt', () => {
+        const llm = fakeLlm([{ success: true, action: { action: 'answer', text: 'done' }, raw: 'r1' }])
+        const tools = fakeTools([])
+        const runs = fakeRunManager()
+        const loop = load({ llmProxy: llm, toolRegistry: tools, runManager: runs, playbook: 'PLAYBOOK', now: () => 0 })
+        const request = new FakeJavaString('the widget will not load')
+
+        loop.run('run1', request)
+
+        expect(llm.calls[0]).toContain('description: the widget will not load')
+        expect(llm.calls[0]).not.toContain('no specific target supplied')
+    })
+})

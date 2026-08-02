@@ -13,9 +13,13 @@
  *      scoped app fails silently — so this record has to exist for
  *      `/analyze` to actually queue anything.
  *   2. The `ScriptAction` that listens for it and drives the diagnosis:
- *      `new PaAgentLoop().run(event.parm1, event.parm2)` — `parm1` is the
- *      run_id, `parm2` the JSON-stringified diagnostic request, exactly as
- *      queued. INLINE, not `Now.include`d, and that is deliberate: a
+ *      `new PaAgentLoop().run(String(event.parm1), String(event.parm2))` —
+ *      `parm1` is the run_id, `parm2` the JSON-stringified diagnostic
+ *      request, exactly as queued. Both are coerced with `String()` before
+ *      the call — belt and braces alongside `PaAgentLoop._normRequest`'s own
+ *      fix, since the platform delivers these as Rhino Java Strings, not JS
+ *      strings (issue #77). INLINE, not `Now.include`d, and that is
+ *      deliberate: a
  *      `Now.include`d module is run through the build's platform-API
  *      linter, which flags the bare identifier `event` as the browser DOM
  *      global ("Unexpected use of 'event' ... Web APIs are not supported",
@@ -106,15 +110,15 @@ export const runStartWorker = ScriptAction({
     name: 'Troubleshooter Run Start Worker',
     active: true,
     description:
-        'Drives one diagnostic run to completion: new PaAgentLoop().run(event.parm1, event.parm2) where parm1 is the run_id and parm2 is the JSON-stringified diagnostic request',
+        'Drives one diagnostic run to completion: new PaAgentLoop().run(String(event.parm1), String(event.parm2)) where parm1 is the run_id and parm2 is the JSON-stringified diagnostic request',
     eventName: 'x_snc_troubleshoot.run.start',
     order: 100,
     // Inline, not Now.include'd — see the file header's note on why the
     // platform-documented `event` global fails the module linter when
     // pulled in through Now.include. No backtick, no escape sequence.
     script: script`(function () {
-    var runId = event.parm1;
-    var requestJson = event.parm2;
+    var runId = String(event.parm1);
+    var requestJson = String(event.parm2);
     new PaAgentLoop().run(runId, requestJson);
 })();`,
 })
