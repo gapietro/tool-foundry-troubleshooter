@@ -130,10 +130,20 @@ read-only via MCP on **gpinst01, 2026-08-02** (`servicenow_schema`/`servicenow_q
 **LLM-call counts** as the comparison proxy, measured identically on both harnesses:
 
 - **Native:** count of `sn_aia_gen_ai_m2m` rows keyed to the run's execution plan / task records (LLD
-  §2.3 linkage path 2 — the table is populated, 2,910 rows instance-wide, one row per logged LLM call).
-  ⚠ Documented, not fully verified within this probe's timebox: a direct `source_id=<execution plan
-  sys_id>` query returned 0 rows, so confirm the exact `source_id` keying (plan vs. task sys_id) against
-  a real run before Task 9/10 rely on it.
+  §2.3 linkage path 2 — the table is populated, one row per logged LLM call). **Run-verified 2026-08-02
+  (Task 9):** the Task 8 probe's direct `source_id=<execution plan sys_id>` query returning 0 rows was
+  the wrong key, not a dead linkage. `source_id` keys to the sys_id of the run's **top-level
+  `sn_aia_execution_task`** row — `type=agent`, `order=100`, the one whose `description` is the agent's
+  name — not the execution plan itself, and not the individual `type=gen_ai` ("AIA ReAct Engine")
+  sub-tasks per reasoning turn (there is one `sn_aia_gen_ai_m2m` row per LLM call, but it references the
+  parent agent task for all of them, not the sub-task that triggered each call). Read: `servicenow_query
+  sn_aia_execution_task query=execution_plan=<plan sys_id>^type=agent^order=100 fields=sys_id`, then
+  `servicenow_query sn_aia_gen_ai_m2m query=source_id=<that sys_id>^source_table=sn_aia_execution_task`
+  and count the rows. Confirmed against two independent live runs: a completed plan from before this
+  task (`74c591c42b2e4bd417a6ffbeee91bf16`, 7 rows, matching its 7 `type=gen_ai` sub-tasks) and the
+  Task 9 native smoke-gate re-run itself (`464d8a082b26c314f243fed2ce91bfa2`, 7 rows, matching its 7
+  `type=gen_ai` sub-tasks exactly). This is now a verified read for Task 10, not a documented-but-untested
+  linkage.
 - **Custom harness (Phase 1b, not yet built):** count of `actor:'llm'` entries in the run's own
   transcript — `PaAgentLoop.js` already appends one such entry per reasoning-loop LLM call
   (`this._runs().appendTranscript(runId, { actor: 'llm', ... })`), so this is a deterministic
@@ -165,6 +175,98 @@ visible in the scored data rather than let it hide inside a low total: a run sho
 available 1/7` is an agent doing everything it can, while `swept 1/7, available 7/7` is one that
 stopped early — the same total score, opposite verdicts. It stays in the protocol for the Phase 1b
 re-run.
+
+## The Phase 1b comparison re-run protocol (readiness confirmed — Task 9)
+
+Task 12's scorecard measured the native harness alone. The Phase 1b comparison re-run measures
+**both** harnesses — native (already scored once, in `scorecard-agent-doctor.md`) and the custom
+deep-diagnosis harness (never scored) — against the same seeds under the same doubled-run, blind,
+audit-derived protocol, so the two are compared on identical evidence. Task 9 is the readiness gate
+before that re-run starts: every precondition below was checked with live evidence on gpinst01,
+2026-08-02, not assumed from a prior task's report.
+
+### Preconditions, each verified
+
+- **Seed 2 v2 installed.** `benchmark/seed-app`'s Fluent source was fixed for the v2 construction
+  (PR #48, `2be8cf7`) but that PR's own install was deferred to this gate — confirmed void before
+  reinstall: `sn_aia_agent_tool_m2m` for **Seed 02 Request Router** (`cd050d48e810411d9f113fd530694fe6`)
+  returned **zero rows**, i.e. the v1 (zero-tool) construction was still live. Rebuilt
+  (`now-sdk build`, clean) and reinstalled (`now-sdk install --alias gpinst01`) from
+  `benchmark/seed-app`. Re-verified: the agent now has exactly **one** active tool bound
+  (`measure_request`, `max_auto_executions=10`), and its instructions read unchanged —
+  *"Read the incoming request and assign it to the right group. Be accurate..."* — matching the v2
+  seed spec's "instructions unchanged byte-for-byte" claim.
+- **`check_config` filter + playbook v2 installed (product app).** Both landed in main before Task
+  1 (PRs #49/#50, merged 2026-08-01 23:0x EDT) and Task 7's async-wiring reinstall (2026-08-02
+  01:14 EDT) ran after both, so no separate reinstall was needed here — confirmed, not assumed, by
+  direct content comparison: the live `sn_aia_agent.instructions` on **Agent Doctor**
+  (`e1392946828940e5a708fc51b0a5e954`) is **byte-identical** to
+  `docs/agent/agent-doctor-instructions.md`, including the playbook-v2 "Derive table names, never
+  guess them" and "The GenAI stack: read the definition row" sections; the live
+  `sys_script_include` script for `PaToolGenAiLog` is **byte-identical** to
+  `src/server/tools/PaToolGenAiLog.js`, including the `check_config` capability-filter code path
+  (`matched_on`, `matched`, definition/capability-reference/name fallback reads).
+- **Both budget knobs read fresh.** `sn_aia.continuous_tool_execution_limit = 25`;
+  `sn_aia_agent_tool_m2m.max_auto_executions = 10` on all 7 tools attached to Agent Doctor — both
+  identical to the values `DECISION.md` §B recorded for the Task 12 scored runs, so the comparison
+  re-run starts from the same budget baseline.
+- **Smoke gate re-run, both harnesses, against `c9d63a932bda8b9417a6ffbeee91bfd0`:**
+  - **Native** — executed via `servicenow_aia_execute` (the documented MCP execution path;
+    the Now Assist panel itself has no MCP-drivable equivalent, and R-2/R-3 in `DESIGN.md`
+    already establish this API path as validated against the panel path for this exact
+    concern). **PASS.** Terminal in 204s, 7 tool calls, 7 LLM calls. The Fix Report's RC-2 names
+    `context_processing_script` line 42, `InternalError`, `CONFIRMED`, citing the trace's
+    `script_errors` array entry directly (`source`, `line`, `error_name`, `message_sequence`) —
+    the known answer.
+  - **Custom** — `POST /analyze {"execution": "...", "mode": "diagnose"}`, polled `GET
+    /runs/{id}` to terminal. **Reached `status:"complete"` with a structurally valid `fix_report`**
+    (all required fields present, `root_causes[0].layer` a string, `layers_swept` covers all 7
+    with a reason each) — but the root cause is generic and **wrong**: "script stack error"
+    at layer 1, no mention of `context_processing_script` or line 42. Only 2 tool calls were made
+    (`agent_trace`, one `read_artifact` page of 2) before the model went straight to a Fix Report;
+    4 LLM calls total (`actor:'llm'` transcript entries). This reproduces Task 7's own live finding
+    exactly (structurally valid, substantively wrong, shallow sweep before repair) — not a new
+    defect, a second independent confirmation of the same recorded one. Per the brief: the gate is
+    that both harnesses **run to terminal with valid outputs**, not that they diagnose correctly,
+    so this is a recorded, acceptable smoke-gate outcome, not a blocker.
+  - **Native LLM-call count verified against a real run** (see the "Measurement source" section
+    above for the corrected `sn_aia_gen_ai_m2m` keying this smoke run confirmed): **7**, exactly
+    matching the transcript's 7 `type=gen_ai` "AIA ReAct Engine" reasoning turns.
+
+All four preconditions hold. **The comparison re-run is mechanically ready to start.**
+
+### The protocol addendum
+
+Same 5 seeds (`seed-01` through `seed-05`, seed 2 in its v2 construction), same doubled-run
+structure, same blind rule, same audit-derived `layers_swept`/`layers_available` (§E1–§E3, unchanged
+— the queries are harness-agnostic: they read `x_snc_troubleshoot_audit`/`sn_aia_*` tables keyed off
+whichever run identity the harness produced), same scoring rule (`scorecard-template.md` §A2
+`passes_gate`, §A3 void-run handling) — with one asymmetry, stated here because it is a deliberate
+scope decision, not an oversight:
+
+- **Custom harness: full 10 rows.** 2 fresh runs × 5 seeds. The custom harness has never been
+  scored, so every seed needs a first measurement.
+- **Native harness: seed 2 only, 2 fresh runs.** Seeds 1, 3, 4 and 5's fixture Fluent source is
+  **byte-identical** between Task 12's scored runs and now — nothing about their construction
+  changed, only seed 2's did (v1 → v2, per `DECISION.md` §D2). Re-running an unchanged seed against
+  the same native harness measures **model response drift on identical inputs, not the harness** —
+  a different question than the comparison re-run exists to answer, and one the doubled-run
+  protocol already has a name for the opposite of ("inconsistent behavior on identical inputs" is
+  the failure mode the doubling *within* a seed measures; re-running an unchanged seed *across*
+  benchmark runs is not that). Native's scored rows for seeds 1/3/4/5 in
+  `scorecard-agent-doctor.md` **stand as-is** and carry into the Phase 1b comparison unchanged; only
+  seed 2's two native rows are new, run against the v2 construction for the first time. Native's
+  comparison total is therefore **8 standing + 2 new = 10 rows**, matching custom's 10 — same
+  row count, same gate math, asymmetric *sourcing* by design.
+
+Each run — native and custom alike — is a **fresh conversation / fresh `POST /analyze`**, blind
+(no seed knowledge in either harness's instructions or tools), scored independently. Layer sweeps
+are derived from the audit trail per §E1–E3 for both harnesses; for the custom harness, `run_id` in
+the scorecard is the `x_snc_troubleshoot_run` sys_id directly (no conversation-id hop needed — the
+custom harness owns its own run record), and its LLM-call count is `actor:'llm'` transcript entries
+per the "Measurement source" decision above, not `sn_aia_gen_ai_m2m` (that table is Now Assist's own
+telemetry, populated for native's NASK-backed reasoning turns, not for a run the custom harness
+drives itself through `PaLlmProxy`).
 
 ## The de-risking step that is unavailable
 
