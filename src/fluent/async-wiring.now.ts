@@ -72,11 +72,19 @@ export const runStartEvent = Record({
 // AFTER is too late (the whole diagnosis, and its transcript, is already
 // finished by the time the ScriptAction gets control back).
 //
-// Deferring is also empirically safe for Phase 1b's bound: MAX_ITERATIONS
-// is 15, each iteration appends at most two transcript entries (llm + tool,
-// or llm + system), each digested to <=200 chars (PaRunManager.DIGEST_CHARS)
-// — worst case ~15 * 2 * 200 = 6,000 characters, well inside the `transcript`
-// column's 65,536-char ceiling (tables.now.ts). Live-verified on gpinst01
+// Deferring is also empirically safe for Phase 1b's bound, RE-DERIVED
+// 2026-08-02 for issue #72's prompt-facing digest (the 6,000-char figure
+// this comment carried before assumed a 200-char ceiling on every entry,
+// which is no longer true). MAX_ITERATIONS is 15 and each iteration appends
+// at most two transcript entries (llm + tool, or llm + system). Every entry
+// still carries a <=200-char result_digest (PaRunManager.DIGEST_CHARS), so
+// the baseline is ~30 entries * ~600 chars including args and JSON overhead
+// = ~18,000. On top of that, at most PROMPT_WINDOW (3) tool entries retain a
+// prompt_digest of up to PROMPT_DIGEST_CHARS (4,000) = 12,000. Worst case
+// ~30,000 characters against the transcript column's 65,536-char ceiling
+// (tables.now.ts) — roughly 2x headroom, and asserted by the "T6 row-size
+// bound" test in test/PaRunManager.test.js so this paragraph cannot go
+// stale silently again. Live-verified on gpinst01
 // (Task 7, Step 4): three real diagnose runs against the Task 12 smoke
 // specimen produced 7 transcript entries each. The unbounded-growth risk
 // the brief names is real across MANY runs accumulating on one row, which

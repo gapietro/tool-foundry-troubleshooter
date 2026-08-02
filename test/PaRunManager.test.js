@@ -430,6 +430,29 @@ describe('prompt_digest', () => {
         const carriers = stored.filter((e) => e.prompt_digest !== undefined).map((e) => e.tool)
         expect(carriers).toEqual(['big1', 'big2'])
     })
+
+    test('T6 row-size bound: a worst-case 15-iteration transcript stays far under the 65536-char column ceiling', () => {
+        const { mgr, world } = load({ world: { rows: { [RUN_TABLE]: [seedRun()] } } })
+        const hugeResult = 'z'.repeat(20000)
+        const hugeArgs = 'a'.repeat(20000)
+
+        // MAX_ITERATIONS is 15 and each iteration appends at most two entries
+        // (llm + tool). Every result is oversized, so this is the worst case
+        // the loop can produce, not a typical one.
+        for (let i = 0; i < 15; i++) {
+            mgr.appendTranscript('run1', { actor: 'llm', result_digest: hugeResult })
+            mgr.appendTranscript('run1', { actor: 'tool', tool: 't' + i, args_digest: hugeArgs, result_digest: hugeResult })
+        }
+
+        const raw = world.tables[RUN_TABLE][0].transcript
+        const stored = JSON.parse(raw)
+
+        expect(stored).toHaveLength(30)
+        expect(stored.filter((e) => e.prompt_digest !== undefined)).toHaveLength(3)
+        // Design spec §4.4 derives ~30,000 worst case. 40,000 is that with
+        // headroom; 65,536 is the hard column ceiling (tables.now.ts:201-204).
+        expect(raw.length).toBeLessThan(40000)
+    })
 })
 
 // ===========================================================================
