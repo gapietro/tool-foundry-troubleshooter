@@ -214,7 +214,8 @@ before that re-run starts: every precondition below was checked with live eviden
   - **Native** — executed via `servicenow_aia_execute` (the documented MCP execution path;
     the Now Assist panel itself has no MCP-drivable equivalent, and R-2/R-3 in `DESIGN.md`
     already establish this API path as validated against the panel path for this exact
-    concern). **PASS.** Terminal in 204s, 7 tool calls, 7 LLM calls. The Fix Report's RC-2 names
+    concern). **PASS.** Terminal in 204s, 12 tool calls (`agent_trace` ×1, `read_artifact` ×7,
+    `agent_config` ×2, `log_analysis` ×1, `genai_log` ×1), 7 LLM calls. The Fix Report's RC-2 names
     `context_processing_script` line 42, `InternalError`, `CONFIRMED`, citing the trace's
     `script_errors` array entry directly (`source`, `line`, `error_name`, `message_sequence`) —
     the known answer.
@@ -257,7 +258,11 @@ scope decision, not an oversight:
   `scorecard-agent-doctor.md` **stand as-is** and carry into the Phase 1b comparison unchanged; only
   seed 2's two native rows are new, run against the v2 construction for the first time. Native's
   comparison total is therefore **8 standing + 2 new = 10 rows**, matching custom's 10 — same
-  row count, same gate math, asymmetric *sourcing* by design.
+  row count, same gate math, asymmetric sourcing by design. **Before scoring seeds 1/3/4/5's rows
+  into this comparison, re-confirm seed 4's capability sys_id match and seed 5's trigger m2m gate
+  (`sn_aia_trigger_agent_usecase_m2m.active`) are still in their valid, non-void state** — Task 9's
+  fixture-app reinstall touched only seed 2, but a full app reinstall is a broader action than a
+  scoped one, and seed 5's gate is a manual post-install PATCH that Fluent does not re-apply.
 
 Each run — native and custom alike — is a **fresh conversation / fresh `POST /analyze`**, blind
 (no seed knowledge in either harness's instructions or tools), scored independently. Layer sweeps
