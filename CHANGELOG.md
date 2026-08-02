@@ -11,6 +11,27 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0215 — 2026-08-02
+
+Phase 1b Task 10 (docs, issue #70): the comparison re-run — MCP-executed on gpinst01, closes the
+Phase 1b milestone. Re-verified Task 9's flagged preconditions live before scoring: seed 4's
+capability sys_id still matched (not void); seed 5's `sn_aia_trigger_agent_usecase_m2m` gate had
+been reset to `active=false` by Task 9's fixture reinstall exactly as that task's concerns section
+warned — PATCHed back to `true` and re-confirmed. Fired a fresh seed-02 v2 execution (never run
+before this task) and used it as the shared diagnostic target for 2 new native rows and 2 of the
+10 custom rows; reused seeds 1/3/4's still-valid Task 12 execution records and seed 5's bench
+ticket for the remaining 8 custom rows. Scored all 20 rows (10 custom + 2 new native + 8 standing
+native) blind, audit-derived, against `scorecard-template.md` §A2/§A3 — written to the new
+`benchmark/scorecard-custom-harness.md`. Result: native 8/10 (80.0%, top band — up from Task 12's
+70% because seed 2's v2 fix now lets a run reach layer-2 diagnosis at all); custom **0/10 (0.0%,
+bottom band)** — audit trail shows all 10 custom runs called only `agent_trace` + one
+`read_artifact` page before attempting a fix, several with fabricated "config"/"schema" evidence
+citations for tools the audit trail proves were never called. `DECISION.md` §G records the
+side-by-side gate table, the confound surface (seed 2 v2 / `check_config` filter / playbook v2 —
+the first two shared by both harnesses, playbook v2 native-only by design), and the verdict: native
+remains the deep-diagnosis front door; the custom harness's reasoning-loop depth is the gap, not
+its infrastructure (10/10 runs reached a terminal state, 0 stuck, 0 void).
+
 ## 2026.08.0214 — 2026-08-02
 
 Phase 1b Task 9 (docs, issue TBD): comparison re-run readiness gate — MCP-verified on gpinst01, plus
