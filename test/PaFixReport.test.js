@@ -915,6 +915,19 @@ describe('inconclusive reports', () => {
         expect(text.toLowerCase()).toContain('preferred')
     })
 
+    test('schemaText states the citation-per-sweep pricing rule and that NOT_SWEPT/UNAVAILABLE reduces it (fix round 1, #72)', () => {
+        const text = load().schemaText()
+
+        // Pins the at-least-as-many-citations-as-SWEPT-layers rule itself —
+        // distinctive enough that a rewording which lost the meaning would
+        // break this assertion, not survive it.
+        expect(text).toContain('AT LEAST AS MANY entries as the number of layers marked SWEPT in layers_swept')
+        expect(text).toContain('claim seven sweeps, cite seven things')
+        // Pins that marking a layer NOT_SWEPT/UNAVAILABLE — not SWEPT — is
+        // what lowers the citation bill, matching _countSweptLayers exactly.
+        expect(text).toContain('mark a layer NOT_SWEPT or UNAVAILABLE with a reason instead and fewer citations are required')
+    })
+
     test('renderMarkdown emits an INCONCLUSIVE section between LAYERS SWEPT and ROOT CAUSES', () => {
         const md = load().renderMarkdown(inconclusiveReport())
 

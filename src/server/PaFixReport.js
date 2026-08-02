@@ -24,8 +24,9 @@
  * CAUSES, FIXES, VERIFICATION, DATA MARKERS — six headings, in that order,
  * plus a seventh INCONCLUSIVE section rendered between LAYERS SWEPT and ROOT
  * CAUSES ONLY when the report took the earned-inconclusive path (T4, issue
- * #72). If the playbook's section order ever changes, LAYOUT below is the one
- * place to change it to keep the two in sync.
+ * #72). If the playbook's section order ever changes, the `lines.push('## ...')`
+ * sequence in `renderMarkdown` below is the one place to change it to keep
+ * the two in sync.
  *
  * VALIDATION IS A FLOOR, NOT A CEILING
  * `validate` checks that the REQUIRED shape is present and internally
@@ -569,20 +570,26 @@ PaFixReport.prototype = {
                 'string, one of ' + this._fixTargetTypes().join('|') + '; target, proposed and rationale are ' +
                 'each non-empty strings; current is a string and may be empty but must be present'
         )
-        lines.push('verification: non-empty string — may be omitted ONLY on the inconclusive path')
+        lines.push(
+            'verification: non-empty string — may be omitted ONLY when root_causes is empty, `inconclusive` is ' +
+                'present, AND fixes is ALSO empty; if you propose any fixes at all, verification is still ' +
+                'required even on the inconclusive path'
+        )
         lines.push('data_markers: array (may be empty, must be present)')
         lines.push(
             'inconclusive: OPTIONAL object {evidence_read, needed_to_conclude} — supply it ONLY when you could ' +
-                'not isolate a cause. When present, root_causes and fixes may both be empty arrays and ' +
-                'verification may be omitted. evidence_read is a non-empty array of {source, detail} in the same ' +
-                'shape as root_causes[].evidence, recording what you ACTUALLY read (the trace-plus-one evidence ' +
-                'rule does NOT apply to it); needed_to_conclude is a non-empty string naming what would be ' +
-                'required to conclude. evidence_read must contain AT LEAST AS MANY entries as the number of ' +
-                'layers marked SWEPT in layers_swept — claim seven sweeps, cite seven things; mark a layer ' +
-                'NOT_SWEPT or UNAVAILABLE with a reason instead and fewer citations are required. An honest ' +
-                'inconclusive report is always preferred to an invented root cause. It does NOT excuse a shallow ' +
-                'sweep: layers_swept must still report all seven layers with a reason on every one you did not ' +
-                'sweep, and you should exhaust your tool budget before concluding you cannot tell.'
+                'not isolate a cause. When present, root_causes may be an empty array, and fixes may also be ' +
+                'empty; verification may be omitted ONLY when fixes is ALSO empty — if you propose any fixes, ' +
+                'verification is still required even though root_causes is empty. evidence_read is a non-empty ' +
+                'array of {source, detail} in the same shape as root_causes[].evidence, recording what you ' +
+                'ACTUALLY read (the trace-plus-one evidence rule does NOT apply to it); needed_to_conclude is a ' +
+                'non-empty string naming what would be required to conclude. evidence_read must contain AT LEAST ' +
+                'AS MANY entries as the number of layers marked SWEPT in layers_swept — claim seven sweeps, cite ' +
+                'seven things; mark a layer NOT_SWEPT or UNAVAILABLE with a reason instead and fewer citations ' +
+                'are required. An honest inconclusive report is always preferred to an invented root cause. It ' +
+                'does NOT excuse a shallow sweep: layers_swept must still report all seven layers with a reason ' +
+                'on every one you did not sweep, and you should exhaust your tool budget before concluding you ' +
+                'cannot tell.'
         )
 
         return lines.join('\n')
