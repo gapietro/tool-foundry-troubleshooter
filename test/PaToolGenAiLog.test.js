@@ -329,10 +329,11 @@ describe('check_config capability filter (DECISION.md §D3, issue #46)', () => {
     // query_table. The filter is what makes a named capability reachable.
     //
     // Semantics avoid OR queries on purpose: the stub's addOrCondition is a
-    // no-op, and two sequential reads leave an honest trail in the reads
-    // block. A sys_id is tried as the definition row first, then as the
-    // parent capability reference; anything else is a contains-match on the
-    // definition name.
+    // no-op, and two sequential real queries are observable (here via the
+    // recorded queries; at runtime via filter.matched_on — the reads block
+    // keys by table and only upgrades, so it shows one entry). A sys_id is
+    // tried as the definition row first, then as the parent capability
+    // reference; anything else is a contains-match on the definition name.
     const DEF_SYS_ID = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
     const CAP_SYS_ID = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
 
@@ -414,12 +415,56 @@ describe('check_config capability filter (DECISION.md §D3, issue #46)', () => {
     })
 
     it('still reports a denied filtered audit as unavailable, not clean', () => {
-        const { result } = run({ mode: 'check_config', capability: DEF_SYS_ID }, fixtures(), {
+        const { result, queries } = run({ mode: 'check_config', capability: DEF_SYS_ID }, fixtures(), {
             denied: ['sys_one_extend_capability_definition'],
         })
 
         expect(result.data.audit_status).toBe('unavailable')
         expect(result.data.notes.join(' ')).toMatch(/NOTHING was audited/)
+
+        // A denied read did not measure the match count — 0 here would be an
+        // absence claim from a question that was never answered (R-11 at
+        // field granularity, PR #49 review).
+        expect(result.data.filter.matched).toBeNull()
+
+        // And DENIED must not trigger the capability-reference fallback: the
+        // second read would be denied identically and only double the noise.
+        // (The stub throws at construction on a denied table, so no query is
+        // recorded at all — the point is there are not two attempts.)
+        const defQueries = queries.filter((q) => q.table === 'sys_one_extend_capability_definition')
+        expect(defQueries.length).toBeLessThanOrEqual(1)
+    })
+
+    it('scopes the truncation note to the matched set when a filter is truncated', () => {
+        // A broad substring can match more than MAX_DEFINITIONS. The
+        // unfiltered note's whole-table denominator (~2026) and its "narrow
+        // with the capability argument" advice are both wrong then: the
+        // caller already narrowed, and the matched count is a floor.
+        const many = []
+        for (let i = 0; i < 105; i++) {
+            many.push({
+                sys_id: ('d' + i + '00000000000000000000000000000000').slice(0, 32),
+                name: 'x_snc_probe capability ' + i,
+                capability: CAP_SYS_ID,
+                api_type: 'sys_hub_flow',
+                api: 'flow1',
+                connection: '',
+            })
+        }
+
+        const { result } = run(
+            { mode: 'check_config', capability: 'x_snc_probe' },
+            world({
+                sys_one_extend_capability_definition: many,
+                sys_one_extend_capability: [{ sys_id: CAP_SYS_ID, name: 'Probe Capability' }],
+            })
+        )
+
+        expect(result.data.audit_status).toBe('partial')
+        const notes = result.data.notes.join(' ')
+        expect(notes).toMatch(/sample of the MATCHED set/)
+        expect(notes).toMatch(/FLOOR/)
+        expect(notes).not.toMatch(/around 2026/)
     })
 
     it('leaves the unfiltered call unfiltered', () => {

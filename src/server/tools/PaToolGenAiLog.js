@@ -295,8 +295,11 @@ PaToolGenAiLog.prototype = {
         if (k.bool(raw.include_payload) === true) out.include_payload = true
 
         // check_config narrowing (issue #46) — a definition or capability
-        // sys_id, or a name substring. Other modes ignore it.
-        var capability = k.str(raw.capability || raw.capability_name || raw.definition)
+        // sys_id, or a name substring. Other modes ignore it. No `definition`
+        // alias: a stray definition key is a plausible LLM emission with a
+        // different intent, and silently turning it into a filter would
+        // narrow an audit the caller meant to be whole-table.
+        var capability = k.str(raw.capability || raw.capability_name)
         if (capability) out.capability = capability
 
         return out
@@ -856,8 +859,10 @@ PaToolGenAiLog.prototype = {
         // appear in the audit. The filter is what makes a named capability
         // reachable. Semantics avoid OR queries on purpose — a sys_id is
         // tried as the definition row first, then as the parent capability
-        // reference, two sequential reads that leave an honest trail in the
-        // reads block; anything else is a contains-match on the definition
+        // reference, two sequential real queries (note the reads block keys
+        // by table and only upgrades status, so the two-step trail is NOT
+        // visible there — filter.matched_on is what records which step
+        // matched); anything else is a contains-match on the definition
         // name.
         var filter = null
         if (a.capability) {
@@ -906,7 +911,9 @@ PaToolGenAiLog.prototype = {
             read = readDefinitions(null)
         }
 
-        if (filter) filter.matched = read.rows.length
+        // R-11 at field granularity: a denied read did not measure the match
+        // count, so matched must not claim 0 — null is "not measured".
+        if (filter) filter.matched = read.status === 'DENIED' ? null : read.rows.length
         data.filter = filter
 
         var findings = []
@@ -1009,13 +1016,17 @@ PaToolGenAiLog.prototype = {
             )
         } else if (filter && !definitions.length) {
             // R-6/R-11: a zero-match filter has two live explanations and this
-            // result decides between neither.
+            // result decides between neither. The table to re-check the value
+            // against depends on which interpretation ran.
             data.notes.push(
                 'The capability filter "' +
                     filter.value +
                     '" matched no definition. That is NOT evidence the capability is healthy or absent — ' +
                     'either the filter is misspelled (the question was wrong; check the value against ' +
-                    'sys_one_extend_capability), or the capability genuinely has no definition row, which ' +
+                    (filter.interpretation === 'sys_id'
+                        ? 'sys_one_extend_capability and sys_one_extend_capability_definition sys_ids'
+                        : 'sys_one_extend_capability_definition names') +
+                    '), or the capability genuinely has no definition row, which ' +
                     'is itself a candidate finding. Confirm with query_table before concluding either.'
             )
         } else if (filter) {
@@ -1024,6 +1035,7 @@ PaToolGenAiLog.prototype = {
                     filter.value +
                     '" were audited (' +
                     definitions.length +
+                    (data.truncated_at ? ' — a FLOOR, the match set was truncated' : '') +
                     ', matched on ' +
                     filter.matched_on +
                     '). audit_status speaks for that set, not the whole table.'
@@ -1057,7 +1069,19 @@ PaToolGenAiLog.prototype = {
             truncated_at: data.truncated_at,
         }
 
-        if (data.truncated_at) {
+        if (data.truncated_at && filter) {
+            // The whole-table denominator and the "narrow it" advice are both
+            // wrong here: the caller already narrowed, and the filter still
+            // matched more than fits. Say what was actually measured.
+            data.notes.push(
+                'The filter matched more than ' +
+                    this.MAX_DEFINITIONS +
+                    ' definitions; only the first ' +
+                    this.MAX_DEFINITIONS +
+                    ' by name were audited, so the matched count above is a floor and this is a sample ' +
+                    'of the MATCHED set. Narrow further — a definition sys_id names exactly one row.'
+            )
+        } else if (data.truncated_at) {
             data.notes.push(
                 'Only the first ' +
                     this.MAX_DEFINITIONS +
