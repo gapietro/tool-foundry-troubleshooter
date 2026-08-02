@@ -11,6 +11,28 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0209 — 2026-08-02
+
+Phase 1b Task 4 (issue #58): `PaFixReport` (`src/server/PaFixReport.js`) — the structural floor
+under the Fix Report JSON the LLM produces at the end of a diagnosis run. `validate(report)`
+checks `failure_summary` (non-empty string), `layers_swept` (all seven playbook layers, each
+SWEPT/NOT_SWEPT/UNAVAILABLE, with a `reason` required for the latter two), `root_causes[]`
+(`layer`, `component`, `finding`, and an `evidence[]` array enforcing the ADR Layer 3 evidence
+rule structurally — at least one `trace` citation PLUS at least one `config`/`schema`/`data`
+citation, every violation naming the cause and the phrase "evidence rule"), `fixes[]`
+(`target_type` from the playbook's five-value enum, `target`/`proposed`/`rationale` non-empty,
+`current` may be an empty string but must be present), `verification` (non-empty string), and
+`data_markers[]` (must be present, may be empty). Validation is a floor not a ceiling — unknown
+extra keys survive `normalized` untouched. `repairPrompt(report, problems)` builds the one
+allowed repair turn: problems verbatim + the schema description + "Return the corrected
+fix_report JSON only." `renderMarkdown(normalized)` mirrors
+`docs/agent/agent-doctor-instructions.md`'s six report section headings in playbook order
+(FAILURE SUMMARY, LAYERS SWEPT, ROOT CAUSES, FIXES, VERIFICATION, DATA MARKERS); `renderJson`
+round-trips the same object. Pure ES5 object-walking, no Glide (R-9: null/undefined/non-object
+input is an invalid report, never a throw). 38 new Jest tests, full suite 603/603 green.
+
+---
+
 ## 2026.08.0208 — 2026-08-02
 
 Phase 1b Task 3 (issue #56): `PaToolRegistry` (`src/server/PaToolRegistry.js`) — the custom
