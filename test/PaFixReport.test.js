@@ -1057,3 +1057,127 @@ describe('#78 absence-diagnosis', () => {
         expect(reports.validate(validReport()).valid).toBe(true)
     })
 })
+
+// =========================================================================
+// #79a — citations cross-checked against what the run actually invoked
+// =========================================================================
+
+/** The context PaAgentLoop passes in. */
+function auditCtx(tools) {
+    return { auditAvailable: true, invokedTools: tools }
+}
+
+/** Every tool invoked — the shape that lets validReport() pass unchanged. */
+function allToolsCtx() {
+    return auditCtx([
+        'agent_trace',
+        'agent_config',
+        'schema_lookup',
+        'query_table',
+        'genai_log',
+        'log_analysis',
+        'read_artifact',
+    ])
+}
+
+describe('#79a citation cross-check', () => {
+    test('a citation naming a source no invoked tool reads → invalid, and names the source', () => {
+        const reports = load()
+        // The exact live shape: run 100c8910... cited agent_config having
+        // only ever invoked agent_trace.
+        const report = validReport({
+            root_causes: [
+                {
+                    layer: 'layer 7',
+                    component: 'sn_aia_trigger_configuration',
+                    finding: 'active=false',
+                    evidence: [
+                        { source: 'trace', detail: 'sn_aia_execution_plan: no rows' },
+                        { source: 'config', detail: 'sn_aia_trigger_configuration.active = false' },
+                    ],
+                },
+            ],
+        })
+
+        const result = reports.validate(report, auditCtx(['agent_trace']))
+
+        expect(result.valid).toBe(false)
+        expect(result.problems.some((p) => p.indexOf('unsupported citation') !== -1)).toBe(true)
+        expect(result.problems.some((p) => p.indexOf('config') !== -1)).toBe(true)
+    })
+
+    test('a citation supported through an ALTERNATE tool passes — the map is permissive', () => {
+        const reports = load()
+        const layers = sweptLayers()
+        // Only the layers genai_log and agent_trace can answer.
+        layers[2] = { status: 'NOT_SWEPT', reason: 'not reached' }
+        layers[3] = { status: 'NOT_SWEPT', reason: 'not reached' }
+        layers[4] = { status: 'NOT_SWEPT', reason: 'not reached' }
+        layers[5] = { status: 'NOT_SWEPT', reason: 'not reached' }
+        layers[7] = { status: 'NOT_SWEPT', reason: 'not reached' }
+        const report = validReport({
+            layers_swept: layers,
+            root_causes: [
+                {
+                    layer: 'layer 6',
+                    component: 'sys_generative_ai_capability api field',
+                    finding: 'api points at a definition that does not exist.',
+                    evidence: [
+                        { source: 'trace', detail: 'OneExtendUtil.execute status:error' },
+                        { source: 'config', detail: 'capability.api = 7c9f... which resolves to nothing' },
+                    ],
+                },
+            ],
+        })
+
+        // genai_log alone supports BOTH trace and config.
+        const result = reports.validate(report, auditCtx(['genai_log']))
+
+        expect(result.valid).toBe(true)
+    })
+
+    test('inconclusive.evidence_read is cross-checked identically', () => {
+        const reports = load()
+        const layers = sweptLayers()
+        Object.keys(layers).forEach((k) => {
+            layers[k] = { status: 'NOT_SWEPT', reason: 'no tool reached this layer' }
+        })
+        const report = validReport({
+            layers_swept: layers,
+            root_causes: [],
+            fixes: [],
+            verification: undefined,
+            inconclusive: {
+                evidence_read: [{ source: 'schema', detail: 'sys_dictionary for x_snc_troubleshoot_run' }],
+                needed_to_conclude: 'A schema read of the target table.',
+            },
+        })
+
+        const result = reports.validate(report, auditCtx(['agent_trace']))
+
+        expect(result.valid).toBe(false)
+        expect(result.problems.some((p) => p.indexOf('unsupported citation') !== -1)).toBe(true)
+    })
+
+    test('auditAvailable:false skips the cross-check entirely — a degraded trail convicts nobody', () => {
+        const reports = load()
+        const report = validReport()
+
+        const result = reports.validate(report, { auditAvailable: false, invokedTools: [] })
+
+        expect(result.valid).toBe(true)
+    })
+
+    test('a malformed context skips the cross-check rather than failing closed', () => {
+        const reports = load()
+
+        expect(reports.validate(validReport(), { auditAvailable: 'yes' }).valid).toBe(true)
+        expect(reports.validate(validReport(), null).valid).toBe(true)
+    })
+
+    test('a fully supported report passes with the audit check active', () => {
+        const reports = load()
+
+        expect(reports.validate(validReport(), allToolsCtx()).valid).toBe(true)
+    })
+})

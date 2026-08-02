@@ -320,6 +320,10 @@ PaFixReport.prototype = {
                 problems.push(entryLabel + ' is missing a detail citation (table, sys_id, field, or value)')
             }
 
+            // #79a — the citation is checked against what the run ACTUALLY
+            // invoked, not against the label the model chose for it.
+            this._checkCitationSupported(entry.source, entryLabel, problems, ctx)
+
             if (entry.source === 'trace') {
                 tally.hasTrace = true
             } else {
@@ -333,6 +337,68 @@ PaFixReport.prototype = {
 
         tally.distinctOther = otherSources.length
         return tally
+    },
+
+    /**
+     * #79a. Validation used to be uncorrelated with evidential honesty: a
+     * report that invented a citation passed, and one citing only what it
+     * genuinely read could fail. Live proof (2026-08-02 re-run, audit-
+     * verified): runs 100c8910... and ebdc4194... both cited `agent_config`
+     * as evidence and both PASSED, having never invoked that tool.
+     *
+     * A citation passes if ANY tool that can produce that kind of evidence
+     * appears in the run's audit trail. The map is deliberately PERMISSIVE —
+     * the goal is to stop fabrication, not to add new pedantry, which is the
+     * exact failure mode #78 exists to fix. `genai_log` supports `config`
+     * because seed 03's answer (a dangling `api`) is found through it and is
+     * legitimately configuration evidence; a strict 1:1 map would reject that
+     * honest citation.
+     *
+     * Skipped entirely when the audit trail is unavailable — see
+     * `_buildCheckContext`.
+     */
+    _checkCitationSupported: function (source, entryLabel, problems, ctx) {
+        if (!ctx.auditEnabled) return
+
+        var supporting = this._citationToolMap()[source]
+        // An unknown source already raised its own problem above.
+        if (!supporting) return
+        if (this._anyInvoked(supporting, ctx)) return
+
+        problems.push(
+            entryLabel + ': unsupported citation — cites "' + source + '" but this run never invoked a ' +
+                'tool that reads it (' + supporting.join(', ') + '). Either call one of those tools and ' +
+                'cite what it actually returned, or drop the claim. Tools invoked this run: ' +
+                this._invokedList(ctx) + '.'
+        )
+    },
+
+    /**
+     * #79a source -> tool map. Deliberately separate from `_layerToolMap`:
+     * layers are finer-grained than the four evidence sources (2, 3 and 7 all
+     * correspond to `config` but each is answered by a different section of
+     * agent_config's output). `read_artifact` supports every source because it
+     * pages an artifact produced by an earlier tool in the same run — and that
+     * earlier call is itself audited.
+     */
+    _citationToolMap: function () {
+        return {
+            trace: ['agent_trace', 'genai_log', 'log_analysis', 'read_artifact'],
+            config: ['agent_config', 'genai_log', 'read_artifact'],
+            schema: ['schema_lookup', 'read_artifact'],
+            data: ['query_table', 'log_analysis', 'read_artifact'],
+        }
+    },
+
+    _anyInvoked: function (candidates, ctx) {
+        for (var i = 0; i < candidates.length; i++) {
+            if (this._indexOf(ctx.invokedTools, candidates[i]) !== -1) return true
+        }
+        return false
+    },
+
+    _invokedList: function (ctx) {
+        return ctx.invokedTools.length > 0 ? ctx.invokedTools.join(', ') : 'none'
     },
 
     /**
