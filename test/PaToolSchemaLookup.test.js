@@ -347,6 +347,42 @@ describe('absence is earned by a complete walk (round 3)', () => {
         expect(tableMode.result.data.truncated_at).toBeNull()
     })
 
+    it('answers UNKNOWN when an ancestor level contributed no dictionary rows', () => {
+        // The base level reads fine, sys_metadata's dictionary read comes back
+        // empty - so the merged list is non-empty, the walk verdict complete,
+        // no clip flag, and round 7 found exists: false claiming a column on
+        // exactly the level that contributed nothing. Every real table has at
+        // least its collection row, so an empty level is row-filtering or a
+        // wrong name, never a table without columns.
+        const { result } = run(
+            { table: 'sn_aia_agent', field: 'sys_created_on' },
+            world({
+                sys_dictionary: [
+                    { sys_id: 'd1', name: 'sn_aia_agent', element: 'name', internal_type: 'translated_text' },
+                ],
+            })
+        )
+
+        expect(result.data.field.exists).toBe('unknown')
+        expect(result.data.field.note).toMatch(/sys_metadata \(empty\)/)
+        expect(result.data.field.note).toMatch(/never merged/)
+        expect(result.data.findings.map((f) => f.finding)).not.toContain('field_does_not_exist')
+    })
+
+    it('table mode states which levels contributed nothing', () => {
+        const { result } = run(
+            'sn_aia_agent',
+            world({
+                sys_dictionary: [
+                    { sys_id: 'd1', name: 'sn_aia_agent', element: 'name', internal_type: 'translated_text' },
+                ],
+            })
+        )
+
+        expect(result.data.levels_not_read).toEqual([{ table: 'sys_metadata', status: 'empty' }])
+        expect(result.data.notes.join(' ')).toMatch(/may be declared there/)
+    })
+
     it('still answers false over a complete walk with rows read', () => {
         const { result } = run({ table: 'sn_aia_agent', field: 'chanel' }, world())
 

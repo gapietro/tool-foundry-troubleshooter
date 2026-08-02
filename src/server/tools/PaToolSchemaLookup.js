@@ -140,6 +140,19 @@ PaToolSchemaLookup.prototype = {
             } else {
                 data.fields = fields
                 data.truncated_at = fields.capped_at || (k.anyTruncation(data) ? this.MAX_FIELDS : null)
+                if (fields.levels_not_read) {
+                    data.levels_not_read = fields.levels_not_read
+                    data.notes.push(
+                        'The column list is INCOMPLETE: the sys_dictionary read for ' +
+                            fields.levels_not_read
+                                .map(function (l) {
+                                    return l.table + ' (' + l.status + ')'
+                                })
+                                .join(', ') +
+                            ' returned no rows, so those levels contributed nothing. A column absent from ' +
+                            'this list may be declared there.'
+                    )
+                }
             }
 
             phase = 'derive_findings'
@@ -442,6 +455,20 @@ PaToolSchemaLookup.prototype = {
                 data
             )
 
+            // A level whose dictionary read did not return rows contributed
+            // NOTHING to the merge, and round 7 found that nothing recorded
+            // it: the walk verdict was complete, the merged list non-empty,
+            // no clip flag — and an absence claim silently spanned a level
+            // that was never read. `empty` is recorded too, deliberately:
+            // every real table has at least its collection row in
+            // sys_dictionary, so an empty level is row-filtering or a wrong
+            // name, not a table without columns.
+            if (read.status !== 'ok') {
+                if (!out.levels_not_read) out.levels_not_read = []
+                out.levels_not_read.push({ table: level.table, status: read.status })
+                continue
+            }
+
             for (var i = 0; i < read.rows.length; i++) {
                 var row = read.rows[i]
                 var element = k.trim(row.element)
@@ -527,8 +554,9 @@ PaToolSchemaLookup.prototype = {
                 (fields && fields.capped_at) ||
                 (data && data.truncations && data.truncations.sys_dictionary) ||
                 null
+            var levelsNotRead = (fields && fields.levels_not_read) || []
 
-            if (!fields.length || !walkComplete || listClipped) {
+            if (!fields.length || !walkComplete || listClipped || levelsNotRead.length) {
                 return {
                     element: name,
                     exists: 'unknown',
@@ -538,7 +566,15 @@ PaToolSchemaLookup.prototype = {
                             : !walkComplete
                               ? 'The ancestor walk was incomplete — ' +
                                 ((walk && walk.incomplete_reason) || 'reason unrecorded')
-                              : 'The column list was clipped at ' +
+                              : levelsNotRead.length
+                                ? 'The dictionary read for level(s) ' +
+                                  levelsNotRead
+                                      .map(function (l) {
+                                          return l.table + ' (' + l.status + ')'
+                                      })
+                                      .join(', ') +
+                                  ' returned no rows, so their columns were never merged'
+                                : 'The column list was clipped at ' +
                                 listClipped +
                                 ' before every ancestor was merged') +
                         ', so whether "' +
