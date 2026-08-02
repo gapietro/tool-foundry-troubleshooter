@@ -562,6 +562,13 @@ declare global {
                         }
                     },
                     {
+                        table: 'sn_aia_tool'
+                        id: 'c3beac9180474930a70e4a4a3de7126d'
+                        key: {
+                            name: 'measure_request'
+                        }
+                    },
+                    {
                         table: 'sn_aia_agent_config'
                         id: 'c9edd5cc81e24d17b6ef1256c0228494'
                         key: {
@@ -595,6 +602,15 @@ declare global {
                             value: '2'
                             language: 'en'
                             dependent_value: 'NULL'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_agent_tool_m2m'
+                        id: 'da3f01db9aec41da835887210ed4b902'
+                        key: {
+                            agent: 'cd050d48e810411d9f113fd530694fe6'
+                            tool: 'c3beac9180474930a70e4a4a3de7126d'
+                            name: 'measure_request'
                         }
                     },
                     {

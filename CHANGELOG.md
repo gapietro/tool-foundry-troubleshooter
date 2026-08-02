@@ -11,6 +11,19 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0202 — 2026-08-02
+
+Phase 1b pre-work, **Seed 2 v2** (issue #45, DECISION.md §D2 precondition of the comparison
+re-run). The refuted tool-less construction now binds exactly one weak tool —
+`measure_request`, a side-effect-free character/word counter over the request text — so the
+ReAct engine enters its loop and the instruction's ambiguity can actually drive the failure.
+Instructions, description and agent name are byte-for-byte unchanged; the defect stays purely
+instructional, and the v2 mechanism is recorded in the seed spec as a **prediction until the
+re-run measures it**. New offline guard `test/seed02Construction.test.js` (exactly one tool, no
+group-resolving vocabulary, v1 instruction verbatim, Rule #19/#43 hygiene); fixture app builds
+clean, emitted `sn_aia_tool` record verified to carry the description and the trailing
+`(inputs);`. Install deliberately deferred to the re-run's setup step.
+
 ## 2026.08.0201 — 2026-08-02
 
 Phase 1a, **Task 12 — the benchmark ran and the harness decision is made** (issue #42). The
