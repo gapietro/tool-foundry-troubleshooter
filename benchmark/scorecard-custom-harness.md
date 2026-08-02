@@ -1,5 +1,12 @@
 # Scorecard — Custom Harness (Task 10, Phase 1b comparison re-run)
 
+> **This file now carries TWO custom-harness measurements.** The Task 10 pass (10 rows,
+> version 2026.08.0216, 0/10) is preserved below exactly as filed. A second pass
+> (10 rows, version 2026.08.0218, after the #72 observation-channel work and the #77
+> target fix) is appended in § "Custom harness scorecard — v2". Neither supersedes the
+> other; the difference between them is itself evidence, and is read in `DECISION.md` §H.
+> The native rows in this file were **not** re-measured for the v2 pass.
+
 Filled 2026-08-02, `gpinst01`, per `benchmark/README.md` "The Phase 1b comparison re-run
 protocol". Copied from `scorecard-template.md`; the template's core scoring contract — §A rubric,
 §A2 gate rule, §A3 void handling, §E audit-derivation discipline — is preserved below verbatim.
@@ -81,7 +88,9 @@ re-verified/fixed above before any row was scored. **No void rows in this file.*
 
 ## E. `layers_swept` — derived from the audit trail, not the run's own self-report
 
-**Critical finding that drove how every custom row below is scored:** for **all 10 custom-harness
+**Critical finding that drove how every custom row below is scored** (statement scoped to the
+**Task 10 pass**; the v2 pass reached `agent_config` in 2 of 10 runs and is tabulated separately in
+§ "Sweep self-report vs. audit — v2"): for **all 10 custom-harness
 rows**, the run's own `fix_report.layers_swept` JSON frequently *claims* layers 2 and/or 3 were
 `SWEPT` ("the agent_config tool was used to inspect the agent's instructions..."), but the
 audit-derived tool roster (`x_snc_troubleshoot_audit` where `run=<run_id>^action_type=result`,
@@ -139,7 +148,165 @@ harness owns its own run record). LLM-call count is `actor:'llm'` transcript ent
 
 ---
 
+## Custom harness scorecard — v2 (10 rows, version 2026.08.0218, 2026-08-02)
+
+**Second measurement of the same harness**, taken after two changes landed on
+`fix/phase1b-observation-channel`: the #72 observation-channel work (Tasks 1–6, commits
+`1448e58..e8e8496`) and the #77 fix for the lost diagnostic target (commits `822a570`, `37a3e70`,
+released as `d318b10`). Installed to `gpinst01` as version **2026.08.0218**. The Task 10 rows above
+are **unchanged and still stand** as the 0/10 baseline. Raw per-run evidence:
+`.superpowers/sdd/2026-08-02-observation-channel/benchmark-raw-evidence-v2.md`.
+
+### Protocol notes for the v2 pass
+
+1. **Same rubric, same gate, same discipline.** Scored against §A, §A2, §A3 and §E above, unchanged.
+   The Task 10 custom rows were **not consulted while scoring** — they cover a different set of
+   `run_id`s. Where the two passes agree it is by arriving at the same evidence.
+2. **The same five diagnostic targets as Task 10, reused verbatim.** Request bodies:
+   seed 01 and 02 in `{"execution": …}` form against `b07dc9082baa4314f243fed2ce91bf4b` (seed 01),
+   `4b315ecc2b66c314f243fed2ce91bfca` (seed 02, the v2 seed construction's execution fired in Task
+   10), `c4cd01842b6a4bd417a6ffbeee91bfc3` (seed 03), `16ddc10c2baa4314f243fed2ce91bf15` (seed 04);
+   seed 05 in `agent` + `timeframe` + `description` form naming bench ticket
+   `29fd09c42b6a4bd417a6ffbeee91bfb0` (no execution plan exists for seed 05 by design). Doubled
+   runs, executed **one at a time, sequentially, no parallelism**.
+3. **Seed-fixture verification.** §A3's two void conditions are seed 4's capability mismatch and
+   seed 5's m2m gate. Both were live-verified/repaired in the Task 10 preconditions recorded at the
+   top of this file, and were **carried forward, not re-read, for this pass** — with one live
+   re-confirmation inside the pass itself: the `agent_config` output captured in runs 9 and 10 reads
+   `sn_aia_trigger_configuration` `bfb77d6c64884500a80203ee029436ee` as `active="0"`, the seeded
+   defect, exactly as specified. Nothing in this pass disturbed either condition. **10 valid rows,
+   0 void.**
+4. **Native was NOT re-measured.** The native comparison rows below are untouched; native's
+   **8 / 10** stands as recorded, and is the figure the v2 custom result is compared against. The
+   two harness numbers therefore come from measurements taken on different days against the same
+   seed fixtures.
+5. **One known non-instance confound, on the record:** `PaFixReport.schemaText()`
+   (`src/server/PaFixReport.js:542`) changed on this branch — the inconclusive path was added and
+   the citation-per-swept-layer pricing was introduced — so the fix_report contract text the model
+   is shown is **not identical** to the Task 10 baseline's. This was unavoidable (the contract text
+   is part of the change under test) and is read in `DECISION.md` §H7.
+6. **`cause_of_death`** uses the same free-text departure from §B's closed vocabulary as the Task 10
+   custom rows, for the same reason.
+
+### v2 rows (10)
+
+`run_id` is the `x_snc_troubleshoot_run` sys_id. `layers_swept` is **audit-derived per §E**, not the
+run's self-report; where the two disagree the self-report figure is given in `notes`. `wall_clock` is
+the transcript-internal span (seq1 → terminal); queue latency before the LLM turn is recorded
+separately below.
+
+| seed | run # | run_id | root_cause_layer_correct | fix_target_correct | evidence_cites_trace_and_config | fix_usable_unedited | total /6 | **passes_gate** | layers_swept (n/7, which) | layers_available (n/7) | cause_of_death | tool_calls | LLM calls | wall_clock | notes |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 01 | 1 | `3b8b859c2bee8fd417a6ffbeee91bfe9` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | n/a — status=`failed` (`PaFixReport.validate`: evidence rule, "cites only the trace; at least one config, schema, or data citation is required") | 1 | 3 | ~13s | No report delivered — API `fix_report` is null. Discarded last attempt named layer **1** ("task count 27 ≠ tool call count 19") — a trace-arithmetic artefact, not a defect. Expected layer 3 (or 4, per seed-01 M18). The word→Integer priority mismatch is not mentioned anywhere; `priority_stored: null` in the trace was never read. Proposed fix is "add a clarification note that task_stats and tool_call_stats measure different metrics" — documentation, targeting nothing in the seed. Self-report `layers_swept` 1/7, consistent with audit. |
+| 01 | 2 | `100c89102b22cfd417a6ffbeee91bf42` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | completed (premature — 1 tool call, then fix_report) | 1 | 2 | ~5s | Same wrong layer 1 / same task-vs-tool-count artefact as run 1, independently. Fix target `context_processing_script` — "add validation to ensure task count matches tool call count" — is not a seed artefact. **FABRICATED EVIDENCE:** `root_causes[0].evidence[1]` cites `source:"config"`, detail *"agent_config showing task-to-tool mapping logic"*, and `layers_swept` 2/3/7 all claim SWEPT "via agent_config" — the audit trail for this run_id contains **one** record, `agent_trace`. `agent_config` was never invoked. Self-report claims 4/7 swept; **3 of those 4 are false claims**. Validation passed anyway — the validator checks source *labels*, not whether the source was read. |
+| 02 | 1 | `7c3c4d502b22cfd417a6ffbeee91bf47` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | completed — **inconclusive path** (validated) | 2 | 3 | ~5s | **Inconclusive: names no root cause**, `root_causes: []`, `fixes: []` — cannot score root-cause, fix-target or fix-usability by construction, and no root cause exists to carry a trace+config citation. Expected layer 2 (instruction: "assign it to the right group" names no group and no means of determining one); the instruction text was never fetched (`agent_config` not called). `inconclusive.evidence_read` = 3× `source:"trace"`, **all audit-supported** by the `agent_trace`+`read_artifact` pair. `needed_to_conclude` blames "layer 7 unavailable due to cross-scope restrictions" — a limitation it never tested; all 7 tools are registered and reachable. Self-report claims 2/7 (L1,L6); L6 ("Gen AI step metadata") rests on trace content, not a `genai_log` call — overclaim, though no uninvoked tool is named. |
+| 02 | 2 | `c66c01142b6ac714f243fed2ce91bf8e` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | n/a — status=`failed` (`PaFixReport.validate`: `inconclusive.evidence_read[4..6]` invalid `source:"tool"`; `fixes[0]` missing `proposed`) | 2 | 4 | ~8s | No report delivered. Attempted the inconclusive path and failed validation. **FALSE SWEEP CLAIM — the worst in the pass:** self-report marks **all 7 layers SWEPT** on **two tool calls**, both of which are reads of the same execution trace (`agent_trace`, then one `read_artifact` page). Layers 2–7 are claimed swept via "configuration/schema/data/tool-definition/GenAI-stack/trigger validation" with no config, schema, data, or GenAI tool ever invoked. **6 of 7 `inconclusive.evidence_read` entries** cite `config`/`schema`/`data`/`tool` sources that no tool call backs. Internally inconsistent as well: `fixes[0]` has empty `current` **and** empty `proposed` with rationale "No changes required as execution completed successfully" — a fix entry proposing nothing. Expected layer 2; never named. |
+| 03 | 1 | `3fac45142b22cfd417a6ffbeee91bfcd` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | completed — **inconclusive path** (validated) | 1 | 2 | ~3s | **Inconclusive: names no root cause.** Expected layer 5 — `x_snc_tsbench_routing` holds zero rows and the tool reports it honestly (`matched:false`, `rules_in_table:0`, a real GlideAggregate count). That signal was sitting in the trace it read and was not acted on; `query_table` was never called. `inconclusive.evidence_read` = 2× `source:"trace"`, **both audit-supported**. `needed_to_conclude` asks for "further analysis of agent configuration or trigger wiring" — the run could have done exactly that with the registered tools and stopped instead. Self-report 1/7, consistent with audit. |
+| 03 | 2 | `ebdc41942b6ac714f243fed2ce91bff1` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | completed (premature) | 2 | 3 | ~6s | Root cause claimed at layer **1** ("lookup_routing_rule tool call — no routing rules found for 'Hardware'"). Expected layer **5**. The finding brushes past the empty table but attributes it to the tool and fixes the tool: `target_type:"tool schema"`, `target:"lookup_routing_rule tool definition"`, proposed "add post-processing to handle zero matches gracefully". Seed 03's spec is explicit — *"A diagnosis naming the tool or the query is a **miss**"* — the tool is correct, the table is empty, and the fix is data seeding. Not a near-miss: the proposed fix would suppress the only honest signal the seed emits. **FABRICATED EVIDENCE:** `evidence[1]` `source:"config"`, *"agent_config confirmed tool schema expects category input"*, plus `layers_swept` 2/3 SWEPT "via agent_config" — audit shows `agent_trace` and `read_artifact` only; `agent_config` never invoked. Self-report claims 4/7; 2 are false claims and L6 is an overclaim on trace metadata. Also internally inconsistent: layer 5 is `NOT_SWEPT` with reason *"Data existence confirmed via read status in trace"* — an affirmative confirmation attached to a not-swept layer, on the one layer that held the answer. |
+| 04 | 1 | `e21d4dd42b6ac714f243fed2ce91bf2d` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | completed — **inconclusive path** (validated) | 1 | 2 | ~4s | **Inconclusive: names no root cause.** Reports the execution "completed successfully with no errors … normal tool and LLM latencies". The seed execution's actual signature is `OneExtendUtil.execute` returning `status:"error"`, "Plan invalid…", `capabilities:{}`, and the tool returning `ok:false` — a failure summarised as a success. Expected layer 6 (capability definition's `api` = all-zeros, resolving to no `sys_hub_flow`); `genai_log` never called, the definition row never read. `inconclusive.evidence_read` = 3× `source:"trace"`, **all audit-supported**, and `layers_swept["2"]` honestly states "agent_config not required" rather than claiming a sweep. Self-report 1/7, consistent with audit. |
+| 04 | 2 | `b44d4d182b6ac714f243fed2ce91bf99` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | completed — **inconclusive path** (validated) | 1 | 2 | ~4s | **Inconclusive: names no root cause.** Same "completed successfully with no errors" reading of a failing execution as run 7. Expected layer 6; never approached. `inconclusive.evidence_read` = 2× `source:"trace"`, **both audit-supported**; no uninvoked tool named anywhere. **Internally inconsistent:** top-level `verification` is an **empty string**, on a report the validator passed — run 7, same seed, same execution, same inconclusive shape, carries verification text. Self-report 1/7, consistent with audit. |
+| 05 | 1 | `a66d01182b22cfd417a6ffbeee91bf28` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L7) | 7/7 | n/a — status=`failed` (`PaFixReport.validate`: evidence rule, "no trace citation found; a candidate resting on config/schema/data alone is not a confirmed root cause") | 2 | 4 | ~13s | **No report delivered — API `fix_report` is null, `status=failed`.** Scored 0 on that basis: the rubric scores the diagnosis and the Fix Report the harness emits, and this harness emitted neither. **This is the most consequential row in the pass, and it must not be read as the run being wrong.** The discarded last attempt names layer **7**, component `sn_aia_trigger_configuration`, finding "Trigger configuration inactive", with a fix of `sn_aia_trigger_configuration.sys_id=bfb77d6c64884500a80203ee029436ee`, `current:"active=false"` → `proposed:"active=true"` — the seed's expected layer **and** its specific gate, the full-credit answer per seed-05's "two gates" rule. Both `config` evidence items are audit-supported against the real `agent_config` output. It was rejected for a **structural** reason: every evidence item was `config`-sourced and the validator requires ≥1 `trace` citation — and no trace exists for this seed *by design* (nothing fired). The evidence rule that catches run 1's trace-only report also destroys the pass's only other correct diagnosis, from the opposite side. See issue #78. Independent of that: `layers_swept` 2/3/7 are all `SWEPT` with an **empty-string `reason`** — an internal inconsistency unique to this run — and layers 2/3 are unbacked: the only `agent_config` call requested `section:"triggers"`, which returns no instructions or tool definitions. |
+| 05 | 2 | `61bd09d82b6ac714f243fed2ce91bfae` | **2** | **2** | **1** | **1** | **6** | **1** | 2/7 (L1,L7) | 7/7 | completed | 2 | 3 | ~6s | **The only passing row in the pass.** Root cause layer **7**, `sn_aia_trigger_configuration`, "Trigger inactive" — the expected layer. Fix names the **specific gate**: `target = sn_aia_trigger_configuration.sys_id=bfb77d6c64884500a80203ee029436ee`, `current:"0"` → `proposed:"1"` — full fix-target credit per seed-05's rule that a generic "the use case is inactive" scores only 1. Evidence cites **both** a `config` source (the real `agent_config` output, `active:"0"`, `condition:"short_descriptionISNOTEMPTY"`) **and** a `trace` source (`agent_trace`'s genuine-absence result — no `sn_aia_execution_plan` row), and the audit trail confirms **both tools were actually invoked** — no fabrication anywhere in this report. Fix is applicable unedited (a single PATCH of a named record's named field to a named value) and addresses the seeded defect. Two caveats recorded, neither costing a rubric point: (a) the **m2m gate was never checked**, so the diagnosis is right without having ruled out the second gate — seed-05's partial band is about naming the specific gate, which it does; (b) `layers_swept` 2/3 claim SWEPT "via agent_config" on a `section:"triggers"` call that returned neither instructions nor tool definitions — an overclaim, distinct in kind from runs 2/6 (the named tool *was* invoked here), hence audit-derived 2/7 rather than the self-reported 3/7. |
+
+**Gate tally — custom harness, v2**
+
+| | |
+|---|---|
+| Valid runs (not void) | **10** / 10 |
+| `sum(passes_gate)` | **1** |
+| Gate result | **1 / 10 (10.0%)** |
+| Rubric points | **6 / 60** (all 6 from seed 05 run 2) |
+| Band (proportional, §A3) | **Bottom (< 50%)** |
+| Void runs and why | **None** — §A3's seed-4 capability and seed-5 m2m gate conditions both hold; seed 5's trigger reads `active="0"` in live `agent_config` output, as specified |
+| Per-seed pass/fail | 01 **0/2** · 02 **0/2** · 03 **0/2** · 04 **0/2** · 05 **1/2** |
+| Prior custom-harness measurement (Task 10, version 2026.08.0216) | **0 / 10 (0.0%)**, 0/60 rubric points — preserved above |
+
+### Tool reach — v2
+
+`agent_trace` ran first in all 10 runs. Everything beyond it:
+
+| Tool | Runs | Count |
+|---|---|---|
+| `read_artifact` | 3, 4, 6 | 3 |
+| `agent_config` | 9, 10 | 2 |
+| `schema_lookup` | — | **0** |
+| `query_table` | — | **0** |
+| `genai_log` | — | **0** |
+| `log_analysis` | — | **0** |
+
+Tool-call distribution: **5 runs made 1 call, 5 runs made 2, 0 runs made 3 or more** (mean 1.5).
+`layers_available` is 7/7 — all seven tools registered and reachable, per `GET /tools`. **Four of the
+seven were never invoked in any of the ten runs**, and `read_artifact` is a second page of the same
+trace, not a second layer, so eight of ten runs are single-source. Seeds 01, 03 and 04 each hide
+their answer behind one of the four never-called tools (`schema_lookup` for the Integer column,
+`query_table` for the empty routing table, `genai_log` for the dangling `api`). The two runs that
+reached a second *layer* (`agent_config`, runs 9–10) are the two that produced the pass's only
+correct diagnoses — a one-to-one correlation across the pass.
+
+**Not budget-limited.** `PaAgentLoop.MAX_ITERATIONS` is 15 (`src/server/PaAgentLoop.js:114`) and
+`BUDGET_MS` is 300 000 (`:115`); the deepest run used **2 of 15 iterations** and ~13s of a 300s
+budget. Transcript-internal spans were 3–13s (median ~5.5s). Terminal status was observed 210–660s
+after POST — that latency is queueing before the LLM turn, not reasoning.
+
+**Target acquisition:** 8 of 10 first calls carried the real target (Task 10's rows carried none —
+see `DECISION.md` §H2). Runs 9 and 10 did not: with no `execution` field in the seed-05 request,
+both passed the **bench ticket sys_id**, lifted from the description prose, to `agent_trace` as if
+it were an execution-plan sys_id, then used the agent name on call 2. Both recovered, because
+`agent_trace` reported the miss as a genuine absence rather than an error.
+
+### Sweep self-report vs. audit — v2 (§E applied to this pass)
+
+| Run | Self-reported | Audit-derived | False claims |
+|---|---|---|---|
+| 1 | 1/7 (L1) | 1/7 (L1) | 0 |
+| 2 | 4/7 (L1,2,3,7) | 1/7 (L1) | **3** (L2,L3,L7 — all "via agent_config", never called) |
+| 3 | 2/7 (L1,6) | 1/7 (L1) | 0 named-tool fabrications; L6 is an overclaim on trace metadata |
+| 4 | **7/7** | 1/7 (L1) | **6** (L2–L7, on two trace reads) |
+| 5 | 1/7 (L1) | 1/7 (L1) | 0 |
+| 6 | 4/7 (L1,2,3,6) | 1/7 (L1) | **2** (L2,L3 — "via agent_config", never called); L6 overclaim |
+| 7 | 1/7 (L1) | 1/7 (L1) | 0 |
+| 8 | 1/7 (L1) | 1/7 (L1) | 0 |
+| 9 | 3/7 (L2,3,7) | 1/7 (L7) | L2,L3 unbacked — the sole `agent_config` call requested `section:"triggers"` |
+| 10 | 3/7 (L2,3,7) | 2/7 (L1,L7) | L2,L3 overclaimed on the same `section:"triggers"` call; named tool *was* invoked |
+
+**11 layer-sweep claims across 4 runs name a tool that was never invoked**, and 4 more (runs 9–10,
+layers 2–3) name a tool invoked for a different section than the claim requires. Six of ten runs
+report a sweep no wider than the audit supports — up from zero such runs in the Task 10 pass.
+
+### fix_report validation outcomes — v2
+
+| | |
+|---|---|
+| Produced and validated | **7** — runs 2, 3, 5, 6, 7, 8, 10 |
+| Failed validation (`fix_report` null, `status=failed`) | **3** — runs 1, 4, 9 |
+| Took the inconclusive shape | **5** — runs 3, 5, 7, 8 (validated) and run 4 (failed validation) |
+
+Failure reasons: the **evidence-diversity rule fired in opposite directions on two runs** — run 1
+rejected for citing *only* `trace`, run 9 rejected for citing *only* `config` on a seed that
+produces no trace by design (issue #78) — and run 4 failed on an illegal `source:"tool"` enum value
+plus an empty `fixes[0].proposed`.
+
+**Validator coverage gap, measured.** The rule checks that evidence *labels* are diverse and legal;
+it never checks whether the labelled source was read. Runs 2 and 6 passed validation on a
+`config`-labelled item attributing a finding to `agent_config`, a tool neither run invoked
+(controller-verified directly against `x_snc_troubleshoot_audit`); run 9, whose `config` citations
+were genuine reads, was rejected. Across this pass, **passing validation is uncorrelated with
+citing evidence that was actually gathered** (issue #79).
+
+**API/table disagreement, recorded because it affects what any consumer sees.** For all three failed
+runs, `/runs/{run_id}` surfaces `fix_report: null` while a raw Table API read of
+`x_snc_troubleshoot_run.fix_report` returns the rejected last attempt in full. The scores above
+follow the API — that is what the harness delivers — but run 9's correct seed-05 diagnosis is
+sitting in the table, discarded and retrievable.
+
+---
+
 ## Native harness — comparison rows (10 rows: 2 new + 8 standing)
+
+> **Not re-measured for the v2 custom pass** (2026-08-02, version 2026.08.0218). Nothing on the
+> `fix/phase1b-observation-channel` branch touches the native harness, so these rows were left as
+> filed for Task 10. The consequence for interpretation is recorded in `DECISION.md` §H7: the v2
+> custom number and the native number below were taken on different days.
 
 ### New rows — seed 02 v2 (fired and scored fresh, this task)
 
