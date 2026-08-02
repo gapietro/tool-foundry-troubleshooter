@@ -11,6 +11,23 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0218 — 2026-08-02
+
+### Fixed
+- **The async worker never received the diagnostic target (issue #77).** `event.parm2` arrives
+  from the platform as a Rhino Java String, whose `typeof` is `'object'`, causing
+  `PaAgentLoop._normRequest` to mistake it for an already-parsed request object and silently drop
+  the target. Every async diagnostic run reasoned with no target, forcing the model to invent a
+  placeholder sys_id and fabricate a diagnosis. Fixed by coercing at the source in the
+  `ScriptAction` via `String(event.parm2)` (the load-bearing guarantee), plus a defence-in-depth
+  foreign-object guard in `_normRequest`. The Jest suite could not catch this defect because it
+  passes a real JavaScript string, which the function always handled correctly; new regression tests
+  now emulate the Rhino shape. This defect predates the observation-channel work (issue #72) and
+  explains the earlier 0/10 benchmark result, so `benchmark/DECISION.md` §G3a's attribution to the
+  200-character observation channel is superseded.
+
+---
+
 ## 2026.08.0217 — 2026-08-02
 
 ### Fixed
