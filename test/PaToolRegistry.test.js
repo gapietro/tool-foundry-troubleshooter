@@ -338,6 +338,44 @@ describe('PaToolRegistry — destructive gate', () => {
         expect(dangerousCore.calls).toEqual([])
         expect(audit.calls).toHaveLength(0)
     })
+
+    it('fails CLOSED: a registration that OMITS destructive entirely is refused, not dispatched', () => {
+        // The gate must not fail open for a future author who simply forgets
+        // to write `destructive: false` on a new registration. Build the
+        // entry by hand (not via fakeEntry(), which defaults the field) so
+        // the property is genuinely absent, matching a real omission.
+        const audit = fakeAudit()
+        const unmarkedCore = fakeCore()
+        const registry = load({
+            cores: {
+                mystery_tool: {
+                    layer: 'unspecified',
+                    description: 'a tool that forgot to declare destructive',
+                    readOnly: true,
+                    factory: () => unmarkedCore,
+                },
+            },
+            auditLogger: audit,
+        })
+
+        const out = registry.dispatch('mystery_tool', {}, { run_id: 'run1' })
+
+        expect(out.success).toBe(false)
+        expect(out.error).toContain('confirmation flow is Phase 3')
+        expect(unmarkedCore.calls).toEqual([])
+        expect(audit.calls).toHaveLength(0)
+    })
+
+    it('fails CLOSED: destructive:undefined explicitly is refused the same as omission', () => {
+        const registry = load({
+            cores: { mystery_tool: fakeEntry({ destructive: undefined }) },
+        })
+
+        const out = registry.dispatch('mystery_tool', {}, { run_id: 'run1' })
+
+        expect(out.success).toBe(false)
+        expect(out.error).toContain('confirmation flow is Phase 3')
+    })
 })
 
 // ---------------------------------------------------------------------------

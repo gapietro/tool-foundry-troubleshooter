@@ -50,15 +50,22 @@
  * agent's descriptions verbatim (content, catches editorial drift).
  *
  * ---------------------------------------------------------------------------
- * THE DESTRUCTIVE GATE
+ * THE DESTRUCTIVE GATE — FAIL CLOSED, NOT FAIL OPEN
  * ---------------------------------------------------------------------------
- * Every Phase 1 tool registers `readOnly: true`. dispatch() refuses to run ANY
- * tool whose registration carries `destructive: true`, citing Phase 3's
- * confirmation flow by name. Phase 1/1b never registers a destructive tool —
- * the gate is proven now, against a hypothetical registration, precisely so
- * that when Phase 3 adds destructive tools it is adding a confirmation flow
- * on top of an already-enforced gate, not discovering the gate was never
- * built and retrofitting safety after the fact.
+ * Every Phase 1 tool registers `readOnly: true`. dispatch() refuses to run any
+ * tool whose registration does not EXPLICITLY carry `destructive: false`,
+ * citing Phase 3's confirmation flow by name. The check is deliberately
+ * `entry.destructive !== false` rather than `entry.destructive === true`: the
+ * latter fails OPEN for an entry that simply omits the field (`undefined`
+ * sails through ungated), which is exactly the failure mode this gate exists
+ * to prevent — a future registration author has to positively assert
+ * safety to be dispatched, rather than accidentally getting it by forgetting
+ * to write a line. Phase 1/1b never registers a destructive tool — the gate is
+ * proven now, against a hypothetical registration that OMITS the field as well
+ * as one that sets `destructive: true`, precisely so that when Phase 3 adds
+ * destructive tools it is adding a confirmation flow on top of an
+ * already-enforced, structurally-safe gate, not discovering the gate was
+ * never built (or was fail-open) and retrofitting safety after the fact.
  *
  * ---------------------------------------------------------------------------
  * STANDING RULES THIS FILE IS BUILT AROUND
@@ -230,15 +237,17 @@ PaToolRegistry.prototype = {
             }
         }
 
-        // The destructive gate. Every Phase 1 registration is readOnly:true;
-        // this branch exists for whatever Phase 3 eventually registers.
-        if (entry.destructive === true) {
+        // The destructive gate — fail CLOSED. Every Phase 1 registration sets
+        // destructive:false EXPLICITLY; anything else — true, or the field
+        // simply omitted — is refused. See THE DESTRUCTIVE GATE above for why
+        // this is `!== false` rather than `=== true`.
+        if (entry.destructive !== false) {
             return {
                 success: false,
                 error:
                     'Tool "' +
                     toolName +
-                    '" is registered destructive. PaToolRegistry refuses to dispatch destructive tools directly — the confirmation flow is Phase 3.',
+                    '" is not registered as explicitly non-destructive (destructive:false). PaToolRegistry refuses to dispatch destructive or unmarked tools directly — the confirmation flow is Phase 3.',
             }
         }
 
