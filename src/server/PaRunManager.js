@@ -20,6 +20,11 @@
  *   appendTranscript(runId, entry) -> {success, entry, count} | {success:false, error}
  *     entry: {seq?, actor:'llm'|'tool'|'system', tool?, args_digest?,
  *             result_digest?, artifact_id?, ts?}
+ *     A stored entry may additionally carry `prompt_digest` — DERIVED from
+ *     `result_digest` on tool entries only, at PROMPT_DIGEST_CHARS, and
+ *     pruned to the newest PROMPT_WINDOW carriers. Never accepted from the
+ *     caller. This is the prompt-facing observation channel (issue #72);
+ *     `result_digest` remains the 200-char UI/audit rendering.
  *   loadContext(runId) -> {transcript:[...], context_summary}
  *   maybeSummarize(runId) -> {summarized:true, ...} | {summarized:false, reason}
  *   close(runId, status, {fixReport?, error?}) -> {success:true, ...} | {success:false, error}
@@ -123,6 +128,20 @@ PaRunManager.prototype = {
      *  ceiling for a single trace line, distinct from PaArtifactStore's much
      *  larger (4,000-char) threshold for a whole tool payload. */
     DIGEST_CHARS: 200,
+
+    /** Prompt-facing ceiling, deliberately equal to
+     *  PaArtifactStore.MAX_PAGE_CHARS so exactly ONE read_artifact page
+     *  survives into the next reasoning prompt intact (issue #72). DISTINCT
+     *  from DIGEST_CHARS, which stays 200 for the polling UI and the audit
+     *  row — raising that one globally is what this design deliberately does
+     *  NOT do. */
+    PROMPT_DIGEST_CHARS: 4000,
+
+    /** How many of the most recent entries CARRYING a prompt_digest keep it.
+     *  Older carriers are pruned on append, which is what bounds the
+     *  `transcript` column — see the row-size arithmetic in
+     *  docs/superpowers/specs/2026-08-02-observation-channel-design.md §4.4. */
+    PROMPT_WINDOW: 3,
 
     /** LLD §D5's default. Overridable per call. */
     DEFAULT_MAX_AGE_HOURS: 24,
@@ -233,6 +252,7 @@ PaRunManager.prototype = {
         var list = this._parseTranscript(gr.getValue('transcript'))
         var normalized = this._normalizeEntry(entry, list.length)
         list.push(normalized)
+        this._prunePromptWindow(list)
 
         if (!this._writeUpdate(gr, { transcript: JSON.stringify(list) })) {
             return { success: false, error: 'transcript write failed' }
@@ -255,6 +275,17 @@ PaRunManager.prototype = {
         // the 200-char ceiling this table's polling UI is sized around.
         if (e.args_digest !== undefined && e.args_digest !== null) out.args_digest = this._digest(e.args_digest)
         if (e.result_digest !== undefined && e.result_digest !== null) out.result_digest = this._digest(e.result_digest)
+        // The observation channel (issue #72). DERIVED, never accepted: a
+        // caller-supplied `entry.prompt_digest` is ignored exactly like any
+        // other unknown key, so the ceiling cannot be forged from the loop
+        // side. Tool results only — an `llm` entry is the model's own prior
+        // reasoning and a `system` entry is a status note; neither is the
+        // evidence channel this fixes, and including them would double the
+        // row cost for no diagnostic gain.
+        if (out.actor === 'tool' && e.result_digest !== undefined && e.result_digest !== null) {
+            var promptText = this._promptDigest(e.result_digest)
+            if (promptText !== null) out.prompt_digest = promptText
+        }
         if (this._nonEmptyString(e.artifact_id)) out.artifact_id = e.artifact_id
         return out
     },
@@ -832,6 +863,46 @@ PaRunManager.prototype = {
         var s = this._stringifyForDigest(value)
         if (s.length <= this.DIGEST_CHARS) return s
         return s.substring(0, this.DIGEST_CHARS) + '...[+' + (s.length - this.DIGEST_CHARS) + ' more chars]'
+    },
+
+    /**
+     * The prompt-facing digest — same never-silent marker as `_digest`, at
+     * PROMPT_DIGEST_CHARS instead of DIGEST_CHARS.
+     *
+     * @returns {String|null} null when the text already fits inside
+     *          DIGEST_CHARS: `result_digest` carries it verbatim in that
+     *          case, and a duplicate would be dead bytes in a column with a
+     *          hard ceiling.
+     */
+    _promptDigest: function (value) {
+        var s = this._stringifyForDigest(value)
+        if (s.length <= this.DIGEST_CHARS) return null
+        if (s.length <= this.PROMPT_DIGEST_CHARS) return s
+        return (
+            s.substring(0, this.PROMPT_DIGEST_CHARS) +
+            '...[+' +
+            (s.length - this.PROMPT_DIGEST_CHARS) +
+            ' more chars]'
+        )
+    },
+
+    /**
+     * Keeps `prompt_digest` on the newest PROMPT_WINDOW entries that CARRY
+     * one and deletes it from every older carrier. The window is over
+     * carriers, not over tool entries generally — a short tool result that
+     * never got a prompt_digest does not consume a slot.
+     *
+     * The bound on the `transcript` column lives HERE, in the append path,
+     * rather than in an assumption about how long the loop runs.
+     */
+    _prunePromptWindow: function (list) {
+        var kept = 0
+        for (var i = list.length - 1; i >= 0; i--) {
+            var entry = list[i]
+            if (!this._isPlainObject(entry) || entry.prompt_digest === undefined) continue
+            kept += 1
+            if (kept > this.PROMPT_WINDOW) delete entry.prompt_digest
+        }
     },
 
     _stringifyForDigest: function (value) {

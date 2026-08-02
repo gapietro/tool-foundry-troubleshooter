@@ -343,6 +343,96 @@ describe('appendTranscript', () => {
 })
 
 // ===========================================================================
+// prompt_digest — the prompt-facing observation channel (issue #72)
+// ===========================================================================
+
+describe('prompt_digest', () => {
+    test('a long TOOL result gets a prompt_digest at the 4000-char ceiling, while result_digest stays at 200', () => {
+        const { mgr, world } = load({ world: { rows: { [RUN_TABLE]: [seedRun()] } } })
+        const long = 'z'.repeat(5000)
+
+        mgr.appendTranscript('run1', { actor: 'tool', tool: 'read_artifact', result_digest: long })
+
+        const stored = JSON.parse(world.tables[RUN_TABLE][0].transcript)
+        expect(stored[0].result_digest).toContain('...[+4800 more chars]')
+        expect(stored[0].result_digest.length).toBeLessThan(300)
+        expect(stored[0].prompt_digest).toContain('...[+1000 more chars]')
+        expect(stored[0].prompt_digest.substring(0, 4000)).toBe('z'.repeat(4000))
+    })
+
+    test('a result that already fits inside 200 chars gets NO prompt_digest — it would only duplicate result_digest', () => {
+        const { mgr, world } = load({ world: { rows: { [RUN_TABLE]: [seedRun()] } } })
+
+        mgr.appendTranscript('run1', { actor: 'tool', tool: 'agent_trace', result_digest: 'short result' })
+
+        const stored = JSON.parse(world.tables[RUN_TABLE][0].transcript)
+        expect(stored[0].result_digest).toBe('short result')
+        expect(stored[0].prompt_digest).toBeUndefined()
+    })
+
+    test('llm and system entries never get a prompt_digest, however long they are', () => {
+        const { mgr, world } = load({ world: { rows: { [RUN_TABLE]: [seedRun()] } } })
+        const long = 'z'.repeat(5000)
+
+        mgr.appendTranscript('run1', { actor: 'llm', result_digest: long })
+        mgr.appendTranscript('run1', { actor: 'system', result_digest: long })
+
+        const stored = JSON.parse(world.tables[RUN_TABLE][0].transcript)
+        expect(stored[0].prompt_digest).toBeUndefined()
+        expect(stored[1].prompt_digest).toBeUndefined()
+    })
+
+    test('args_digest never gets the larger ceiling — only results are the observation channel', () => {
+        const { mgr, world } = load({ world: { rows: { [RUN_TABLE]: [seedRun()] } } })
+        const long = 'z'.repeat(5000)
+
+        mgr.appendTranscript('run1', { actor: 'tool', args_digest: long, result_digest: 'short' })
+
+        const stored = JSON.parse(world.tables[RUN_TABLE][0].transcript)
+        expect(stored[0].args_digest.length).toBeLessThan(300)
+        expect(stored[0].prompt_digest).toBeUndefined()
+    })
+
+    test('a caller-supplied prompt_digest is IGNORED — the field is derived, never accepted', () => {
+        const { mgr, world } = load({ world: { rows: { [RUN_TABLE]: [seedRun()] } } })
+
+        mgr.appendTranscript('run1', { actor: 'tool', result_digest: 'short', prompt_digest: 'x'.repeat(50000) })
+
+        const stored = JSON.parse(world.tables[RUN_TABLE][0].transcript)
+        expect(stored[0].prompt_digest).toBeUndefined()
+    })
+
+    test('only the newest PROMPT_WINDOW carriers keep prompt_digest — older ones are pruned on append', () => {
+        const { mgr, world } = load({ world: { rows: { [RUN_TABLE]: [seedRun()] } } })
+        const long = 'z'.repeat(5000)
+
+        for (let i = 0; i < 5; i++) {
+            mgr.appendTranscript('run1', { actor: 'tool', tool: 't' + i, result_digest: long })
+        }
+
+        const stored = JSON.parse(world.tables[RUN_TABLE][0].transcript)
+        const carriers = stored.filter((e) => e.prompt_digest !== undefined).map((e) => e.tool)
+        expect(carriers).toEqual(['t2', 't3', 't4'])
+        // every entry keeps its 200-char result_digest regardless — the UI/audit path is untouched
+        expect(stored.filter((e) => typeof e.result_digest === 'string')).toHaveLength(5)
+    })
+
+    test('short results do not consume a window slot', () => {
+        const { mgr, world } = load({ world: { rows: { [RUN_TABLE]: [seedRun()] } } })
+        const long = 'z'.repeat(5000)
+
+        mgr.appendTranscript('run1', { actor: 'tool', tool: 'big1', result_digest: long })
+        mgr.appendTranscript('run1', { actor: 'tool', tool: 'small1', result_digest: 'tiny' })
+        mgr.appendTranscript('run1', { actor: 'tool', tool: 'small2', result_digest: 'tiny' })
+        mgr.appendTranscript('run1', { actor: 'tool', tool: 'big2', result_digest: long })
+
+        const stored = JSON.parse(world.tables[RUN_TABLE][0].transcript)
+        const carriers = stored.filter((e) => e.prompt_digest !== undefined).map((e) => e.tool)
+        expect(carriers).toEqual(['big1', 'big2'])
+    })
+})
+
+// ===========================================================================
 // loadContext
 // ===========================================================================
 
