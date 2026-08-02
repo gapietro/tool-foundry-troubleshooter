@@ -490,10 +490,21 @@ PaToolSchemaLookup.prototype = {
         out.exists = true
 
         if (found.has_choices) {
+            // sys_choice rows live under the table that DECLARES the column —
+            // the same ownership rule the hierarchy walk exists for. The first
+            // version queried only the caller's table and then emitted a note
+            // telling the READER to "re-check the declaring table", while
+            // `declared_on` sat right there in `found`: instructing a human to
+            // do a join the tool could do itself. Both tables are queried
+            // (an extending table can also define its own overrides) and each
+            // choice says which one defined it.
+            var choiceTables = [table]
+            if (found.declared_on && found.declared_on !== table) choiceTables.push(found.declared_on)
+
             var choiceRead = k.readRows(
                 'sys_choice',
                 function (gr) {
-                    gr.addQuery('name', table)
+                    gr.addQuery('name', 'IN', choiceTables.join(','))
                     gr.addQuery('element', name)
                 },
                 this.CHOICE_FIELDS,
@@ -509,6 +520,7 @@ PaToolSchemaLookup.prototype = {
                 choices.push({
                     value: row.value,
                     label: row.label,
+                    defined_on: row.name,
                     sequence: row.sequence,
                     inactive: row.inactive,
                     dependent_value: row.dependent_value || null,
@@ -529,16 +541,17 @@ PaToolSchemaLookup.prototype = {
                     ' choices were read. This list is a LOWER BOUND — do NOT conclude a value is invalid ' +
                     'because it is absent from it.'
             }
+            out.choice_tables_queried = choiceTables
             out.choice_note =
                 choiceRead.rows.length || choiceRead.status !== 'empty'
                     ? null
-                    : 'The dictionary marks this column as having choices, but sys_choice holds none for ' +
-                      table +
-                      '.' +
+                    : 'The dictionary marks this column as having choices, but sys_choice holds none ' +
+                      'under ' +
+                      choiceTables.join(' or ') +
+                      ' for element ' +
                       name +
-                      '. Choices may be inherited from the column\'s declaring table (' +
-                      found.declared_on +
-                      ') — re-check there.'
+                      '. Both the asked-for table and the declaring table were queried, so this is a ' +
+                      'genuine absence of choice rows, not a lookup at the wrong level.'
         }
 
         return out

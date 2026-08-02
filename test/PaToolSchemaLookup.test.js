@@ -36,10 +36,14 @@ function world(overrides) {
             { sys_id: 'd2', name: 'sn_aia_agent', element: 'channel', internal_type: 'choice', choice: '1' },
             { sys_id: 'd3', name: 'sn_aia_agent', element: '', internal_type: 'collection' },
             { sys_id: 'd4', name: 'sys_metadata', element: 'sys_created_on', internal_type: 'glide_date_time' },
+            { sys_id: 'd5', name: 'sys_metadata', element: 'lifecycle', internal_type: 'choice', choice: '1' },
         ],
         sys_choice: [
             { sys_id: 'c1', name: 'sn_aia_agent', element: 'channel', value: 'nap', label: 'Now Assist Panel', sequence: '0' },
             { sys_id: 'c2', name: 'sn_aia_agent', element: 'channel', value: 'nap_and_va', label: 'Panel and VA', sequence: '1' },
+            // Choices for an INHERITED column live under the DECLARING table -
+            // the same ownership rule as sys_dictionary itself.
+            { sys_id: 'c3', name: 'sys_metadata', element: 'lifecycle', value: 'draft', label: 'Draft', sequence: '0' },
         ],
     }
     return Object.assign(base, overrides || {})
@@ -138,6 +142,7 @@ describe('the inheritance walk', () => {
         // the element-less collection row is absent, not the sequence.
         expect(result.data.fields.map((f) => f.element).sort()).toEqual([
             'channel',
+            'lifecycle',
             'name',
             'sys_created_on',
         ])
@@ -197,6 +202,21 @@ describe('field detail', () => {
 
         expect(result.data.field.choices).toHaveLength(2)
         expect(result.data.field.choices_truncated_at).toBeNull()
+    })
+
+    it('finds choices declared on an ancestor rather than telling the reader to look', () => {
+        // The old lookup queried sys_choice only under the caller's table and
+        // then emitted a note telling the READER to re-check the declaring
+        // table - with declared_on already in hand. The tool now does that
+        // join itself.
+        const { result } = run({ table: 'sn_aia_agent', field: 'lifecycle' }, world())
+
+        expect(result.data.field.inherited).toBe(true)
+        expect(result.data.field.declared_on).toBe('sys_metadata')
+        expect(result.data.field.choices).toHaveLength(1)
+        expect(result.data.field.choices[0].defined_on).toBe('sys_metadata')
+        expect(result.data.field.choice_note).toBeNull()
+        expect(result.data.field.choice_tables_queried).toEqual(['sn_aia_agent', 'sys_metadata'])
     })
 
     it('reports a missing column as a schema mismatch and suggests near misses', () => {
