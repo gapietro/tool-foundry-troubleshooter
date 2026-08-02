@@ -57,6 +57,83 @@ declare global {
                         table: 'sys_script_include'
                         id: '2fc5b74bb9f4425b846022e1572ed294'
                     }
+                    'pa-llm-input-prompt': {
+                        table: 'sys_one_extend_definition_attribute'
+                        id: 'd045f44fadb4411c94d114edc67c7218'
+                        deleted: true
+                    }
+                    'pa-llm-reason-acl': {
+                        table: 'sys_security_acl'
+                        id: '4db071a71082415f9de11a602563bd52'
+                    }
+                    'pa-llm-reason-input-prompt': {
+                        table: 'sys_one_extend_definition_attribute'
+                        id: 'a01dd1b1883345fb9e8592c82bb6d44a'
+                    }
+                    'pa-llm-reason-prompt-v1': {
+                        table: 'sys_generative_ai_config'
+                        id: '6c8d17638d8542b7b60962ddc9e167f2'
+                    }
+                    'pa-llm-reason-skill': {
+                        table: 'sys_one_extend_capability'
+                        id: '0bf0bc13a7414399a1482d21de01231d'
+                    }
+                    'pa-llm-reason-skill__output_error': {
+                        table: 'sys_one_extend_definition_attribute'
+                        id: '80ed34fbd6b14019aab030a05d27da34'
+                    }
+                    'pa-llm-reason-skill__output_errorcode': {
+                        table: 'sys_one_extend_definition_attribute'
+                        id: '427fa2cadf5d410ab407e5ecd5b8e4c7'
+                    }
+                    'pa-llm-reason-skill__output_provider': {
+                        table: 'sys_one_extend_definition_attribute'
+                        id: '2b8a6dbe2faf4dcaa404966fe1a7a1f4'
+                    }
+                    'pa-llm-reason-skill__output_response': {
+                        table: 'sys_one_extend_definition_attribute'
+                        id: 'f6b63872e08c48738b48aa46d59561ae'
+                    }
+                    'pa-llm-reason-skill__output_status': {
+                        table: 'sys_one_extend_definition_attribute'
+                        id: '1ecbfcf87fd44f4087a7143b3a2dc396'
+                    }
+                    'pa-llm-summarize-acl': {
+                        table: 'sys_security_acl'
+                        id: 'ac36c7a2cb58451a8a5111ab3adcf457'
+                    }
+                    'pa-llm-summarize-input-prompt': {
+                        table: 'sys_one_extend_definition_attribute'
+                        id: '13f74a6b0ed04aa0bfd5a5cf19dd259b'
+                    }
+                    'pa-llm-summarize-prompt-v1': {
+                        table: 'sys_generative_ai_config'
+                        id: '57b76b4affc54a3583cb62ecbd4445df'
+                    }
+                    'pa-llm-summarize-skill': {
+                        table: 'sys_one_extend_capability'
+                        id: '3914d62f6a9b42a3a4633432a97a1d0f'
+                    }
+                    'pa-llm-summarize-skill__output_error': {
+                        table: 'sys_one_extend_definition_attribute'
+                        id: '433812bcaedb49cb97b081d9aa199f7d'
+                    }
+                    'pa-llm-summarize-skill__output_errorcode': {
+                        table: 'sys_one_extend_definition_attribute'
+                        id: '86f32138797a4a77bb5b52430c6ed795'
+                    }
+                    'pa-llm-summarize-skill__output_provider': {
+                        table: 'sys_one_extend_definition_attribute'
+                        id: '52b05d0a76d64d349708e9ef9af42a0f'
+                    }
+                    'pa-llm-summarize-skill__output_response': {
+                        table: 'sys_one_extend_definition_attribute'
+                        id: '86515df8a4c04686bc60689c1e5725e7'
+                    }
+                    'pa-llm-summarize-skill__output_status': {
+                        table: 'sys_one_extend_definition_attribute'
+                        id: 'f657ed16599b48a7a6ffc8301e18bf01'
+                    }
                     'pa-run-anchor': {
                         table: 'sys_script_include'
                         id: '442109ddbf1c459d919c2b04ffa9e71f'
@@ -327,6 +404,13 @@ declare global {
                         }
                     },
                     {
+                        table: 'sn_nowassist_skill_config'
+                        id: '21c00b55a323477082b23a25049a11ba'
+                        key: {
+                            skill_id: '0bf0bc13a7414399a1482d21de01231d'
+                        }
+                    },
+                    {
                         table: 'sys_security_acl_role'
                         id: '23796a4558eb4d2993c74f4739c5780b'
                         key: {
@@ -335,6 +419,20 @@ declare global {
                                 id: '8c13403abda74dcb9964e5962f58d64a'
                                 key: {
                                     name: 'x_snc_troubleshoot.user'
+                                }
+                            }
+                        }
+                    },
+                    {
+                        table: 'sys_gen_ai_strategy_mapping'
+                        id: '2af33e9afead4e2084ef066de9a4f37d'
+                        key: {
+                            strategy: 'CAPABILITY_EXECUTION'
+                            feature: {
+                                id: '32880fd465f74ca9a1b2e18a0ed38921'
+                                key: {
+                                    feature_name: 'pa llm summarize'
+                                    document: '3914d62f6a9b42a3a4633432a97a1d0f'
                                 }
                             }
                         }
@@ -358,6 +456,14 @@ declare global {
                                     name: 'x_snc_troubleshoot.admin'
                                 }
                             }
+                        }
+                    },
+                    {
+                        table: 'sys_one_extend_resource_mapping'
+                        id: '2d9cabae0a004601824029360c270e6e'
+                        key: {
+                            parent_capability: '3914d62f6a9b42a3a4633432a97a1d0f'
+                            resource_capability: '3914d62f6a9b42a3a4633432a97a1d0f'
                         }
                     },
                     {
@@ -387,6 +493,14 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_gen_ai_feature_mapping'
+                        id: '32880fd465f74ca9a1b2e18a0ed38921'
+                        key: {
+                            feature_name: 'pa llm summarize'
+                            document: '3914d62f6a9b42a3a4633432a97a1d0f'
+                        }
+                    },
+                    {
                         table: 'sn_aia_agent_tool_m2m'
                         id: '34149445e94b46668374caa8061b6a78'
                         key: {
@@ -413,10 +527,31 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_one_extend_definition_config'
+                        id: '3607b2b4596c472987319c95eede5d41'
+                        key: {
+                            definition: {
+                                id: '620255db6d8e4ef9999dd087e20844a7'
+                                key: {
+                                    capability: '0bf0bc13a7414399a1482d21de01231d'
+                                    api: '936e514a53b3b110f028ddeeff7b128c'
+                                }
+                            }
+                            capability: '0bf0bc13a7414399a1482d21de01231d'
+                        }
+                    },
+                    {
                         table: 'sn_aia_tool'
                         id: '387983889a1845e8ac55829bef5b238e'
                         key: {
                             name: 'agent_trace'
+                        }
+                    },
+                    {
+                        table: 'sn_nowassist_skill_config'
+                        id: '3997e152586a4c8986ebe6d9e6bb6120'
+                        key: {
+                            skill_id: '3914d62f6a9b42a3a4633432a97a1d0f'
                         }
                     },
                     {
@@ -558,6 +693,28 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_gen_ai_strategy_mapping'
+                        id: '5f47a169fbf04ffd834d1600985e7e24'
+                        key: {
+                            strategy: 'CAPABILITY_EXECUTION'
+                            feature: {
+                                id: 'ce70f923528c4844a643aa417cc7c7f3'
+                                key: {
+                                    feature_name: 'pa llm reason'
+                                    document: '0bf0bc13a7414399a1482d21de01231d'
+                                }
+                            }
+                        }
+                    },
+                    {
+                        table: 'sys_one_extend_capability_definition'
+                        id: '620255db6d8e4ef9999dd087e20844a7'
+                        key: {
+                            capability: '0bf0bc13a7414399a1482d21de01231d'
+                            api: '936e514a53b3b110f028ddeeff7b128c'
+                        }
+                    },
+                    {
                         table: 'sys_choice'
                         id: '6271a9fc390a4edaa4c7c7690c4f926f'
                         key: {
@@ -566,6 +723,20 @@ declare global {
                             value: 'error'
                             language: 'en'
                             dependent_value: 'NULL'
+                        }
+                    },
+                    {
+                        table: 'sys_one_extend_definition_config'
+                        id: '671b6c8d99c649d7a50287cc57886d4e'
+                        key: {
+                            definition: {
+                                id: 'f24a39cd0b384eacb4649387d7f41531'
+                                key: {
+                                    capability: '3914d62f6a9b42a3a4633432a97a1d0f'
+                                    api: '936e514a53b3b110f028ddeeff7b128c'
+                                }
+                            }
+                            capability: '3914d62f6a9b42a3a4633432a97a1d0f'
                         }
                     },
                     {
@@ -617,12 +788,44 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_agent_access_role_mapping'
+                        id: '77edd97f4b304ac8b8f634368f50280f'
+                        key: {
+                            agent_access_config: {
+                                id: 'd76dd00253b64abda09c0ffed4116663'
+                                key: {
+                                    agent: '21c00b55a323477082b23a25049a11ba'
+                                }
+                            }
+                            role: {
+                                id: 'c3c9f3a9863249f08abc0e7d01cba643'
+                                key: {
+                                    name: 'x_snc_troubleshoot.admin'
+                                }
+                            }
+                        }
+                    },
+                    {
                         table: 'sys_documentation'
                         id: '7b8cf0b5c1d741d59eaee936fd91150f'
                         key: {
                             name: 'x_snc_troubleshoot_audit'
                             element: 'tool_name'
                             language: 'en'
+                        }
+                    },
+                    {
+                        table: 'sys_generative_ai_prompt_config'
+                        id: '808a4a3f72eb42c89e2b034460175756'
+                        key: {
+                            ai_config: '57b76b4affc54a3583cb62ecbd4445df'
+                        }
+                    },
+                    {
+                        table: 'sys_generative_ai_prompt_config'
+                        id: '819a1e521bfc41cabc0fb1f414360e32'
+                        key: {
+                            ai_config: '6c8d17638d8542b7b60962ddc9e167f2'
                         }
                     },
                     {
@@ -644,6 +847,18 @@ declare global {
                         key: {
                             name: 'x_snc_troubleshoot_run'
                             element: 'fix_report'
+                        }
+                    },
+                    {
+                        table: 'sn_nowassist_skill_config_status'
+                        id: '88ea3fc615a34363a57da0207b1daf2d'
+                        key: {
+                            skill_config: {
+                                id: '3997e152586a4c8986ebe6d9e6bb6120'
+                                key: {
+                                    skill_id: '3914d62f6a9b42a3a4633432a97a1d0f'
+                                }
+                            }
                         }
                     },
                     {
@@ -859,6 +1074,13 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_agent_access_role_configuration'
+                        id: 'bc9c716b0afe4376a6d748afa2847aef'
+                        key: {
+                            agent: '3997e152586a4c8986ebe6d9e6bb6120'
+                        }
+                    },
+                    {
                         table: 'sn_aia_agent_tool_m2m'
                         id: 'c2c28b3942b6479692cd2e9e69a9de26'
                         key: {
@@ -872,6 +1094,14 @@ declare global {
                         id: 'c3c9f3a9863249f08abc0e7d01cba643'
                         key: {
                             name: 'x_snc_troubleshoot.admin'
+                        }
+                    },
+                    {
+                        table: 'sys_gen_ai_feature_mapping'
+                        id: 'ce70f923528c4844a643aa417cc7c7f3'
+                        key: {
+                            feature_name: 'pa llm reason'
+                            document: '0bf0bc13a7414399a1482d21de01231d'
                         }
                     },
                     {
@@ -908,10 +1138,47 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_agent_access_role_configuration'
+                        id: 'd76dd00253b64abda09c0ffed4116663'
+                        key: {
+                            agent: '21c00b55a323477082b23a25049a11ba'
+                        }
+                    },
+                    {
                         table: 'sn_aia_tool'
                         id: 'dce4f5cdd48f4fe89121b7760d4bf563'
                         key: {
                             name: 'log_analysis'
+                        }
+                    },
+                    {
+                        table: 'sys_agent_access_role_mapping'
+                        id: 'dd124f8b890a495dbf70a7ec260f3fc9'
+                        key: {
+                            agent_access_config: {
+                                id: 'bc9c716b0afe4376a6d748afa2847aef'
+                                key: {
+                                    agent: '3997e152586a4c8986ebe6d9e6bb6120'
+                                }
+                            }
+                            role: {
+                                id: 'c3c9f3a9863249f08abc0e7d01cba643'
+                                key: {
+                                    name: 'x_snc_troubleshoot.admin'
+                                }
+                            }
+                        }
+                    },
+                    {
+                        table: 'sn_nowassist_skill_config_status'
+                        id: 'dd71fa7c889a40d3bc5008ebab6ffa12'
+                        key: {
+                            skill_config: {
+                                id: '21c00b55a323477082b23a25049a11ba'
+                                key: {
+                                    skill_id: '0bf0bc13a7414399a1482d21de01231d'
+                                }
+                            }
                         }
                     },
                     {
@@ -995,6 +1262,14 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_one_extend_capability_definition'
+                        id: 'f24a39cd0b384eacb4649387d7f41531'
+                        key: {
+                            capability: '3914d62f6a9b42a3a4633432a97a1d0f'
+                            api: '936e514a53b3b110f028ddeeff7b128c'
+                        }
+                    },
+                    {
                         table: 'sys_choice'
                         id: 'f4d97983a6d84bb9a1635ec29dd579a6'
                         key: {
@@ -1021,6 +1296,14 @@ declare global {
                             name: 'x_snc_troubleshoot_audit'
                             element: 'user'
                             language: 'en'
+                        }
+                    },
+                    {
+                        table: 'sys_one_extend_resource_mapping'
+                        id: 'f9483fe7a99d4cce960a4177815e1936'
+                        key: {
+                            parent_capability: '0bf0bc13a7414399a1482d21de01231d'
+                            resource_capability: '0bf0bc13a7414399a1482d21de01231d'
                         }
                     },
                     {

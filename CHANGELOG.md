@@ -11,6 +11,30 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0206 — 2026-08-02
+
+Phase 1b Task 1 (issue #52): NASK skills `pa llm reason` / `pa llm summarize`
+(`src/fluent/nask-skills.now.ts`) — the minimal passthrough skills PaLlmProxy (Task 2) calls,
+each with one `prompt` string input and a `{{prompt}}` template that adds nothing. Skill names
+build-reject underscores (TS210: letters/numbers/spaces only), so the platform names are spaced
+(`pa llm reason` / `pa llm summarize`); Task 2 resolves them by `$id`-derived sys_id. Gated on
+this app's own `x_snc_troubleshoot.admin` role via `roleMap`, not the golden example's demo
+`itil`, since both skills are server-side-only (no Now Assist Panel deployment).
+
+Live-verified on gpinst01 before and after install (MCP only, no shell): the Step 1 probe
+against three existing custom skill configs and one OOB skill confirmed the documented
+`OneExtendUtil.executeSecure({executionRequests:[{capabilityId, payload, meta:{skillConfigId}}]})`
+call shape, and turned up a fact not in the golden example — the `response` output attribute is a
+JSON-string-wrapped `{"model_output": "<text>"}`, not bare model text, so PaLlmProxy needs one
+more `JSON.parse` than the golden example implies. Both skills installed deactivated (Rule #40),
+activated via `PATCH sn_nowassist_skill_config_status`, and round-tripped a real completion
+("Reply with exactly one word: OK" → `{"model_output": "OK"}`) despite the backing `Now LLM
+Integration` subflow reading `active=false` at preflight — the flag is corroborated-unreliable as
+an execution gate on this instance (AIA's own LTM subsystem was observed succeeding against
+Bedrock under the identical condition), which is now recorded so `check_config`-style tooling
+doesn't treat it as a hard signal. Full narrative in the file header and
+`docs/LOW_LEVEL_DESIGN.md` §4.8.
+
 ## 2026.08.0205 — 2026-08-02
 
 Phase 1b kickoff docs (issue #44). The pre-work design spec

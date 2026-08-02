@@ -351,6 +351,61 @@ Seven thin `sn_aia_tool` (type `script`) bodies each call `invoke()` with their 
 5. **`input_schema` is an ARRAY**, never a JSON-Schema object — a JSON-Schema object causes a **silent, never-terminating stall** (`In progress` forever, no error). The single most expensive defect found in Phase 0; the adapter template must enforce the array shape rather than leaving it to whoever writes the next tool.
 6. **Declared inputs may simply not arrive** (**R-9**) — the probe agent never passed a declared input in any run while its own reasoning text claimed it had. Every tool core must behave correctly with all inputs absent.
 
+### 4.8 PaLlmProxy invocation path — verified 2026-08-01/02 (Phase 1b Task 1 addendum)
+
+⚠ **Written before PaLlmProxy exists (Task 2 is next).** This section is the Step 1 probe's binding
+finding: the call, payload and response shape Task 2 must build against, verified live on gpinst01
+rather than assumed from the golden example. Full narrative and evidence trail live in the file
+header of `src/fluent/nask-skills.now.ts` (`pa llm reason` / `pa llm summarize` skills, `$id`s
+`pa-llm-reason-skill` / `pa-llm-summarize-skill`); this is the pointer + the load-bearing facts.
+
+**API called:** `sn_one_extend.OneExtendUtil.executeSecure()` (the MCP probe tool's "OneExtend REST
+API" strategy is the same public OneExtend surface) — `{executionRequests: [{capabilityId, payload,
+meta: {skillConfigId}}]}`, matching the golden example's RUNTIME INVOCATION COMPANION exactly. No
+background-script executor exists in the Foundry MCP toolset (unchanged from Phase 0, LLD §8 item 4;
+also removed from this MCP server for security, #372), so `servicenow_skill_execute` was the only
+sanctioned probe path — and it is the platform's real public entry point, not a stand-in for one.
+
+**Payload keying:** `{prompt: "<text>"}` — the skill's one input, internal name unchanged from the
+Fluent `name` (`prompt` has no space to underscore-normalize; Rule #38 applies but is a no-op here).
+The stored prompt template on the instrument is the literal string `{{prompt}}`, confirmed against
+three live custom skill configs' own stored prompt text (`{{shortdescription}}` / `{{fulldescription}}`
+on CC03/cc04/CC05) before writing any Fluent — the platform's native template syntax already **is**
+`{{name}}` substitution; the Fluent `(p) => ...${p.input[...]}...` sugar compiles down to the same
+thing, and a plain `{{prompt}}` string literal is a valid, simpler alternative for a true passthrough.
+
+**Response envelope path to the model text — the one fact that is NOT in the golden example and
+cost real live calls to pin down:** `resp.capabilities[capabilityId].response` is a **JSON-STRING-
+WRAPPED** object, not bare model text: `{"model_output": "<text>"}`. Confirmed by reading
+`sys_generative_ai_log.prompt` / `.response` (via the matching `sys_gen_ai_log_metadata.gen_ai_log_id`)
+for a real `pa llm reason` call —
+```
+prompt:   [{"role":"user","content":"Reply with exactly one word: OK"}]
+response: {"model_output": "OK"}
+```
+— so **PaLlmProxy must `JSON.parse(result.response).model_output`**, not use `result.response`
+directly, to reach the model's actual output text. That output text is itself where PaLlmProxy's own
+"strict-JSON parse + one retry" contract (harness plan Task 2) begins — two JSON layers, not one.
+
+**Provider availability — a live, current instance condition, not a call-shape defect.** At probe
+time every "Now LLM"/"Chat Completions" `sys_hub_flow` sampled (23 flows, including `Now LLM
+Integration`, `Now LLM LTS Integration`, `Amazon Bedrock Chat Completions`, `Azure OpenAI Chat
+Completions`, `Google Cloud Chat Completions - Vertex AI`) read `active=false`, matching the golden
+example's own already-documented finding for gpinst01 (`.claude/context/sdk-examples/now-assist-
+skill.now.ts` header, "PROVIDER AVAILABILITY IS INSTANCE-DEPENDENT") — but the `active` flag is
+**corroborated-unreliable as an execution gate**: AIA's own long-term-memory subsystem was observed
+completing successful Bedrock calls (`sys_gen_ai_log_metadata`, `definition: "LTM Identify
+memories_Amazon Bedrock"`, `status: success`, every ~4 minutes) at the same moment its backing flow
+also read `active=false`, and both `pa llm reason` and `pa llm summarize` executed successfully
+against `Now LLM Service` (`model_name: apriel-nowllm`) under the identical condition. **Do not use
+`api.active` as a hard precondition for whether a NASK call will succeed on this instance** — treat
+it as the SKILL.md-documented heuristic it is, not a guarantee, and prefer a live test call.
+
+**Disposition:** this is NOT a Step 1 STOP-condition failure. The call shape was already
+runtime-validated end-to-end on this exact instance in issue #202; this probe re-confirmed it live
+and additionally pinned the `model_output`-wrapper fact the golden example doesn't cover. PaLlmProxy's
+seam design may proceed on a verified call, not a guessed one.
+
 ---
 
 ## 5. Agent Doctor — Native Agent Record Set (built as **Fluent DSL via the SDK**)
