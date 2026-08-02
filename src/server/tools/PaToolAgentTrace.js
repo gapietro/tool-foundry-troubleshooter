@@ -229,9 +229,7 @@ PaToolAgentTrace.prototype = {
                 note: toolCallRead.note || null,
                 truncated_at: toolCallRead.rows.length >= this.MAX_TOOL_CALLS ? this.MAX_TOOL_CALLS : null,
             }
-            data.notes.push(
-                this._taskVsToolCallNote(data.task_stats.total, data.tool_call_stats.total)
-            )
+            data.notes.push(this._taskVsToolCallNote(data.task_stats, data.tool_call_stats))
 
             // ---- Step 4: messages + conversation context -----------------
             phase = 'read_messages'
@@ -1076,18 +1074,65 @@ PaToolAgentTrace.prototype = {
      * description, where it is read once at tool-selection time rather than
      * re-read on every call.
      */
-    _taskVsToolCallNote: function (taskTotal, toolCallTotal) {
+    _taskVsToolCallNote: function (taskStats, toolCallStats) {
+        var denied = []
+        var tasks = this._countPhrase(taskStats, 'execution task(s)', 'sn_aia_execution_task', denied)
+        var calls = this._countPhrase(toolCallStats, 'tool call(s)', 'sn_aia_tools_execution', denied)
+
+        var note = 'This run recorded ' + tasks + ' and ' + calls + '. '
+
+        // The denial, if any, leads — it governs how the counts above are to be
+        // read, and burying it after the reconciliation guidance would put the
+        // caveat behind the thing it qualifies.
+        if (denied.length) {
+            note +=
+                denied.join(' and ') +
+                ' could not be read (DENIED). That is a permission gap and says nothing about the run: ' +
+                'each "unknown number" above is NOT a zero, and NOT an absence of those rows. '
+        }
+
         return (
-            'This run recorded ' +
-            taskTotal +
-            ' execution task(s) and ' +
-            toolCallTotal +
-            ' tool call(s). The two are not 1:1 and are not expected to match: task_stats counts ' +
-            'sn_aia_execution_task rows — the reasoning engine\'s own steps, including orchestrator ' +
-            'and access-verification tasks that call no tool — while tool_call_stats counts ' +
-            'sn_aia_tools_execution rows. The difference between them is NOT a finding and must not ' +
-            'be reported as one.'
+            note +
+            'Execution tasks and tool calls are not 1:1 and are not expected to match: task_stats ' +
+            'counts sn_aia_execution_task rows — the reasoning engine\'s own steps, including ' +
+            'orchestrator and access-verification tasks that call no tool — while tool_call_stats ' +
+            'counts sn_aia_tools_execution rows. The difference between them is NOT a finding and ' +
+            'must not be reported as one.'
         )
+    },
+
+    /**
+     * One side of the count above, stated only when it was actually measured.
+     * Appends `table` to `denied` when it was not, so the caller can explain
+     * the gap once in its own sentence rather than inline (an inline clause
+     * here produced "…says nothing about the run and 1 tool call(s)", which
+     * garden-paths on the conjunction — bad prose in a note whose entire
+     * purpose is not being misread).
+     *
+     * Both totals are `rows.length`, and a cross-scope denial leaves that array
+     * as empty as a genuinely empty run does (R-1: the catch records DENIED and
+     * moves on without touching the exception). Rendering the denial as "0
+     * execution task(s)" asserts a count nobody could read — and contradicts
+     * evidence_basis sitting in the same payload, which says a zero with status
+     * DENIED "says nothing about the run". R-19b forbids exactly that: a note
+     * may never contradict the status beside it.
+     *
+     * It is also, precisely, the defect class this note was rewritten to fix
+     * (issue #85) — a number in a note that is not what it appears to be —
+     * except that a fabricated ZERO is the worse shape, because "the agent
+     * called no tools" is a confident wrong diagnosis rather than a harmless
+     * one. Found in review of that same rewrite.
+     *
+     * A denial on one read says nothing about the other, so the sides are
+     * decided independently.
+     */
+    _countPhrase: function (stats, noun, table, denied) {
+        var s = stats || {}
+        if (s.read_status === 'DENIED') {
+            denied.push(table)
+            return 'an unknown number of ' + noun
+        }
+        return s.total + ' ' + noun
     },
 
     _detailDeferredNotice: function (step) {

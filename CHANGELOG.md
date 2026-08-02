@@ -40,6 +40,15 @@ two-digit daily counter. Incremented on every merge to `main`.
   six sites already said "measured over the whole table on gpinst01" and were misread anyway, so the
   label names what the number is *not* about rather than only where it came from.
 
+- **The rewritten note asserted a count on a DENIED read** (caught reviewing the fix above). Both
+  totals are `rows.length`, and a cross-scope denial leaves that array as empty as a genuinely empty
+  run does — so a denied trace reported *"This run recorded 0 execution task(s) and 0 tool call(s)"*,
+  contradicting `evidence_basis` in the same payload (*"a zero with DENIED is a permission gap and
+  says nothing about the run"*) and violating R-19b. The same defect class the fix above exists to
+  remove, in its worse shape: a fabricated **zero** reads as *"the agent called no tools"*, which is
+  a confident wrong diagnosis rather than a harmless one. Each side is now decided independently
+  against its own `read_status`, and a denial is stated as an unknown with the gap named.
+
 ### Added
 - `test/referenceStatistics.test.js` — a source-scan tripwire over all seven tool cores plus the
   read kit. It fails the build if a hard-coded statistic (`X of Y`, a literal percentage, a
