@@ -257,6 +257,27 @@ describe('absence is earned by a complete walk (round 3)', () => {
         expect(result.data.findings.map((f) => f.finding)).not.toContain('field_does_not_exist')
     })
 
+    it('answers UNKNOWN when the column list was clipped before the ancestors', () => {
+        // 300+ columns on the base table hit the in-memory cap before
+        // sys_metadata is ever scanned, so an ancestor's column is simply not
+        // in the merged list. Round 3's guard checked the WALK and not the
+        // LIST, so exists: false still claimed a "complete chain" over
+        // ancestors that were never merged.
+        const wide = []
+        for (let i = 0; i < 305; i++) {
+            wide.push({ sys_id: 'w' + i, name: 'sn_aia_agent', element: 'col_' + i, internal_type: 'string' })
+        }
+
+        const { result } = run(
+            { table: 'sn_aia_agent', field: 'sys_created_on' },
+            world({ sys_dictionary: wide.concat([{ sys_id: 'd4', name: 'sys_metadata', element: 'sys_created_on', internal_type: 'glide_date_time' }]) })
+        )
+
+        expect(result.data.field.exists).toBe('unknown')
+        expect(result.data.field.note).toMatch(/clipped at 300/)
+        expect(result.data.findings.map((f) => f.finding)).not.toContain('field_does_not_exist')
+    })
+
     it('still answers false over a complete walk with rows read', () => {
         const { result } = run({ table: 'sn_aia_agent', field: 'chanel' }, world())
 

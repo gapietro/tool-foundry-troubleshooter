@@ -481,15 +481,29 @@ PaToolSchemaLookup.prototype = {
             for (var h = 0; h < levels.length; h++) {
                 if (levels[h].read_status !== 'ok') walkComplete = false
             }
+            // A clipped column list is incomplete the same way a broken walk
+            // is: _fields stops at its in-memory ceiling BEFORE later ancestor
+            // levels are scanned, and a kit-truncated dictionary page drops
+            // columns inside a level. Round 3's guard checked the walk and not
+            // the list — so `exists: false` could still claim a "complete
+            // chain" over ancestors that were never merged.
+            var listClipped =
+                (fields && fields.capped_at) ||
+                (data && data.truncations && data.truncations.sys_dictionary) ||
+                null
 
-            if (!fields.length || !walkComplete) {
+            if (!fields.length || !walkComplete || listClipped) {
                 return {
                     element: name,
                     exists: 'unknown',
                     note:
                         (!fields.length
                             ? 'No columns could be read for this table or its ancestors at all'
-                            : 'The ancestor walk was incomplete (a level read as denied or empty)') +
+                            : !walkComplete
+                              ? 'The ancestor walk was incomplete (a level read as denied or empty)'
+                              : 'The column list was clipped at ' +
+                                listClipped +
+                                ' before every ancestor was merged') +
                         ', so whether "' +
                         name +
                         '" exists is UNKNOWN — the question was not answered, and this must not be ' +
