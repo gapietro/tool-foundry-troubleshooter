@@ -525,3 +525,39 @@ describe('awaiting_confirmation branch', () => {
         expect(code).not.toMatch(/awaiting_confirmation/)
     })
 })
+
+// ===========================================================================
+// _renderTranscript — the observation channel rendering (issue #72)
+// ===========================================================================
+
+describe('_renderTranscript prompt_digest rendering', () => {
+    test('an entry carrying prompt_digest renders it as a block, not an inline result=', () => {
+        const rendered = load()._renderTranscript([
+            { seq: 1, actor: 'tool', tool: 'read_artifact', args_digest: '{"id":"a1"}', result_digest: 'SHORT', prompt_digest: 'FULL PAYLOAD' },
+        ])
+
+        expect(rendered).toBe('#1 [tool:read_artifact] args={"id":"a1"}\nresult:\nFULL PAYLOAD')
+        expect(rendered).not.toContain('SHORT')
+    })
+
+    test('an entry without prompt_digest renders exactly as before — inline result=', () => {
+        const rendered = load()._renderTranscript([
+            { seq: 1, actor: 'tool', tool: 'agent_trace', result_digest: 'SHORT' },
+        ])
+
+        expect(rendered).toBe('#1 [tool:agent_trace] result=SHORT')
+    })
+
+    test('mixed entries render each in its own form', () => {
+        const rendered = load()._renderTranscript([
+            { seq: 1, actor: 'llm', result_digest: 'thinking' },
+            { seq: 2, actor: 'tool', tool: 'read_artifact', result_digest: 'SHORT', prompt_digest: 'BIG' },
+        ])
+
+        expect(rendered).toBe('#1 [llm] result=thinking\n#2 [tool:read_artifact]\nresult:\nBIG')
+    })
+
+    test('an empty transcript still reports the first-step message', () => {
+        expect(load()._renderTranscript([])).toContain('first reasoning step')
+    })
+})

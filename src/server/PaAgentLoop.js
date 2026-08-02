@@ -494,6 +494,26 @@ PaAgentLoop.prototype = {
             var label = this._nonEmptyString(e.tool) ? this._str(e.actor) + ':' + e.tool : this._str(e.actor)
             var line = '#' + (e.seq !== undefined && e.seq !== null ? e.seq : i + 1) + ' [' + label + ']'
             if (e.args_digest !== undefined && e.args_digest !== null) line += ' args=' + this._str(e.args_digest)
+
+            // THE OBSERVATION CHANNEL (issue #72). When PaRunManager kept a
+            // prompt-facing digest for this entry, render THAT — the 200-char
+            // `result_digest` is the UI/audit rendering, not what the model
+            // is supposed to reason over. Before this, a 4,000-character
+            // read_artifact page reached the next prompt as ~200 characters,
+            // which is the leading identified mechanical cause of the Phase
+            // 1b benchmark's 0/10 (benchmark/DECISION.md §G3a).
+            //
+            // Block form rather than an inline `result=` suffix: 4,000
+            // characters crammed onto one line is hard for the model to parse
+            // and unreadable for a human pulling the prompt back out of
+            // sys_generative_ai_log to check what the model actually saw.
+            if (e.prompt_digest !== undefined && e.prompt_digest !== null) {
+                lines.push(line)
+                lines.push('result:')
+                lines.push(this._str(e.prompt_digest))
+                continue
+            }
+
             if (e.result_digest !== undefined && e.result_digest !== null) line += ' result=' + this._str(e.result_digest)
             lines.push(line)
         }
