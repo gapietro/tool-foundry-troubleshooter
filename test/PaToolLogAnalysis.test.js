@@ -112,6 +112,28 @@ describe('mandatory scoping', () => {
         expect(String(q.filters.find((f) => f.field === 'level').value)).toBe('3')
     })
 
+    it('warns when an unmapped level label would match nothing', () => {
+        // The warning existed from the start and was DEAD CODE: normalisation
+        // ran during argument parsing, before the data envelope existed, so
+        // the note had nowhere to land. An unknown label then flowed into the
+        // IN filter, matched no rows, and returned a clean `empty`
+        // indistinguishable from a genuinely quiet log layer.
+        const { result, queries } = run({ message: 'boom', level: 'Sev1' }, world())
+        const q = queries.find((x) => x.table === 'syslog')
+
+        expect(String(q.filters.find((f) => f.field === 'level').value)).toBe('Sev1')
+        expect(result.data.notes.join(' ')).toMatch(/not one of the measured syslog level labels/)
+        expect(result.data.notes.join(' ')).toMatch(/will match nothing/)
+    })
+
+    it('does not warn for a mapped label or a numeric value', () => {
+        const a = run({ message: 'boom', level: 'Error' }, world())
+        const b = run({ message: 'boom', level: '3' }, world())
+
+        expect(a.result.data.notes.join(' ')).not.toMatch(/will match nothing/)
+        expect(b.result.data.notes.join(' ')).not.toMatch(/will match nothing/)
+    })
+
     it('clamps an oversized window', () => {
         const { result } = run({ source: 'x_snc', minutes_ago: 99999 }, world())
 

@@ -220,7 +220,14 @@ PaToolLogAnalysis.prototype = {
         var execution = k.str(raw.execution || raw.execution_plan || raw.plan)
         var source = k.str(raw.source)
         var message = k.str(raw.message || raw.contains || raw.keyword)
-        var level = this._normalizeLevel(k.str(raw.level), null)
+        // Kept RAW here: _normalizeArgs runs before the data envelope exists,
+        // and the first version normalised at this point with data=null — which
+        // made the unknown-label warning in _normalizeLevel dead code. An
+        // unmapped label then flowed into the IN filter, matched nothing, and
+        // produced a clean `empty` indistinguishable from a quiet log layer.
+        // Normalisation happens in _buildScope, where the envelope can carry
+        // the note.
+        var level = k.str(raw.level)
 
         if (execution) out.execution = execution
         if (source) out.source = source
@@ -276,7 +283,7 @@ PaToolLogAnalysis.prototype = {
             window: null,
             source_contains: a.source || null,
             message_contains: a.message || null,
-            levels: a.level ? [a.level] : this.DEFAULT_LEVELS,
+            levels: a.level ? [this._normalizeLevel(a.level, data)] : this.DEFAULT_LEVELS,
             levels_meaning:
                 'stored choice values (measured: Warning=1, Error=2, Fatal=3) — the table does not hold ' +
                 'the labels',
