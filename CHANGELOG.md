@@ -11,6 +11,26 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0207 — 2026-08-02
+
+Phase 1b Task 2 (issue #54): `PaLlmProxy` (`src/server/PaLlmProxy.js`) — the sole NASK
+touchpoint for the custom harness. `reason(prompt)` enforces the strict-JSON contract
+(`tool_call` / `answer` / `fix_report`) with exactly one retry on a parse failure, re-prompting
+with the parse reason plus "JSON only"; `summarize(prompt)` is a plain-text passthrough with no
+JSON contract and no retry. `_parseResponse` is pure string logic (trim, strip a single markdown
+fence, locate the outermost `{...}`, validate per-action required fields) — no Glide, testable
+without an instance. `_invokeNask` is the ONLY method in the codebase that knows NASK exists,
+wired to Task 1's verified call shape (LLD §4.8):
+`sn_one_extend.OneExtendUtil.executeSecure({executionRequests:[{capabilityId, payload, meta:
+{skillConfigId}}]})`, unwrapping the double-JSON response envelope
+(`{"model_output":"<text>"}`) down to plain text. Skills resolved by direct sys_id from
+`src/fluent/generated/keys.ts`, never by name. Distinguishes invoke-layer failure (no retry,
+`raw:null`) from parse-layer failure (one retry, `raw` carries the latest model text) — the
+distinction `/status` and the Evidence Bundle advice hang on. 27 new Jest tests, full suite
+546/546 green.
+
+---
+
 ## 2026.08.0206 — 2026-08-02
 
 Phase 1b Task 1 (issue #52): NASK skills `pa llm reason` / `pa llm summarize`
