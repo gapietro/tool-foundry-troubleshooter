@@ -120,8 +120,11 @@ PaToolSchemaLookup.prototype = {
             }
 
             phase = 'walk_hierarchy'
-            var hierarchy = this._hierarchy(a.table, data)
+            var walk = this._hierarchy(a.table, data)
+            var hierarchy = walk.levels
             data.hierarchy = hierarchy
+            data.hierarchy_complete = walk.complete
+            data.hierarchy_incomplete_reason = walk.incomplete_reason
             data.hierarchy_note =
                 'sys_dictionary rows live on the table that DECLARES a column, not on every table that has ' +
                 'it. Every field below carries declared_on. A lookup that does not walk this chain reports ' +
@@ -133,7 +136,7 @@ PaToolSchemaLookup.prototype = {
             data.field_count = fields.length
 
             if (a.field) {
-                data.field = this._oneField(a.field, fields, a.table, data, hierarchy)
+                data.field = this._oneField(a.field, fields, a.table, data, walk)
             } else {
                 data.fields = fields
                 data.truncated_at = fields.capped_at || (k.anyTruncation(data) ? this.MAX_FIELDS : null)
@@ -348,6 +351,18 @@ PaToolSchemaLookup.prototype = {
         var lookup = { field: 'name', value: table }
         var depth = 0
 
+        // The walk has FOUR ways to end, and only one of them means "the whole
+        // ancestry was seen". Round 6 found that the other three — a failed
+        // read, a cycle, and the depth ceiling — all left every visited level
+        // reading `ok`, so a completeness check derived from per-level
+        // statuses called a truncated walk complete and let `exists: false`
+        // claim ancestors that were never scanned. The verdict is therefore
+        // returned EXPLICITLY by the code that knows why the loop ended,
+        // instead of being re-derived downstream from evidence that cannot
+        // distinguish the cases.
+        var complete = false
+        var incompleteReason = null
+
         while (lookup.value && depth < this.MAX_DEPTH) {
             var read = k.readRows(
                 'sys_db_object',
@@ -361,11 +376,14 @@ PaToolSchemaLookup.prototype = {
 
             if (read.status === 'DENIED' || !read.rows.length) {
                 chain.push({ table: lookup.value, label: null, read_status: read.status, parent: null })
+                incompleteReason =
+                    'a level could not be read (sys_db_object ' + read.status + ' for "' + lookup.value + '")'
                 break
             }
 
             var row = read.rows[0]
             if (seen[row.sys_id]) {
+                incompleteReason = 'the super_class chain revisits "' + row.name + '" (cycle)'
                 data.notes.push(
                     'The super_class chain revisits "' + row.name + '"; the walk stopped to avoid a cycle.'
                 )
@@ -382,11 +400,25 @@ PaToolSchemaLookup.prototype = {
                 parent: parentId ? row.super_class_display || parentId : null,
             })
 
+            if (!parentId) {
+                // The only genuine completion: the chain topped out.
+                complete = true
+                break
+            }
+
             lookup = { field: 'sys_id', value: parentId }
             depth++
         }
 
-        return chain
+        if (!complete && !incompleteReason) {
+            incompleteReason =
+                depth >= this.MAX_DEPTH
+                    ? 'the depth ceiling (' + this.MAX_DEPTH + ') was reached with a parent still unresolved'
+                    : 'the walk ended without resolving the chain'
+            data.notes.push('The ancestor walk is INCOMPLETE: ' + incompleteReason + '.')
+        }
+
+        return { levels: chain, complete: complete, incomplete_reason: incompleteReason }
     },
 
     // =======================================================================
@@ -417,6 +449,18 @@ PaToolSchemaLookup.prototype = {
                 // itself, not a column.
                 if (!element) continue
                 if (seen[element]) continue
+
+                // The cap is claimed only when a row that WOULD have been
+                // added arrives after the list is full. Marking it at
+                // `length >= MAX` alone calls an exactly-300-column schema
+                // clipped — the same exactly-full ambiguity the kit's limit+1
+                // read removes; it pushed a genuinely missing field to
+                // `unknown` and table mode to a false truncation ceiling.
+                // IN-MEMORY CAP (declared exception), limit+1 semantics:
+                if (out.length >= this.MAX_FIELDS) {
+                    out.capped_at = this.MAX_FIELDS
+                    return out
+                }
                 seen[element] = true
 
                 out.push({
@@ -443,21 +487,13 @@ PaToolSchemaLookup.prototype = {
                     inherited: h > 0,
                 })
 
-                // IN-MEMORY CAP: an accumulation ceiling across the whole
-                // hierarchy walk, not any single read's limit - so it cannot
-                // take the kit's measured value and is declared here instead.
-                // It still must not be silent.
-                if (out.length >= this.MAX_FIELDS) {
-                    out.capped_at = this.MAX_FIELDS
-                    return out
-                }
             }
         }
 
         return out
     },
 
-    _oneField: function (name, fields, table, data, hierarchy) {
+    _oneField: function (name, fields, table, data, walk) {
         var k = this._k()
 
         var found = null
@@ -476,11 +512,11 @@ PaToolSchemaLookup.prototype = {
             // UNKNOWN, and the first version answered `false`: the same
             // empty-result overconfidence QueryTable's verdict had, in the
             // tool whose one job is telling those apart.
-            var levels = hierarchy || []
-            var walkComplete = levels.length > 0
-            for (var h = 0; h < levels.length; h++) {
-                if (levels[h].read_status !== 'ok') walkComplete = false
-            }
+            // The walk's OWN verdict — not a re-derivation from per-level
+            // statuses, which cannot tell a topped-out chain from one ended by
+            // a cycle or the depth ceiling (round 6: all three left every
+            // visited level reading `ok`).
+            var walkComplete = walk && walk.complete === true
             // A clipped column list is incomplete the same way a broken walk
             // is: _fields stops at its in-memory ceiling BEFORE later ancestor
             // levels are scanned, and a kit-truncated dictionary page drops
@@ -500,7 +536,8 @@ PaToolSchemaLookup.prototype = {
                         (!fields.length
                             ? 'No columns could be read for this table or its ancestors at all'
                             : !walkComplete
-                              ? 'The ancestor walk was incomplete (a level read as denied or empty)'
+                              ? 'The ancestor walk was incomplete — ' +
+                                ((walk && walk.incomplete_reason) || 'reason unrecorded')
                               : 'The column list was clipped at ' +
                                 listClipped +
                                 ' before every ancestor was merged') +

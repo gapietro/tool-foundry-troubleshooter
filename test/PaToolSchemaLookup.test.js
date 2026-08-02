@@ -278,6 +278,75 @@ describe('absence is earned by a complete walk (round 3)', () => {
         expect(result.data.findings.map((f) => f.finding)).not.toContain('field_does_not_exist')
     })
 
+    it('answers UNKNOWN when the walk stopped on a cycle', () => {
+        // A cycle ends the walk with every visited level reading `ok`, so a
+        // completeness check derived from per-level statuses called the walk
+        // complete — and exists: false claimed ancestors beyond the cycle
+        // point. The walk now reports its own verdict.
+        const { result } = run(
+            { table: 'a', field: 'some_col' },
+            world({
+                sys_db_object: [
+                    { sys_id: 'x', name: 'a', super_class: 'y', super_class__display: 'B Label' },
+                    { sys_id: 'y', name: 'b', super_class: 'x', super_class__display: 'A Label' },
+                ],
+                sys_dictionary: [{ sys_id: 'da', name: 'a', element: 'other_col', internal_type: 'string' }],
+            })
+        )
+
+        expect(result.data.hierarchy_complete).toBe(false)
+        expect(result.data.hierarchy_incomplete_reason).toMatch(/cycle/)
+        expect(result.data.field.exists).toBe('unknown')
+        expect(result.data.findings.map((f) => f.finding)).not.toContain('field_does_not_exist')
+    })
+
+    it('answers UNKNOWN when the depth ceiling ended the walk with a parent unresolved', () => {
+        // MAX_DEPTH+2 tables chained: every visited level reads ok, but the
+        // deepest still points at a parent that was never scanned.
+        const tables = []
+        const dict = []
+        for (let i = 0; i < 18; i++) {
+            tables.push({
+                sys_id: 't' + i,
+                name: 'tbl_' + i,
+                super_class: i < 17 ? 't' + (i + 1) : '',
+                super_class__display: i < 17 ? 'Label ' + (i + 1) : '',
+            })
+            dict.push({ sys_id: 'dd' + i, name: 'tbl_' + i, element: 'col_' + i, internal_type: 'string' })
+        }
+
+        const { result } = run(
+            { table: 'tbl_0', field: 'col_17' },
+            world({ sys_db_object: tables, sys_dictionary: dict })
+        )
+
+        expect(result.data.hierarchy_complete).toBe(false)
+        expect(result.data.hierarchy_incomplete_reason).toMatch(/depth ceiling/)
+        expect(result.data.field.exists).toBe('unknown')
+    })
+
+    it('does not call an exactly-full column list clipped', () => {
+        // The accumulator's own limit+1: exactly MAX_FIELDS columns, all
+        // consumed, is a COMPLETE list. Marking it clipped pushed a genuinely
+        // missing field to unknown and table mode to a false ceiling — the
+        // mirror direction of every other finding in this cycle.
+        const exact = []
+        for (let i = 0; i < 299; i++) {
+            exact.push({ sys_id: 'e' + i, name: 'sn_aia_agent', element: 'ecol_' + i, internal_type: 'string' })
+        }
+        // 299 on the base + 1 inherited = exactly 300 across the chain.
+        exact.push({ sys_id: 'em', name: 'sys_metadata', element: 'sys_created_on', internal_type: 'glide_date_time' })
+
+        const fieldMode = run({ table: 'sn_aia_agent', field: 'genuinely_absent' }, world({ sys_dictionary: exact }))
+        const tableMode = run('sn_aia_agent', world({ sys_dictionary: exact }))
+
+        expect(fieldMode.result.data.field_count).toBe(300)
+        expect(fieldMode.result.data.field.exists).toBe(false)
+        expect(fieldMode.result.data.findings.map((f) => f.finding)).toContain('field_does_not_exist')
+        // Table mode reports no ceiling either - truncated_at is its field.
+        expect(tableMode.result.data.truncated_at).toBeNull()
+    })
+
     it('still answers false over a complete walk with rows read', () => {
         const { result } = run({ table: 'sn_aia_agent', field: 'chanel' }, world())
 
