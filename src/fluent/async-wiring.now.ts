@@ -73,18 +73,25 @@ export const runStartEvent = Record({
 // finished by the time the ScriptAction gets control back).
 //
 // Deferring is also empirically safe for Phase 1b's bound, RE-DERIVED
-// 2026-08-02 for issue #72's prompt-facing digest (the 6,000-char figure
-// this comment carried before assumed a 200-char ceiling on every entry,
-// which is no longer true). MAX_ITERATIONS is 15 and each iteration appends
-// at most two transcript entries (llm + tool, or llm + system). Every entry
+// 2026-08-02 for issue #72's prompt-facing digest, and RE-DERIVED AGAIN in
+// final review the same day once PROMPT_DIGEST_CHARS moved from 4,000 to
+// 8,500 (the 4,000 value was sized against the bare read_artifact page;
+// final review found the digest actually runs over the JSON-stringified
+// dispatch envelope, whose escaping can nearly double a page's length, so
+// the ceiling was raised to 8,500 to guarantee one full page survives
+// regardless of content — see PaRunManager.js's PROMPT_DIGEST_CHARS comment
+// for the full account). MAX_ITERATIONS is 15 and each iteration appends at
+// most two transcript entries (llm + tool, or llm + system). Every entry
 // still carries a <=200-char result_digest (PaRunManager.DIGEST_CHARS), so
-// the baseline is ~30 entries * ~600 chars including args and JSON overhead
-// = ~18,000. On top of that, at most PROMPT_WINDOW (3) tool entries retain a
-// prompt_digest of up to PROMPT_DIGEST_CHARS (4,000) = 12,000. Worst case
-// ~30,000 characters against the transcript column's 65,536-char ceiling
-// (tables.now.ts) — roughly 2x headroom, and asserted by the "T6 row-size
-// bound" test in test/PaRunManager.test.js so this paragraph cannot go
-// stale silently again. Live-verified on gpinst01
+// the baseline is ~30 entries * ~400-600 chars including args and JSON
+// overhead = ~12,800. On top of that, at most PROMPT_WINDOW (3) tool
+// entries retain a prompt_digest of up to PROMPT_DIGEST_CHARS (8,500) =
+// 25,500. Worst case ~38,300 characters against the transcript column's
+// 65,536-char ceiling (tables.now.ts) — roughly 1.7x headroom (down from
+// the ~2x the old 4,000-char ceiling gave, but still comfortable) — and
+// asserted by the "T6 row-size bound" test in test/PaRunManager.test.js
+// (measured 38,340 chars against that test's synthetic worst case) so this
+// paragraph cannot go stale silently again. Live-verified on gpinst01
 // (Task 7, Step 4): three real diagnose runs against the Task 12 smoke
 // specimen produced 7 transcript entries each. The unbounded-growth risk
 // the brief names is real across MANY runs accumulating on one row, which

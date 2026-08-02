@@ -129,13 +129,33 @@ PaRunManager.prototype = {
      *  larger (4,000-char) threshold for a whole tool payload. */
     DIGEST_CHARS: 200,
 
-    /** Prompt-facing ceiling, deliberately equal to
-     *  PaArtifactStore.MAX_PAGE_CHARS so exactly ONE read_artifact page
-     *  survives into the next reasoning prompt intact (issue #72). DISTINCT
-     *  from DIGEST_CHARS, which stays 200 for the polling UI and the audit
-     *  row — raising that one globally is what this design deliberately does
-     *  NOT do. */
-    PROMPT_DIGEST_CHARS: 4000,
+    /** Prompt-facing ceiling (issue #72; corrected in final review, see below).
+     *  DISTINCT from DIGEST_CHARS, which stays 200 for the polling UI and the
+     *  audit row — raising that one globally is what this design deliberately
+     *  does NOT do.
+     *
+     *  NOT equal to PaArtifactStore.MAX_PAGE_CHARS (4,000) — that was the
+     *  original rationale and it was FALSE. `PaAgentLoop._dispatchTool`
+     *  digests `this._toText(result)`, which is the JSON-STRINGIFIED
+     *  ENVELOPE (`{success, data:{content, offset, next_offset, total,
+     *  has_more, ...}}`), not the bare page. JSON escaping expands the page's
+     *  content (`"` -> `\"`, newline -> `\n`) and the envelope adds its own
+     *  ~200 chars of keys, so a full MAX_PAGE_CHARS page is NOT guaranteed to
+     *  survive a 4,000-char cut. Measured expansion: 1.08x on log-like text,
+     *  ~1.17x on quote-dense JSON-like content, and 2.01x in the pathological
+     *  all-quotes case (a 4,000-char page -> an 8,057-char envelope).
+     *
+     *  Worse, the loss is SILENT and undetectable by the model: `next_offset`
+     *  appears BEFORE `content` in the envelope's key order, so it always
+     *  survives the cut even when the content tail is dropped — the model
+     *  reads `next_offset: 4000`, pages from there, and believes it read
+     *  contiguously when in fact a chunk of the page never reached it. That
+     *  is why "usually enough" was not an acceptable bar here.
+     *
+     *  Set to 8,500 — above the 8,057-char pathological worst case plus
+     *  headroom for envelope-key variance — so one full page survives whole
+     *  REGARDLESS of content. */
+    PROMPT_DIGEST_CHARS: 8500,
 
     /** How many of the most recent entries CARRYING a prompt_digest keep it.
      *  Older carriers are pruned on append, which is what bounds the

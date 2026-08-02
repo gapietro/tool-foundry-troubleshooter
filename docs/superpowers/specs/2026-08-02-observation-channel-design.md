@@ -79,8 +79,21 @@ Two new constants:
 
 | Constant | Value | Rationale |
 |---|---|---|
-| `PROMPT_DIGEST_CHARS` | `4000` | Deliberately equal to `PaArtifactStore.MAX_PAGE_CHARS`, so exactly one `read_artifact` page survives intact — the use case the issue names. |
+| `PROMPT_DIGEST_CHARS` | `8500` | **Corrected in final review — see note below.** Sized against the JSON-stringified dispatch envelope (what is actually digested), not the bare page: escaping can nearly double a page's length (measured up to 2.01x pathological), so the ceiling sits above the measured 8,057-char worst case plus envelope-key variance, guaranteeing one full `read_artifact` page survives intact regardless of content. |
 | `PROMPT_WINDOW` | `3` | Number of most-recent tool entries that retain `prompt_digest`. |
+
+**Correction, final review (2026-08-02).** The original rationale above — "deliberately equal to
+`PaArtifactStore.MAX_PAGE_CHARS`, so exactly one page survives intact" — was found FALSE in final
+review, before this branch shipped. `PaAgentLoop._dispatchTool` digests `this._toText(result)`, the
+JSON-stringified **envelope** (`{success, data:{content, offset, next_offset, total, has_more,
+...}}`), not the bare page. JSON escaping (`"` -> `\"`, newline -> `\n`) plus the envelope's own
+~200 chars of keys means a full 4,000-char page is not guaranteed to survive a 4,000-char cut —
+measured expansion ranged from 1.08x (log-like text) to 2.01x (pathological all-quotes content,
+4,000 chars -> 8,057). Worse, `next_offset` precedes `content` in the envelope's key order, so it
+always survives a cut that drops the content tail — the model reads a `next_offset` that looks
+valid and pages onward believing it read contiguously, with no signal that a chunk of the prior
+page never reached it. `PROMPT_DIGEST_CHARS` was raised to 8,500 to close that gap; the row-size
+arithmetic in §4.4 is re-derived accordingly.
 
 `_normalizeEntry` gains one narrow rule. When **all** of the following hold, it additionally writes
 `out.prompt_digest`:
@@ -157,19 +170,24 @@ and it is recorded as a named confound in the §H addendum rather than glossed o
 
 ### 4.4 Row-size arithmetic (the T6 re-check)
 
-Worst case under `MAX_ITERATIONS = 15`, two transcript entries per iteration:
+**Re-derived in final review** for `PROMPT_DIGEST_CHARS = 8,500` (was 4,000 — see the §4.1
+correction). Worst case under `MAX_ITERATIONS = 15`, two transcript entries per iteration:
 
 | Component | Count | Each | Subtotal |
 |---|---|---|---|
-| Baseline entries (200-char `result_digest` + `args_digest` + JSON overhead) | 30 | ~600 | ~18,000 |
-| `prompt_digest` retained by the window | 3 | 4,000 | 12,000 |
-| **Total** | | | **~30,000** |
+| Baseline entries (200-char `result_digest`/`args_digest` + JSON overhead) | 30 | ~400-600 | ~12,800 |
+| `prompt_digest` retained by the window | 3 | 8,500 | 25,500 |
+| **Total (projected)** | | | **~38,300** |
 
-Against the `transcript` column's 65,536-char ceiling (`tables.now.ts`), that leaves roughly 2×
-headroom. T6's conclusion — deferring the `maybeSummarize` wiring is safe for Phase 1b's bound —
-therefore still holds, on new arithmetic rather than the superseded 6,000-char figure. The DEFERRED
-comment block in `src/fluent/async-wiring.now.ts` is updated to cite these numbers, and the bound is
-additionally guarded by a test (§5) so it cannot go stale silently.
+The "T6 row-size bound" test in `test/PaRunManager.test.js` runs the real append path against a
+synthetic worst case and **measures** 38,340 characters — matching the projection, not merely
+assumed. Against the `transcript` column's 65,536-char ceiling (`tables.now.ts`), that leaves
+roughly 1.7× headroom (down from the ~2× the superseded 4,000-char ceiling gave, but still
+comfortable, and the test's own 40,000-char assertion has ~1,660 chars of slack above the measured
+value). T6's conclusion — deferring the `maybeSummarize` wiring is safe for Phase 1b's bound —
+therefore still holds, on this re-derived and measured arithmetic. The DEFERRED comment block in
+`src/fluent/async-wiring.now.ts` is updated to cite these numbers, and the bound remains guarded by
+that same test so it cannot go stale silently again.
 
 ## 5. Testing
 
