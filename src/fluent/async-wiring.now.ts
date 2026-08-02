@@ -50,7 +50,7 @@ export const runStartEvent = Record({
         event_name: 'x_snc_troubleshoot.run.start',
         description: 'Fired by POST /analyze (diagnose mode) to queue the async ReAct worker for one diagnostic run',
         table: 'x_snc_troubleshoot_run',
-        fired_by: 'PaRestHandlers.analyze (REST route: POST /api/x_snc_troubleshoot/troubleshooter/analyze)',
+        fired_by: 'PaRestHandlers.analyze (REST route: POST /api/x_snc_troubleshoot/v1/troubleshooter/analyze)',
         priority: 100,
     },
 })

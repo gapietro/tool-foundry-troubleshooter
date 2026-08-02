@@ -3,11 +3,11 @@
  * docs/superpowers/plans/2026-08-02-phase1b-harness.md; LOW_LEVEL_DESIGN.md
  * §4.8 wiring).
  *
- * GET  /api/x_snc_troubleshoot/troubleshooter/tools
- * GET  /api/x_snc_troubleshoot/troubleshooter/status
- * POST /api/x_snc_troubleshoot/troubleshooter/analyze
- * GET  /api/x_snc_troubleshoot/troubleshooter/runs/{run_id}
- * POST /api/x_snc_troubleshoot/troubleshooter/runs/{run_id}/message
+ * GET  /api/x_snc_troubleshoot/v1/troubleshooter/tools
+ * GET  /api/x_snc_troubleshoot/v1/troubleshooter/status
+ * POST /api/x_snc_troubleshoot/v1/troubleshooter/analyze
+ * GET  /api/x_snc_troubleshoot/v1/troubleshooter/runs/{run_id}
+ * POST /api/x_snc_troubleshoot/v1/troubleshooter/runs/{run_id}/message
  *
  * ALL FIVE ROUTE SCRIPTS ARE ONE-LINE DELEGATIONS TO PaRestHandlers.
  * Build Rule #43: escape sequences and backticks inside a Fluent `script`

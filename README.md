@@ -1,6 +1,6 @@
 # Foundry Troubleshooter
 
-![Version](https://img.shields.io/badge/version-2026.08.0215-blue)
+![Version](https://img.shields.io/badge/version-2026.08.0216-blue)
 
 An AI-powered diagnostic agent that runs **entirely within ServiceNow**. When an AI Agent built with Foundry fails on a customer instance — where external AI tools are prohibited — the Troubleshooter ingests the failing execution, systematically inspects the agent's instructions, tools, schemas, data, and GenAI stack, finds the root cause, and produces a structured **Fix Report** to feed back into the builder AI.
 
@@ -60,7 +60,7 @@ All queries use `GlideRecordSecure`. Phase 1–2 tools are read-only; fix applic
 | Layer | Technology |
 |-------|-----------|
 | UI | React (ServiceNow SDK) — Phase 2 |
-| API | Scripted REST API (`/api/x_snc_pa/troubleshooter/*`), async runs |
+| API | Scripted REST API (`/api/x_snc_troubleshoot/v1/troubleshooter/*`), async runs |
 | Orchestration | Script Includes (server-side JavaScript) |
 | LLM | NASK Skills / GenAI Controller (strict-JSON contract) |
 | State | Scoped tables (x_snc_troubleshoot_run, x_snc_troubleshoot_audit) + attachments for large artifacts |

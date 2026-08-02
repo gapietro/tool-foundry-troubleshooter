@@ -224,15 +224,30 @@ neither harness is being measured against a different playing field than the oth
    filter would have mattered, so the filter's benefit is unexercised in this comparison, not
    asymmetrically applied.
 3. **Playbook v2** (PR #50, merged 2026-08-01, before Task 1) — the "derive table names, never
-   guess them" and "the GenAI stack: read the definition row" sections. This playbook text is
-   **native-only** — it is `agent-doctor-instructions.md`, loaded by the NASK-backed `sn_aia_agent`
-   record. The custom harness's `PaAgentLoop` loads its own, separate playbook text (Task 7's
-   explicit scope boundary: "the shared playbook stayed OFF LIMITS throughout"). So playbook v2 is
-   **not** a shared confound between the two harnesses in this comparison — it improves native's
-   diagnostic discipline only, and has no counterpart change on the custom side. Recorded here
-   because the brief asked for the full confound surface on the record, not because it muddies
-   the native-vs-custom comparison: it is a real, deliberate asymmetry (the two harnesses have
-   never shared a playbook), not a measurement artifact.
+   guess them" and "the GenAI stack: read the definition row" sections. **Correction (final
+   whole-branch review, 2026-08-02):** the claim below that this text is native-only, and that "the
+   two harnesses have never shared a playbook," is **false** and is corrected here rather than
+   silently edited, per this project's evidence-over-claims discipline. `PaAgentLoop._loadPlaybook()`
+   / `_defaultPlaybook()` (`src/server/PaAgentLoop.js:54-67`, `:656-672`) reads
+   `sn_aia_agent.instructions` off the SAME installed `Agent Doctor` record (`AGENT_NAME: 'Agent
+   Doctor'`, `:119`) that backs native's NASK agent — the identical Fluent-authored text, not a
+   third hand-typed copy; the class's own header comment documents this explicitly as the reason no
+   playbook text is ever embedded in `PaAgentLoop` itself. The `ScriptAction` async worker
+   (`async-wiring.now.ts:100-104`) injects no playbook of its own, so at runtime the custom harness
+   falls through to this same shared read by construction, not by accident.
+   **Live-verified for this comparison, not assumed:** `sys_generative_ai_log` prompt content was
+   inspected (MCP, read-only, gpinst01) for all 10 custom-harness benchmark runs (created
+   2026-08-02 06:25:01–06:25:12; run ids in `benchmark/scorecard-custom-harness.md`). The first-step
+   prompt for run `06819e402ba6c314f243fed2ce91bf9f` (`sys_generative_ai_log` sys_id
+   `068116c42ba2cbd417a6ffbeee91bf05`) contains the "## The seven-layer sweep", "## Derive table
+   names, never guess them", and "## The GenAI stack: read the definition row" headings verbatim —
+   playbook v2's own text — not `PaAgentLoop`'s 4-line `_FALLBACK_PLAYBOOK`. **Playbook v2 was in
+   effect for the 10 runs scored in this comparison.** It is therefore not a confound in the sense
+   originally written here (a difference between what the two harnesses were given) — it is a
+   shared input, present on both sides, whose presence did not prevent the 0/10 result. That
+   redirects the causal question in G3/G4 away from "does the custom harness need its own playbook
+   pass" — it already had this playbook — toward what actually stopped a compliant, well-instructed
+   sweep from happening. See G3a.
 
 **Net effect on interpretation:** the native score moving from 70% (Task 12) to 80% (this
 comparison) is attributable entirely to item 1 (seed 2's confound being repaired) plus ordinary
@@ -275,6 +290,28 @@ compounding failure modes, present in different mixes across the 10 rows:
 This is not a marginal or borderline result requiring judgment calls to reach — `sum(passes_gate)`
 is unambiguously 0 because `root_cause_layer_correct` is 0 on every row.
 
+### G3a. The leading identified mechanical cause — the 200-character observation channel
+
+**Added (final whole-branch review, 2026-08-02).** The three failure modes above are not simply
+"the model reasoned poorly" — the loop's own transcript-construction path caps what the model can
+ever see of a tool's result, regardless of how instructed it is. `_dispatchTool` appends every
+tool's result to the transcript (`src/server/PaAgentLoop.js:258-263`); `PaRunManager._normalizeEntry`
+runs every `result_digest` through `_digest()`, which truncates to 200 characters
+(`src/server/PaRunManager.js:256-257`, `_digest` at `:831-835`); `_buildPrompt` renders only this
+digested transcript back into the next reasoning prompt (`src/server/PaAgentLoop.js:429-461`); the
+full result object is otherwise discarded — `_step()` returns `{terminal:false}` without it
+(`:234-235`). A `read_artifact` page as large as 4,000 characters is therefore crushed to roughly
+200 characters before the model can reason over it a second time, which mechanically explains the
+observed profile in every one of the 10 rows: one `agent_trace` call, one `read_artifact` page, then
+a fix attempt. A model that cannot see more than ~200 characters of what it already fetched has no
+way to know that paging further would surface anything new — and the same starvation plausibly
+feeds failure mode 2 above (fabricated evidence): a model reasoning from a mostly-blank digest has
+nothing real left to cite. `test/PaAgentLoop.test.js`'s `fakeRunManager` (`:63-67`) does not digest,
+so no existing unit test would catch this or verify a fix. This is the **leading identified
+mechanical cause** of the 0/10 result — named as the primary lead, not asserted as the sole
+contributor. Fix and required re-run tracked in
+[issue #72](https://github.com/gapietro/tool-foundry-troubleshooter/issues/72).
+
 ### G4. The verdict
 
 **Native remains the deep-diagnosis front door; the custom harness (Phase 1b) does not yet clear
@@ -293,12 +330,25 @@ authorization. This comparison is the first time that gap has been measured acro
 **What this does not mean:** it does not mean Phase 1b's infrastructure is broken. `/analyze`,
 `/runs/{id}`, the async worker, the Evidence Bundle, `PaFixReport`'s validation/repair path, and
 the REST surface all ran to completion correctly on every one of the 10 rows (10/10 reached a
-terminal state, 0 stuck runs, 0 void rows) — the defect is entirely in the reasoning loop's
-diagnostic *depth and honesty*, governed by `PaAgentLoop`'s prompt assembly and the custom
-harness's own (non-shared) playbook text, both explicitly out of scope for Tasks 7–10's
-authorization. The natural next step is a playbook/prompt-discipline pass on the custom harness's
-reasoning loop — mirroring what playbook v2 already did for native — followed by a re-run of this
-same benchmark before any claim that the custom harness is production-ready for deep diagnosis.
-Until then, native stays the recommended path for both triage and deep diagnosis on this instance,
-and the Phase 1b milestone ("deep diagnosis passes the same seeded-failure benchmark") is **not
-met** by this measurement.
+terminal state, 0 stuck runs, 0 void rows).
+
+**Correction (final whole-branch review, 2026-08-02):** the paragraph below originally attributed
+the defect to the reasoning loop's diagnostic "depth and honesty" in the abstract and prescribed a
+playbook/prompt-discipline pass as the next step. Both are corrected here rather than silently
+edited. The playbook attribution was unsafe and is now known to be wrong: playbook v2 was already
+in effect, on the SAME shared `Agent Doctor` instructions record used by native, for every one of
+these 10 runs (G2 item 3, live-verified against `sys_generative_ai_log`) — so "a playbook pass on
+the custom harness's own (non-shared) playbook" was never an available fix; there is no separate
+playbook to pass. The **leading identified mechanical cause**, named in G3a, is the 200-character
+observation channel: `PaRunManager`'s transcript digesting caps every tool result the model can see
+on its next reasoning step to ~200 characters, regardless of how much real evidence a tool call
+actually returned or how well-instructed the model is. The natural next step is fixing that channel
+— carrying the full (thresholded, not digested-to-200-chars) result of the most recent tool dispatch
+into the next prompt, with an integration test proving a >200-character payload survives into the
+second prompt — followed by a re-run of this same benchmark before any claim that the custom
+harness is production-ready for deep diagnosis. This fix and re-run are tracked in
+[issue #72](https://github.com/gapietro/tool-foundry-troubleshooter/issues/72); the benchmark
+re-run happens only after that fix lands, not before and not instead of it. Until then, native
+stays the recommended path for both triage and deep diagnosis on this instance, and the Phase 1b
+milestone ("deep diagnosis passes the same seeded-failure benchmark") is **not met** by this
+measurement — that verdict and the underlying 0/10 measurement are unchanged by this correction.
