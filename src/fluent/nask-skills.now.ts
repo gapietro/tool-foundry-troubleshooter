@@ -187,17 +187,33 @@ import { NowAssistSkillConfig } from '@servicenow/sdk/core'
  * `execute()` (not ACL-enforced — SKILL.md notes both are supported,
  * ~20/~15 split in platform code). Record whichever is chosen in
  * PaLlmProxy.js's own header.
+ *
+ * ===========================================================================
+ * FIX ROUND (post-review): one input LITERAL per skill, not a shared object
+ * ===========================================================================
+ * The first version of this file declared a single `promptOnlyInput` array
+ * once, with one `$id: Now.ID['pa-llm-input-prompt']`, and passed the SAME
+ * object reference to both `paLlmReason.inputs` and `paLlmSummarize.inputs`.
+ * `keys.ts` showed exactly one `pa-llm-input-prompt` entry — a single
+ * `sys_one_extend_definition_attribute` record — which the reported Step 4
+ * round-trip could not distinguish from "each skill correctly got its own
+ * attribute record" (both calls used a `prompt` key regardless of whether
+ * the underlying attribute row was shared or duplicated). No golden-example
+ * precedent uses a shared input object across two skill configs — every
+ * `now-assist-skill.now.ts` example declares its own inline `inputs[]`
+ * literal per skill — and `roleMap`, in this very file, already showed the
+ * correct contrasting pattern: a separate literal per config, confirmed by
+ * `keys.ts` showing two distinct `sys_agent_access_role_mapping` rows.
+ *
+ * Fixed by giving each skill its own input literal with a distinct `$id`
+ * (`pa-llm-reason-input-prompt` / `pa-llm-summarize-input-prompt`) rather
+ * than resolving the ambiguity by querying the shared record's associations
+ * — the unambiguous route the reviewer preferred. Rebuilt, reinstalled,
+ * re-verified `keys.ts` now carries two separate `sys_one_extend_
+ * definition_attribute` entries, and re-ran the micro-invocation on BOTH
+ * skills post-reinstall (task-1-report.md "Fix round" section has the full
+ * command/output pair for both).
  */
-
-const promptOnlyInput = [
-    {
-        $id: Now.ID['pa-llm-input-prompt'],
-        name: 'prompt',
-        description: 'The complete prompt text, composed server-side by PaAgentLoop/PaLlmProxy. This skill performs no assembly of its own.',
-        mandatory: true,
-        dataType: 'string' as const,
-    },
-]
 
 export const paLlmReason = NowAssistSkillConfig(
     {
@@ -210,7 +226,15 @@ export const paLlmReason = NowAssistSkillConfig(
             userAccess: { $id: Now.ID['pa-llm-reason-acl'], type: 'authenticated' },
             roleMap: ['x_snc_troubleshoot.admin'],
         },
-        inputs: promptOnlyInput,
+        inputs: [
+            {
+                $id: Now.ID['pa-llm-reason-input-prompt'],
+                name: 'prompt',
+                description: 'The complete prompt text, composed server-side by PaAgentLoop/PaLlmProxy. This skill performs no assembly of its own.',
+                mandatory: true,
+                dataType: 'string' as const,
+            },
+        ],
     },
     {
         providers: [
@@ -248,7 +272,15 @@ export const paLlmSummarize = NowAssistSkillConfig(
             userAccess: { $id: Now.ID['pa-llm-summarize-acl'], type: 'authenticated' },
             roleMap: ['x_snc_troubleshoot.admin'],
         },
-        inputs: promptOnlyInput,
+        inputs: [
+            {
+                $id: Now.ID['pa-llm-summarize-input-prompt'],
+                name: 'prompt',
+                description: 'The complete prompt text, composed server-side by PaAgentLoop/PaLlmProxy. This skill performs no assembly of its own.',
+                mandatory: true,
+                dataType: 'string' as const,
+            },
+        ],
     },
     {
         providers: [

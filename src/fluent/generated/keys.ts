@@ -60,10 +60,15 @@ declare global {
                     'pa-llm-input-prompt': {
                         table: 'sys_one_extend_definition_attribute'
                         id: 'd045f44fadb4411c94d114edc67c7218'
+                        deleted: true
                     }
                     'pa-llm-reason-acl': {
                         table: 'sys_security_acl'
                         id: '4db071a71082415f9de11a602563bd52'
+                    }
+                    'pa-llm-reason-input-prompt': {
+                        table: 'sys_one_extend_definition_attribute'
+                        id: 'a01dd1b1883345fb9e8592c82bb6d44a'
                     }
                     'pa-llm-reason-prompt-v1': {
                         table: 'sys_generative_ai_config'
@@ -96,6 +101,10 @@ declare global {
                     'pa-llm-summarize-acl': {
                         table: 'sys_security_acl'
                         id: 'ac36c7a2cb58451a8a5111ab3adcf457'
+                    }
+                    'pa-llm-summarize-input-prompt': {
+                        table: 'sys_one_extend_definition_attribute'
+                        id: '13f74a6b0ed04aa0bfd5a5cf19dd259b'
                     }
                     'pa-llm-summarize-prompt-v1': {
                         table: 'sys_generative_ai_config'
