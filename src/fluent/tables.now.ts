@@ -198,6 +198,12 @@ export const x_snc_troubleshoot_run = Table({
 
         // JSON array of {seq, actor, tool, args_digest, result_digest,
         // artifact_id?, ts}. See the header note on the type choice.
+        // A stored entry may additionally carry prompt_digest (issue #72) —
+        // DERIVED from result_digest, written only on tool entries, and
+        // pruned to the newest PROMPT_WINDOW entries that carry it (see
+        // PaRunManager.js's appendTranscript/_prunePromptWindow). Not part
+        // of the write contract callers populate; never present on llm or
+        // system entries.
         transcript: MultiLineTextColumn({
             label: 'Transcript',
             maxLength: 65536,

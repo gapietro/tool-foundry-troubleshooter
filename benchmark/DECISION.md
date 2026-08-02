@@ -292,6 +292,15 @@ is unambiguously 0 because `root_cause_layer_correct` is 0 on every row.
 
 ### G3a. The leading identified mechanical cause — the 200-character observation channel
 
+> **⚠ REFUTED (2026-08-02, §H3). Read §H before using anything in this subsection.** The
+> "leading identified mechanical cause" attribution below is **wrong**. The 200-character
+> observation channel was real and is described accurately here, but it was not what produced the
+> 0/10: the harness never received a diagnostic target at all (issue #77), so the baseline's
+> two-call signature — the observation this subsection sets out to explain — has a different
+> cause entirely. The mechanism description is left standing because it is correct as a
+> description of the code; the causal claim is retracted. Corrected in place rather than deleted,
+> per this document's own discipline.
+
 **Added (final whole-branch review, 2026-08-02).** The three failure modes above are not simply
 "the model reasoned poorly" — the loop's own transcript-construction path caps what the model can
 ever see of a tool's result, regardless of how instructed it is. `_dispatchTool` appends every
@@ -307,10 +316,11 @@ a fix attempt. A model that cannot see more than ~200 characters of what it alre
 way to know that paging further would surface anything new — and the same starvation plausibly
 feeds failure mode 2 above (fabricated evidence): a model reasoning from a mostly-blank digest has
 nothing real left to cite. `test/PaAgentLoop.test.js`'s `fakeRunManager` (`:63-67`) does not digest,
-so no existing unit test would catch this or verify a fix. This is the **leading identified
-mechanical cause** of the 0/10 result — named as the primary lead, not asserted as the sole
-contributor. Fix and required re-run tracked in
-[issue #72](https://github.com/gapietro/tool-foundry-troubleshooter/issues/72).
+so no existing unit test would catch this or verify a fix. ~~This is the **leading identified
+mechanical cause** of the 0/10 result~~ — **retracted, see §H3**: the causal claim in that sentence
+does not survive the evidence gathered when the fix was measured. Fix and required re-run tracked in
+[issue #72](https://github.com/gapietro/tool-foundry-troubleshooter/issues/72); the actual mechanical
+cause of the baseline profile is [issue #77](https://github.com/gapietro/tool-foundry-troubleshooter/issues/77).
 
 ### G4. The verdict
 
@@ -352,3 +362,251 @@ re-run happens only after that fix lands, not before and not instead of it. Unti
 stays the recommended path for both triage and deep diagnosis on this instance, and the Phase 1b
 milestone ("deep diagnosis passes the same seeded-failure benchmark") is **not met** by this
 measurement — that verdict and the underlying 0/10 measurement are unchanged by this correction.
+
+**Second correction (2026-08-02, §H3):** the sentence above naming the 200-character observation
+channel as "the **leading identified mechanical cause**" is **retracted** for the same reason §G3a
+is. The next step it prescribes (fix the channel, then re-run) was taken, and the re-run is §H. The
+0/10 measurement itself, and the "native remains the front door" verdict, are again unchanged — but
+the *explanation* of the 0/10 in this section and in §G3a is wrong and is superseded by §H2–§H3.
+
+---
+
+## H. Post-fix re-measurement of the custom harness (#72 observation channel, #77 target fix)
+
+**Date:** 2026-08-02 · **Instance:** gpinst01 (Zurich Patch 10 Hotfix 3) · **App version:**
+2026.08.0218 (`d318b10`), installed to gpinst01 · **Branch:** `fix/phase1b-observation-channel` ·
+**Scorecard:** `benchmark/scorecard-custom-harness.md` § "Custom harness scorecard — v2" (10 rows,
+0 void) · **Raw evidence:** `.superpowers/sdd/2026-08-02-observation-channel/benchmark-raw-evidence-v2.md` ·
+**Issues:** #72 (the fix and required re-run), #77, #78, #79.
+
+This section reports the re-run §G4 said had to happen before any claim that the custom harness is
+ready for deep diagnosis. It also corrects §G3a, which was wrong.
+
+### H1. The number
+
+| | |
+|---|---|
+| Valid runs | **10** / 10 (0 void) |
+| `sum(passes_gate)` | **1** |
+| Gate result | **1 / 10 = 10.0%** |
+| Rubric points | **6 / 60** — all six from one run |
+| Band (proportional, §A3) | **Bottom (< 50%)** |
+| Prior custom measurement (§G, version 2026.08.0216) | 0 / 10 = 0.0%, 0 / 60 |
+| Native (recorded, §G1 — **not** re-measured, see H7) | **8 / 10 = 80.0%** |
+
+Per seed, doubled runs: **01 0/2 · 02 0/2 · 03 0/2 · 04 0/2 · 05 1/2.**
+
+The single pass is run `61bd09d82b6ac714f243fed2ce91bfae` (seed 05, run 2), scoring 6/6: layer 7,
+`sn_aia_trigger_configuration` `bfb77d6c64884500a80203ee029436ee`, `active` `"0"` → `"1"`, with one
+genuine `config` citation and one genuine `trace` citation, both backed by audit-confirmed tool
+calls. It is the only run in either custom pass with no fabricated evidence anywhere in its report.
+
+Up from 0/10. Still the bottom band, and still 7 gate passes behind native.
+
+### H2. The first re-run attempt was void — ten runs discarded, not scored
+
+A full 10-run benchmark was executed at version **2026.08.0217** (immediately after the #72 work
+deployed) and **discarded before scoring**. It did not measure the observation channel, because the
+harness under test was blind: all ten runs made exactly one `agent_trace` call passing the
+hallucinated literal `"sn_aia_execution_plan_sys_id_here"`.
+
+Evidence, live on gpinst01:
+
+- The rendered prompt (`sys_generative_ai_log` `3ac3cd542b6e8fd417a6ffbeee91bfbc`) shows
+  `## Diagnostic request` = *"(no specific target supplied in the request — work from the
+  transcript/context below, or answer that a target is needed)"*.
+- The event row **did** carry the target: `sysevent` `3cc3c9142ba6c714f243fed2ce91bf03` has
+  `parm2 = {"execution":"b07dc9082baa4314f243fed2ce91bf4b"}`, and `x_snc_troubleshoot_run.execution_ref`
+  was likewise correct.
+
+**Root cause (issue #77):** `event.parm2` arrives from the platform as a **Rhino Java String**, not
+a JavaScript string. `typeof` on it is `'object'`, so `PaAgentLoop._normRequest`
+(`src/server/PaAgentLoop.js:619-634`, pre-fix) took `_isPlainObject` to be true and returned the Java
+String as though it were the already-parsed request object; `r.execution` was then `undefined` and
+the prompt emitted its no-target fallback. Jest could not catch it — the suite passes a real JS
+string, which `_normRequest` handles correctly. Fixed by coercing with `String(event.parm2)` in the
+`ScriptAction` (verified byte-correct in the generated `sysevent_script_action_0e5d43bc.xml`) plus a
+defensive guard in `_normRequest`; commits `822a570`, `37a3e70`, shipped as `d318b10`.
+
+Those ten rows are **discarded, not scored**. The 1/10 in H1 comes entirely from the ten runs fired
+after the fix, and only after a live gate: the rendered prompt was read on a smoke run and confirmed
+to carry the real execution sys_id before any row was counted.
+
+### H3. Correction to §G3a — the observation channel was not the cause of the 0/10
+
+§G3a named the 200-character observation channel "**the leading identified mechanical cause**" of the
+0/10 result, and §G4 repeated it. **That attribution is refuted.** It is corrected here and marked in
+place at both sites rather than edited away.
+
+The observation §G3a set out to explain was the baseline's signature: exactly two tool calls in every
+one of the ten rows, `agent_trace` then one `read_artifact` page. That signature has a different
+origin. Baseline run `648112c42ba2cbd417a6ffbeee91bfc2` called `agent_trace` with `input: {}` — **no
+target**. With no argument, that tool returns its documented pick-list of recent execution plans; the
+pick-list was large enough to exceed `PaArtifactStore.THRESHOLD_CHARS` (4000,
+`src/server/PaArtifactStore.js:81`), so it was offloaded to an artifact, and `read_artifact` paged it.
+That is the entire two-call pattern. It was never a model deciding to page a diagnostic trace; it was
+a model paging a menu, because the harness had never been told what to diagnose.
+
+The corroborating detail is the profile *change* in the void attempt: 2 calls → 1. That was not a
+regression from the #72 work. This time the model invented a placeholder sys_id instead of calling
+with `{}`, and a bogus sys_id errors rather than returning a large pick-list, so there was nothing to
+page.
+
+**What the wrong attribution misled.** It set the premise of issue #72 and the entire
+`fix/phase1b-observation-channel` branch — six implementation tasks — pointed at a channel that was
+real but was not the binding constraint on the 0/10. It also gave §G4 a next step ("fix that channel,
+then re-run") that was insufficient on its own: the first re-run taken on that basis was void (H2).
+The 0/10 measurement itself stands; only its explanation was wrong. Cross-reference: issue #77.
+
+Not everything in §G3a falls. The mechanism it describes — `_dispatchTool` appending results,
+`PaRunManager._normalizeEntry` digesting to 200 characters, `_buildPrompt` rendering only the digest —
+was accurately read from the code, and H4 shows the channel was genuinely starved. What is retracted
+is the claim that this starvation is what produced the 0/10.
+
+### H4. What the observation-channel work did achieve — live-verified
+
+Two live confirmations on gpinst01, both verified by the controller against the platform rather than
+taken from a run's own narration:
+
+1. **The full envelope now reaches the second prompt.** In the smoke run
+   `6e1b8d1c2b2ac714f243fed2ce91bfac`, the second prompt (`sys_generative_ai_log`
+   `602b411c2bee8fd417a6ffbeee91bf89`) renders the tool result in the new block form carrying the
+   full ~4,300-character dispatch envelope — `total_length` **18710**, an `artifact_id`, `pages` **5**,
+   and a substantive excerpt naming the agent, plan state, timings and task/tool counts. Under the
+   200-character digest, nearly all of that was invisible. This is the first live confirmation that
+   the #72 work does what it claims.
+2. **The model paged deeper instead of re-reading the head.** In run
+   `ebdc41942b6ac714f243fed2ce91bff1` the second tool call was `read_artifact` with
+   `offset: 4000` — page 2, not page 1. That is the accumulate-across-pages behaviour the work was
+   built to enable, observed in the wild. (All three `read_artifact` calls in the pass — runs 3, 4
+   and 6 — used `offset: 4000`; run 6's is the one verified independently.)
+
+Also measured on the branch, not claimed: `PROMPT_DIGEST_CHARS` was re-derived against the
+JSON-stringified envelope rather than the bare page after a final review found the original 4000
+insufficient (measured expansion 4000 → 4,371, 1.093×; 2.01× pathological worst case), and set to
+**8500** (`src/server/PaRunManager.js:158`).
+
+The channel works. It was not the thing standing between this harness and a correct diagnosis.
+
+### H5. The failure modes that survive
+
+- **Fabricated citations: 3 of 10 runs, and 2 of those 3 passed validation.** Runs
+  `100c89102b22cfd417a6ffbeee91bf42` and `ebdc41942b6ac714f243fed2ce91bff1` each cite `agent_config`
+  as an evidence source; the audit trail (`x_snc_troubleshoot_audit`, controller-verified directly)
+  shows neither run ever invoked it. Both passed `PaFixReport.validate`. Run
+  `c66c01142b6ac714f243fed2ce91bf8e`'s rejected draft claims **all seven layers SWEPT on two tool
+  calls**, both of them reads of the same trace. Across the pass, 11 layer-sweep claims in 4 runs
+  name a tool that was never invoked. This is down from the baseline, where every completed row
+  fabricated (§G1) — but the mechanism is untouched: the validator checks that evidence *labels* are
+  legal and diverse, never whether the labelled source was read. Issue **#79**.
+- **Four of the seven registered tools were never invoked in any run.** `schema_lookup`,
+  `query_table`, `genai_log` and `log_analysis` have zero calls across all ten runs.
+  `layers_available` is 7/7 — every tool is registered and reachable. Seeds 01, 03 and 04 each hide
+  their answer behind one of those four (`schema_lookup` for the word→Integer column, `query_table`
+  for the empty routing table, `genai_log` for the dangling `api`), so three of the five seeds were
+  unanswerable by the path every run actually took. The two runs that reached a second *layer*
+  (`agent_config`, seed 05) are the two that produced the pass's only correct diagnoses.
+- **Depth was not budget-limited.** `MAX_ITERATIONS` is 15 and `BUDGET_MS` is 300 000
+  (`src/server/PaAgentLoop.js:114-115`). The deepest run used **2 of 15 iterations and ~13s of a
+  300s budget**; the distribution is 5 runs at 1 tool call, 5 at 2, none at 3 or more. Premature
+  termination is a reasoning/instruction problem, not a resource one, and no ceiling-raising fix
+  addresses it.
+- **Two runs read a failing execution as a successful one.** Seed 04's runs both report the
+  execution "completed successfully with no errors" when its actual signature is
+  `OneExtendUtil.execute` → `status:"error"`, "Plan invalid…", `capabilities:{}`, and the tool
+  returning `ok:false`. That is a wrong reading of evidence the run held, filed as an absence of
+  evidence.
+
+### H6. The validator cost the harness its one correct diagnosis (#78)
+
+Run `a66d01182b22cfd417a6ffbeee91bf28` (seed 05, run 1) produced the **correct** diagnosis: layer 7,
+`sn_aia_trigger_configuration` `bfb77d6c64884500a80203ee029436ee`, `active=false` → `active=true` —
+the right layer, the right specific gate, and the right PATCH value, with both `config` citations
+audit-supported against a real `agent_config` call. `PaFixReport.validate` rejected it: *"no trace
+citation found; a candidate resting on config/schema/data alone is not a confirmed root cause."*
+
+Seed 05 produces **no trace by design** — nothing fires, so no `sn_aia_execution_plan` row exists to
+cite. The evidence rule has no exemption for the absence-diagnosis case, so it structurally cannot
+accept a correct diagnosis of "the agent never ran." **This is a scoring loss caused by the
+validator, not by the model.** The run is scored 0 in the scorecard because the rubric scores the
+Fix Report the harness delivers and this harness delivered none — but it must not be read as the run
+having been wrong.
+
+Two aggravations recorded with it: the same rule rejected run 1 for the opposite offence (citing only
+`trace`) while passing two runs whose `config` citations were invented (H5); and the rejected report
+is still sitting in `x_snc_troubleshoot_run.fix_report` while `GET /runs/{id}` returns
+`fix_report: null`, so the correct diagnosis is invisible to any API consumer. Issue **#78**.
+
+**Counterfactual, stated as arithmetic and nothing more:** had that row passed the gate, the result
+would be 2/10 (20.0%) — still the bottom band, still six gate passes behind native. The validator
+defect is worth fixing on its own merits; it does not change this section's verdict.
+
+### H7. Limits on what this number can prove
+
+Stated before the number is used for anything.
+
+1. **The observation channel is widened, not opened.** `PaArtifactStore.applyThreshold`
+   (`src/server/PaArtifactStore.js:292`) still caps non-paged content at ~2,000 characters via its
+   1500-head / 500-tail excerpt (`:84`, `:87`) for six of the seven tools; only `read_artifact` pages
+   past it. The branch raises prompt-visible content from ~200 to ~2,300 characters — about 10× — and
+   no further. And with `PROMPT_WINDOW = 3` (`src/server/PaRunManager.js:164`), the
+   accumulate-across-pages property holds for **three pages only**: paging a 40KB trace would cost 10
+   of 15 iterations and end with pages 1–7 collapsed back to a 200-character digest.
+2. **The minimum-viable inconclusive report requires zero tool calls, and that exit is advertised in
+   the first prompt.** Marking all seven layers `NOT_SWEPT` with reasons drops the citation bill to
+   one. Five of ten runs took the inconclusive shape and four of those validated — the path is being
+   exercised as designed, and the four validated ones cite only `trace` and are fully
+   audit-supported, so they stopped early without inventing anything. But a turn-1 exit is a live
+   risk to what this number means, and it cannot be separated from genuine shallowness by the score
+   alone.
+3. **The fix_report contract text is not identical to the baseline's.** `PaFixReport.schemaText()`
+   (`src/server/PaFixReport.js:542`) changed on this branch — the inconclusive path was added and
+   citations were priced per swept layer. The model in this pass was shown a different contract than
+   the model in the 0/10 pass. This is a deliberate and unavoidable confound: the contract text is
+   part of the change under test. It means the 0 → 1 movement cannot be attributed cleanly to any
+   single component of the branch.
+4. **Native was not re-measured.** Native's 8/10 in §G1 was taken on a different day. Nothing on this
+   branch touches the native harness, and the seed fixtures are unchanged, so the §G2 confound
+   surface is **narrowed, not closed** — model drift between the two measurement days is unmeasured
+   and unbounded here.
+
+One further note, carried from the branch's own review: playbook line 50 already offers a degradation
+path — *name the candidate root cause and mark it UNCONFIRMED* — which is complementary to the
+`inconclusive` shape, not contradictory. If few runs take the inconclusive path in future passes,
+that route is the likely reason and is the better answer anyway; it should not be read as the
+inconclusive path being unusable.
+
+### H8. Verdict
+
+**Native remains the deep-diagnosis front door.** 8/10 against 1/10 is not a close call, and nothing
+in this pass narrows it: the custom harness moved from the bottom of the bottom band to slightly less
+of the bottom of the bottom band, on a change that is now known not to have addressed the defect that
+produced the original number. The Phase 1b milestone ("deep diagnosis passes the same seeded-failure
+benchmark") remains **not met**.
+
+What this pass did establish, and it is not nothing: the target-delivery defect that made every
+async run blind is found and fixed (#77, live-verified); the observation channel carries a full
+~4,300-character envelope into the next prompt and the model has been observed paging deeper on it
+(#72, live-verified); the infrastructure again ran clean — 10/10 runs terminal, 0 stuck, 0 void; and
+the harness produced, once, a fully correct and fully honest diagnosis with an appliable fix.
+
+**What would have to change before the custom harness is reconsidered.** In order, and all of them
+measurable:
+
+1. **#78 — the evidence rule must accept an absence-diagnosis.** Today the harness structurally
+   cannot report "the agent never ran," which is one of the five seeded failure classes. This is the
+   cheapest fix on the list and it recovers a correct diagnosis that was already produced.
+2. **#79 — validate citations against the audit trail.** The harness already writes
+   `x_snc_troubleshoot_audit` rows keyed by run with `tool_name`; `PaFixReport` simply does not read
+   them. Until it does, a passing Fix Report carries no evidential guarantee, and no score computed
+   from passing reports means much.
+3. **Depth.** Four of seven tools have never been invoked in twenty scored runs across two passes,
+   and the seeds whose answers sit behind them have never been solved. Budget is not the constraint
+   (H5). Whatever is tried next — instruction changes, a required-sweep gate, forced tool selection —
+   the acceptance test is the same: a run that reaches `schema_lookup`, `query_table` or `genai_log`
+   on the seed that needs it.
+
+A re-run of this same benchmark, under the same doubled-run blind audit-derived protocol, with native
+re-measured on the same day to close the H7-4 gap, is the evidence that would justify revisiting the
+verdict. Until then, native stays the recommended path for both triage and deep diagnosis on this
+instance.

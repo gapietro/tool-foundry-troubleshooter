@@ -21,9 +21,12 @@
  * `renderMarkdown` and `renderJson` both take the SAME `normalized` object
  * validate() produced. The markdown section order is copied verbatim from the
  * playbook's "The Fix Report" section: FAILURE SUMMARY, LAYERS SWEPT, ROOT
- * CAUSES, FIXES, VERIFICATION, DATA MARKERS — six headings, in that order. If
- * the playbook's section order ever changes, LAYOUT below is the one place to
- * change it to keep the two in sync.
+ * CAUSES, FIXES, VERIFICATION, DATA MARKERS — six headings, in that order,
+ * plus a seventh INCONCLUSIVE section rendered between LAYERS SWEPT and ROOT
+ * CAUSES ONLY when the report took the earned-inconclusive path (T4, issue
+ * #72). If the playbook's section order ever changes, the `lines.push('## ...')`
+ * sequence in `renderMarkdown` below is the one place to change it to keep
+ * the two in sync.
  *
  * VALIDATION IS A FLOOR, NOT A CEILING
  * `validate` checks that the REQUIRED shape is present and internally
@@ -197,7 +200,8 @@ PaFixReport.prototype = {
             return
         }
         if (rcs.length === 0) {
-            problems.push('root_causes must include at least one entry')
+            // T4 — the earned-inconclusive path. See `_checkInconclusive`.
+            this._checkInconclusive(report, problems)
             return
         }
 
@@ -241,20 +245,17 @@ PaFixReport.prototype = {
     },
 
     /**
-     * The evidence rule, enforced structurally: at least one 'trace' citation
-     * PLUS at least one 'config' | 'schema' | 'data' citation. Every problem
-     * this raises contains the literal phrase "evidence rule" (Task 4 brief,
-     * Step 1) and names the cause so a repair prompt — or a human — can find
-     * it without re-deriving which entry failed.
+     * Per-entry shape check, shared by `_checkEvidenceRule` (root causes) and
+     * `_checkInconclusive` (evidence_read). Returns the source tally so the
+     * caller can apply — or deliberately NOT apply — the evidence rule.
      */
-    _checkEvidenceRule: function (evidence, label, causeName, problems) {
+    _checkEvidenceEntries: function (evidence, label, problems) {
         var sources = this._evidenceSources()
-        var hasTrace = false
-        var hasOther = false
+        var tally = { hasTrace: false, hasOther: false }
 
         for (var i = 0; i < evidence.length; i++) {
             var entry = evidence[i]
-            var entryLabel = label + '.evidence[' + i + ']'
+            var entryLabel = label + '[' + i + ']'
 
             if (!this._isPlainObject(entry) || this._indexOf(sources, entry.source) === -1) {
                 problems.push(
@@ -266,20 +267,141 @@ PaFixReport.prototype = {
                 problems.push(entryLabel + ' is missing a detail citation (table, sys_id, field, or value)')
             }
 
-            if (entry.source === 'trace') hasTrace = true
-            else hasOther = true
+            if (entry.source === 'trace') tally.hasTrace = true
+            else tally.hasOther = true
         }
 
-        if (!hasTrace) {
+        return tally
+    },
+
+    /**
+     * The evidence rule, enforced structurally: at least one 'trace' citation
+     * PLUS at least one 'config' | 'schema' | 'data' citation. Every problem
+     * this raises contains the literal phrase "evidence rule" (Task 4 brief,
+     * Step 1) and names the cause so a repair prompt — or a human — can find
+     * it without re-deriving which entry failed.
+     */
+    _checkEvidenceRule: function (evidence, label, causeName, problems) {
+        var tally = this._checkEvidenceEntries(evidence, label + '.evidence', problems)
+
+        if (!tally.hasTrace) {
             problems.push(
                 label + ' (' + causeName + '): evidence rule violation — no trace citation found; ' +
                     'a candidate resting on config/schema/data alone is not a confirmed root cause'
             )
         }
-        if (hasTrace && !hasOther) {
+        if (tally.hasTrace && !tally.hasOther) {
             problems.push(
                 label + ' (' + causeName + '): evidence rule violation — evidence cites only the trace; ' +
                     'at least one config, schema, or data citation is required'
+            )
+        }
+    },
+
+    /**
+     * True when the report is CLAIMING the inconclusive path — an empty
+     * `root_causes` plus an `inconclusive` object. Whether that claim is
+     * VALID is `_checkInconclusive`'s job; this predicate only decides
+     * whether `fixes` may be empty and `verification` may be absent, so it
+     * must NOT re-raise the problems that method already raises.
+     */
+    _isInconclusiveShape: function (report) {
+        return (
+            this._isArray(report.root_causes) &&
+            report.root_causes.length === 0 &&
+            this._isPlainObject(report.inconclusive)
+        )
+    },
+
+    /**
+     * The verification relaxation is narrower than `_isInconclusiveShape`: a
+     * report that PROPOSES fixes still owes a verification step, even if it
+     * named no root cause. Only a fix-less inconclusive report has nothing
+     * to verify.
+     */
+    _isInconclusiveWithoutFixes: function (report) {
+        return this._isInconclusiveShape(report) && this._isArray(report.fixes) && report.fixes.length === 0
+    },
+
+    /**
+     * How many of the seven layers the report CLAIMS to have swept. Used to
+     * price the inconclusive path: a claim to have swept a layer is a claim
+     * to have looked at something, and looking at something is citable.
+     */
+    _countSweptLayers: function (report) {
+        var ls = this._isPlainObject(report.layers_swept) ? report.layers_swept : {}
+        var defs = this._layerDefs()
+        var count = 0
+        for (var i = 0; i < defs.length; i++) {
+            var entry = ls[defs[i].number]
+            if (this._isPlainObject(entry) && entry.status === 'SWEPT') count += 1
+        }
+        return count
+    },
+
+    /**
+     * T4 (issue #72): an honest "I could not reach a conclusion" must be
+     * expressible, or the only structurally valid output is an invented root
+     * cause — which is pressure toward fabrication, not a validation floor.
+     *
+     * But it must be EARNED, not cheap. `layers_swept` is charged identically
+     * on every path (`validate` runs `_checkLayersSwept` unconditionally), so
+     * it is NOT by itself a differential cost on the inconclusive path — a
+     * report claiming all seven layers SWEPT while citing only one thing in
+     * `evidence_read` would otherwise validate. The actual price is the
+     * `evidence_read` citations below, SIZED to the sweep claim: at least one
+     * citation per layer marked SWEPT (`_countSweptLayers`). Claim seven
+     * sweeps, cite seven things; honestly mark most layers NOT_SWEPT /
+     * UNAVAILABLE with a reason and the citation bill drops with it. Writing
+     * an honest inconclusive report should cost more than diagnosing a
+     * defect the model actually found — not because of the layer report
+     * (which every path pays), but because of this citation-per-claimed-
+     * sweep pricing.
+     *
+     * NOTE the evidence RULE (trace PLUS one of config/schema/data) is
+     * deliberately NOT applied to `evidence_read`: that array is a record of
+     * what was READ, not a claim about a cause, and demanding a trace
+     * citation from a run whose trace was unavailable is exactly the
+     * pedantry this path exists to remove.
+     */
+    _checkInconclusive: function (report, problems) {
+        var inc = report.inconclusive
+
+        if (!this._isPlainObject(inc)) {
+            problems.push(
+                'root_causes is empty, which is allowed ONLY for an honest inconclusive report — and such a ' +
+                    'report must carry an `inconclusive` object of {evidence_read, needed_to_conclude}. Either ' +
+                    'name at least one root cause with evidence, or add that object. Do NOT invent a root cause ' +
+                    'to satisfy this check.'
+            )
+            return
+        }
+
+        var ev = inc.evidence_read
+        if (!this._isArray(ev) || ev.length === 0) {
+            problems.push(
+                'inconclusive.evidence_read is required and must be a non-empty array of {source, detail} ' +
+                    'recording what you actually read — an uncited inconclusive report is not distinguishable ' +
+                    'from not having looked'
+            )
+        } else {
+            this._checkEvidenceEntries(ev, 'inconclusive.evidence_read', problems)
+
+            var swept = this._countSweptLayers(report)
+            if (ev.length < swept) {
+                problems.push(
+                    'inconclusive.evidence_read has ' + ev.length + ' citation(s) but layers_swept marks ' +
+                        swept + ' layer(s) SWEPT — cite at least one piece of evidence per layer you claim to ' +
+                        'have swept. If you did not actually sweep a layer, mark it NOT_SWEPT or UNAVAILABLE ' +
+                        'with a reason rather than claiming it.'
+                )
+            }
+        }
+
+        if (!this._nonEmptyString(inc.needed_to_conclude)) {
+            problems.push(
+                'inconclusive.needed_to_conclude is required and must be a non-empty string naming what would ' +
+                    'be needed to reach a conclusion'
             )
         }
     },
@@ -291,7 +413,12 @@ PaFixReport.prototype = {
             return
         }
         if (fixes.length === 0) {
-            problems.push('fixes must include at least one entry')
+            // Empty `fixes` rides on the inconclusive path ONLY. A NAMED root
+            // cause with nothing proposed is still a defect — the report
+            // claims to know what broke and declines to say what to do.
+            if (!this._isInconclusiveShape(report)) {
+                problems.push('fixes must include at least one entry')
+            }
             return
         }
 
@@ -321,6 +448,12 @@ PaFixReport.prototype = {
     },
 
     _checkVerification: function (report, problems) {
+        // Nothing to verify when no fix was proposed — demanding a string
+        // here would only invite "n/a" boilerplate. Note this is narrower
+        // than `_isInconclusiveShape`: an inconclusive report that DOES
+        // propose fixes still owes a verification step.
+        if (this._isInconclusiveWithoutFixes(report)) return
+
         if (!this._nonEmptyString(report.verification)) {
             problems.push('verification is required and must be a non-empty string')
         }
@@ -421,7 +554,8 @@ PaFixReport.prototype = {
                 'REQUIRED when status is not SWEPT'
         )
         lines.push(
-            'root_causes: non-empty array of {layer, component, finding, evidence, confidence?} — layer is the ' +
+            'root_causes: array of {layer, component, finding, evidence, confidence?} — NON-EMPTY unless you ' +
+                'supply the `inconclusive` object described below; layer is the ' +
                 'layer number as a string "1".."7" (a bare JSON number 1-7 is also accepted and normalized to a ' +
                 'string); component is a non-empty string naming the specific record/table/field; finding is a ' +
                 'non-empty string describing what is wrong; evidence is a non-empty array of {source, detail} ' +
@@ -431,12 +565,32 @@ PaFixReport.prototype = {
                 ' (the evidence rule); confidence, if present, is a string (e.g. CONFIRMED or UNCONFIRMED)'
         )
         lines.push(
-            'fixes: non-empty array of {target_type, target, current, proposed, rationale} — target_type is a ' +
+            'fixes: array of {target_type, target, current, proposed, rationale} — NON-EMPTY unless root_causes ' +
+                'is empty and you supply `inconclusive`; target_type is a ' +
                 'string, one of ' + this._fixTargetTypes().join('|') + '; target, proposed and rationale are ' +
                 'each non-empty strings; current is a string and may be empty but must be present'
         )
-        lines.push('verification: non-empty string')
+        lines.push(
+            'verification: non-empty string — may be omitted ONLY when root_causes is empty, `inconclusive` is ' +
+                'present, AND fixes is ALSO empty; if you propose any fixes at all, verification is still ' +
+                'required even on the inconclusive path'
+        )
         lines.push('data_markers: array (may be empty, must be present)')
+        lines.push(
+            'inconclusive: OPTIONAL object {evidence_read, needed_to_conclude} — supply it ONLY when you could ' +
+                'not isolate a cause. When present, root_causes may be an empty array, and fixes may also be ' +
+                'empty; verification may be omitted ONLY when fixes is ALSO empty — if you propose any fixes, ' +
+                'verification is still required even though root_causes is empty. evidence_read is a non-empty ' +
+                'array of {source, detail} in the same shape as root_causes[].evidence, recording what you ' +
+                'ACTUALLY read (the trace-plus-one evidence rule does NOT apply to it); needed_to_conclude is a ' +
+                'non-empty string naming what would be required to conclude. evidence_read must contain AT LEAST ' +
+                'AS MANY entries as the number of layers marked SWEPT in layers_swept — claim seven sweeps, cite ' +
+                'seven things; mark a layer NOT_SWEPT or UNAVAILABLE with a reason instead and fewer citations ' +
+                'are required. An honest inconclusive report is always preferred to an invented root cause. It ' +
+                'does NOT excuse a shallow sweep: layers_swept must still report all seven layers with a reason ' +
+                'on every one you did not sweep, and you should exhaust your tool budget before concluding you ' +
+                'cannot tell.'
+        )
 
         return lines.join('\n')
     },
@@ -448,8 +602,10 @@ PaFixReport.prototype = {
     /**
      * @param {Object} normalized the object validate() returned as `normalized`.
      * @returns {String} markdown with the six playbook section headings, in
-     *          playbook order. Defensive against a sparse/missing object
-     *          (R-9) — this is a rendering path, not a second validation.
+     *          playbook order, plus a seventh INCONCLUSIVE section between
+     *          LAYERS SWEPT and ROOT CAUSES when the report took that path.
+     *          Defensive against a sparse/missing object (R-9) — this is a
+     *          rendering path, not a second validation.
      */
     renderMarkdown: function (normalized) {
         var r = this._isPlainObject(normalized) ? normalized : {}
@@ -475,6 +631,27 @@ PaFixReport.prototype = {
             lines.push(line)
         }
         lines.push('')
+
+        // Rendered only when present — a normal report is byte-identical to
+        // before. Placed after LAYERS SWEPT because it explains the sweep the
+        // reader has just looked at, before the (empty) causes below.
+        var inc = this._isPlainObject(r.inconclusive) ? r.inconclusive : null
+        if (inc) {
+            lines.push('## INCONCLUSIVE')
+            lines.push('')
+            lines.push('evidence read:')
+            var read = this._isArray(inc.evidence_read) ? inc.evidence_read : []
+            if (read.length === 0) {
+                lines.push('  (none)')
+            } else {
+                for (var p = 0; p < read.length; p++) {
+                    var re = this._isPlainObject(read[p]) ? read[p] : {}
+                    lines.push('  - ' + this._str(re.source) + ': ' + this._str(re.detail))
+                }
+            }
+            lines.push('needed to conclude: ' + this._str(inc.needed_to_conclude))
+            lines.push('')
+        }
 
         lines.push('## ROOT CAUSES')
         lines.push('')
@@ -511,7 +688,13 @@ PaFixReport.prototype = {
 
         lines.push('## VERIFICATION')
         lines.push('')
-        lines.push(this._nonEmptyString(r.verification) ? r.verification : '(not provided)')
+        lines.push(
+            this._nonEmptyString(r.verification)
+                ? r.verification
+                : inc
+                  ? '(not applicable — inconclusive)'
+                  : '(not provided)'
+        )
         lines.push('')
 
         lines.push('## DATA MARKERS')

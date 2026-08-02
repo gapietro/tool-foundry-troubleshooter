@@ -11,6 +11,75 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0219 — 2026-08-02
+
+### Fixed
+- **Unconditional `String()` on the async worker's event parms defeated the run-id guard** (PR #80
+  review). `String(null)` is `"null"` and `String(undefined)` is `"undefined"` — both non-empty — so
+  a missing `event.parm1` no longer failed fast with "run id is required" and instead drove the full
+  agent loop under the literal run id `"null"`, invoking the LLM while every `appendTranscript` and
+  `close` silently no-opped against a non-existent run row. The `parm1` coercion is removed outright
+  rather than guarded: `PaAgentLoop._str` already returns `''` for null/undefined *and* correctly
+  converts a Rhino Java String, so it was never needed. The `parm2` coercion is load-bearing (it is
+  the fix for #77) and is retained, but null-guarded — previously a missing `parm2` became the string
+  `"null"`, which `_normRequest` turned into a fabricated `{description: "null"}` instead of `{}`.
+- No effect on the `benchmark/DECISION.md` §H measurement: the two forms differ only when `parm1` or
+  `parm2` is null/undefined, and all ten scored runs carried real values on both.
+
+### Added
+- `test/asyncWiring.test.js` — extracts the `ScriptAction` body from `src/fluent/async-wiring.now.ts`
+  and evaluates it against a fake `event` and a recording fake `PaAgentLoop`, pinning the pass-through
+  and both null cases. Nothing previously covered this script, which is why the regression above was
+  reviewable only by eye.
+
+---
+
+## 2026.08.0218 — 2026-08-02
+
+### Fixed
+- **The async worker never received the diagnostic target (issue #77).** `event.parm2` arrives
+  from the platform as a Rhino Java String, whose `typeof` is `'object'`, causing
+  `PaAgentLoop._normRequest` to mistake it for an already-parsed request object and silently drop
+  the target. Every async diagnostic run reasoned with no target, forcing the model to invent a
+  placeholder sys_id and fabricate a diagnosis. Fixed by coercing at the source in the
+  `ScriptAction` via `String(event.parm2)` (the load-bearing guarantee), plus a defence-in-depth
+  foreign-object guard in `_normRequest`. The Jest suite could not catch this defect because it
+  passes a real JavaScript string, which the function always handled correctly; new regression tests
+  now emulate the Rhino shape. This defect predates the observation-channel work (issue #72) and
+  explains the earlier 0/10 benchmark result, so `benchmark/DECISION.md` §G3a's attribution to the
+  200-character observation channel is superseded.
+
+---
+
+## 2026.08.0217 — 2026-08-02
+
+### Fixed
+- **The 200-character observation channel (#72).** `PaRunManager` now writes a second,
+  prompt-facing `prompt_digest` (`PROMPT_DIGEST_CHARS` 8,500 — sized for the JSON-stringified
+  dispatch envelope that actually gets digested, not the bare page: escaping expands content up
+  to 2.01x, so a 4,000-char ceiling equal to `PaArtifactStore.MAX_PAGE_CHARS` could silently drop
+  a page's tail while `next_offset` — which precedes `content` in the envelope — survived,
+  leaving the model to page onward believing it had read contiguously) alongside the unchanged
+  200-char `result_digest`, pruned on append to the newest `PROMPT_WINDOW` (3) carriers so the
+  `transcript` column stays bounded. `PaAgentLoop._renderTranscript` renders it as a block.
+  Previously a 4,000-character evidence page reached the next reasoning prompt as ~200 characters —
+  the leading identified mechanical cause of the Phase 1b comparison benchmark's 0/10
+  (`benchmark/DECISION.md` §G3a).
+- **Fabrication pressure in `PaFixReport` (T4).** `root_causes` and `fixes` may now both be empty
+  when the report carries an `inconclusive` object citing `evidence_read` and `needed_to_conclude`,
+  so an honest "I could not isolate this" is expressible instead of structurally rejected. The
+  seven-layer `layers_swept` requirement is unchanged, which is what keeps the path from becoming a
+  cheap exit.
+
+### Changed
+- `PaFixReport.schemaText()` documents the inconclusive path — reaching both the first-attempt
+  contract (via `PaAgentLoop._fixReportContract`) and the repair turn from one source.
+- `renderMarkdown` gains a conditional `## INCONCLUSIVE` section.
+- The `DEFERRED` note in `async-wiring.now.ts` re-derives the T6 transcript row-size bound
+  (~30,000 worst case against the 65,536 ceiling, was ~6,000), now asserted by a test.
+
+---
+
 ## 2026.08.0216 — 2026-08-02
 
 Phase 1b final-review fix wave (docs, issues #72-#75): whole-branch review of the merged Phase 1b

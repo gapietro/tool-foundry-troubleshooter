@@ -306,6 +306,20 @@ describe('PaFixReport.validate — structural matrix', () => {
         expect(fx.validate(withData).valid).toBe(true)
     })
 
+    test('a root cause evidence entry with an invalid source names the exact per-entry label (pins the _checkEvidenceEntries refactor)', () => {
+        const fx = load()
+        const report = validReport()
+        report.root_causes[0].evidence = [
+            { source: 'vibes', detail: 'it felt wrong' },
+            { source: 'config', detail: 'sn_aia_trigger_configuration.usecase = NULL, sys_id abc123' },
+        ]
+
+        const result = fx.validate(report)
+
+        expect(result.valid).toBe(false)
+        expect(result.problems.join('\n')).toContain('root_causes[0].evidence[0]')
+    })
+
     test('a root cause with no evidence array at all → named problem', () => {
         const fx = load()
         const report = validReport()
@@ -598,5 +612,342 @@ describe('PaFixReport.schemaText', () => {
         const fx = load()
 
         expect(fx.repairPrompt({}, ['x'])).toEqual(expect.stringContaining(fx.schemaText()))
+    })
+})
+
+// ===========================================================================
+// The earned-inconclusive path (T4, bundled into issue #72)
+// ===========================================================================
+
+describe('inconclusive reports', () => {
+    function allSevenSwept(status, reason) {
+        const ls = {}
+        for (let i = 1; i <= 7; i++) {
+            ls[i] = status === 'SWEPT' ? { status: 'SWEPT' } : { status: status, reason: reason }
+        }
+        return ls
+    }
+
+    function inconclusiveReport(overrides) {
+        return Object.assign(
+            {
+                failure_summary: 'The execution failed but the cause could not be isolated.',
+                layers_swept: allSevenSwept('UNAVAILABLE', 'the trace record was purged before diagnosis'),
+                root_causes: [],
+                fixes: [],
+                // A real string here (not just an absent key) so the
+                // "verification may be omitted" test below is actually
+                // exercising the relaxation, not the accident of a key that
+                // was never present in the first place.
+                verification: 'N/A — no fix was proposed on this path, so there is nothing to verify.',
+                data_markers: [],
+                inconclusive: {
+                    evidence_read: [
+                        { source: 'trace', detail: 'sn_aia_execution_plan 8f2c… returned zero task rows' },
+                        { source: 'config', detail: 'sn_aia_agent "Order Triage" instructions read, 4200 chars' },
+                    ],
+                    needed_to_conclude: 'the sn_aia_execution_task rows for this plan, which no longer exist',
+                },
+            },
+            overrides || {}
+        )
+    }
+
+    test('empty root_causes and fixes VALIDATE when the inconclusive block is present and cited', () => {
+        const res = load().validate(inconclusiveReport())
+
+        expect(res.valid).toBe(true)
+        expect(res.normalized.inconclusive.needed_to_conclude).toContain('sn_aia_execution_task')
+    })
+
+    test('empty root_causes WITHOUT an inconclusive block is still rejected, and the problem says not to invent one', () => {
+        const res = load().validate(inconclusiveReport({ inconclusive: undefined }))
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.join('\n')).toContain('inconclusive')
+        expect(res.problems.join('\n')).toContain('Do NOT invent a root cause')
+    })
+
+    test('empty fixes alongside a NAMED root cause is still rejected — a cause with no fix is a defect', () => {
+        const res = load().validate(
+            inconclusiveReport({
+                root_causes: [
+                    {
+                        layer: '3',
+                        component: 'sn_aia_tool "lookup_order"',
+                        finding: 'input schema omits order_number',
+                        evidence: [
+                            { source: 'trace', detail: 'task 3 error: missing required input' },
+                            { source: 'schema', detail: 'sn_aia_tool.inputs has no order_number key' },
+                        ],
+                    },
+                ],
+                inconclusive: undefined,
+            })
+        )
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.join('\n')).toContain('fixes must include at least one entry')
+    })
+
+    test('inconclusive.evidence_read is mandatory and must be non-empty — an uncited "I could not tell" is not earned', () => {
+        const res = load().validate(
+            inconclusiveReport({
+                inconclusive: { evidence_read: [], needed_to_conclude: 'more data' },
+            })
+        )
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.join('\n')).toContain('inconclusive.evidence_read')
+    })
+
+    test('an evidence_read entry with a source outside the vocabulary is rejected', () => {
+        const res = load().validate(
+            inconclusiveReport({
+                inconclusive: {
+                    evidence_read: [{ source: 'vibes', detail: 'it felt wrong' }],
+                    needed_to_conclude: 'more data',
+                },
+            })
+        )
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.join('\n')).toContain('inconclusive.evidence_read[0]')
+    })
+
+    test('inconclusive.needed_to_conclude is mandatory', () => {
+        const res = load().validate(
+            inconclusiveReport({
+                inconclusive: {
+                    evidence_read: [{ source: 'trace', detail: 'zero rows' }],
+                    needed_to_conclude: '   ',
+                },
+            })
+        )
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.join('\n')).toContain('needed_to_conclude')
+    })
+
+    test('the evidence RULE does not bind evidence_read — a record of what was read is not a claim about a cause', () => {
+        const res = load().validate(
+            inconclusiveReport({
+                inconclusive: {
+                    evidence_read: [{ source: 'config', detail: 'agent instructions, 4200 chars' }],
+                    needed_to_conclude: 'the purged trace',
+                },
+            })
+        )
+
+        expect(res.valid).toBe(true)
+    })
+
+    test('verification may be omitted on the inconclusive path — there is nothing to verify', () => {
+        const report = inconclusiveReport()
+        delete report.verification
+
+        const res = load().validate(report)
+
+        expect(res.valid).toBe(true)
+    })
+
+    test('verification is STILL required when the inconclusive path proposes fixes — root_causes empty is not enough to relax it', () => {
+        const res = load().validate(
+            inconclusiveReport({
+                fixes: [
+                    {
+                        target_type: 'configuration',
+                        target: 'sn_aia_trigger_configuration on Agent Doctor',
+                        current: '',
+                        proposed: 'set usecase to the workflow usecase sys_id',
+                        rationale: 'the trigger cannot bind without it',
+                    },
+                ],
+                verification: undefined,
+            })
+        )
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.join('\n')).toContain('verification is required')
+    })
+
+    test('inconclusive: [] (an array, not an object) falls back to full enforcement — root_causes must include at least one entry', () => {
+        const res = load().validate(inconclusiveReport({ inconclusive: [] }))
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.join('\n')).toContain('Do NOT invent a root cause')
+    })
+
+    test('inconclusive: null falls back to full enforcement — root_causes must include at least one entry', () => {
+        const res = load().validate(inconclusiveReport({ inconclusive: null }))
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.join('\n')).toContain('Do NOT invent a root cause')
+    })
+
+    test('verification is STILL required when real root causes are named', () => {
+        const res = load().validate(
+            inconclusiveReport({
+                root_causes: [
+                    {
+                        layer: '3',
+                        component: 'sn_aia_tool "lookup_order"',
+                        finding: 'input schema omits order_number',
+                        evidence: [
+                            { source: 'trace', detail: 'task 3 error: missing required input' },
+                            { source: 'schema', detail: 'sn_aia_tool.inputs has no order_number key' },
+                        ],
+                    },
+                ],
+                fixes: [
+                    {
+                        target_type: 'tool schema',
+                        target: 'sn_aia_tool "lookup_order"',
+                        current: '',
+                        proposed: 'add order_number',
+                        rationale: 'the tool cannot run without it',
+                    },
+                ],
+                inconclusive: undefined,
+                verification: undefined,
+            })
+        )
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.join('\n')).toContain('verification is required')
+    })
+
+    test('layers_swept is still fully enforced on the inconclusive path — the escape hatch is not a bypass', () => {
+        const res = load().validate(
+            inconclusiveReport({ layers_swept: { 1: { status: 'SWEPT' } } })
+        )
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.join('\n')).toContain('layers_swept is missing layer 2')
+    })
+
+    test('an un-swept layer with no reason is still rejected on the inconclusive path', () => {
+        const ls = {}
+        for (let i = 1; i <= 7; i++) ls[i] = { status: 'NOT_SWEPT' }
+        const res = load().validate(inconclusiveReport({ layers_swept: ls }))
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.join('\n')).toContain('has no reason')
+    })
+
+    // -----------------------------------------------------------------------
+    // Citation pricing tied to the sweep claim (Critical 1, fix round 1):
+    // claiming N layers SWEPT requires at least N evidence_read citations —
+    // layers_swept alone is not a differential cost, since every path pays it.
+    // -----------------------------------------------------------------------
+
+    test('claiming all seven layers SWEPT with only one citation is INVALID — the citation bill is unpaid', () => {
+        const res = load().validate(
+            inconclusiveReport({
+                layers_swept: allSevenSwept('SWEPT'),
+                inconclusive: {
+                    evidence_read: [{ source: 'config', detail: 'agent instructions read, 4200 chars' }],
+                    needed_to_conclude: 'a clearer trace',
+                },
+            })
+        )
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.join('\n')).toContain('inconclusive.evidence_read has 1 citation(s) but layers_swept marks 7 layer(s) SWEPT')
+    })
+
+    test('claiming all seven layers SWEPT with seven citations is VALID — the claim is paid for', () => {
+        const evidence_read = []
+        for (let i = 1; i <= 7; i++) {
+            evidence_read.push({ source: 'config', detail: 'layer ' + i + ' checked, nothing conclusive' })
+        }
+        const res = load().validate(
+            inconclusiveReport({
+                layers_swept: allSevenSwept('SWEPT'),
+                inconclusive: {
+                    evidence_read: evidence_read,
+                    needed_to_conclude: 'a clearer trace',
+                },
+            })
+        )
+
+        expect(res.valid).toBe(true)
+    })
+
+    test('claiming two layers SWEPT and honestly marking the other five NOT_SWEPT/UNAVAILABLE needs only two citations', () => {
+        const ls = {
+            1: { status: 'SWEPT' },
+            2: { status: 'SWEPT' },
+            3: { status: 'UNAVAILABLE', reason: 'the trace record was purged before diagnosis' },
+            4: { status: 'UNAVAILABLE', reason: 'the trace record was purged before diagnosis' },
+            5: { status: 'NOT_SWEPT', reason: 'ran out of time before the data layer' },
+            6: { status: 'NOT_SWEPT', reason: 'ran out of time before the data layer' },
+            7: { status: 'NOT_SWEPT', reason: 'ran out of time before the data layer' },
+        }
+        const res = load().validate(
+            inconclusiveReport({
+                layers_swept: ls,
+                inconclusive: {
+                    evidence_read: [
+                        { source: 'trace', detail: 'sn_aia_execution_plan: no rows for this agent in 24h' },
+                        { source: 'config', detail: 'agent instructions read, 4200 chars' },
+                    ],
+                    needed_to_conclude: 'the purged trace',
+                },
+            })
+        )
+
+        expect(res.valid).toBe(true)
+    })
+
+    // -----------------------------------------------------------------------
+    // Advertising and rendering the path (T6, issue #72): the escape hatch
+    // above changes nothing if the model is never told it exists.
+    // -----------------------------------------------------------------------
+
+    test('schemaText documents the inconclusive field so the model knows the path exists', () => {
+        const text = load().schemaText()
+
+        expect(text).toContain('inconclusive')
+        expect(text).toContain('evidence_read')
+        expect(text).toContain('needed_to_conclude')
+        // and it must say the honest path is preferred over invention
+        expect(text.toLowerCase()).toContain('preferred')
+    })
+
+    test('schemaText states the citation-per-sweep pricing rule and that NOT_SWEPT/UNAVAILABLE reduces it (fix round 1, #72)', () => {
+        const text = load().schemaText()
+
+        // Pins the at-least-as-many-citations-as-SWEPT-layers rule itself —
+        // distinctive enough that a rewording which lost the meaning would
+        // break this assertion, not survive it.
+        expect(text).toContain('AT LEAST AS MANY entries as the number of layers marked SWEPT in layers_swept')
+        expect(text).toContain('claim seven sweeps, cite seven things')
+        // Pins that marking a layer NOT_SWEPT/UNAVAILABLE — not SWEPT — is
+        // what lowers the citation bill, matching _countSweptLayers exactly.
+        expect(text).toContain('mark a layer NOT_SWEPT or UNAVAILABLE with a reason instead and fewer citations are required')
+    })
+
+    test('renderMarkdown emits an INCONCLUSIVE section between LAYERS SWEPT and ROOT CAUSES', () => {
+        const md = load().renderMarkdown(inconclusiveReport())
+
+        expect(md).toContain('## INCONCLUSIVE')
+        expect(md).toContain('needed to conclude: the sn_aia_execution_task rows')
+        expect(md).toContain('- trace: sn_aia_execution_plan')
+        expect(md.indexOf('## LAYERS SWEPT')).toBeLessThan(md.indexOf('## INCONCLUSIVE'))
+        expect(md.indexOf('## INCONCLUSIVE')).toBeLessThan(md.indexOf('## ROOT CAUSES'))
+    })
+
+    test('renderMarkdown marks verification not-applicable on the inconclusive path', () => {
+        const md = load().renderMarkdown(inconclusiveReport({ verification: undefined }))
+
+        expect(md).toContain('(not applicable — inconclusive)')
+    })
+
+    test('renderMarkdown on a normal report is unchanged — no INCONCLUSIVE section, verification reads (not provided)', () => {
+        const md = load().renderMarkdown({ failure_summary: 'x', root_causes: [], fixes: [] })
+
+        expect(md).not.toContain('## INCONCLUSIVE')
+        expect(md).toContain('(not provided)')
     })
 })

@@ -343,6 +343,127 @@ describe('appendTranscript', () => {
 })
 
 // ===========================================================================
+// prompt_digest — the prompt-facing observation channel (issue #72)
+// ===========================================================================
+
+describe('prompt_digest', () => {
+    test('a long TOOL result gets a prompt_digest at the 8500-char ceiling, while result_digest stays at 200', () => {
+        const { mgr, world } = load({ world: { rows: { [RUN_TABLE]: [seedRun()] } } })
+        const long = 'z'.repeat(10000)
+
+        mgr.appendTranscript('run1', { actor: 'tool', tool: 'read_artifact', result_digest: long })
+
+        const stored = JSON.parse(world.tables[RUN_TABLE][0].transcript)
+        expect(stored[0].result_digest).toContain('...[+9800 more chars]')
+        expect(stored[0].result_digest.length).toBeLessThan(300)
+        expect(stored[0].prompt_digest).toContain('...[+1500 more chars]')
+        expect(stored[0].prompt_digest.substring(0, 8500)).toBe('z'.repeat(8500))
+    })
+
+    test('a result that already fits inside 200 chars gets NO prompt_digest — it would only duplicate result_digest', () => {
+        const { mgr, world } = load({ world: { rows: { [RUN_TABLE]: [seedRun()] } } })
+
+        mgr.appendTranscript('run1', { actor: 'tool', tool: 'agent_trace', result_digest: 'short result' })
+
+        const stored = JSON.parse(world.tables[RUN_TABLE][0].transcript)
+        expect(stored[0].result_digest).toBe('short result')
+        expect(stored[0].prompt_digest).toBeUndefined()
+    })
+
+    test('llm and system entries never get a prompt_digest, however long they are', () => {
+        const { mgr, world } = load({ world: { rows: { [RUN_TABLE]: [seedRun()] } } })
+        const long = 'z'.repeat(5000)
+
+        mgr.appendTranscript('run1', { actor: 'llm', result_digest: long })
+        mgr.appendTranscript('run1', { actor: 'system', result_digest: long })
+
+        const stored = JSON.parse(world.tables[RUN_TABLE][0].transcript)
+        expect(stored[0].prompt_digest).toBeUndefined()
+        expect(stored[1].prompt_digest).toBeUndefined()
+    })
+
+    test('args_digest never gets the larger ceiling — only results are the observation channel', () => {
+        const { mgr, world } = load({ world: { rows: { [RUN_TABLE]: [seedRun()] } } })
+        const long = 'z'.repeat(5000)
+
+        mgr.appendTranscript('run1', { actor: 'tool', args_digest: long, result_digest: 'short' })
+
+        const stored = JSON.parse(world.tables[RUN_TABLE][0].transcript)
+        expect(stored[0].args_digest.length).toBeLessThan(300)
+        expect(stored[0].prompt_digest).toBeUndefined()
+    })
+
+    test('a caller-supplied prompt_digest is IGNORED — the field is derived, never accepted', () => {
+        const { mgr, world } = load({ world: { rows: { [RUN_TABLE]: [seedRun()] } } })
+
+        mgr.appendTranscript('run1', { actor: 'tool', result_digest: 'short', prompt_digest: 'x'.repeat(50000) })
+
+        const stored = JSON.parse(world.tables[RUN_TABLE][0].transcript)
+        expect(stored[0].prompt_digest).toBeUndefined()
+    })
+
+    test('only the newest PROMPT_WINDOW carriers keep prompt_digest — older ones are pruned on append', () => {
+        const { mgr, world } = load({ world: { rows: { [RUN_TABLE]: [seedRun()] } } })
+        const long = 'z'.repeat(5000)
+
+        for (let i = 0; i < 5; i++) {
+            mgr.appendTranscript('run1', { actor: 'tool', tool: 't' + i, result_digest: long })
+        }
+
+        const stored = JSON.parse(world.tables[RUN_TABLE][0].transcript)
+        const carriers = stored.filter((e) => e.prompt_digest !== undefined).map((e) => e.tool)
+        expect(carriers).toEqual(['t2', 't3', 't4'])
+        // every entry keeps its 200-char result_digest regardless — the UI/audit path is untouched
+        expect(stored.filter((e) => typeof e.result_digest === 'string')).toHaveLength(5)
+    })
+
+    test('short results do not consume a window slot', () => {
+        const { mgr, world } = load({ world: { rows: { [RUN_TABLE]: [seedRun()] } } })
+        const long = 'z'.repeat(5000)
+
+        mgr.appendTranscript('run1', { actor: 'tool', tool: 'big1', result_digest: long })
+        mgr.appendTranscript('run1', { actor: 'tool', tool: 'small1', result_digest: 'tiny' })
+        mgr.appendTranscript('run1', { actor: 'tool', tool: 'small2', result_digest: 'tiny' })
+        mgr.appendTranscript('run1', { actor: 'tool', tool: 'big2', result_digest: long })
+
+        const stored = JSON.parse(world.tables[RUN_TABLE][0].transcript)
+        const carriers = stored.filter((e) => e.prompt_digest !== undefined).map((e) => e.tool)
+        expect(carriers).toEqual(['big1', 'big2'])
+    })
+
+    test('T6 row-size bound: a worst-case 15-iteration transcript stays far under the 65536-char column ceiling', () => {
+        const { mgr, world } = load({ world: { rows: { [RUN_TABLE]: [seedRun()] } } })
+        const hugeResult = 'z'.repeat(20000)
+        const hugeArgs = 'a'.repeat(20000)
+
+        // MAX_ITERATIONS is 15 and each iteration appends at most two entries
+        // (llm + tool). Every result is oversized, so this is the worst case
+        // the loop can produce, not a typical one.
+        for (let i = 0; i < 15; i++) {
+            mgr.appendTranscript('run1', { actor: 'llm', result_digest: hugeResult })
+            mgr.appendTranscript('run1', { actor: 'tool', tool: 't' + i, args_digest: hugeArgs, result_digest: hugeResult })
+        }
+
+        const raw = world.tables[RUN_TABLE][0].transcript
+        const stored = JSON.parse(raw)
+
+        expect(stored).toHaveLength(30)
+        expect(stored.filter((e) => e.prompt_digest !== undefined)).toHaveLength(3)
+        // Re-derived for PROMPT_DIGEST_CHARS = 8,500 (final review, issue #72
+        // critical-1): design spec §4.4 now projects ~38,300 worst case
+        // (baseline ~12,800 + window 3 x 8,500 = 25,500); measured here at
+        // 38,340. 40,000 keeps that measured number under the assertion with
+        // headroom; 65,536 is the hard column ceiling (tables.now.ts:201-204)
+        // — roughly 1.7x above the measured worst case, not the 2x the old
+        // 4,000-char ceiling gave, but still comfortable. If this ever
+        // regresses above 40,000, raise the threshold to a value with clear
+        // headroom under 65,536 and report the new measured number — do not
+        // silently loosen it.
+        expect(raw.length).toBeLessThan(40000)
+    })
+})
+
+// ===========================================================================
 // loadContext
 // ===========================================================================
 
