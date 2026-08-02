@@ -147,18 +147,28 @@ paths. `evidence_read` is checked identically — it is the most directly falsif
 schema, since it literally asserts "I read this."
 
 ```
-trace  ← agent_trace, genai_log, log_analysis, read_artifact
-config ← agent_config, genai_log, read_artifact
-schema ← schema_lookup, read_artifact
-data   ← query_table, log_analysis, read_artifact
+trace  ← agent_trace, genai_log, log_analysis
+config ← agent_config, genai_log
+schema ← schema_lookup
+data   ← query_table, log_analysis
 ```
 
 A citation passes if **any** tool in its set appears in `invokedTools`. The map is deliberately
 permissive: the goal is to stop fabrication, not to add new pedantry — which is the exact failure
 mode #78 exists to fix. `genai_log` supports `config` because seed 03's answer (a dangling `api`) is
 found through it and is legitimately configuration evidence; a strict 1:1 map would reject that
-honest citation. `read_artifact` supports every source because it pages an artifact produced by an
-earlier tool in the same run, and that earlier call is itself audited.
+honest citation.
+
+**`read_artifact` supports nothing on its own** — corrected 2026-08-02, during implementation, from
+an earlier version of this spec that made it a wildcard for every source. Artifacts are created only
+inside `PaToolRegistry.dispatch` (`src/server/PaToolRegistry.js:267`) and
+`PaScriptToolAdapter.invoke` (`src/server/PaScriptToolAdapter.js:135`), both of which write an audit
+`intent` row for the producing tool *before* the call. So within a run, `read_artifact` can only page
+an artifact whose producing tool is **already in the trail**. That makes the wildcard redundant when
+the citation is honest — the producer supports it directly — and a blanket pass for all four sources
+when it is not. Under the wildcard, the re-run's worst draft (all seven layers `SWEPT` on
+`agent_trace` + `read_artifact`, both reads of the same trace) passed both cross-checks: precisely
+the draft #79b exists to catch. Nothing honest is lost by dropping it.
 
 The problem text names the unsupported source and the tools that would support it, so the repair
 turn can either go get the evidence or drop the claim.
@@ -169,14 +179,16 @@ The layer→tool map extends `PaRunManager._collectionTools` (`src/server/PaRunM
 the two tools it does not cover. `read_artifact` is a wildcard, matching its role above.
 
 ```
-1 Execution trace   ← agent_trace, genai_log, log_analysis, read_artifact
-2 Instructions      ← agent_config, read_artifact
-3 Tool definitions  ← agent_config, read_artifact
-4 Data schemas      ← schema_lookup, read_artifact
-5 Data              ← query_table, read_artifact
-6 GenAI stack       ← genai_log, log_analysis, read_artifact
-7 Trigger + wiring  ← agent_config, read_artifact
+1 Execution trace   ← agent_trace, genai_log, log_analysis
+2 Instructions      ← agent_config
+3 Tool definitions  ← agent_config
+4 Data schemas      ← schema_lookup
+5 Data              ← query_table
+6 GenAI stack       ← genai_log, log_analysis
+7 Trigger + wiring  ← agent_config
 ```
+
+`read_artifact` is absent here for the same reason it is absent from the citation map above.
 
 **The two maps are separate by design, not duplicates.** Layers are finer-grained than the four
 evidence sources — layers 2, 3 and 7 all correspond to the `config` source but each is answered by a

@@ -871,6 +871,13 @@ Expected: FAIL — the first test returns `valid: true` because no cross-check e
             data: ['query_table', 'log_analysis', 'read_artifact'],
         }
     },
+```
+
+> **⚠️ Superseded after this task shipped.** `read_artifact` is removed from all four entries — see
+> Task 4's second correction block, which owns the fix. The text above is what Task 3 actually
+> committed, kept here so the history reads honestly.
+
+```javascript
 
     _anyInvoked: function (candidates, ctx) {
         for (var i = 0; i < candidates.length; i++) {
@@ -935,6 +942,39 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 > ```
 >
 > Without this line the new methods are dead code and this task's tests will fail.
+
+> **Second plan correction (made after Task 3's review) — `read_artifact` is dropped from BOTH maps.**
+>
+> Task 3 shipped `_citationToolMap()` with `read_artifact` as a wildcard supporting every source.
+> That is wrong, and this task must fix it as well as avoid repeating it.
+>
+> Artifacts are created only inside `PaToolRegistry.dispatch` (`src/server/PaToolRegistry.js:267`)
+> and `PaScriptToolAdapter.invoke` (`src/server/PaScriptToolAdapter.js:135`), both of which write an
+> audit `intent` row for the **producing** tool before the call. So within a run, `read_artifact` can
+> only page an artifact whose producer is already in the trail. The wildcard is therefore redundant
+> when a citation is honest, and a blanket pass for all four sources when it is not — under it, the
+> benchmark's worst draft (all seven layers `SWEPT` on `agent_trace` + `read_artifact`) passes both
+> cross-checks, which is exactly the draft #79b exists to catch.
+>
+> **Edit `_citationToolMap()` in `src/server/PaFixReport.js` to remove `read_artifact` from all four
+> entries:**
+>
+> ```javascript
+>     _citationToolMap: function () {
+>         return {
+>             trace: ['agent_trace', 'genai_log', 'log_analysis'],
+>             config: ['agent_config', 'genai_log'],
+>             schema: ['schema_lookup'],
+>             data: ['query_table', 'log_analysis'],
+>         }
+>     },
+> ```
+>
+> Also update that method's doc comment: replace the sentence claiming `read_artifact` supports every
+> source with a note that it supports none, because its producing tool is already audited.
+>
+> No Task 3 test breaks from this — verified: its cases use `agent_trace` alone, `genai_log` alone,
+> or all seven tools, none of which depend on the wildcard. Run the full suite to confirm.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1002,13 +1042,23 @@ describe('#79b sweep-claim cross-check', () => {
         expect(result.valid).toBe(true)
     })
 
-    test('read_artifact supports every layer — it pages an earlier audited tool call', () => {
+    test('read_artifact alone supports NO layer — its producing tool is what counts', () => {
         const reports = load()
 
         const result = reports.validate(validReport(), auditCtx(['read_artifact']))
         const sweepProblems = result.problems.filter((p) => p.indexOf('unsupported sweep claim') !== -1)
 
-        expect(sweepProblems.length).toBe(0)
+        // All seven layers are SWEPT and none is supported: one collapsed problem.
+        expect(sweepProblems.length).toBe(1)
+        expect(sweepProblems[0].indexOf('7 layer(s)')).not.toBe(-1)
+    })
+
+    test('read_artifact alone supports NO citation either — the Task 3 map is corrected here', () => {
+        const reports = load()
+
+        const result = reports.validate(validReport(), auditCtx(['read_artifact']))
+
+        expect(result.problems.some((p) => p.indexOf('unsupported citation') !== -1)).toBe(true)
     })
 })
 ```
@@ -1082,13 +1132,13 @@ Add these two methods to `src/server/PaFixReport.js` immediately after `_checkLa
      */
     _layerToolMap: function () {
         return {
-            1: ['agent_trace', 'genai_log', 'log_analysis', 'read_artifact'],
-            2: ['agent_config', 'read_artifact'],
-            3: ['agent_config', 'read_artifact'],
-            4: ['schema_lookup', 'read_artifact'],
-            5: ['query_table', 'read_artifact'],
-            6: ['genai_log', 'log_analysis', 'read_artifact'],
-            7: ['agent_config', 'read_artifact'],
+            1: ['agent_trace', 'genai_log', 'log_analysis'],
+            2: ['agent_config'],
+            3: ['agent_config'],
+            4: ['schema_lookup'],
+            5: ['query_table'],
+            6: ['genai_log', 'log_analysis'],
+            7: ['agent_config'],
         }
     },
 ```
@@ -1183,8 +1233,9 @@ In `schemaText()`, find the `root_causes:` line (`:557`) that ends with the evid
             'EVIDENCE IS CHECKED AGAINST WHAT YOU ACTUALLY CALLED. Every citation source is verified ' +
                 'against the tools this run actually invoked. Citing a source you did not read with a tool ' +
                 'in THIS run is rejected — trace comes from agent_trace/genai_log/log_analysis, config from ' +
-                'agent_config/genai_log, schema from schema_lookup, data from query_table/log_analysis, and ' +
-                'read_artifact counts for whatever it paged. Do not label evidence you did not gather.',
+                'agent_config/genai_log, schema from schema_lookup, data from query_table/log_analysis. ' +
+                'read_artifact does NOT count on its own — cite the tool whose output you paged. Do not ' +
+                'label evidence you did not gather.',
 
             'A LAYER MARKED SWEPT NEEDS A TOOL CALL BEHIND IT. layers_swept entries marked SWEPT are ' +
                 'verified the same way: claiming a layer you never ran a tool against is rejected. Marking a ' +
