@@ -77,9 +77,11 @@ function fakeRunManager() {
 
 function fakeFixReport(validateResults) {
     const calls = []
+    const renderCalls = { markdown: [], json: [] }
     let i = 0
     return {
         calls: calls,
+        renderCalls: renderCalls,
         validate: function (report) {
             calls.push(report)
             const r = validateResults[i]
@@ -88,6 +90,19 @@ function fakeFixReport(validateResults) {
         },
         repairPrompt: function (report, problems) {
             return 'REPAIR PROMPT: ' + JSON.stringify(problems) + ' DRAFT: ' + JSON.stringify(report)
+        },
+        // Real PaFixReport.renderMarkdown/renderJson both take the SAME
+        // normalized object and describe the same report (see that file's
+        // header) — these fakes mirror that: deterministic, distinguishable
+        // output per rendering, and every call recorded so tests can assert
+        // the loop actually calls them rather than re-stringifying itself.
+        renderMarkdown: function (normalized) {
+            renderCalls.markdown.push(normalized)
+            return 'MARKDOWN(' + JSON.stringify(normalized) + ')'
+        },
+        renderJson: function (normalized) {
+            renderCalls.json.push(normalized)
+            return 'JSON(' + JSON.stringify(normalized) + ')'
         },
     }
 }
@@ -135,9 +150,12 @@ describe('happy path', () => {
         expect(runs.closeCalls[0].runId).toBe('run1')
         expect(runs.closeCalls[0].status).toBe('complete')
 
+        // Sequence, not just counts: llm+tool paired per tool_call
+        // iteration, then a final llm entry for the terminal answer (no
+        // paired tool entry — answer never dispatches) followed by the
+        // system entry _finishAnswer appends before closing the run.
         const actors = runs.transcript.map((e) => e.actor)
-        expect(actors.filter((a) => a === 'llm')).toHaveLength(3)
-        expect(actors.filter((a) => a === 'tool')).toHaveLength(2)
+        expect(actors).toEqual(['llm', 'tool', 'llm', 'tool', 'llm', 'system'])
     })
 
     test('the initial prompt carries the playbook, the tool promptBlock, and the request', () => {
@@ -159,9 +177,10 @@ describe('happy path', () => {
 // ===========================================================================
 
 describe('fix_report path', () => {
-    test('valid report -> validated, stored, closed complete', () => {
+    test('valid report -> validated, rendered, stored, closed complete', () => {
+        const normalized = { failure_summary: 'x', root_causes: [] }
         const llm = fakeLlm([{ success: true, action: { action: 'fix_report', report: { failure_summary: 'x' } }, raw: 'rf' }])
-        const fixReport = fakeFixReport([{ valid: true, normalized: { failure_summary: 'x', root_causes: [] } }])
+        const fixReport = fakeFixReport([{ valid: true, normalized: normalized }])
         const runs = fakeRunManager()
         const loop = load({
             llmProxy: llm,
@@ -176,19 +195,29 @@ describe('fix_report path', () => {
 
         expect(res.success).toBe(true)
         expect(res.outcome).toBe('fix_report')
-        expect(res.report).toEqual({ failure_summary: 'x', root_causes: [] })
+        expect(res.report).toEqual(normalized)
+
+        // RENDERED: both renderJson and renderMarkdown are called on the
+        // normalized report, and their output — not a second ad-hoc
+        // stringify of the raw object — is what actually gets stored and
+        // surfaced.
+        expect(fixReport.renderCalls.json).toEqual([normalized])
+        expect(fixReport.renderCalls.markdown).toEqual([normalized])
+
         expect(runs.closeCalls[0].status).toBe('complete')
-        expect(runs.closeCalls[0].options.fixReport).toEqual({ failure_summary: 'x', root_causes: [] })
+        expect(runs.closeCalls[0].options.fixReport).toBe('JSON(' + JSON.stringify(normalized) + ')')
+        expect(res.renderedMarkdown).toBe('MARKDOWN(' + JSON.stringify(normalized) + ')')
     })
 
-    test('invalid report -> ONE repair via repairPrompt through the proxy -> valid -> complete', () => {
+    test('invalid report -> ONE repair via repairPrompt through the proxy -> valid -> complete (and rendered)', () => {
+        const normalized = { failure_summary: 'good' }
         const llm = fakeLlm([
             { success: true, action: { action: 'fix_report', report: { failure_summary: 'bad' } }, raw: 'draft1' },
             { success: true, action: { action: 'fix_report', report: { failure_summary: 'good' } }, raw: 'draft2' },
         ])
         const fixReport = fakeFixReport([
             { valid: false, problems: ['missing root_causes'] },
-            { valid: true, normalized: { failure_summary: 'good' } },
+            { valid: true, normalized: normalized },
         ])
         const runs = fakeRunManager()
         const loop = load({
@@ -204,12 +233,19 @@ describe('fix_report path', () => {
 
         expect(res.success).toBe(true)
         expect(res.outcome).toBe('fix_report')
-        expect(res.report).toEqual({ failure_summary: 'good' })
+        expect(res.report).toEqual(normalized)
         expect(llm.calls).toHaveLength(2)
         // the repair prompt (built from PaFixReport.repairPrompt) is what
         // goes through the proxy on the second call
         expect(llm.calls[1]).toContain('missing root_causes')
+
+        // the repair path's terminal success renders too — it goes through
+        // the SAME _completeFixReport as the first-try-valid path
+        expect(fixReport.renderCalls.json).toEqual([normalized])
+        expect(fixReport.renderCalls.markdown).toEqual([normalized])
         expect(runs.closeCalls[0].status).toBe('complete')
+        expect(runs.closeCalls[0].options.fixReport).toBe('JSON(' + JSON.stringify(normalized) + ')')
+        expect(res.renderedMarkdown).toBe('MARKDOWN(' + JSON.stringify(normalized) + ')')
     })
 
     test('invalid twice -> closed failed with the problems and the raw draft preserved', () => {

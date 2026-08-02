@@ -30,7 +30,11 @@
  *         action:answer     -> close complete, outcome:'answer'
  *         action:fix_report -> validate; invalid -> ONE repair through the
  *                               proxy; still invalid -> close failed with
- *                               the problems AND the last draft preserved
+ *                               the problems AND the last draft preserved;
+ *                               valid -> RENDERED both ways
+ *                               (PaFixReport.renderJson/renderMarkdown —
+ *                               see `_completeFixReport`), stored, close
+ *                               complete
  *
  * BOUNDS ARE A FLOOR, NEVER A SILENT STOP (the R-3 lesson)
  * DESIGN.md's R-3 finding was that a premature "the diagnosis is done"
@@ -317,13 +321,31 @@ PaAgentLoop.prototype = {
         return this._finishFailedFixReport(runId, validated2.problems, repairedAction.report)
     },
 
+    /**
+     * Renders the SAME normalized report both ways (PaFixReport header:
+     * "the two renderings describe the same report") and stores each where
+     * it is actually consumed, rather than a third ad-hoc re-stringify of
+     * the raw object: `renderJson(normalized)` — the canonical
+     * serialization — is what lands in the run row's `fix_report` field via
+     * `close()`'s existing `{fixReport}` option (PaRunManager's `_stringify`
+     * passes an already-a-string value through untouched, so this is not a
+     * double-encode); `renderMarkdown(normalized)` — the human-readable
+     * rendering the playbook's "Fix Report" section describes — is returned
+     * directly on `run()`'s result as `renderedMarkdown`, the one place
+     * every caller (Task 7's Script Action / REST handler) is guaranteed to
+     * read without needing PaRunManager's schema to grow a new column.
+     */
     _completeFixReport: function (runId, normalized) {
+        var renderedMarkdown = this._reports().renderMarkdown(normalized)
+        var renderedJson = this._reports().renderJson(normalized)
+
         this._runs().appendTranscript(runId, { actor: 'system', result_digest: 'fix_report validated' })
-        var closeRes = this._runs().close(runId, 'complete', { fixReport: normalized })
+        var closeRes = this._runs().close(runId, 'complete', { fixReport: renderedJson })
         return {
             success: !!(closeRes && closeRes.success === true),
             outcome: 'fix_report',
             report: normalized,
+            renderedMarkdown: renderedMarkdown,
             run_id: runId,
         }
     },
