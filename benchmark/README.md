@@ -105,18 +105,23 @@ read-only via MCP on **gpinst01, 2026-08-02** (`servicenow_schema`/`servicenow_q
 - **`sys_gen_ai_usage_log`** (the brief's named alternative) — populated instance-wide: 3,250 rows,
   `SUM(assists)=1121`. It filters to this app, but not on the field the schema implies: `caller_scope` is
   **empty on all 3,250 rows**; `source_scope=x_snc_troubleshoot` is the populated field and returns 48 rows.
-  Of those: 32 carry `assists=1` on `document_table=sys_one_extend_capability` (Agent Doctor's own
-  script-tool-backed LLM calls, timestamped today), 16 carry `assists=0` on `document_table=sys_cs_topic`
-  (conversation/topic-routing overhead, billed at zero).
+  Of those: 32 carry `assists=1` on `document_table=sys_one_extend_capability` with
+  `skill_config_id=21c00b55a323477082b23a25049a11ba` — **not** Agent Doctor's own tools (those are
+  data-fetching script tools with no LLM call in their path) but `PaLlmProxy`'s `reason` NASK skill
+  config (`src/server/PaLlmProxy.js` `_NASK_SKILLS.reason`; `keys.ts` resolves the same sys_id to
+  `feature_name: 'pa llm reason'`) — i.e. these 32 rows are the **custom harness's own** reasoning-loop
+  LLM calls, timestamped today. 16 carry `assists=0` on `document_table=sys_cs_topic` (conversation/
+  topic-routing overhead, billed at zero).
 - **No per-run join key exists on the `assists=1` rows.** `sn_aia_execution_plan.gen_ai_usage_log` is the
   one documented linkage (LLD §2.3 path 1) and it **is** populated — 10/10 sampled execution plans from
   2026-08-02 carry a reference — but of 3 of those references checked, all 3 point at the plan's
   `sys_cs_topic` row (`assists=0`), never at a `sys_one_extend_capability` row, which is where the actual
   consumption lives. `sys_gen_ai_usage_log` itself has no `conversation` column at all. The sibling
   per-call telemetry table, `sys_gen_ai_log_metadata`, does declare a `conversation` field, but it read
-  empty on all 10 sampled rows for the `skill_config_id` backing our capability calls
-  (`21c00b55a323477082b23a25049a11ba`) — the table built to carry conversation identity doesn't carry it
-  for this call path either.
+  empty on all 10 sampled rows for `skill_config_id=21c00b55a323477082b23a25049a11ba` — **the custom
+  harness's own `PaLlmProxy.reason()` calls, per the correction above** — so this is direct evidence
+  that the custom harness's own NASK invocations do not carry conversation identity in platform
+  telemetry, not merely a gap on the native side.
 - **Net:** a real, current, scope-filterable consumption number exists, but only as an aggregate over a
   time window, not attributable to an individual run. The same reasoning that disqualifies time-window
   keying for run identity above (interleaving) disqualifies it here too.
@@ -129,10 +134,14 @@ read-only via MCP on **gpinst01, 2026-08-02** (`servicenow_schema`/`servicenow_q
   ⚠ Documented, not fully verified within this probe's timebox: a direct `source_id=<execution plan
   sys_id>` query returned 0 rows, so confirm the exact `source_id` keying (plan vs. task sys_id) against
   a real run before Task 9/10 rely on it.
-- **Custom harness (Phase 1b, not yet built):** count of `llm`-type entries in the run's own transcript,
-  and/or `sys_gen_ai_log` rows scoped to the run's `conversation_id`, once the harness makes and logs its
-  own LLM calls — the harness controls this log directly, so it doesn't inherit the native path's
-  join-key gap.
+- **Custom harness (Phase 1b, not yet built):** count of `actor:'llm'` entries in the run's own
+  transcript — `PaAgentLoop.js` already appends one such entry per reasoning-loop LLM call
+  (`this._runs().appendTranscript(runId, { actor: 'llm', ... })`), so this is a deterministic
+  per-run count sourced entirely from data the harness owns, verified in code rather than inferred.
+  **No platform-telemetry fallback is used** — the probe above shows the custom harness's own
+  `PaLlmProxy.reason()` calls are exactly the rows where `sys_gen_ai_log_metadata.conversation` reads
+  empty, so a `sys_gen_ai_*`-table cross-check would inherit the same join-key gap as the native path,
+  not avoid it.
 
 **Assist-units are NOT COMPARABLE to entitlement/licensing units.** LLM-call counts are a fair
 apples-to-apples proxy between the two harnesses' own consumption, not a measurement of billed Now
