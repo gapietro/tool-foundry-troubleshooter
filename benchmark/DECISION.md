@@ -576,6 +576,66 @@ path — *name the candidate root cause and mark it UNCONFIRMED* — which is co
 that route is the likely reason and is the better answer anyway; it should not be read as the
 inconclusive path being unusable.
 
+#### H7-5. Carried forward: the contract text changed AGAIN in `2026.08.0220` (#78, #79)
+
+Recorded here **before** the next measurement rather than discovered after it, because H7-3 above is
+the same limitation and it is about to apply twice over.
+
+`PaFixReport.schemaText()` changed again on the `fix/fixreport-evidence-validation` branch. Three
+clauses were added — citations are cross-checked against the tools the run actually invoked; a layer
+marked `SWEPT` needs a tool call behind it; an absence-diagnosis may omit the trace citation if layer
+1 is `UNAVAILABLE` and two **distinct** non-trace sources are cited — and the pre-existing
+`root_causes` clause was amended so it no longer asserts the trace citation is unconditional. The
+per-layer tool list is now emitted from `_layerToolMap()` at render time.
+
+**Consequence for attribution.** Any movement in the next number reflects both the enforcement change
+and the contract change, and the two cannot be separated by the score alone. This is again deliberate
+and again unavoidable — the contract text is part of the change under test — but it means the
+0 → 1 → *n* sequence across three passes has three different contracts behind it. Do not read the
+sequence as a trend.
+
+**A second, subtler confound on the same axis.** `docs/agent/agent-doctor-instructions.md` line 48
+still states the categorical rule — *"Every root cause cites trace evidence PLUS at least one
+configuration, schema or data source"* — with no mention of the absence path. That text is prompt
+position #1; the amended contract block is prompt position #last. It was deliberately **not** edited
+on this branch: the same file is the native harness's instruction source, and changing it would move
+the native baseline that §H7-4 already flags as unmeasured. Recency favours the contract block, but a
+model that anchors on the earlier categorical statement may still decline the absence path. If the
+next pass shows absence-diagnoses continuing to fail, check the rendered prompt for this conflict
+before concluding the branch did not work.
+
+**Live-confirmed limit on what #78 can do by itself.** Run `a66d01182b22cfd417a6ffbeee91bf28` — the
+correct diagnosis §H6 records as lost to the validator — marks layer 1 `NOT_SWEPT` (not `UNAVAILABLE`)
+and cites two `config` entries (one distinct source). It therefore fails the new mode B on **both**
+counts and would still be rejected on a replay. The code change makes a correct absence-diagnosis
+*expressible*; only the contract change can make the model express it that way. §H6's arithmetic
+counterfactual (2/10 had that row passed) should not be read as automatically recovered.
+
+**Two unscored smoke runs on `2026.08.0220`, recorded because one result is a genuine surprise.**
+Runs `7f33f9d82ba60b14f243fed2ce91bf0e` and `5983351c2b2ecfd417a6ffbeee91bff2`, both seed 05, both
+against the deployed branch. **This is not a scored pass and must not be cited as one** — n=2, one
+seed, no native control.
+
+- Mode B fires as designed. Both were rejected with *"layer 1 is UNAVAILABLE, so no trace citation is
+  required, but a diagnosis of an absence still needs corroboration… found 0"* — the new path, not
+  the old blanket "no trace citation found."
+- **Sweep inflation disappeared.** Both runs marked layers 2–7 `NOT_SWEPT` with honest reasons, several
+  naming the specific tool they had not invoked ("No `agent_config` tool was invoked to inspect
+  instructions"). The historical run on this same seed claimed layers 2, 3 and 7 `SWEPT` with empty
+  reasons on the same class of evidence. The contract appears to suppress over-claiming *before* the
+  validator has to reject it, which is the better failure mode and was not something #79b was
+  designed to produce.
+- **Both were shallower than the historical run** — one tool call versus two, and neither reached
+  `agent_config`, so neither could produce a single non-trace source. Whether the new contract's
+  emphasis on not-claiming-what-you-did-not-do also discourages *going and getting* evidence is
+  unanswerable at n=2 and is the first thing a scored re-run should look at.
+- **Structural finding, filed separately:** the repair turn has no tool access, so a
+  "cite two distinct sources — found 0" problem is **unfixable in repair by construction**. The model's
+  only legal moves are to weaken the claim, go `inconclusive`, or fabricate. Both runs' repair turns
+  reproduced the same shape and failed identically. This property predates the branch, but the new
+  checks make citation shortfall the dominant rejection reason, so it now governs the repair turn's
+  usefulness.
+
 ### H8. Verdict
 
 **Native remains the deep-diagnosis front door.** 8/10 against 1/10 is not a close call, and nothing
