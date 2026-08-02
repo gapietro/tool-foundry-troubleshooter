@@ -173,3 +173,129 @@ blind, audit-derived protocol so the two harnesses are compared on identical evi
 - **Seed spec prediction banners** — seed 1's measured `priority_stored` is **null** (not `0`,
   not `''`); seed 2's mechanism is refuted (D2); seed 4's observed signature matches the primary
   construction. The three spec files are updated alongside this document.
+
+---
+
+## G. Task 10 addendum — the Phase 1b comparison re-run verdict
+
+**Date:** 2026-08-02 · **Instance:** gpinst01 (Zurich Patch 10 Hotfix 3) · **Scorecard:**
+`benchmark/scorecard-custom-harness.md` (20 rows: 10 custom + 10 native-comparison, 0 void) ·
+Protocol: `benchmark/README.md` "The Phase 1b comparison re-run protocol" (Task 9).
+
+This section measures **both** harnesses against the same 5 seeds under the same doubled-run,
+blind, audit-derived protocol §A used throughout this document, and states the comparison
+verdict the Phase 1b milestone ("deep diagnosis passes the same seeded-failure benchmark", PRD)
+depends on.
+
+### G1. The side-by-side gate table
+
+Same §A2 pass rule for both — `passes_gate = 1 iff root_cause_layer_correct == 2 AND
+fix_usable_unedited == 1` — nothing else feeds it, computed identically for every row in both
+harnesses.
+
+| | Native (comparison total) | Custom (Phase 1b harness) |
+|---|---|---|
+| Valid runs | 10 / 10 | 10 / 10 |
+| `sum(passes_gate)` | **8** | **0** |
+| Gate result | **8 / 10 = 80.0%** | **0 / 10 = 0.0%** |
+| Band (proportional, §A3) | Top (≥ 80%) | Bottom (< 50%) |
+| `layers_swept` (typical) | 4–6 of 7, varies by run — real, audit-confirmed sweeps | **1/7 (L1) on all 10 rows, no exception** — `agent_trace` + one `read_artifact` page, then straight to a fix attempt |
+| Evidence quality | Config/schema citations correspond to tools actually called | **Config/schema citations were fabricated in every "complete" row** — `agent_config` was never called in any of the 10 runs, yet several reports claimed it was, including two that labeled fabricated ids/evidence as `"(hypothetical example)"` in the model's own text |
+| Wall-clock | 178–232s (seed 2 rows measured this task) | 5–14s |
+| Void rows | 0 | 0 |
+
+### G2. What changed between the two harness measurements — the confound surface, on the record
+
+Three things changed on the shared instance between Task 12 (native's original 70% score) and
+this comparison, and all three apply **identically to both harnesses** being compared here —
+neither harness is being measured against a different playing field than the other:
+
+1. **Seed 2 v1 → v2** (D2 above). v1 bound zero tools; the ReAct engine cancels a tool-less agent
+   before the LLM ever runs, so no valid run — native or custom — could ever reach layer-2
+   diagnosis under v1. v2 binds one deliberately irrelevant tool so the engine's loop actually
+   starts and the instruction ambiguity can manifest. This is the seed both harnesses were
+   re-run against fresh in Task 10 (native: 2 new rows; custom: seeds 1/3/4 reused Task 12's
+   still-valid execution records, but seed 2 needed a fresh trigger for both).
+2. **The `check_config` capability-name filter** (PR #49, merged 2026-08-01, before Task 1) —
+   lets `genai_log`'s `check_config` mode reach an `x_*`-prefixed capability instead of being
+   capped at the first 100 name-ordered rows. Confirmed byte-identical between Task 7's build and
+   this comparison (Task 9's precondition check). Available to both harnesses' `genai_log` tool
+   equally; the custom harness never called `genai_log` in any of the 10 seed-4 rows where this
+   filter would have mattered, so the filter's benefit is unexercised in this comparison, not
+   asymmetrically applied.
+3. **Playbook v2** (PR #50, merged 2026-08-01, before Task 1) — the "derive table names, never
+   guess them" and "the GenAI stack: read the definition row" sections. This playbook text is
+   **native-only** — it is `agent-doctor-instructions.md`, loaded by the NASK-backed `sn_aia_agent`
+   record. The custom harness's `PaAgentLoop` loads its own, separate playbook text (Task 7's
+   explicit scope boundary: "the shared playbook stayed OFF LIMITS throughout"). So playbook v2 is
+   **not** a shared confound between the two harnesses in this comparison — it improves native's
+   diagnostic discipline only, and has no counterpart change on the custom side. Recorded here
+   because the brief asked for the full confound surface on the record, not because it muddies
+   the native-vs-custom comparison: it is a real, deliberate asymmetry (the two harnesses have
+   never shared a playbook), not a measurement artifact.
+
+**Net effect on interpretation:** the native score moving from 70% (Task 12) to 80% (this
+comparison) is attributable entirely to item 1 (seed 2's confound being repaired) plus ordinary
+doubled-run variance on that one seed (1 of 2 new rows passed) — not to any change in native's
+own tooling, playbook, or the instance's AI Agent Studio configuration, which are unchanged
+between the two measurements for seeds 1/3/4/5 (Task 9's precondition checks, re-confirmed by
+this task for seeds 4/5's void-gate state). The custom harness's 0% has no such history to
+compare against — this is its first scored measurement — so there is nothing to attribute it to
+except the harness's own behavior, measured fresh in this task.
+
+### G3. Why the custom harness scored 0/10 — audit-derived, not assumed
+
+Every one of the custom harness's 10 runs, across all five seeds, called exactly two tools —
+`agent_trace` once and `read_artifact` for one page — before either producing a Fix Report or
+failing `PaFixReport.validate`. This was verified by the audit trail
+(`x_snc_troubleshoot_audit` where `run=<run_id>^action_type=result`, distinct `tool_name`) for
+every row, not inferred from the runs' own self-reported `layers_swept`, several of which
+**claimed** `agent_config` had been consulted when the audit trail shows it never was. Three
+compounding failure modes, present in different mixes across the 10 rows:
+
+1. **Premature termination.** The loop jumps to a fix attempt after a single trace read, never
+   exercising `agent_config`, `schema_lookup`, `query_table`, `genai_log`, or `log_analysis` — the
+   five tools that carry layers 2–6, i.e. every layer except the trace itself. This matches Task
+   7/9's smoke-specimen finding exactly, now confirmed as this harness's *systemic* behavior
+   across 5 independent seeds rather than a property of one specimen.
+2. **Fabricated corroborating evidence.** Several "complete" rows produced a `root_causes[].evidence`
+   entry labeled `source: "config"` or `source: "schema"` with specific-sounding detail (a
+   `DENIED` permission status for a table the seed never touches; schema version numbers; tool
+   ids) that no tool call in the transcript could have produced. Two rows (seed 4, run 1) label
+   their own fabricated detail `"(hypothetical example)"` in the output text — the model
+   narrating, and flagging, its own invention rather than reporting an absence honestly.
+3. **Wrong layer, every time.** Not one of the 10 runs named the seed's expected root-cause layer.
+   Where a specific mechanism was named, it was frequently unrelated to anything in the seed's own
+   configuration — seed 5 run 2's root cause cites a `Create Incident` tool that does not exist in
+   this seed's tool set, or any seed's.
+
+This is not a marginal or borderline result requiring judgment calls to reach — `sum(passes_gate)`
+is unambiguously 0 because `root_cause_layer_correct` is 0 on every row.
+
+### G4. The verdict
+
+**Native remains the deep-diagnosis front door; the custom harness (Phase 1b) does not yet clear
+the bar its own benchmark sets.** Native's 80% comparison score sits in the top band; the custom
+harness's 0% sits in the bottom band by a wide margin — not a close call decided by scoring
+judgment calls, but a harness whose reasoning loop terminates before reaching the tools that
+would let it answer correctly, on every seed, in every run.
+
+This is a legitimate benchmark outcome, not a benchmark failure. Per the Task 10 brief: *"the
+benchmark's job is to measure that honestly, not to make it pass."* Tasks 7 and 9 both flagged this
+exact behavior on the smoke specimen (premature Fix Report, shallow sweep) as a known,
+unresolved, playbook-governed reasoning-quality gap explicitly out of scope for those tasks'
+authorization. This comparison is the first time that gap has been measured across the full
+5-seed benchmark rather than one specimen, and it generalizes without exception.
+
+**What this does not mean:** it does not mean Phase 1b's infrastructure is broken. `/analyze`,
+`/runs/{id}`, the async worker, the Evidence Bundle, `PaFixReport`'s validation/repair path, and
+the REST surface all ran to completion correctly on every one of the 10 rows (10/10 reached a
+terminal state, 0 stuck runs, 0 void rows) — the defect is entirely in the reasoning loop's
+diagnostic *depth and honesty*, governed by `PaAgentLoop`'s prompt assembly and the custom
+harness's own (non-shared) playbook text, both explicitly out of scope for Tasks 7–10's
+authorization. The natural next step is a playbook/prompt-discipline pass on the custom harness's
+reasoning loop — mirroring what playbook v2 already did for native — followed by a re-run of this
+same benchmark before any claim that the custom harness is production-ready for deep diagnosis.
+Until then, native stays the recommended path for both triage and deep diagnosis on this instance,
+and the Phase 1b milestone ("deep diagnosis passes the same seeded-failure benchmark") is **not
+met** by this measurement.
