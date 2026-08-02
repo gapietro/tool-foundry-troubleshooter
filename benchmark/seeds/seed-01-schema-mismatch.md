@@ -19,12 +19,13 @@
 
 The instructions require the agent to express priority as a **word**
 ("critical", "high", …), and `set_ticket_priority` passes that word straight
-through to `x_snc_tsbench_ticket.priority`, which is an **integer** choice
-column, 1–5. `'critical'` is not an integer, so the requested priority is **not
-what ends up in the column** (a non-numeric string on an integer field typically
-settles at `0` — see "Expected diagnosis" for why no literal value is scored) —
-while `gr.update()` still reports success, so the agent tells the user the ticket
-was prioritised.
+through to `x_snc_tsbench_ticket.priority`, an **Integer** column (declared
+with choices 1–5 in the Fluent source, but the choice list did not install —
+measured `has_choices: false`; the integer typing alone carries the defect).
+`'critical'` is not an integer, so the requested priority is **not what ends up
+in the column** (measured at Task 12: `priority_stored` = `null` — see the
+measurement note under "Expected diagnosis") — while `gr.update()` still
+reports success, so the agent tells the user the ticket was prioritised.
 
 **Where the declaration actually lives — and where it does not.** Script-tool
 inputs have no `type` property in Fluent. The emitted `sn_aia_tool.input_schema`
@@ -47,7 +48,11 @@ originally declared with `ChoiceColumn`, which emits `internal_type=choice`,
 happily. The mechanism above was false as shipped. The column is now
 `IntegerColumn` + choices, emitting `internal_type=integer` (the shape
 `task.priority` itself uses on gpinst01), which makes the mismatch real. See
-`../seed-app/src/fluent/seed-01-schema-mismatch.now.ts`.
+`../seed-app/src/fluent/seed-01-schema-mismatch.now.ts`. **Installed-state
+addendum (Task 12, 2026-08-02):** the Fluent source declares the choices, but
+the install did not create them — `schema_lookup` reads the installed column as
+`type: Integer`, `has_choices: false`. The integer typing carried the defect
+regardless; treat "plain Integer column" as the ground truth for scoring.
 
 ## Why it is built this way
 
@@ -84,7 +89,8 @@ is down for all customers, no workaround"*. Capture the resulting
 ## Expected diagnosis
 
 Root cause in `tool_schema`: the tool accepts and forwards a priority **word**
-while the target column is an integer choice 1–5, so the value is never stored.
+while the target column is Integer-typed (measured installed state: plain
+Integer, no choice list — `has_choices: false`), so the value is never stored.
 
 Fix target: **the tool's word-typed contract** — map the word to its integer
 value inside the script before `setValue`, or change the tool description and

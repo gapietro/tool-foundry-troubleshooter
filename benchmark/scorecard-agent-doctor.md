@@ -6,10 +6,12 @@ gate run before scoring starts, not a scored row.
 
 **This is the filled Task 12 scorecard** (copied from `scorecard-template.md`; the template's
 column definitions and rules are preserved below as the scoring contract this file was filled
-against — with one post-fill wording update applied identically in both files: the §A3 seed-4
-void condition now describes the hardcoded-sys_id state, per PR #43 review). Runs executed 2026-08-02 01:31–02:16 UTC on gpinst01, Agent Doctor
-sys_id `e1392946828940e5a708fc51b0a5e954`, all 7 tools attached and active. The verdict and its
-caveats live in `DECISION.md`.
+against — with two post-fill wording updates applied identically in both files per PR #43 review:
+the §A3 seed-4 void condition now describes the hardcoded-sys_id state, and §E3's expected
+`layers_available` now reads `7/7`, superseding the pre-Tasks-7/8 `1/7` expectation). Runs
+executed 2026-08-02 01:31–02:16 UTC on gpinst01, Agent Doctor sys_id
+`e1392946828940e5a708fc51b0a5e954`, all 7 tools attached and active. The verdict and its caveats
+live in `DECISION.md`.
 
 **Smoke-test gate (pre-scoring): PASS.** Execution `4e2cc5c82b2a4bd417a6ffbeee91bf87`
 (conversation `742c45c82b2a4bd417a6ffbeee91bf45`, 190s, 9 tool calls) diagnosed the specimen
@@ -265,11 +267,13 @@ Map the returned tool names through the table in E2 to get the available layer s
 same query section D.2 already requires for `max_auto_executions`, so run it once and fill both
 columns from it.
 
-Against the current build this is expected to return `1/7 (L1)` — Agent Doctor ships with
-`agent_trace` and `read_artifact` only, and `docs/agent/agent-doctor-instructions.md` states it
-without hedging. **Record the measured value anyway.** A scorecard whose `layers_available` was
-assumed rather than read cannot support the `swept 1/7, available 1/7` versus `swept 1/7,
-available 7/7` distinction that is the column's whole purpose.
+Against the current build this is expected to return `7/7` — Tasks 7–8 landed before Task 12
+ran, all seven tools are attached and active, and every Task 12 scored row measured `7/7`
+(the earlier `1/7 (L1)` expectation described the pre-Tasks-7/8 build and is superseded; issue
+#32 closed). **Record the measured value anyway — never copy this expectation into a row.** A
+scorecard whose `layers_available` was assumed rather than read cannot support the `swept 1/7,
+available 1/7` versus `swept 1/7, available 7/7` distinction that is the column's whole purpose,
+and tool attachments can change between builds — that changing is the entire signal.
 
 ---
 

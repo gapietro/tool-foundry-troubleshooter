@@ -253,11 +253,13 @@ Map the returned tool names through the table in E2 to get the available layer s
 same query section D.2 already requires for `max_auto_executions`, so run it once and fill both
 columns from it.
 
-Against the current build this is expected to return `1/7 (L1)` — Agent Doctor ships with
-`agent_trace` and `read_artifact` only, and `docs/agent/agent-doctor-instructions.md` states it
-without hedging. **Record the measured value anyway.** A scorecard whose `layers_available` was
-assumed rather than read cannot support the `swept 1/7, available 1/7` versus `swept 1/7,
-available 7/7` distinction that is the column's whole purpose.
+Against the current build this is expected to return `7/7` — Tasks 7–8 landed before Task 12
+ran, all seven tools are attached and active, and every Task 12 scored row measured `7/7`
+(the earlier `1/7 (L1)` expectation described the pre-Tasks-7/8 build and is superseded; issue
+#32 closed). **Record the measured value anyway — never copy this expectation into a row.** A
+scorecard whose `layers_available` was assumed rather than read cannot support the `swept 1/7,
+available 1/7` versus `swept 1/7, available 7/7` distinction that is the column's whole purpose,
+and tool attachments can change between builds — that changing is the entire signal.
 
 ---
 

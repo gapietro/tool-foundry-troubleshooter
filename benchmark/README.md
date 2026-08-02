@@ -53,9 +53,15 @@ the per-seed specs remain authoritative for the detail.
      confirm it returns `true`. Fluent cannot set this gate — a plain install leaves *both* gates
      off, and with both off the seed isolates nothing. Leave
      `sn_aia_trigger_configuration.active` at `false`; that is the seeded defect.
-   - **Seed 4** — replace `REPLACE_WITH_SEED_04_CAPABILITY_SYS_ID` in the `summarise_ticket` tool
-     script with the installed capability's real sys_id (read it from
-     `sys_one_extend_capability` where `name=x_snc_tsbench_unmapped_capability`).
+   - **Seed 4** — verify the capability sys_id in the installed `summarise_ticket` tool script
+     **matches** the instance's `sys_one_extend_capability` record
+     (`name=x_snc_tsbench_unmapped_capability`). Since Task 12 (2026-08-02) the Fluent source no
+     longer ships the `REPLACE_WITH_SEED_04_CAPABILITY_SYS_ID` placeholder — it hardcodes
+     **gpinst01's** sys_id `92ff62af516741769c437feb88c80ef3`. On gpinst01 reinstalls, verify and
+     move on (do not reintroduce the placeholder); on any **other** instance, read the installed
+     capability's sys_id and substitute it before rebuild + reinstall. Full decision table:
+     `seeds/seed-04-genai-unmapped.md` Setup step 2. The void condition is a **mismatch**, not a
+     skipped find/replace — a matching hardcoded value is a valid install.
 
    Seeds 1, 4 and 5 also need a bench ticket row inserted and its sys_id recorded. Skipping any of
    this does not merely weaken a run — it makes the run **void**, which has its own recording rule
@@ -84,20 +90,22 @@ interleaves artifacts and audit rows into one contaminated scorecard, and lets r
 its way into run 1's evidence, breaking the blind independence the doubled-run protocol exists to
 measure.
 
-## The tool-availability dependency (stated as fact, not a caveat)
+## The tool-availability dependency (RESOLVED before the scored run)
 
-Agent Doctor as shipped has tools for **layer 1 only** — `docs/agent/agent-doctor-instructions.md`
-states it without hedging. All five gate-scored seeds target layers 2 through 7. Until Tasks 7–8 land
-and the remaining tool cores ship, a scored run against the current build returns near-0/10 **by
-construction** — not because the native harness reasons badly, but because the tools it would need
-to sweep layers 2–7 do not exist yet. The Task 12 gate table reads any score under 5/10 as *"full
-custom harness as designed"*, which would be the most expensive decision in the project, reached from
-a missing-tools gap rather than from anything measured about the native harness itself.
+**Resolved 2026-08-02 — issue #32 closed.** When this section was written, Agent Doctor shipped
+tools for **layer 1 only** while all five gate-scored seeds target layers 2 through 7, so a scored
+run would have returned near-0/10 **by construction** — a missing-tools gap that the Task 12 gate
+table would have misread as *"full custom harness as designed"*, the most expensive decision in
+the project. Tasks 7–8 landed first (PRs #36/#38/#39/#40), and the Task 12 pre-flight measured
+**all seven tools attached and active** — every scored row in `scorecard-agent-doctor.md` records
+`layers_available 7/7`, read per run via the §E3 query, so the by-construction scenario did not
+occur and the 7/10 result measures the native harness itself.
 
-The `layers_available` column in `scorecard-template.md` exists to make this visible in the scored
-data rather than let it hide inside a low total: a run showing `swept 1/7, available 1/7` is an agent
-doing everything it can, while `swept 1/7, available 7/7` is one that stopped early — the same total
-score, opposite verdicts. Tracked separately as blocker **issue #32**.
+The `layers_available` column in `scorecard-template.md` exists to make exactly this class of gap
+visible in the scored data rather than let it hide inside a low total: a run showing `swept 1/7,
+available 1/7` is an agent doing everything it can, while `swept 1/7, available 7/7` is one that
+stopped early — the same total score, opposite verdicts. It stays in the protocol for the Phase 1b
+re-run.
 
 ## The de-risking step that is unavailable
 
