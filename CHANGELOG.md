@@ -11,6 +11,40 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0210 — 2026-08-02
+
+Phase 1b Task 5 (issue #60): `PaRunManager` (`src/server/PaRunManager.js`) — the custom harness's
+run lifecycle over `x_snc_troubleshoot_run`, including the DECISION.md §D5 close-out. `createRun`
+calls `PaRunAnchor.getOrCreate` with `harness:'custom'` and a freshly manufactured single-use
+`conversationId` (so two `createRun` calls diagnosing the same execution plan never converge on
+one row), then force-writes `status:'queued'` — the anchor only ever inserts `running` (DESIGN.md
+R-20's requirement for the harness it was built for). `appendTranscript(runId, entry)` normalizes
+and digests entries (200-char ceiling, matching `PaToolReadKit.DIGEST_CHARS`) and writes after
+every call. `loadContext`/`maybeSummarize` implement the 11-entry summarization threshold: past
+10 transcript entries, the oldest are compressed via `PaLlmProxy.summarize` into
+`context_summary`, the newest 5 stay verbatim, every summarized entry's `artifact_id` is embedded
+verbatim in the summarize prompt (ADR Layer 6), and a `summarize` failure leaves the transcript
+untouched without failing the run (summarization is an optimization, not a correctness
+requirement). `close(runId, status, {fixReport?, error?})` guards the only legal transitions
+(`queued|running → complete|failed`) and returns `{success:false}` naming the transition on
+anything else — never throws; `awaiting_confirmation` is excluded by construction, matching the
+brief's "never expires and is not closeable by the sweep." `collectBundle(runId)` is the LLM-free
+Evidence Bundle: dispatches the five layer-bearing tool cores through `PaToolRegistry` (no
+`PaLlmProxy` anywhere in the call path — verified structurally by constructing `PaRunManager`
+with no `llmProxy` at all), fans `agent_config`'s one call across layers 2/3/7, and passes a
+DENIED per-table read status straight through to the layer's own `status` (R-11) rather than
+collapsing it into a generic failure. `sweepStaleNative({maxAgeHours})` closes NATIVE runs only,
+older than the threshold (default 24h) AND with no `x_snc_troubleshoot_audit` row inside that same
+window, appending the exact R-20 citation
+(`stale-closed by lifecycle sweep; completeness remains audit-derived (R-20)`) before closing via
+the same guarded `close()` path everything else uses. `test/_glideStub.js`'s writable-world
+`GlideRecord` fake gains an `update()` method (merges pending `setValue`s into the found row,
+with `failUpdate`/`throwOnUpdate` R-1 test hooks) — the first component in this app that updates
+rather than only inserting. ES5/Rhino, `Class.create()` + `.prototype`. 61 new Jest tests, full
+suite 664/664 green.
+
+---
+
 ## 2026.08.0209 — 2026-08-02
 
 Phase 1b Task 4 (issue #58): `PaFixReport` (`src/server/PaFixReport.js`) — the structural floor

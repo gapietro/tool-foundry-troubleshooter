@@ -254,6 +254,8 @@ function makeQueryingGlideRecordSecure(tables, options) {
  *   throwOnInsert throw this value from insert() — pass an object whose
  *                 `.message` getter throws, to enforce R-1
  *   throwOnQuery  same, for query()
+ *   failUpdate    update() returns null, as a denied or rejected write does
+ *   throwOnUpdate same, for update() — R-1
  */
 function makeWritableWorld(options) {
     var opts = options || {}
@@ -261,7 +263,7 @@ function makeWritableWorld(options) {
     Object.keys(opts.rows || {}).forEach(function (t) {
         tables[t] = opts.rows[t].slice(0)
     })
-    var calls = { inserts: [], queries: [] }
+    var calls = { inserts: [], queries: [], updates: [] }
     var seq = 0
 
     function rowsFor(table) {
@@ -301,6 +303,27 @@ function makeWritableWorld(options) {
         calls.inserts.push({ table: this._table, row: row })
         this._matched = [row]
         this._i = 0
+        return row.sys_id
+    }
+
+    /**
+     * MERGES pending field writes into the row found by get()/query(), rather
+     * than replacing it wholesale — a real GlideRecord.update() only touches
+     * the fields a caller actually setValue()'d. Returns the sys_id, or null
+     * on a denied/rejected write (failUpdate) — R-10's degrade-explicitly
+     * shape has to be exercisable from a test, same as insert.
+     */
+    GlideRecord.prototype.update = function () {
+        if (opts.throwOnUpdate) throw opts.throwOnUpdate
+        if (opts.failUpdate) return null
+        var row = (this._matched || [])[this._i]
+        if (!row) return null
+        var pending = this._pending || {}
+        Object.keys(pending).forEach(function (k) {
+            row[k] = pending[k]
+        })
+        this._pending = null
+        calls.updates.push({ table: this._table, row: row })
         return row.sys_id
     }
 
