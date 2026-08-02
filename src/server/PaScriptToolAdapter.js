@@ -40,14 +40,37 @@ PaScriptToolAdapter.prototype = {
     // =======================================================================
 
     /**
-     * Name -> factory. Two entries at this scope; the remaining five wrappers
-     * land with their cores in Tasks 7 and 8.
+     * Name -> factory. Seven entries: the six diagnostic tool cores plus the
+     * paging primitive.
+     *
+     * The key is the string written to x_snc_troubleshoot_audit.tool_name, and
+     * that is not incidental — DESIGN.md R-20 makes completeness DERIVED rather
+     * than declared: how many layers a diagnosis actually swept is the distinct
+     * tool_name set over the audit rows for a run. If a key here drifts from
+     * the name in the Fluent tools[] entry, the run looks like it swept fewer
+     * layers than it did, and the benchmark scores the drift rather than the
+     * diagnosis.
      */
     _registry: function () {
         if (this._tools) return this._tools
         return {
             agent_trace: function () {
                 return new PaToolAgentTrace()
+            },
+            agent_config: function () {
+                return new PaToolAgentConfig()
+            },
+            genai_log: function () {
+                return new PaToolGenAiLog()
+            },
+            schema_lookup: function () {
+                return new PaToolSchemaLookup()
+            },
+            query_table: function () {
+                return new PaToolQueryTable()
+            },
+            log_analysis: function () {
+                return new PaToolLogAnalysis()
             },
             read_artifact: function () {
                 return new PaToolReadArtifact()

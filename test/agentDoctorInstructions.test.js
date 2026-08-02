@@ -44,13 +44,37 @@ describe('agent-doctor-instructions.md is safe to embed in a Fluent template', (
         expect(text).not.toMatch(/\\n/)
     })
 
-    it('states the layer-coverage rule, which is the load-bearing sentence', () => {
-        // Not style policing. This sentence is the entire defence against
-        // DESIGN.md 97: an agent holding one tool, asked for a root cause, will
-        // produce one. If an edit drops it, the agent starts inventing layers
-        // 2-7 and the benchmark measures a scoring artifact.
+    it('names every tool and the layer it sweeps', () => {
+        // Replaces the old 'LAYER 1 ONLY' assertion, which was true of the
+        // two-tool build and is now false. The guard it provided still matters:
+        // an agent asked for a root cause will produce one, so the instructions
+        // must tie each claim to a tool that can actually check it.
+        ;['agent_trace', 'agent_config', 'schema_lookup', 'query_table', 'genai_log', 'log_analysis', 'read_artifact'].forEach(
+            (tool) => {
+                expect(text).toContain(tool)
+            }
+        )
+    })
+
+    it('keeps the layer-coverage discipline now that every layer has a tool', () => {
+        // The defence against DESIGN.md R-3's finding — premature completion
+        // surfaces as `completed` and is indistinguishable from a genuine
+        // finish. With seven tools the risk INVERTS: a skipped layer now looks
+        // like a choice rather than a gap, so the report has to state which
+        // were skipped and why.
         expect(text).toContain('NOT SWEPT')
-        expect(text).toContain('LAYER 1 ONLY')
+        expect(text).toContain('UNAVAILABLE')
+        expect(text).toMatch(/CHOSE not to sweep/)
+    })
+
+    it('carries the two limits the tools cannot check past', () => {
+        // Both are measured facts that an agent will otherwise paper over:
+        // syslog is blocked by a caller restriction this app cannot lift
+        // (R-19), and User Access vs Data Access has no structural field to
+        // read (R-18a / R-23).
+        expect(text).toMatch(/log layer was NOT swept|platform log layer was NOT swept/)
+        expect(text).toMatch(/instance administrator/)
+        expect(text).toMatch(/Never report that both lists check out/)
     })
 
     it('is short enough not to be instruction bloat', () => {
@@ -119,7 +143,7 @@ describe('the Fluent agent carries the instructions verbatim', () => {
         expect(code).not.toMatch(/Now\.ref\s*\(/)
     })
 
-    it('ends both wrapper IIFEs with the required (inputs) invocation', () => {
+    it('ends every wrapper IIFE with the required (inputs) invocation', () => {
         // Build Rule #19: without the trailing (inputs) the runtime receives a
         // function object instead of a JSON string. Builds clean, installs
         // clean, fails only when the tool is called.
@@ -128,6 +152,117 @@ describe('the Fluent agent carries the instructions verbatim', () => {
             'utf8'
         )
         const invocations = fluent.match(/\}\)\(inputs\);/g) || []
-        expect(invocations.length).toBe(2)
+        expect(invocations.length).toBe(7)
+    })
+
+    it('registers exactly the seven tools the agent declares, under the same names', () => {
+        // DESIGN.md R-20 makes completeness DERIVED: how many layers a run
+        // swept is the distinct tool_name set over its audit rows, and the
+        // registry key is what lands in that column. A name that drifts from
+        // the Fluent entry makes a full sweep look partial, and the benchmark
+        // then scores the drift instead of the diagnosis.
+        const fluent = fs.readFileSync(
+            path.join(__dirname, '..', 'src', 'fluent', 'agent-doctor.now.ts'),
+            'utf8'
+        )
+        const adapter = fs.readFileSync(
+            path.join(__dirname, '..', 'src', 'server', 'PaScriptToolAdapter.js'),
+            'utf8'
+        )
+
+        const declared = (fluent.match(/invoke\('(\w+)'/g) || []).map((m) => m.replace(/invoke\('|'/g, ''))
+        const registered = (adapter.match(/^\s{12}(\w+): function \(\) \{/gm) || []).map((m) =>
+            m.trim().replace(/: function \(\) \{/, '')
+        )
+
+        expect(declared.sort()).toEqual(registered.sort())
+        expect(declared).toHaveLength(7)
+    })
+})
+
+describe('our own tools meet the bar agent_config scores customer tools against', () => {
+    // The K26 Lab 3 checklist is not advice we only give out: agent_config
+    // scores every customer tool against it, and shipping tools that fail our
+    // own check would be a poor advertisement. This runs the real checker over
+    // the real descriptions.
+    const fs2 = require('fs')
+    const path2 = require('path')
+    const { loadScriptInclude } = require('./_loadScriptInclude')
+
+    function ourTools() {
+        const fluent = fs2.readFileSync(
+            path2.join(__dirname, '..', 'src', 'fluent', 'agent-doctor.now.ts'),
+            'utf8'
+        )
+        const entries = []
+        const re = /name: '(\w+)',\s*\n\s*type: 'script',\s*\n\s*description: `([\s\S]*?)`,\s*\n\s*executionMode/g
+        let m
+        while ((m = re.exec(fluent)) !== null) {
+            entries.push({ name: m[1], description: m[2] })
+        }
+        return entries
+    }
+
+    function smellsFor(tool) {
+        // The real kit, not a stub: _smellsFor does no reads, but it leans on
+        // the kit's helpers throughout.
+        const kitCtx = loadScriptInclude('PaToolReadKit.js')
+        const ctx = loadScriptInclude('tools/PaToolAgentConfig.js', { PaToolReadKit: kitCtx.PaToolReadKit })
+        const core = new ctx.PaToolAgentConfig()
+        const list = []
+        core._smellsFor(
+            list,
+            { sys_id: 'm', name: tool.name, active: 'true' },
+            {
+                sys_id: 't',
+                name: tool.name,
+                active: 'true',
+                type: 'script',
+                description: tool.description,
+                input_schema: '[{"name":"request","description":"x","mandatory":false}]',
+                script: "(function (inputs) {\n    return new x_snc_troubleshoot.PaScriptToolAdapter().invoke('x', inputs.request, {})\n})(inputs);",
+            }
+        )
+        return list
+    }
+
+    it('finds all seven tools to score', () => {
+        expect(ourTools().map((t) => t.name)).toHaveLength(7)
+    })
+
+    it('raises no high-severity smell on any of our tool descriptions', () => {
+        const offenders = []
+        ourTools().forEach((tool) => {
+            smellsFor(tool)
+                .filter((s) => s.severity === 'high')
+                .forEach((s) => offenders.push(tool.name + ': ' + s.smell))
+        })
+        expect(offenders).toEqual([])
+    })
+
+    it('raises no description smell at all - the three sections are all present', () => {
+        const offenders = []
+        ourTools().forEach((tool) => {
+            smellsFor(tool)
+                .filter((s) => s.smell.indexOf('description_') === 0)
+                .forEach((s) => offenders.push(tool.name + ': ' + s.smell))
+        })
+        expect(offenders).toEqual([])
+    })
+
+    it('documents the one heuristic that DOES fire on our wrappers, rather than tuning it away', () => {
+        // script_no_input_validation fires on every wrapper, because the
+        // wrapper is a one-line delegation and the validation happens a layer
+        // down in PaScriptToolAdapter.tolerantParse. That is a real precision
+        // limit of a text-scan heuristic, and the honest response is to record
+        // it here rather than special-case our own shape in the checker - the
+        // checker would then be biased in exactly the direction that flatters
+        // whoever wrote it.
+        const smells = smellsFor(ourTools()[0])
+        const validation = smells.find((s) => s.smell === 'script_no_input_validation')
+
+        expect(validation).toBeDefined()
+        expect(validation.severity).toBe('medium')
+        expect(validation.confidence).toBe('heuristic')
     })
 })

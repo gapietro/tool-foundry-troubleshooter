@@ -290,6 +290,13 @@ declare global {
                         }
                     },
                     {
+                        table: 'sn_aia_tool'
+                        id: '18127b03d2da4c4cb05bbff4e458df19'
+                        key: {
+                            name: 'agent_config'
+                        }
+                    },
+                    {
                         table: 'sys_documentation'
                         id: '1897483989964a4e9b1c201a2e4d6510'
                         key: {
@@ -372,6 +379,15 @@ declare global {
                         key: {
                             name: 'x_snc_troubleshoot_audit'
                             element: 'action_type'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_agent_tool_m2m'
+                        id: '34149445e94b46668374caa8061b6a78'
+                        key: {
+                            agent: 'e1392946828940e5a708fc51b0a5e954'
+                            tool: 'dce4f5cdd48f4fe89121b7760d4bf563'
+                            name: 'log_analysis'
                         }
                     },
                     {
@@ -512,6 +528,15 @@ declare global {
                         }
                     },
                     {
+                        table: 'sn_aia_agent_tool_m2m'
+                        id: '5807dcaeb6ea48179f034181dc13a16f'
+                        key: {
+                            agent: 'e1392946828940e5a708fc51b0a5e954'
+                            tool: '9cbf6011abf04716b016851e39c56443'
+                            name: 'schema_lookup'
+                        }
+                    },
+                    {
                         table: 'sys_dictionary'
                         id: '5a0deab2cb8d4dcb8e1d23b08bef978b'
                         key: {
@@ -544,6 +569,13 @@ declare global {
                         key: {
                             name: 'x_snc_troubleshoot_audit'
                             element: 'output'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_tool'
+                        id: '6d724f5caf744f2299900f047acd4a10'
+                        key: {
+                            name: 'query_table'
                         }
                     },
                     {
@@ -713,6 +745,31 @@ declare global {
                     },
                     {
                         table: 'sn_aia_agent_tool_m2m'
+                        id: '97720609c89c47d1ad21efd3a867f1f2'
+                        key: {
+                            agent: 'e1392946828940e5a708fc51b0a5e954'
+                            tool: '6d724f5caf744f2299900f047acd4a10'
+                            name: 'query_table'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_agent_tool_m2m'
+                        id: '9a9d4d2631ab4bc480ed3bd2c872f24f'
+                        key: {
+                            agent: 'e1392946828940e5a708fc51b0a5e954'
+                            tool: 'b6d9ddff9c9945dcaaac27ff25aa9c4f'
+                            name: 'genai_log'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_tool'
+                        id: '9cbf6011abf04716b016851e39c56443'
+                        key: {
+                            name: 'schema_lookup'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_agent_tool_m2m'
                         id: '9fb95833fdb24cfcaaad91cf0d756330'
                         key: {
                             agent: 'e1392946828940e5a708fc51b0a5e954'
@@ -790,6 +847,22 @@ declare global {
                         }
                     },
                     {
+                        table: 'sn_aia_tool'
+                        id: 'b6d9ddff9c9945dcaaac27ff25aa9c4f'
+                        key: {
+                            name: 'genai_log'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_agent_tool_m2m'
+                        id: 'c2c28b3942b6479692cd2e9e69a9de26'
+                        key: {
+                            agent: 'e1392946828940e5a708fc51b0a5e954'
+                            tool: '18127b03d2da4c4cb05bbff4e458df19'
+                            name: 'agent_config'
+                        }
+                    },
+                    {
                         table: 'sys_user_role'
                         id: 'c3c9f3a9863249f08abc0e7d01cba643'
                         key: {
@@ -827,6 +900,13 @@ declare global {
                             value: 'native'
                             language: 'en'
                             dependent_value: 'NULL'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_tool'
+                        id: 'dce4f5cdd48f4fe89121b7760d4bf563'
+                        key: {
+                            name: 'log_analysis'
                         }
                     },
                     {

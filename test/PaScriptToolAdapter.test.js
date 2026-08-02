@@ -190,11 +190,22 @@ describe('PaScriptToolAdapter — input handling', () => {
         expect(audit.calls).toHaveLength(0)
     })
 
-    test('the default registry carries exactly the two wrappers of this scope', () => {
+    test('the default registry carries all seven wrappers', () => {
         const ctx = loadScriptInclude('PaScriptToolAdapter.js', { JSON: JSON })
         const names = new ctx.PaScriptToolAdapter().toolNames()
 
-        expect(names.sort()).toEqual(['agent_trace', 'read_artifact'])
+        // Six diagnostic cores plus the paging primitive. Seven sits at the
+        // top of the platform's 5-7 guidance; anything further goes through
+        // query_table rather than becoming an eighth tool.
+        expect(names.sort()).toEqual([
+            'agent_config',
+            'agent_trace',
+            'genai_log',
+            'log_analysis',
+            'query_table',
+            'read_artifact',
+            'schema_lookup',
+        ])
     })
 
     test('a result that cannot be stringified still yields a String', () => {
