@@ -120,6 +120,11 @@ declare global {
                         id: '1fc74db242f84cc79c489e4a72c6ec35'
                         deleted: true
                     }
+                    'scope-probe-derisk': {
+                        table: 'sys_ws_operation'
+                        id: '623d8fc33dba474590b18daf77cb0685'
+                        deleted: true
+                    }
                     'scope-probe-reads': {
                         table: 'sys_ws_operation'
                         id: 'a04ccacf0888461d84eb46c0e0d14752'

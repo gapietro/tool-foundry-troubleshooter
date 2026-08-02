@@ -97,18 +97,19 @@ Evidence a correct diagnosis should cite: the trace showing `priority_stored`
 **disagreeing with `priority_requested`** in the tool result, plus the
 `x_snc_tsbench_ticket.priority` dictionary entry showing `internal_type=integer`.
 
-**What `priority_stored` will actually read — do not score on a literal value.**
-The criterion above deliberately does not name one. A ServiceNow integer field
-handed a non-numeric string typically settles at **`0`**, not empty, and the
-column is now genuinely integer-typed; `''`, `0` and `null` are all plausible,
-and which one appears depends on platform coercion this benchmark has not
-measured. **Any value that is not the requested word scores as correct
-evidence** — the finding is the mismatch between `priority_requested:
-"critical"` and whatever `priority_stored` came back as. Only
-`priority_stored == "critical"` would refute the seed, and that outcome means
-the column is not integer-backed after all: record it in `notes` and treat the
-run as a **refutation of the seed**, not a miss by the diagnosing agent. Replace
-this paragraph with the measured value once Task 12 has run one.
+**`priority_stored` measured at Task 12 (2026-08-02): `null`.** The seed
+execution `b07dc9082baa4314f243fed2ce91bf4b` called `set_ticket_priority` with
+`priority: "critical"` and the tool returned `{ok: true, priority_requested:
+"critical", priority_stored: null}` while the record's `priority` column read
+back empty over REST. GlideRecord silently discarded the non-numeric string —
+the seed's mechanism is confirmed as built. (Pre-measurement guidance, kept for
+the record: any value that is not the requested word scores as correct
+evidence; only `priority_stored == "critical"` would have refuted the seed.)
+One correction surfaced by the de-risk pass: the **choice list did not
+install** — `schema_lookup` reports `has_choices: false` on the installed
+column — so the defect as measured is "word written to a plain Integer column",
+not "integer choice 1–5". The integer typing is the operative half and the
+seed's diagnosis target is unchanged.
 
 ### Scoring note — layers 3 and 4 (M18)
 

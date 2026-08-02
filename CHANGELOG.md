@@ -11,6 +11,31 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0201 — 2026-08-02
+
+Phase 1a, **Task 12 — the benchmark ran and the harness decision is made** (issue #42). The
+`x_snc_tsbench` seed app was installed on gpinst01 alongside the product app, both mandatory
+setup steps were applied and verified (seed 4 capability sys_id substituted into the tool script;
+seed 5's `sn_aia_trigger_agent_usecase_m2m` gate PATCHed on and re-read), the smoke-test gate
+passed (the line-42 `context_processing_script` specimen diagnosed correctly from a
+Completed-looking plan header), and **10 scored runs — 2 per seed, fresh conversations, blind —
+were executed and scored** per `benchmark/scorecard-template.md`, with `layers_swept` derived
+from the audit trail and both budget knobs read fresh per run.
+
+**Result: 7 of 10 valid runs passed the gate (70.0%) → middle band. Native is kept for
+lightweight triage; the custom deep-diagnosis harness (Phase 1b) gets built.** Deliverables:
+`benchmark/scorecard-agent-doctor.md` (filled) and `benchmark/DECISION.md` (verdict, R-4
+unknown-OOB-default caveat, failure notes as Phase 1b requirements).
+
+The three failed runs are themselves findings: seed 2's construction is **refuted** (a tool-less
+ReAct agent is cancelled before the LLM runs, so instruction ambiguity can never manifest — seed
+2 v2 needs a tool bound); and seed 4's doubled runs **split** on the R-22 decoy (run 1 found the
+dangling `api` and the exact healthy repoint; run 2 proposed "bind a connection" — the canonical
+2/0/1/0 decoy row), the measured instance of the inconsistent-behavior failure mode the doubled
+runs exist to catch. LLD §8 item 8 (seed-4 efficacy) closes on the observed failure; the seed-5
+run-as question stays open. The temporary `/scope_probe/derisk` route used for the documented
+PaEvidenceCollector substitution was removed and the app reinstalled before merge.
+
 ## 2026.08.0102 — 2026-08-01
 
 Phase 1a, **Tasks 7 and 8**: the five remaining diagnostic tool cores, wired into Agent Doctor.
