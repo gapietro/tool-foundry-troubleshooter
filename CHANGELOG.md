@@ -11,6 +11,26 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0208 — 2026-08-02
+
+Phase 1b Task 3 (issue #56): `PaToolRegistry` (`src/server/PaToolRegistry.js`) — the custom
+harness's dispatch layer over the seven unchanged Phase 1a tool cores plus `read_artifact`.
+`list()` returns `[{name, layer, description, readOnly:true}]`; `dispatch(name, args, runCtx)`
+resolves the core, audit-logs intent/result/error via `PaAuditLogger`, applies
+`PaArtifactStore.applyThreshold` with `runCtx.run_id` (skipped for the `PAGED_OUTPUT`
+`read_artifact` core, mirroring `PaScriptToolAdapter`'s 4000/4000 collision guard), and refuses
+unknown names with the roster listed in the error. `promptBlock()` generates the reasoning
+prompt's tools section purely from `list()` metadata — no hand-written second copy — and its
+seven descriptions are the same text `src/fluent/agent-doctor.now.ts` ships, verified by test.
+The destructive gate refuses any registration or call marked `destructive:true`, citing "the
+confirmation flow is Phase 3", so Phase 3 adds a flow rather than discovering a bypass. Roster
+name-set equality with `PaScriptToolAdapter`'s registry keys (R-20's derived-completeness
+dependency) is enforced by reading both files as text, mirroring
+`test/agentDoctorInstructions.test.js`'s fluent/adapter technique. 17 new Jest tests, full suite
+563/563 green.
+
+---
+
 ## 2026.08.0207 — 2026-08-02
 
 Phase 1b Task 2 (issue #54): `PaLlmProxy` (`src/server/PaLlmProxy.js`) — the sole NASK
