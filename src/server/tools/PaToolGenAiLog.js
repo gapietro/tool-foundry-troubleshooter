@@ -929,7 +929,21 @@ PaToolGenAiLog.prototype = {
         data.findings = findings
         data.read_status = read.status
         data.truncated_at = read.truncated_at || null
-        data.audit_status = read.status === 'DENIED' ? 'unavailable' : definitions.length ? 'ok' : 'empty'
+        // `ok` is earned only by a COMPLETE clean read. On a typical instance
+        // this mode reads 100 of ~2026 definitions, so the audit is almost
+        // always a sample — and the note below already said so while this
+        // status said `ok`, contradicting it in the same result object
+        // (R-19b: the status is the claim a consumer gates on). A truncated
+        // audit with zero findings in its first page is indistinguishable from
+        // a complete clean one, and the defects live in the unaudited tail.
+        data.audit_status =
+            read.status === 'DENIED'
+                ? 'unavailable'
+                : read.truncated_at
+                  ? 'partial'
+                  : definitions.length
+                    ? 'ok'
+                    : 'empty'
 
         if (read.status === 'DENIED') {
             data.notes.push(
