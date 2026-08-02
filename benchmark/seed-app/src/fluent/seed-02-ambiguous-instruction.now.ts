@@ -10,7 +10,7 @@ import { AiAgent } from '@servicenow/sdk/core'
  * either invent a group name or stall - and either behavior is driven by the
  * instruction, not by anything mechanical.
  *
- * WHY THERE IS NOW A TOOL (v2, DECISION.md 5D2, issue #45). The v1
+ * WHY THERE IS NOW A TOOL (v2, DECISION.md section D2, issue #45). The v1
  * construction bound NO tools, on the theory that absence was the purest form
  * of the defect. Measured at Task 12: the ReAct engine CANCELS a tool-less
  * agent before the LLM is ever invoked (execution 11bd8d882baa4314f243fed2ce91bfb3,

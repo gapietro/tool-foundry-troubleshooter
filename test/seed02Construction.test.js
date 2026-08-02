@@ -47,18 +47,22 @@ describe('seed 2 v2 binds exactly one weak tool (DECISION.md §D2)', () => {
 
     it('declares a tools array with exactly one tool', () => {
         // The v1 construction had no tools property at all — that absence is
-        // the refuted mechanism. One name: entry inside tools: [...] is the
-        // whole point of v2.
+        // the refuted mechanism. Exactly one tool is the whole point of v2:
+        // zero re-refutes the seed, two gives the diagnosis something else to
+        // blame. Counting type: entries in the tools slice counts EVERY tool
+        // shape (script, crud, ...) — a name/type-adjacency regex would count
+        // only script tools and let a second crud tool pass unseen.
         expect(code).toMatch(/tools\s*:\s*\[/)
-        // A bare name: match would also catch the version entry and the tool's
-        // own inputs — anchor on the name/type pair, the shape only a tool
-        // entry has (same approach as agentDoctorInstructions.test.js).
-        const toolNames = code.match(/name:\s*'(\w+)',\s*\n\s*type:\s*'script'/g) || []
-        expect(toolNames).toHaveLength(1)
+        const tools = code.slice(code.indexOf('tools:'))
+        const toolTypes = tools.match(/type:\s*'\w+'/g) || []
+        expect(toolTypes).toHaveLength(1)
+        expect(toolTypes[0]).toContain("'script'")
     })
 
     it('ends the tool IIFE with the required (inputs) invocation (Rule #19)', () => {
-        expect(source.match(/\}\)\(inputs\);/g) || []).toHaveLength(1)
+        // Counted in the comment-stripped code so a future doc comment quoting
+        // the literal cannot inflate the count.
+        expect(code.match(/\}\)\(inputs\);/g) || []).toHaveLength(1)
     })
 
     it('gives the tool no group-resolving vocabulary', () => {
@@ -66,6 +70,12 @@ describe('seed 2 v2 binds exactly one weak tool (DECISION.md §D2)', () => {
         // description or script mentions groups, routing or assignment is a
         // lookup tool in embryo — it would move the seed to layer 3 (or worse,
         // make the sanctioned fix appear already applied).
+        //
+        // The slice assumes tools: is the LAST property, below the agent
+        // description and instructions (which legitimately say "group" and
+        // "assign" — they are the v1 text under test). Moving tools: above
+        // them would pull that text into the slice and fail this test — the
+        // safe direction, but know that is why.
         const tools = code.slice(code.indexOf('tools:'))
         ;['group', 'assign', 'route', 'routing'].forEach((word) => {
             expect(tools.toLowerCase()).not.toContain(word)
@@ -82,8 +92,10 @@ describe('seed 2 v2 binds exactly one weak tool (DECISION.md §D2)', () => {
     it('carries no forbidden template sequences in the added tool (Rule #43)', () => {
         // A \s in a regex, a \n in a string, a ${} — all consumed by
         // TypeScript before the platform sees the script. The v2 tool counts
-        // words with split(' ') precisely to avoid regex escapes.
-        expect(source).not.toMatch(/\\[a-z]/)
+        // words with split(' ') precisely to avoid regex escapes. The file
+        // needs no backslash of ANY kind, so the guard is total rather than a
+        // lowercase-escape pattern that would miss quote escapes.
+        expect(source).not.toContain('\\')
         expect(source).not.toContain('${')
     })
 
