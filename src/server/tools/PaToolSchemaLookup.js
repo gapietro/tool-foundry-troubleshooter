@@ -133,7 +133,7 @@ PaToolSchemaLookup.prototype = {
             data.field_count = fields.length
 
             if (a.field) {
-                data.field = this._oneField(a.field, fields, a.table, data)
+                data.field = this._oneField(a.field, fields, a.table, data, hierarchy)
             } else {
                 data.fields = fields
                 data.truncated_at = fields.capped_at || (k.anyTruncation(data) ? this.MAX_FIELDS : null)
@@ -457,7 +457,7 @@ PaToolSchemaLookup.prototype = {
         return out
     },
 
-    _oneField: function (name, fields, table, data) {
+    _oneField: function (name, fields, table, data, hierarchy) {
         var k = this._k()
 
         var found = null
@@ -469,6 +469,36 @@ PaToolSchemaLookup.prototype = {
         }
 
         if (!found) {
+            // "Does not exist" is a claim about the table AND every ancestor,
+            // so it is earned only when the whole chain was actually read. A
+            // denied dictionary yields zero columns and a denied sys_db_object
+            // yields a one-level walk — either way the honest answer is
+            // UNKNOWN, and the first version answered `false`: the same
+            // empty-result overconfidence QueryTable's verdict had, in the
+            // tool whose one job is telling those apart.
+            var levels = hierarchy || []
+            var walkComplete = levels.length > 0
+            for (var h = 0; h < levels.length; h++) {
+                if (levels[h].read_status !== 'ok') walkComplete = false
+            }
+
+            if (!fields.length || !walkComplete) {
+                return {
+                    element: name,
+                    exists: 'unknown',
+                    note:
+                        (!fields.length
+                            ? 'No columns could be read for this table or its ancestors at all'
+                            : 'The ancestor walk was incomplete (a level read as denied or empty)') +
+                        ', so whether "' +
+                        name +
+                        '" exists is UNKNOWN — the question was not answered, and this must not be ' +
+                        'treated as a schema mismatch. See read_status_by_table and the hierarchy for ' +
+                        'which read failed.',
+                    similar_columns: [],
+                }
+            }
+
             var near = this._nearMisses(name, fields)
             return {
                 element: name,
@@ -480,8 +510,9 @@ PaToolSchemaLookup.prototype = {
                     table +
                     ' or on any of its ancestors (' +
                     fields.length +
-                    ' columns checked across the chain). A query reading this name gets a BLANK, not an ' +
-                    'error — so a blank you are seeing is a schema mismatch, not absent data (DESIGN.md R-6).',
+                    ' columns checked across the complete chain). A query reading this name gets a BLANK, ' +
+                    'not an error — so a blank you are seeing is a schema mismatch, not absent data ' +
+                    '(DESIGN.md R-6).',
                 similar_columns: near,
             }
         }
@@ -542,16 +573,28 @@ PaToolSchemaLookup.prototype = {
                     'because it is absent from it.'
             }
             out.choice_tables_queried = choiceTables
-            out.choice_note =
-                choiceRead.rows.length || choiceRead.status !== 'empty'
-                    ? null
-                    : 'The dictionary marks this column as having choices, but sys_choice holds none ' +
-                      'under ' +
-                      choiceTables.join(' or ') +
-                      ' for element ' +
-                      name +
-                      '. Both the asked-for table and the declaring table were queried, so this is a ' +
-                      'genuine absence of choice rows, not a lookup at the wrong level.'
+            out.choice_read_status = choiceRead.status
+            // DENIED is not success. The old guard nulled the note for any
+            // non-empty status, so a denied read produced choices: [] with no
+            // note — a verified-looking absence over a question that was
+            // refused (R-26, in miniature).
+            if (choiceRead.status === 'DENIED') {
+                out.choice_note =
+                    'sys_choice is not readable from this scope, so the choice list is UNAVAILABLE — ' +
+                    'an empty choices array here is a permission gap, not evidence the column has no ' +
+                    'choice values.'
+            } else if (!choiceRead.rows.length && choiceRead.status === 'empty') {
+                out.choice_note =
+                    'The dictionary marks this column as having choices, but sys_choice holds none ' +
+                    'under ' +
+                    choiceTables.join(' or ') +
+                    ' for element ' +
+                    name +
+                    '. Both the asked-for table and the declaring table were queried, so this is a ' +
+                    'genuine absence of choice rows, not a lookup at the wrong level.'
+            } else {
+                out.choice_note = null
+            }
         }
 
         return out
@@ -597,6 +640,20 @@ PaToolSchemaLookup.prototype = {
                           data.table.caller_access +
                           '), which a self-declared cross-scope privilege does not lift.'
                         : 'If sys_dictionary itself reads DENIED, no schema lookup is possible from this scope.'),
+            })
+        }
+
+        if (a.field && data.field && data.field.exists === 'unknown') {
+            findings.push({
+                finding: 'field_existence_unknown',
+                severity: 'medium',
+                table: a.table,
+                field: a.field,
+                why:
+                    'The column was not found, but the reads behind the answer were incomplete — see the ' +
+                    'field note. Reporting field_does_not_exist here would be the empty-result ' +
+                    'overconfidence this tool exists to prevent.',
+                next_step: 'Re-check once the denied or empty reads in the hierarchy are resolvable.',
             })
         }
 
