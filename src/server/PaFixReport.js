@@ -799,7 +799,8 @@ PaFixReport.prototype = {
                 'where source is a string, one of ' + this._evidenceSources().join('|') + ', and detail is a ' +
                 'non-empty string citation (table, sys_id, field, or value); EVERY root cause needs at least one ' +
                 '"trace" evidence entry PLUS at least one of ' + this._nonTraceEvidenceSources().join('|') +
-                ' (the evidence rule); confidence, if present, is a string (e.g. CONFIRMED or UNCONFIRMED)'
+                ' (the evidence rule) — UNLESS nothing ever ran, in which case see the absence rule below; ' +
+                'confidence, if present, is a string (e.g. CONFIRMED or UNCONFIRMED)'
         )
         lines.push(
             'fixes: array of {target_type, target, current, proposed, rationale} — NON-EMPTY unless root_causes ' +
@@ -827,6 +828,28 @@ PaFixReport.prototype = {
                 'does NOT excuse a shallow sweep: layers_swept must still report all seven layers with a reason ' +
                 'on every one you did not sweep, and you should exhaust your tool budget before concluding you ' +
                 'cannot tell.'
+        )
+        lines.push(
+            'EVIDENCE IS CHECKED AGAINST WHAT YOU ACTUALLY CALLED. Every citation source is verified ' +
+                'against the tools this run actually invoked. Citing a source you did not read with a tool ' +
+                'in THIS run is rejected — trace comes from agent_trace/genai_log/log_analysis, config from ' +
+                'agent_config/genai_log, schema from schema_lookup, data from query_table/log_analysis. ' +
+                'read_artifact does NOT count on its own — cite the tool whose output you paged. Do not ' +
+                'label evidence you did not gather.'
+        )
+        lines.push(
+            'A LAYER MARKED SWEPT NEEDS A TOOL CALL BEHIND IT. layers_swept entries marked SWEPT are ' +
+                'verified the same way: claiming a layer you never ran a tool against is rejected. Marking a ' +
+                'layer NOT_SWEPT or UNAVAILABLE with an honest reason is always acceptable and costs you ' +
+                'nothing — an inflated sweep claim costs you the whole report.'
+        )
+        lines.push(
+            'IF NOTHING EVER RAN, SAY SO — you do not need a trace citation. When there is no execution ' +
+                'to trace (the agent never fired, so no execution plan exists), mark layer 1 UNAVAILABLE ' +
+                'with the reason and cite two distinct sources from ' +
+                this._nonTraceEvidenceSources().join('/') + ' instead. Two citations of the same source ' +
+                'are one source. This is a fully acceptable root cause — do NOT invent a trace citation to ' +
+                'satisfy the evidence rule.'
         )
 
         return lines.join('\n')

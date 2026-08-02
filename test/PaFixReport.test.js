@@ -1262,3 +1262,36 @@ describe('#79b sweep-claim cross-check', () => {
         expect(result.problems.some((p) => p.indexOf('unsupported citation') !== -1)).toBe(true)
     })
 })
+
+// =========================================================================
+// The contract the model is actually shown
+// =========================================================================
+
+describe('schemaText contract additions', () => {
+    test('tells the model citations are checked against tools actually called', () => {
+        const text = load().schemaText()
+
+        expect(text.indexOf('actually called') !== -1 || text.indexOf('actually invoked') !== -1).toBe(true)
+    })
+
+    test('tells the model a SWEPT layer needs a tool call behind it', () => {
+        const text = load().schemaText()
+
+        expect(text.indexOf('SWEPT')).not.toBe(-1)
+        expect(text.toLowerCase().indexOf('tool call')).not.toBe(-1)
+    })
+
+    test('tells the model how to report an absence', () => {
+        const text = load().schemaText()
+
+        expect(text.indexOf('UNAVAILABLE')).not.toBe(-1)
+        expect(text.indexOf('two distinct')).not.toBe(-1)
+    })
+
+    test('is still a single non-empty string', () => {
+        const text = load().schemaText()
+
+        expect(typeof text).toBe('string')
+        expect(text.length > 0).toBe(true)
+    })
+})
