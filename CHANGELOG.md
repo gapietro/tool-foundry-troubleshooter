@@ -11,6 +11,20 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0213 — 2026-08-02
+
+Phase 1b Task 8 (docs, issue TBD): assist-unit measurement source (DECISION.md §D5, LLD §8 item 11)
+— MCP read-only probe on gpinst01, no server code, no Fluent. Re-confirmed `sn_value_ai_consumption`
+still has 0 rows. Found `sys_gen_ai_usage_log` populated and filterable to this app
+(`source_scope=x_snc_troubleshoot`, not the always-empty `caller_scope`: 48 rows, 32 `assists=1` /
+16 `assists=0`) but with no working per-run join key — `sn_aia_execution_plan.gen_ai_usage_log`
+links only to the zero-assist topic row, and `sys_gen_ai_log_metadata.conversation` reads empty for
+this call path. Decision: the Phase 1b scorecard uses LLM-call counts as the comparison proxy
+(`sn_aia_gen_ai_m2m` for native, the custom harness's own transcript once built), and assist-units
+are marked NOT COMPARABLE to entitlement/licensing units. `benchmark/README.md` gets a new
+"Measurement source: assist units" section; `docs/LOW_LEVEL_DESIGN.md` §8 gets a new item 11
+closing the question.
+
 ## 2026.08.0212 — 2026-08-02
 
 Phase 1b Task 7 (issue #64): async wiring + Scripted REST API — the custom harness's first

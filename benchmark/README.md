@@ -90,6 +90,56 @@ interleaves artifacts and audit rows into one contaminated scorecard, and lets r
 its way into run 1's evidence, breaking the blind independence the doubled-run protocol exists to
 measure.
 
+## Measurement source: assist units (DECISION.md §D5)
+
+DECISION.md §D5 found `assists_consumed` "not measurable live" during Task 12 (`sn_value_ai_consumption`
+empty in the window) and left the Phase 1b comparison's assist-unit source as an open question. Probed
+read-only via MCP on **gpinst01, 2026-08-02** (`servicenow_schema`/`servicenow_query`/`servicenow_aggregate`,
+`authType=keychain`):
+
+- **`sn_value_ai_consumption`** (AI Value Consumption, scope `sn_value_engine`) — the table exists (16
+  fields: `units_consumed`, `vendor`, `ai_system`, `cost`, `include_in_dashboard`, …) but has **0 rows**,
+  confirming the Task 12 finding still holds today. This is the presumed backing table for any
+  license/entitlement dashboard, so a dashboard has nothing to read either — not independently probeable
+  via MCP (no "dashboard" API surface), but a dashboard cannot show what its source table doesn't have.
+- **`sys_gen_ai_usage_log`** (the brief's named alternative) — populated instance-wide: 3,250 rows,
+  `SUM(assists)=1121`. It filters to this app, but not on the field the schema implies: `caller_scope` is
+  **empty on all 3,250 rows**; `source_scope=x_snc_troubleshoot` is the populated field and returns 48 rows.
+  Of those: 32 carry `assists=1` on `document_table=sys_one_extend_capability` (Agent Doctor's own
+  script-tool-backed LLM calls, timestamped today), 16 carry `assists=0` on `document_table=sys_cs_topic`
+  (conversation/topic-routing overhead, billed at zero).
+- **No per-run join key exists on the `assists=1` rows.** `sn_aia_execution_plan.gen_ai_usage_log` is the
+  one documented linkage (LLD §2.3 path 1) and it **is** populated — 10/10 sampled execution plans from
+  2026-08-02 carry a reference — but of 3 of those references checked, all 3 point at the plan's
+  `sys_cs_topic` row (`assists=0`), never at a `sys_one_extend_capability` row, which is where the actual
+  consumption lives. `sys_gen_ai_usage_log` itself has no `conversation` column at all. The sibling
+  per-call telemetry table, `sys_gen_ai_log_metadata`, does declare a `conversation` field, but it read
+  empty on all 10 sampled rows for the `skill_config_id` backing our capability calls
+  (`21c00b55a323477082b23a25049a11ba`) — the table built to carry conversation identity doesn't carry it
+  for this call path either.
+- **Net:** a real, current, scope-filterable consumption number exists, but only as an aggregate over a
+  time window, not attributable to an individual run. The same reasoning that disqualifies time-window
+  keying for run identity above (interleaving) disqualifies it here too.
+
+**Decision:** no usable per-run assist-unit source exists on gpinst01. The Phase 1b scorecard uses
+**LLM-call counts** as the comparison proxy, measured identically on both harnesses:
+
+- **Native:** count of `sn_aia_gen_ai_m2m` rows keyed to the run's execution plan / task records (LLD
+  §2.3 linkage path 2 — the table is populated, 2,910 rows instance-wide, one row per logged LLM call).
+  ⚠ Documented, not fully verified within this probe's timebox: a direct `source_id=<execution plan
+  sys_id>` query returned 0 rows, so confirm the exact `source_id` keying (plan vs. task sys_id) against
+  a real run before Task 9/10 rely on it.
+- **Custom harness (Phase 1b, not yet built):** count of `llm`-type entries in the run's own transcript,
+  and/or `sys_gen_ai_log` rows scoped to the run's `conversation_id`, once the harness makes and logs its
+  own LLM calls — the harness controls this log directly, so it doesn't inherit the native path's
+  join-key gap.
+
+**Assist-units are NOT COMPARABLE to entitlement/licensing units.** LLM-call counts are a fair
+apples-to-apples proxy between the two harnesses' own consumption, not a measurement of billed Now
+Assist consumption — `sn_value_ai_consumption`, the entitlement table, is empty, and even
+`sys_gen_ai_usage_log`'s `assists` field (1 per capability call, 0 for topic routing) isn't run-attributable,
+so there is no live entitlement number to compare a call-count proxy against.
+
 ## The tool-availability dependency (RESOLVED before the scored run)
 
 **Resolved 2026-08-02 — issue #32 closed.** When this section was written, Agent Doctor shipped
