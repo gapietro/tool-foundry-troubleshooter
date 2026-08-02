@@ -11,6 +11,30 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0216 — 2026-08-02
+
+Phase 1b final-review fix wave (docs, issues #72-#75): whole-branch review of the merged Phase 1b
+harness (7d0ba37..6fa72fc) found `DECISION.md` §G's playbook attribution false — it claimed
+playbook v2 was "native-only" and that the two harnesses "have never shared a playbook." Live
+MCP verification (read-only, gpinst01) of `sys_generative_ai_log` prompt content for all 10
+custom-harness benchmark runs confirmed the opposite: `PaAgentLoop._defaultPlaybook()` reads
+`sn_aia_agent.instructions` off the SAME `Agent Doctor` record native uses, and playbook v2's own
+text (the "seven-layer sweep" / "Derive table names" / "GenAI stack" sections) was verbatim in
+every one of the 10 runs' prompts — not a separate copy, not the 4-line fallback. §G rewritten:
+corrected the architecture claim, named the 200-character transcript-digest observation channel
+(`PaAgentLoop`/`PaRunManager`) as the leading identified mechanical cause of the measured 0/10
+result (measurement and bottom-band verdict unchanged), and replaced the invalid "playbook pass"
+next-step with the observation-channel fix + re-run plan (issue #72). Also fixed three stale REST
+base-path copies (`rest-api.now.ts`, `async-wiring.now.ts`, `README.md` — real path is
+`/api/x_snc_troubleshoot/v1/troubleshooter`, one copy also had the wrong scope) and a
+`PaAgentLoop.js` comment wrongly claiming `renderedMarkdown` is read by "every caller" when the
+only production caller discards `run()`'s return value. Filed four follow-up issues for code
+fixes deliberately out of scope for this docs-only pass: #72 (200-char observation channel +
+re-run, bundling ledger T4/T6 and two minors), #73 (`/status` stuck-run check is vacuous — no
+custom run ever reaches `status=running`), #74 (REST hardening bundle — authorization breadth,
+dropped note, mislabeled message actor, caller-dependent `/status`, two minors), #75
+(destructive/unknown-tool refusals never reach the audit trail — `bug`, pre-Phase 3).
+
 ## 2026.08.0215 — 2026-08-02
 
 Phase 1b Task 10 (docs, issue #70): the comparison re-run — MCP-executed on gpinst01, closes the

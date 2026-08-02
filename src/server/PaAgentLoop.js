@@ -331,9 +331,14 @@ PaAgentLoop.prototype = {
      * passes an already-a-string value through untouched, so this is not a
      * double-encode); `renderMarkdown(normalized)` — the human-readable
      * rendering the playbook's "Fix Report" section describes — is returned
-     * directly on `run()`'s result as `renderedMarkdown`, the one place
-     * every caller (Task 7's Script Action / REST handler) is guaranteed to
-     * read without needing PaRunManager's schema to grow a new column.
+     * directly on `run()`'s result as `renderedMarkdown`. NOTE (final
+     * review, Phase 1b): in production this value is currently dead — the
+     * only caller, the ScriptAction async worker (async-wiring.now.ts),
+     * discards `run()`'s return value, and GET /runs re-parses the stored
+     * JSON `fix_report` rather than reading a stored markdown rendering.
+     * `renderedMarkdown` is reachable today only from tests that call
+     * `run()` directly. See the tracked follow-up issue for exposing
+     * `fix_report_markdown` on GET /runs once complete.
      */
     _completeFixReport: function (runId, normalized) {
         var renderedMarkdown = this._reports().renderMarkdown(normalized)
