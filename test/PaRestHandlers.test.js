@@ -326,6 +326,69 @@ describe('getRun — owner gate', () => {
     })
 })
 
+// ---------------------------------------------------------------------------
+// #78 side-defect — a rejected draft must not be invisible
+// ---------------------------------------------------------------------------
+
+describe('getRun fix_report_rejected', () => {
+    const DRAFT = '{"failure_summary":"trigger inactive","root_causes":[{"layer":"layer 7"}]}'
+
+    function runRow(overrides) {
+        return Object.assign(
+            {
+                run_id: 'run1',
+                number: 'TR0001042',
+                user: 'u1',
+                status: 'failed',
+                mode: 'diagnose',
+                transcript: [],
+                context_summary: '',
+                fix_report: DRAFT,
+                error: 'fix_report failed validation and could not be repaired: no trace citation found',
+            },
+            overrides
+        )
+    }
+
+    function getRunFor(overrides) {
+        const { handlers } = load({ readRun: fakeReadRun(runRow(overrides)) })
+        return handlers.getRun({ pathParams: { run_id: 'run1' }, userId: 'u1' })
+    }
+
+    test('a failed run exposes the rejected draft and the problems', () => {
+        const res = getRunFor({})
+
+        expect(res.status).toBe(200)
+        expect(res.body.fix_report_rejected.report.failure_summary).toBe('trigger inactive')
+        expect(res.body.fix_report_rejected.problems.indexOf('no trace citation found')).not.toBe(-1)
+    })
+
+    test('fix_report stays null on a failed run — it means "passed validation"', () => {
+        const res = getRunFor({})
+
+        expect(res.body.fix_report).toBeNull()
+    })
+
+    test('a complete run carries no rejected draft', () => {
+        const res = getRunFor({ status: 'complete', error: '' })
+
+        expect(res.body.fix_report).not.toBeNull()
+        expect(res.body.fix_report_rejected).toBeUndefined()
+    })
+
+    test('a failed run with no stored draft carries no rejected field', () => {
+        const res = getRunFor({ fix_report: '', error: 'llm unavailable' })
+
+        expect(res.body.fix_report_rejected).toBeUndefined()
+    })
+
+    test('an unparseable stored draft does not produce a half-built field', () => {
+        const res = getRunFor({ fix_report: 'not json at all' })
+
+        expect(res.body.fix_report_rejected).toBeUndefined()
+    })
+})
+
 // ===========================================================================
 // /runs/{run_id}/message
 // ===========================================================================

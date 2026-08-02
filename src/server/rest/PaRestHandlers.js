@@ -279,6 +279,28 @@ PaRestHandlers.prototype = {
             fix_report: run.status === 'complete' ? this._parseJsonSafe(run.fix_report) : null,
         }
 
+        // #78 side-defect. The rejected draft IS stored — _finishFailedFixReport
+        // writes it — and the validation problems are in the same row's `error`
+        // text. The status gate above returned null for both, so the one
+        // CORRECT diagnosis the harness produced in the 2026-08-02 benchmark
+        // re-run was invisible to every API consumer and had to be read out of
+        // the table by hand (benchmark/DECISION.md H6).
+        //
+        // A SIBLING field, not a loosening of `fix_report`: that field keeps
+        // meaning "a report that PASSED validation", so no consumer can mistake
+        // a rejected draft for a diagnosis. `problems` is the persisted error
+        // text verbatim — it was stored as prose, and splitting it back into an
+        // array would invent structure that was never recorded.
+        if (run.status !== 'complete' && this._nonEmptyString(run.fix_report)) {
+            var rejected = this._parseJsonSafe(run.fix_report)
+            if (rejected) {
+                body.fix_report_rejected = {
+                    report: rejected,
+                    problems: this._str(run.error),
+                }
+            }
+        }
+
         return { status: 200, body: body }
     },
 
