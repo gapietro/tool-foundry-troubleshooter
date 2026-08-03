@@ -256,3 +256,60 @@ its own model chooses to do with it.
 ```json
 {"agent": "Seed 05 Ticket Acknowledger", "timeframe": "last 24 hours", "description": "A bench ticket was created (sys_id 29fd09c42b6a4bd417a6ffbeee91bfb0) and the agent that should have triaged it never ran."}
 ```
+
+### Fix round: stronger source attempted — v3's own live transcript, negative result
+
+A follow-up check went after a stronger source than the filesystem artifact
+above: the v3 seed-05 runs' **own live transcript on gpinst01**, on the
+hypothesis (from this file's Task 3 smoke-gate note that "the observation
+channel carries the full ~4,300-char envelope in `prompt_digest`, not a
+200-char digest") that the full request envelope might be preserved
+somewhere in `TR1000103`/`TR1000104`'s own record.
+
+Pulled every text-bearing field on both run records
+(`ee3a71dc2baecfd417a6ffbeee91bfe5`, `734a7dd02b6a0b14f243fed2ce91bf73`)
+untruncated via `/api/now/table/x_snc_troubleshoot_run` —
+`transcript`, `fix_report`, `error`, `context_summary` — and searched all of
+it for `"Seed 05 Ticket Acknowledger"`, `"timeframe"`, `"last 24 hours"`, and
+`"description"`. **No match anywhere.**
+
+This is **not** an ambiguous digest-truncation miss (the "elided middle"
+hazard) — it is confirmed absent by construction, verified in
+`src/server/PaRunManager.js` `_normalizeEntry` (~lines 296–308): a
+transcript entry only ever gets a `prompt_digest` when `actor === 'tool'`,
+and that `prompt_digest` is derived from **that same entry's own
+`result_digest`** — i.e. a tool's own output, re-expanded past the 200-char
+ceiling. The code comment states this explicitly: an `llm` entry is "the
+model's own prior reasoning" and a `system` entry "a status note; neither is
+the evidence channel this fixes." `src/server/PaAgentLoop.js` `_step` /
+`_dispatchTool` confirm the same from the write side: `_buildPrompt` embeds
+`_renderRequest(request)` — the original diagnostic request — into the
+prompt sent to the LLM at every turn, but only the LLM's **response**
+(`result_digest`) and the tool's own args/result get written back to the
+transcript; the constructed prompt itself, request text included, is never
+persisted anywhere. So the field the hypothesis pointed at cannot, by
+construction, ever have carried the original request — not "not found in
+the preserved portion," but not there for any version of this run, digest
+window or not. This sharpens (does not merely repeat) Path 1's finding above.
+
+**Outcome: recovered text is unchanged, and the caveat/wording above stands
+exactly as written.** No discrepancy was found to flag — there was nothing
+to compare against, only a confirmed absence. This negative result is
+recorded here so the next person does not re-spend effort re-checking the
+v3 transcript for this text.
+
+**Two provenance notes:**
+
+1. The recovery source used above —
+   `.superpowers/sdd/2026-08-02-observation-channel/benchmark-raw-evidence-v2.md`
+   — sits in a **different plan's** working directory than this one
+   (`2026-08-03-v4-scored-pass`), which is outside this plan's normal
+   boundary. It produced a correct, corroborated result and is not being
+   undone, but the recovered JSON body is quoted verbatim, in full, directly
+   above in this committed file — so this file's record does not depend on
+   that other path remaining readable or even continuing to exist.
+2. The gap this task surfaced — **`x_snc_troubleshoot_run` has no field that
+   ever stores the inbound diagnostic request text**, for any seed, not only
+   seed 05 (confirmed against the schema and reinforced by this fix round's
+   source-code read) — is a real product gap, not a benchmarking
+   inconvenience, and is worth its own GitHub issue.
