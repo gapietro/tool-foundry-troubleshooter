@@ -11,6 +11,76 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0227 — 2026-08-02
+
+### Fixed
+- **The blind rule bound instructions only, so tool output could carry the answer (#89).**
+  `benchmark/README.md`'s rule — the condition that makes every score in this repo mean
+  anything — bound the text that becomes Agent Doctor's *instructions*. It did not bind tool
+  descriptions or tool output, and tool output is the more direct channel: it lands in the
+  reasoning loop at the moment of diagnosis rather than in a preamble read once at the start.
+
+  The leak that proved it: until `2026.08.0222`, `PaToolAgentConfig` emitted *"an auto-populated
+  body on this instance threw at line 42"* inside a finding — the smoke gate's own expected
+  answer — on any agent with a populated `context_processing_script`. It never fired because no
+  run has ever invoked `agent_config` (0/10 in v3, 0/10 in Task 10, 0/4 in the v4 smoke). The
+  leak was harmless only because the harness was too shallow to reach it, and would have
+  activated at exactly the moment the depth work succeeded. PR #87 removed that instance while
+  sweeping for *statistics* (#85); it never swept for *answers*.
+
+  The rule now binds all three channels — instructions, tool descriptions, tool output.
+
+- **Two more answer leaks in tool output, found by applying the broadened rule (#89).** Neither
+  was a repeat of the #87 instance, and neither was in a file the earlier sweep had reason to
+  re-open.
+
+  `src/server/tools/PaToolGenAiLog.js` — the `capability_unresolvable` finding's `next_step`
+  called its own signature *"the FALLBACK signature rather than the primary provider-mapping
+  one"*. That two-member taxonomy exists only in seed 04's spec, and naming one member tells a
+  model by elimination that the other is a provider-mapping failure, which is seed 04's answer.
+  Replaced with a contrast between two checks the tool performs on the record in front of it
+  (`capability_unresolvable` vs `api_dangling`) — observable and instance-general.
+
+  `src/server/tools/PaToolAgentConfig.js` — the `note` on every `section=instructions` call read
+  *"the known failure specimen on this instance threw in the AGENT copy"*, and its sibling
+  `detail` restated `README.md`'s reason for choosing that specimen (*"state=Completed with an
+  empty state_reason"*) near-verbatim. Together they handed a model the smoke gate's answer minus
+  only "line 42". Both clauses removed; the R-7/R-16 guidance they sat in survives intact.
+
+  Exposure, narrowed rather than assumed: no custom-harness run ever received either, and no
+  scored seed's answer was leaked to any run. The `PaToolAgentConfig` note *did* ship on native
+  runs that pulled the instructions section, and what it named was the smoke gate — a pass/fail
+  gate, not one of the ten scored rows. `benchmark/scorecard-agent-doctor.md` is annotated
+  accordingly, restating no row. Full analysis in `benchmark/DECISION.md` §M3–§M4.
+
+### Added
+- **`test/blindRule.test.js` — the mechanical half for answers.** Each seed spec and the README
+  smoke gate declares its own tokens in a fenced ` ```blind-rule-tokens ` block; the guard fails
+  the build when one reaches a model-facing string across 16 targets — the seven tool cores,
+  `PaToolReadKit`, `PaToolRegistry`, `PaArtifactStore`, `PaFixReport`, `PaAgentLoop`,
+  `PaLlmProxy`, `PaScriptToolAdapter`, `src/fluent/agent-doctor.now.ts` and the instructions doc.
+  A new seed is picked up automatically and fails until its tokens are declared. The roster size
+  is pinned, because a deleted target silently stops generating its assertion while the suite
+  stays green.
+
+  A token names **the answer, not the vocabulary of the question**.
+  `sn_aia_trigger_configuration` is seed 05's answer *and* a table `agent_config` must query to
+  sweep layer 7; `context_processing_script` is the smoke gate's answer *and* a field that same
+  tool must read. Neither is declared — a token that fires on honest tool code is a bad token,
+  not a finding. There is deliberately no stop-list: a too-generic token reddens the suite, and
+  that failure is the signal to pick a better one.
+
+  Paired with `test/referenceStatistics.test.js` (#85, statistics), which now shares its comment
+  stripper via `test/_stripComments.js` so the two guards cannot drift.
+
+  **The guard found neither of the two leaks above.** Its first full run reported every target
+  passing; its later changes were repairs to its own token list and roster, driven by manual
+  review. One leak was caught by a hand sweep and one by an independent reviewer reading the same
+  function the hand sweep had already walked past — and the first of them was *framing* rather
+  than a value, which no token could have matched. The guard's value is prospective: it pins both
+  leaks closed permanently and covers all 16 targets automatically from here, so the next leak of
+  a declared value fails a build instead of waiting for someone to notice.
+
 ## 2026.08.0226 — 2026-08-03
 
 ### Fixed
