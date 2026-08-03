@@ -60,12 +60,13 @@ covered the moment its spec lands and fails the build until its tokens are decla
 
 **A passing suite is not evidence of blindness.** Neither guard can catch what it was not told to
 look for, and a token that names platform vocabulary a tool legitimately reads is a bad token
-rather than a finding. The #89 sweep bears this out: the automated guard, a hand sweep of every
-scan target, and an independent adversarial review each caught a leak the other two missed —
-including one framing leak (a finding naming its own result "the fallback signature" by
-elimination) that no token could have matched, because the leak was in what was implied rather than
-in a value. Coverage across the three is disjoint, not redundant. The human half of the rule
-governs everything the patterns cannot reach.
+rather than a finding. The #89 sweep bears this out: the automated guard's first full run reported
+every scan target clean, and both real leaks were found by humans reading — a hand sweep caught a
+framing leak in `PaToolGenAiLog` that no token could have matched (the leak was in what a finding
+implied by elimination, not in a value), and an independent adversarial review caught a second leak
+in `PaToolAgentConfig` that the hand sweep had already walked past. The guard's value here is
+prospective, not diagnostic: it pins both leaks closed permanently and covers all 16 targets
+automatically from here on, so the next leak fails a build instead of waiting for someone to notice.
 
 ## The protocol
 
