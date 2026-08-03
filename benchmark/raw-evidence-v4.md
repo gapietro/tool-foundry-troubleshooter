@@ -140,10 +140,9 @@ Prompt: `Diagnose execution plan c9d63a932bda8b9417a6ffbeee91bfd0.`
 - **Caveat on RC-2's wording:** native's Fix Report also claims, as part of
   RC-2, that the `sn_aia_agent` record owning that script "no longer exists."
   This reads as a misinterpretation of an `agent_config` empty read against a
-  script-owning sub-record, not evidence of an actual deletion — the agent
-  plainly still exists and ran the diagnosis. Recorded here as an observation
-  about native's output/reasoning, not as a fact about the instance; flagged
-  for whoever scores this fixture in the 20-row pass.
+  script-owning sub-record, not evidence of an actual deletion. Recorded here
+  as an observation about native's output/reasoning, not as a fact about the
+  instance; flagged for whoever scores this fixture in the 20-row pass.
 
 **Gate: PASS.**
 
