@@ -1418,20 +1418,20 @@ Full text of the Fix Report (pulled from `sys_cs_message`
 > - Conversation sys_id: `44cd85402b6a4bd417a6ffbeee91bf79`
 > - Sender sys_id in `sys_cs_message`: `6816f79cc0a8016401c5a33be04be441`
 
-**CAUTION — a quoted id that is NOT one of this run's identities:** both
-native Fix Reports above quote or embed `conversation:
-44cd85402b6a4bd417a6ffbeee91bf79`. Native run 1's own `agent_trace` tool
-output surfaced this value inside the trace JSON header
-(`"conversation":"44cd85402b6a4bd417a6ffbeee91bf79"`) as part of the
-FIXTURE's own prior seeded execution history (the same execution plan
-`c4cd01842b6a4bd417a6ffbeee91bfc3` was originally run once to seed the
-defect, before this task's four diagnostic runs). Native run 2's Fix Report
-lists this same value again, explicitly labeled "Conversation sys_id," in
-its DATA MARKERS section — quoted as evidence read from the trace, not as
-that run's own conversation. **This id belongs to the fixture under
-diagnosis, not to this task's runs**, and must not be confused with the two
-native run identities below (`fced2ee82be6cf14f243fed2ce91bfc1`,
-`2c0eaea42be6871817a6ffbeee91bff3`).
+**CAUTION — a quoted id that is NOT one of this run's identities:**
+conversation `44cd85402b6a4bd417a6ffbeee91bf79` appears in **Native run 2's
+committed Fix Report** above, explicitly labeled "Conversation sys_id," in
+its DATA MARKERS section. For **Native run 1**, this same id was observed
+during polling in the raw `agent_trace` tool output's trace JSON header
+(`"conversation":"44cd85402b6a4bd417a6ffbeee91bf79"`) — that raw tool
+output is not part of the committed record above, so native run 1's
+committed Fix Report text does not itself contain this id. Either way, it
+is the FIXTURE's own prior seeded execution history (the same execution
+plan `c4cd01842b6a4bd417a6ffbeee91bfc3` was originally run once to seed the
+defect, before this task's four diagnostic runs). **This id belongs to the
+fixture under diagnosis, not to this task's runs**, and must not be
+confused with the two native run identities below
+(`fced2ee82be6cf14f243fed2ce91bfc1`, `2c0eaea42be6871817a6ffbeee91bff3`).
 
 ### Custom run 2 (`x_snc_troubleshoot`, fresh POST)
 
@@ -1504,8 +1504,10 @@ confirmed by direct multi-record query of `sn_aia_execution_plan` (native)
 and by the distinct `run_id`/`number` pairs returned from each `POST
 /analyze` call (custom) — not by inference from timing. No anchor collision
 observed. Per the CAUTION note above, the fixture's own prior conversation
-id (`44cd85402b6a4bd417a6ffbeee91bf79`), which appears inside both native
-Fix Reports as quoted evidence, was excluded from this identity set.
+id (`44cd85402b6a4bd417a6ffbeee91bf79`) — present in native run 2's
+committed Fix Report, and observed for native run 1 only in the raw
+`agent_trace` tool output rather than in that run's committed Fix Report —
+was excluded from this identity set.
 
 ### Result summary
 
