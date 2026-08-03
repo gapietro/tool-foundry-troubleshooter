@@ -45,6 +45,8 @@
 const fs = require('fs')
 const path = require('path')
 
+const { stripComments } = require('./_stripComments')
+
 const SRC = path.join(__dirname, '..', 'src', 'server')
 
 const FILES = [
@@ -57,25 +59,6 @@ const FILES = [
     path.join('tools', 'PaToolSchemaLookup.js'),
     path.join('tools', 'PaToolReadArtifact.js'),
 ]
-
-/**
- * Blank out block comments and line comments, preserving line numbering so a
- * failure can name the line. Explanatory prose ABOUT a measurement is exactly
- * where these numbers belong — the rule is about what reaches a payload.
- */
-function stripComments(source) {
-    const withoutBlocks = source.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
-    return withoutBlocks
-        .split('\n')
-        .map((line) => {
-            const at = line.indexOf('//')
-            if (at === -1) return line
-            // Naive, and deliberately so: a `//` inside a string literal only
-            // causes this scan to look at LESS text, never more.
-            return line.slice(0, at)
-        })
-        .join('\n')
-}
 
 /**
  * `38 of 40 rows`, `1 of 2026 rows`, `27 tasks / 19 calls`, `(15.7%)`, and a
@@ -166,5 +149,23 @@ describe('PaToolReadKit.REFERENCE_STAT', () => {
 
     it('reads as a prefix, so the sentence it labels follows it', () => {
         expect(text()).toMatch(/\s$/)
+    })
+})
+
+describe('the shared comment stripper (test/_stripComments.js)', () => {
+    const { stripComments } = require('./_stripComments')
+
+    it('blanks a block comment but keeps the line count', () => {
+        const src = 'a\n/* leak\n   leak */\nb'
+        expect(stripComments(src).split('\n')).toHaveLength(4)
+        expect(stripComments(src)).not.toContain('leak')
+    })
+
+    it('blanks a line comment and keeps the code before it', () => {
+        expect(stripComments("var x = 1 // leak")).toBe('var x = 1 ')
+    })
+
+    it('leaves a source with no comments untouched', () => {
+        expect(stripComments("var x = 'plain'")).toBe("var x = 'plain'")
     })
 })
