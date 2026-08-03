@@ -485,3 +485,39 @@ describe('PaToolRegistry — promptBlock()', () => {
         })
     })
 })
+
+// ---------------------------------------------------------------------------
+// Section-aware excerpting is declared by the tool, not guessed by the store
+// (issue #91).
+// ---------------------------------------------------------------------------
+describe('excerptPriority (#91)', () => {
+    it('agent_trace declares one, and puts evidence ahead of bulk', () => {
+        const reg = load()._registry()
+        const p = reg.agent_trace.excerptPriority
+
+        expect(Array.isArray(p)).toBe(true)
+        // The sections the blind slice was throwing away must outrank the
+        // ones it was keeping. task_tree is the bulk and goes last.
+        expect(p.indexOf('tool_calls')).toBeLessThan(p.indexOf('task_tree'))
+        expect(p.indexOf('script_errors')).toBeLessThan(p.indexOf('task_tree'))
+        expect(p.indexOf('header')).toBeLessThan(p.indexOf('conversation'))
+        expect(p[p.length - 1]).toBe('task_tree')
+    })
+
+    it('every named section is a real key of the agent_trace payload', () => {
+        // A typo here degrades silently: _orderedKeys skips names the payload
+        // does not have, so a misspelt section simply never gets prioritised
+        // and the excerpt quietly reverts toward natural key order.
+        const fs = require('fs')
+        const path = require('path')
+        const src = fs.readFileSync(
+            path.join(__dirname, '..', 'src', 'server', 'tools', 'PaToolAgentTrace.js'),
+            'utf8'
+        )
+        load()
+            ._registry()
+            .agent_trace.excerptPriority.forEach((section) => {
+                expect(src).toMatch(new RegExp('data\\.' + section + '\\s*=|' + section + ':'))
+            })
+    })
+})

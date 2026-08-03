@@ -131,6 +131,15 @@ PaScriptToolAdapter.prototype = {
             var result = core.execute(args)
 
             phase = 'threshold'
+            // DELIBERATELY no `excerptPriority` here (#91). This adapter is
+            // the NATIVE harness's tool entry point — the Fluent script tools
+            // in agent-doctor.now.ts call it — while the custom harness goes
+            // through PaToolRegistry.dispatch. Section-aware excerpting is
+            // being measured against the custom harness first, and passing a
+            // priority here would move the native baseline at the same time,
+            // which is the confound (§I4 item 3, §H7-4) that has made three
+            // scored passes harder to read than they needed to be. Propagate
+            // this once the custom-harness measurement is in.
             if (!core.PAGED_OUTPUT) {
                 result = this._store().applyThreshold(runId, result, name)
             }
