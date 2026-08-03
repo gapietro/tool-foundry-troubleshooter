@@ -65,3 +65,49 @@ difference.
 identical to the code committed on `main` at `8c909cd` for all four Script
 Includes and the shared Agent Doctor instructions.** The rest of this v4
 pass measures the committed code, not something else.
+
+---
+
+## Seed fixture preconditions (§A3 void conditions) — all verified, none void
+
+All queries run via `servicenow_query` against gpinst01, admin session, connected
+through the foundry MCP `servicenow_connect` broker (no shell credentials used).
+
+| Condition | Read | Verdict |
+|---|---|---|
+| Seed 02 `sn_aia_agent_tool_m2m` for agent `cd050d48e810411d9f113fd530694fe6` (`active=true`) | 1 row: `tool.name=measure_request`, `max_auto_executions=10` | v2 construction is live — not void |
+| Seed 04 capability `x_snc_tsbench_unmapped_capability` | `sys_id=92ff62af516741769c437feb88c80ef3` | matches the value hardcoded in the installed tool script — not void |
+| Seed 04 definition `904c0485699a4a73a124446a7231c563` | `api_type=sys_hub_flow`, `api=00000000000000000000000000000000` (dangling), `connection` empty (decoy) | matches expected v3 construction — not void |
+| Seed 05 `sn_aia_trigger_agent_usecase_m2m` `ba30d8775b0c4cebb960c58830590d5d` | `active=true` (already on — no PATCH required) | gate on, as required — not void |
+| Seed 05 `sn_aia_trigger_configuration` `bfb77d6c64884500a80203ee029436ee` | `active=false` | the seeded defect, intact — not void |
+| Seed 05 bench ticket `29fd09c42b6a4bd417a6ffbeee91bfb0` | present in `x_snc_tsbench_ticket`, short_description "New starter needs laptop provisioned before Monday", priority `3` | reusable |
+| Seeds 01–04 execution targets (`b07dc9082baa4314f243fed2ce91bf4b`, `4b315ecc2b66c314f243fed2ce91bfca`, `c4cd01842b6a4bd417a6ffbeee91bfc3`, `16ddc10c2baa4314f243fed2ce91bf15`) | all four present in `sn_aia_execution_plan`, all four `state=completed` | reusable — not void |
+
+**No PATCH was required for Step 3.** Seed 5's `sn_aia_trigger_agent_usecase_m2m`
+gate already read `active=true` on first query — the fixture was already in its
+correct post-install state, so the one permitted repair action was not exercised.
+`sn_aia_trigger_configuration.active` was read (not touched) and confirmed `false`,
+as the seeded defect requires.
+
+**All five seeds: not void.**
+
+### Budget knobs and `layers_available` (§E3 query)
+
+`sn_aia_agent_tool_m2m` for agent `e1392946828940e5a708fc51b0a5e954` (`active=true`)
+returned **7 rows**, each `max_auto_executions=10`:
+
+| tool.name | max_auto_executions |
+|---|---|
+| `agent_trace` | 10 |
+| `agent_config` | 10 |
+| `schema_lookup` | 10 |
+| `query_table` | 10 |
+| `genai_log` | 10 |
+| `log_analysis` | 10 |
+| `read_artifact` | 10 |
+
+`sys_properties` `sn_aia.continuous_tool_execution_limit` = **`25`**.
+
+**Measured `layers_available`: 7/7** — all seven tools are registered on the
+agent record read directly from the instance (not copied from a prior pass).
+The gap measured by scored runs is "did not look", never "could not look with".
