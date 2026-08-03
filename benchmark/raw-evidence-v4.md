@@ -2486,3 +2486,188 @@ capability the harness lacks. This is the last of the five seed blocks; all
 20 scored rows across seeds 01–05 are now recorded in this file.
 
 ---
+
+## Task 10 — audit-trail-derived measurements, all 20 rows
+
+**This section is the "given data" every scorer in Tasks 11–12 receives — it
+was computed by reading `x_snc_troubleshoot_audit` (and, for native, the
+`sn_aia_gen_ai_m2m` LLM-call linkage) directly, independently of and before
+any Fix Report was read for correctness.** Per §N7, the trail can REFUTE a
+sweep claim but never CONFER one — that asymmetry only holds if this section
+was produced first. It was: no report text above was re-read for this task;
+only the identities already recorded in this file were used to query the
+instance.
+
+### Method notes
+
+- **Native identity hop (the brief's central trap).** Native's identity in
+  this file is a **conversation id**, but `x_snc_troubleshoot_audit.run`
+  references `x_snc_troubleshoot_run`, not a conversation. Each of the 10
+  native conversation ids was hopped through `x_snc_troubleshoot_run` where
+  `conversation_ref=<conversation_id>` first. **All 10 resolved to exactly
+  one row** (`TR1000118, TR1000120, TR1000122, TR1000124, TR1000127,
+  TR1000129, TR1000130, TR1000133, TR1000135, TR1000137`) — no native run
+  was left unanchored. One incidental finding: all 10 anchor rows still read
+  `status: running`, never updated to a terminal state, even though the
+  underlying native execution completed in every case (per Tasks 5–9's own
+  `state: completed` reads). This is a harness-observation-channel gap, not
+  a scoring input — noted here, not corrected.
+- **`layers_swept` is computed from `action_type='result'` rows only**, per
+  the tool→layer map in the brief (`agent_trace`→L1, `agent_config`→L2/L3/L7
+  refined by `sections_returned`, `schema_lookup`→L4, `query_table`→L5,
+  `genai_log`→L6, `log_analysis`→no layer of its own, `read_artifact`→not a
+  layer). For every `agent_config` result row, the **full, untruncated**
+  `output` field was pulled via the Table API (not the query tool's display,
+  which elides mid-string) and `sections_returned` read directly — this
+  field sits in the payload head and survives the digest intact in all 7
+  cases where `agent_config` was called.
+- **Tool-call count and order** are the count and creation-order sequence of
+  `action_type='result'` rows (each tool call is one intent+result pair in
+  this schema).
+- **LLM-call count, native:** `sn_aia_execution_task` where
+  `execution_plan=<native run's own plan sys_id>^type=agent^order=100` → one
+  row → `sn_aia_gen_ai_m2m` where `source_id=<that task sys_id>^source_table
+  =sn_aia_execution_task`, row count. The native run's own plan sys_id is
+  the "Execution ID" already recorded per run above (Agent Doctor's own
+  diagnostic execution, distinct from the fixture plan under diagnosis).
+- **LLM-call count, custom:** count of `"actor":"llm"` entries in the run's
+  own `x_snc_troubleshoot_run.transcript`, pulled untruncated via the Table
+  API. Multiple `llm` entries occur on runs with more than one `fix_report`
+  attempt (validation retries) — each attempt is its own LLM call.
+- **`layers_available`** was re-queried fresh at this task (not copied from
+  Task 2 or the seed-fixture section above): `sn_aia_agent_tool_m2m` where
+  `agent=e1392946828940e5a708fc51b0a5e954^active=true` → **7 rows**
+  (`agent_trace, agent_config, schema_lookup, query_table, genai_log,
+  log_analysis, read_artifact`, all `active=true`, `max_auto_executions=10`)
+  — unchanged from the pre-flight reading. This single query covers all 20
+  rows: it is the shared underlying agent/tool-registry config both
+  harnesses' tool calls resolve against, not a per-run value, and it did not
+  drift across the pass.
+
+### Master table (compact)
+
+| Seed | Harness | Run | `layers_swept` | Tool calls (count) | Tool-call order | LLM calls | `layers_available` |
+|---|---|---|---|---|---|---|---|
+| 01 | native | run 1 (conv `e7c7ea…bf79`) | 4/7 (L1,L3,L4,L5) | 10 | agent_trace, read_artifact×3, agent_config, query_table, read_artifact×3, schema_lookup | 10 | 7/7 |
+| 01 | native | run 2 (conv `1098e2…bfe1`) | 4/7 (L1,L3,L4,L5) | 10 | agent_trace, read_artifact×3, query_table, agent_config, read_artifact×2, schema_lookup, query_table | 7 | 7/7 |
+| 01 | custom | run 1 (`db78ae…bfe2`, TR1000119) | 1/7 (L1) | 1 | agent_trace | 2 | 7/7 |
+| 01 | custom | run 2 (`8c19ea…bf4c`, TR1000121) | 1/7 (L1) | 1 | agent_trace | 2 | 7/7 |
+| 02 | native | run 1 (conv `748b62…bfcd`) | 1/7 (L1) | 5 | agent_trace, read_artifact×4 | 4 | 7/7 |
+| 02 | native | run 2 (conv `a10caa…bf89`) | 1/7 (L1) | 5 | agent_trace, read_artifact×4 | 5 | 7/7 |
+| 02 | custom | run 1 (`e2db6a…bfee`, TR1000123) | 1/7 (L1) | 1 | agent_trace | 2 | 7/7 |
+| 02 | custom | run 2 (`e26c2e…bffa`, TR1000125) | 1/7 (L1) | 1 | agent_trace | 2 | 7/7 |
+| 03 | native | run 1 (conv `fced2e…bfc1`) | 5/7 (L1,L3,L4,L5,L6) | 9 | agent_trace, read_artifact×2, genai_log, agent_config, read_artifact×2, schema_lookup, query_table | 7 | 7/7 |
+| 03 | native | run 2 (conv `2c0eae…bff3`) | 4/7 (L1,L3,L4,L5) | 9 | agent_trace, read_artifact×3, agent_config, read_artifact×2, query_table, schema_lookup | 7 | 7/7 |
+| 03 | custom | run 1 (`56ed26…bf16`, TR1000126) | 1/7 (L1) | 1 | agent_trace | 3 | 7/7 |
+| 03 | custom | run 2 (`5d0eae…bfd9`, TR1000128) | 1/7 (L1) | 1 | agent_trace | 3 | 7/7 |
+| 04 | native | run 1 (conv `ed80b6…bff0`) | 5/7 (L1,L2,L3,L6,L7) | 9 | agent_trace, read_artifact×2, genai_log, read_artifact, genai_log, read_artifact, agent_config, read_artifact | 7 | 7/7 |
+| 04 | native | run 2 (conv `d1617a…bf76`) | 2/7 (L1,L6) | 5 | agent_trace, read_artifact×3, genai_log | 5 | 7/7 |
+| 04 | custom | run 1 (`2331b6…bf47`, TR1000131, **failed**) | 1/7 (L1) | 2 | agent_trace, read_artifact | 4 | 7/7 |
+| 04 | custom | run 2 (`57617a…bf70`, TR1000132) | 1/7 (L1) | 2 | agent_trace, read_artifact | 4 | 7/7 |
+| 05 | native | run 1 (conv `46a3b2…bf9a`) | 6/7 (L1,L2,L3,L5,L6,L7) | 9 | agent_trace, agent_config, read_artifact×3, query_table, log_analysis, query_table, genai_log | 5 | 7/7 |
+| 05 | native | run 2 (conv `79743a…bfe3`) | 6/7 (L1,L2,L3,L5,L6,L7) | 7 | agent_trace, agent_config, read_artifact×3, query_table, genai_log | 4 | 7/7 |
+| 05 | custom | run 1 (`d3a372…bf8d`, TR1000134, **failed**) | 1/7 (L1)† | 1 | agent_trace | 3 | 7/7 |
+| 05 | custom | run 2 (`8b74ba…bfb3`, TR1000136, **failed**) | 1/7 (L1)† | 1 | agent_trace | 3 | 7/7 |
+
+† — see disagreement flag below; the run's own report calls this layer
+`UNAVAILABLE`, not `SWEPT`.
+
+### `agent_config` refinement detail (Step 4)
+
+Seven `action_type='result'` rows called `agent_config` across the 20 runs.
+Full untruncated `output.sections_returned` for each, and the resulting
+layer credit:
+
+| Run | `agent` param requested | `sections_returned` | Layers credited |
+|---|---|---|---|
+| Seed01 native run 1 | `914db68f…` , `section:"tools"` | `["tools"]` | L3 only |
+| Seed01 native run 2 | `914db68f…` , `section:"tools"` | `["tools"]` | L3 only |
+| Seed03 native run 1 | `0bbf1b00…`, `section:"tools"` | `["tools"]` | L3 only |
+| Seed03 native run 2 | `0bbf1b00…`, `section:"tools"` | `["tools"]` | L3 only |
+| Seed04 native run 1 | `8bac1f84…`, no section (all) | `["overview","instructions","tools","triggers"]` | L2, L3, L7 |
+| Seed05 native run 1 | `"Seed 05 Ticket Acknowledger"`, no section | `["overview","instructions","tools","triggers"]` | L2, L3, L7 |
+| Seed05 native run 2 | `"Seed 05 Ticket Acknowledger"`, no section | `["overview","instructions","tools","triggers"]` | L2, L3, L7 |
+
+`overview` never maps to a layer per the brief. No custom run called
+`agent_config` in this pass (all 10 custom rows made only `agent_trace`,
+plus `read_artifact` on the two seed 04 rows) — the refinement table
+therefore only affects the 7 native rows listed.
+
+### Disagreements between the audit trail and a run's own report
+
+**1. Seed 01, both native runs — Layer 2 (Agent instructions) is claimed
+SWEPT, but the trail shows only `tools` was ever requested/returned.**
+Native run 1's committed Fix Report states: `| 2 | Agent instructions |
+SWEPT | agent_config section: tools (instructions also returned) |` — the
+parenthetical explicitly claims the instructions section came back. The
+audit trail's own `agent_config` result row for this call, read in full
+above, carries `"sections_returned":["tools"]` — `instructions` is not in
+the list, and the `resolution.requested.section` on the same call was
+literally `"tools"` (the model asked for tools only). Native run 2's report
+similarly credits L2 SWEPT with the rationale "tools section covers binding
+context" — a different rationalization but the same unsupported credit
+under the brief's Step 4 rule ("credit ONLY the layers whose sections
+actually returned"). **Per the audit trail, both seed 01 native runs swept
+4/7 (L1,L3,L4,L5), not the 5 layers (L1–L5) their own LAYERS SWEPT tables
+claim.** This is a hit, not a miss — the digest-hazard caveat does not apply
+here: `sections_returned` sits in the payload head and both reads returned
+cleanly.
+
+**2. Seed 05, both custom runs — the run's own report calls Layer 1
+`UNAVAILABLE`; the mechanical audit-trail rule credits it `SWEPT`.** Both
+custom runs' rejected `fix_report` mark layer 1
+`{"status":"UNAVAILABLE","reason":"No sn_aia_execution_plan row exists for
+the provided sys_id, as reported by agent_trace"}`. Mechanically, per the
+brief's Step 3 rule, `agent_trace` produced an `action_type='result'` row
+(the tool executed and returned a genuine-absence finding, not a tool
+failure) — so the distinct-tool-name rule credits L1 `SWEPT` regardless of
+what the returned content was. This is flagged, not resolved: it is a real
+tension between "the tool returned an answer" (mechanical rule, this
+section's basis) and "the report's own semantic judgment that an
+against-the-wrong-object query which found nothing establishes nothing about
+layer 1" (the model's own more conservative reading). Recorded as `1/7 (L1)`
+per the brief's literal mechanical rule, with this caveat carried forward
+for whoever scores seed 05's custom rows.
+
+**3. Minor bookkeeping note, not a report disagreement.** Task 5's earlier
+entry for seed 01 native run 2 states "Tool-call count: 10 — agent_trace
+×1, read_artifact ×4, agent_config ×1, query_table ×2, schema_lookup ×1" —
+those five figures sum to 9, not the stated 10. The audit-trail recount in
+this task finds `read_artifact` called **5** times, not 4 (full order:
+agent_trace, read_artifact×3, query_table, agent_config, read_artifact×2,
+schema_lookup, query_table — 10 calls total, matching the stated count).
+Task 5's number was derived from `servicenow_aia_trace`, a different source
+than this task's audit-trail read, so this is not a case of a diagnosis
+report over-claiming evidence — it reads as a manual-tally slip in the
+earlier entry. Not corrected in that section (out of this task's scope to
+edit prior sections); flagged here so a scorer trusts this task's counts
+over the Task 5 prose figure where they differ.
+
+### Concerns / observations for whoever scores next
+
+- All 10 native `x_snc_troubleshoot_run` anchor rows still read `status:
+  running` — never flipped to a terminal state — despite every underlying
+  native execution reaching `Completed` per Tasks 5–9. This suggests the
+  observation-channel anchor's own status field is not wired to the native
+  execution's lifecycle. Not a scoring input, but worth its own follow-up
+  issue.
+- Seed 04 custom run 1 and seed 05 both custom runs terminated
+  `status: failed` (harness validation gate rejected the `fix_report`) —
+  `layers_swept`, tool-call count/order, and LLM-call count were computed
+  identically from the audit trail regardless of terminal shape, per the
+  brief's "terminal ≠ friendlier shape" instruction from Task 5–9.
+- Seed 05 native run 1's `query_table` calls include one against a
+  misspelled table name (`sn_tsbench_ticket`, missing the `x_snc_` prefix),
+  which read `sys_db_object: empty` (table does not exist), and a second,
+  correctly-spelled call against `x_snc_tsbench_ticket` which read `ok`.
+  Both are `action_type='result'` rows for the same tool, so both count
+  toward the tool-call total and neither changes the L5 credit (L5 is
+  credited on the correctly-targeted call). Not a discrepancy, just a
+  traceable oddity in the run's own tool use.
+
+Full query-by-query working (every `servicenow_query`/`servicenow_request`
+call, every raw JSON payload) is in
+`.superpowers/sdd/2026-08-03-v4-scored-pass/task-10-report.md` for bulk
+reference only — that path is gitignored and will not survive the plan.
+
+---
