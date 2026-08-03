@@ -351,7 +351,7 @@ The parser has an answer key; now it needs targets. This task adds the scan, plu
 
 **Interfaces:**
 - Consumes: `stripComments` from `test/_stripComments.js` (Task 1); `SPECIMENS`, `readTokenBlock` from Task 2.
-- Produces: `SCAN_TARGETS` — array of `{file: string, stripComments: boolean}`, repo-relative paths. Nothing later consumes it.
+- Produces: `SCAN_TARGETS` — array of `{file: string, stripComments: boolean}`, repo-relative paths. `scanText(text: string, tokens: {token, from}[]) => {line, token, from, text}[]` — pure matcher. `findTokens(target, tokens) => {file, line, token, from, text}[]` — `scanText` plus file read and comment policy. Nothing later consumes them.
 
 - [ ] **Step 1: Write the scan**
 
@@ -398,28 +398,30 @@ function allTokens() {
     return out
 }
 
-/** Case-insensitive substring hits, as {file, line, token, from, text}. */
-function findTokens(target, tokens) {
-    const raw = fs.readFileSync(path.join(ROOT, target.file), 'utf8')
-    const text = target.stripComments ? stripComments(raw) : raw
-    const lines = text.split('\n')
+/**
+ * Case-insensitive substring hits in already-prepared text, as
+ * {line, token, from, text}. Pure — no file I/O, no comment handling — so the
+ * POSITIVE control below can exercise THE REAL MATCHER on a planted line.
+ */
+function scanText(text, tokens) {
     const hits = []
 
-    lines.forEach((line, i) => {
+    text.split('\n').forEach((line, i) => {
         const haystack = line.toLowerCase()
         tokens.forEach((t) => {
             if (haystack.indexOf(t.token.toLowerCase()) === -1) return
-            hits.push({
-                file: target.file,
-                line: i + 1,
-                token: t.token,
-                from: t.from,
-                text: line.trim(),
-            })
+            hits.push({ line: i + 1, token: t.token, from: t.from, text: line.trim() })
         })
     })
 
     return hits
+}
+
+/** scanText against a target file, with that target's comment policy applied. */
+function findTokens(target, tokens) {
+    const raw = fs.readFileSync(path.join(ROOT, target.file), 'utf8')
+    const text = target.stripComments ? stripComments(raw) : raw
+    return scanText(text, tokens).map((h) => Object.assign({ file: target.file }, h))
 }
 
 describe('no seeded answer reaches a model-facing string (issue #89)', () => {
@@ -437,19 +439,24 @@ describe('no seeded answer reaches a model-facing string (issue #89)', () => {
 })
 
 describe('the scanner itself works (controls)', () => {
-    it('POSITIVE: catches a planted token in a scanned line', () => {
-        const planted = { token: 'Seed 03 Category Router', from: 'control' }
-        const lines = ["    detail: 'the Seed 03 Category Router never fired',"]
-        const hits = []
-        lines.forEach((line, i) => {
-            if (line.toLowerCase().indexOf(planted.token.toLowerCase()) !== -1) {
-                hits.push(i + 1)
-            }
-        })
-        // Mirrors findTokens' matching. A guard that passes because it silently
-        // matched NOTHING is indistinguishable from one that passes because the
-        // code is clean; this asserts the matcher is live.
-        expect(hits).toEqual([1])
+    it('POSITIVE: the real matcher catches a planted token', () => {
+        // A guard that passes because it silently matched NOTHING is
+        // indistinguishable from one that passes because the code is clean.
+        // This calls scanText -- the same function the scan above runs on every
+        // target -- so a matcher that stops matching fails HERE.
+        const hits = scanText("    detail: 'the Seed 03 Category Router never fired',", [
+            { token: 'Seed 03 Category Router', from: 'control' },
+        ])
+
+        expect(hits).toHaveLength(1)
+        expect(hits[0].line).toBe(1)
+        expect(hits[0].token).toBe('Seed 03 Category Router')
+    })
+
+    it('POSITIVE: the real matcher is case-insensitive', () => {
+        expect(
+            scanText('RULES_IN_TABLE', [{ token: 'rules_in_table', from: 'control' }])
+        ).toHaveLength(1)
     })
 
     it('NEGATIVE: a token inside a real comment does not fire', () => {
