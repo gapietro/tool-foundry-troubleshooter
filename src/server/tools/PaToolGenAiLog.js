@@ -970,10 +970,18 @@ PaToolGenAiLog.prototype = {
                         why:
                             'capability is a mandatory reference to sys_one_extend_capability and it ' +
                             'resolves to no record. The capability cannot be dispatched.',
+                        // The runtime signature is worth naming — it is what a
+                        // reader will have seen — but ONLY as a property of this
+                        // instance's records. An earlier wording ranked it
+                        // against a "primary provider-mapping" signature, which
+                        // is vocabulary from a benchmark specimen's construction
+                        // rather than anything a diagnostician could observe
+                        // here (issue #89).
                         next_step:
-                            'Repoint capability at a real sys_one_extend_capability row. Note this ' +
-                            'produces a "capability not found" signature at runtime, which is the ' +
-                            'FALLBACK signature rather than the primary provider-mapping one.',
+                            'Repoint capability at a real sys_one_extend_capability row. At runtime this ' +
+                            'surfaces as "capability not found" — the executor cannot reach the capability ' +
+                            'record at all, which is a different signature from a capability that resolves ' +
+                            'but whose api points at no provider record (see the api_dangling check).',
                     })
                 } else {
                     entry.capability_state = 'resolved'
