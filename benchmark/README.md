@@ -74,6 +74,17 @@ the per-seed specs remain authoritative for the detail.
    all 5 tool calls `Success` — so it tests whether a diagnosis that stops at the header gets caught,
    not merely whether the tools can read rows. This is a pass/fail gate, not one of the 10 scored
    rows.
+
+   The smoke gate's own answer tokens, guarded by `../test/blindRule.test.js`:
+
+   ```blind-rule-tokens
+   c9d63a932bda8b9417a6ffbeee91bfd0
+   line 42
+   ```
+
+   `context_processing_script` is deliberately **not** a token: it is this
+   gate's answer *and* a field `agent_config` must read to sweep layer 4. A
+   token that fires on honest tool code is a bad token, not a finding.
 4. **2 runs per seed, in fresh conversations, for all 5 seeds — 10 scored runs.** Each run is blind:
    Agent Doctor's instructions, its tools, and the playbook carry no seed knowledge. The doubling
    measures the documented "inconsistent behavior on identical inputs" failure mode, not redundancy.

@@ -71,3 +71,15 @@ query is a **miss**, and the scorecard should record it as one.
 ## Safety
 
 Table owned by the fixture app; created empty by design.
+
+## Blind-rule tokens
+
+Strings that would give this seed's answer away if they reached a model-facing
+string. Guarded by `../../test/blindRule.test.js` — see that file's header for
+how a token is chosen.
+
+```blind-rule-tokens
+Seed 03 Category Router
+x_snc_tsbench_routing_rule
+rules_in_table
+```
