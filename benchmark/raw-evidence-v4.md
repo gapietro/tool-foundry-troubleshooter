@@ -119,8 +119,10 @@ The gap measured by scored runs is "did not look", never "could not look with".
 One run fired per harness against the standing smoke specimen (execution plan
 `c9d63a932bda8b9417a6ffbeee91bfd0`), invocation text exactly per the brief and
 nothing else. Bar: terminal with structurally valid output — not correct
-diagnosis. Full transcripts, timings, and complete Fix Report text are in
-`.superpowers/sdd/2026-08-03-v4-scored-pass/task-3-report.md`.
+diagnosis. Full raw transcripts (complete tool-call payloads, full Fix Report
+text) are in `.superpowers/sdd/2026-08-03-v4-scored-pass/task-3-report.md` for
+bulk reference only — that path is gitignored and will not survive the plan;
+every judgement a later reader needs is inlined below.
 
 ### Native (Agent Doctor, `e1392946828940e5a708fc51b0a5e954`)
 
@@ -135,6 +137,13 @@ Prompt: `Diagnose execution plan c9d63a932bda8b9417a6ffbeee91bfd0.`
   FIXES / VERIFICATION) and named `context_processing_script` line 42 as
   RC-2 with CONFIRMED confidence — matching the known answer, consistent
   with native also finding it at Task 9 and Task 12.
+- **Caveat on RC-2's wording:** native's Fix Report also claims, as part of
+  RC-2, that the `sn_aia_agent` record owning that script "no longer exists."
+  This reads as a misinterpretation of an `agent_config` empty read against a
+  script-owning sub-record, not evidence of an actual deletion — the agent
+  plainly still exists and ran the diagnosis. Recorded here as an observation
+  about native's output/reasoning, not as a fact about the instance; flagged
+  for whoever scores this fixture in the 20-row pass.
 
 **Gate: PASS.**
 
