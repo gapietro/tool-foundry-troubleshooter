@@ -31,8 +31,41 @@ the scores mean anything:
 nothing was lost: the file that carries Agent Doctor's instructions — the playbook in the sense the
 rule means — is **`docs/agent/agent-doctor-instructions.md`**, the only file in `docs/agent/`. The
 rule's wording is preserved verbatim because it is the condition that makes the scores mean
-anything; read "the playbook" as that file. The rule binds anything that becomes part of Agent
-Doctor's instructions, whatever it ends up being called.
+anything; read "the playbook" as that file.
+
+**What the rule binds.** Instructions were the only channel that existed when this rule was written
+for the native harness. There are now three, and the rule binds all of them:
+
+| Channel | Source | Reaches |
+|---|---|---|
+| Instructions | `docs/agent/agent-doctor-instructions.md` | both harnesses |
+| Tool descriptions | `src/server/PaToolRegistry.js` (single-sourced), mirrored into `src/fluent/agent-doctor.now.ts` | both harnesses |
+| Tool output | the 7 cores in `src/server/tools/` + `src/server/PaToolReadKit.js` | both harnesses |
+
+Tool output is the most direct of the three: it lands in the reasoning loop at the moment of
+diagnosis, not in a preamble read once at the start. Until `2026.08.0222`, `PaToolAgentConfig`
+emitted this gate's own expected answer — *"threw at line 42"* — inside a finding. It never fired
+only because no run has ever invoked `agent_config`, and it would have activated at exactly the
+moment the depth work succeeded (#89, `DECISION.md` §J4, §M).
+
+Two guards enforce the mechanical half:
+
+| Guard | Catches | Origin |
+|---|---|---|
+| `test/referenceStatistics.test.js` | reference **statistics** mistakable for run data | #85 |
+| `test/blindRule.test.js` | **answers** — the seeded diagnosis itself | #89 |
+
+`blindRule` reads the ` ```blind-rule-tokens ` block each specimen declares, so a new seed is
+covered the moment its spec lands and fails the build until its tokens are declared.
+
+**A passing suite is not evidence of blindness.** Neither guard can catch what it was not told to
+look for, and a token that names platform vocabulary a tool legitimately reads is a bad token
+rather than a finding. The #89 sweep bears this out: the automated guard, a hand sweep of every
+scan target, and an independent adversarial review each caught a leak the other two missed —
+including one framing leak (a finding naming its own result "the fallback signature" by
+elimination) that no token could have matched, because the leak was in what was implied rather than
+in a value. Coverage across the three is disjoint, not redundant. The human half of the rule
+governs everything the patterns cannot reach.
 
 ## The protocol
 
