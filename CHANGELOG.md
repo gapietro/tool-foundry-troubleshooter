@@ -11,6 +11,44 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0225 — 2026-08-03
+
+### Fixed
+- **Blind head/tail truncation was eliding exactly the diagnostic evidence (#91).**
+  `PaArtifactStore._truncate` sliced by character offset with no idea what it was cutting. On a real
+  `agent_trace` result that retained `resolution`, `reads`, `notes`, `header` and `evidence_basis` —
+  every one of them saying *"state completed, every read ok"* — and elided 16,969 of 18,969 chars in
+  the middle, where `tool_calls`, `script_errors` and the failure signatures live. **The excerpt kept
+  the reassuring sections and dropped the diagnostic ones**, reading as a clean bill of health for a
+  run that had failed. Tools now declare an `excerptPriority` in `PaToolRegistry`; the store fills the
+  budget in that order, keeps sections **whole** so the excerpt is parseable JSON rather than a
+  chopped string, and **names every section it omitted**. Same ~2,000-char retained budget — the
+  envelope is spent better, not grown.
+
+### Measured
+- **The evidence now reaches the model, and on seed 03 it finds the answer (TR1000112).** The excerpt
+  led with `script_errors`, `header`, `tool_calls`, and the report stated
+  *"the tool call to `lookup_routing_rule` returned 0 rules found for the 'Hardware' category"*,
+  citing `rules_in_table: 0` — **the seeded answer, cited for the first time in any custom-harness
+  run.** Previously that digest was in the elided middle and every run reported "no failure detected".
+- **It was then rejected, and the rejection is the line-48 contradiction (§I4 confound 2).** Both
+  citations were `source: trace`, so the evidence rule refused it and the run ended `failed`. The
+  playbook's own escape — *"name the candidate root cause … and mark it UNCONFIRMED"* — does not
+  exist in the contract, which requires trace PLUS one of config/schema/data on **every** root cause.
+  The model had genuinely diagnosed the seed from the trace alone and could not express it.
+- **Seed 01 is unchanged (TR1000113): `complete`, inconclusive, no root cause.** Its defect — a
+  priority word silently dropped into an Integer column while `gr.update()` reports success — is not
+  visible in a trace by construction, and still needs `schema_lookup` or `query_table`. Still 1 tool
+  call.
+
+### Not established by this version
+- **That this moves the score.** Seed 03's report was rejected; seed 01's was empty. Depth is
+  unchanged at 1 tool call on both. `0216` paged 10/10 and still scored 0/10 — paging and visibility
+  are necessary, not proven sufficient.
+- **Anything about native.** `PaScriptToolAdapter` deliberately does NOT pass a priority: it is the
+  native harness's tool entry point, and moving both harnesses at once is the confound (§I4 item 3)
+  that made three passes hard to read. Propagate after the custom-harness measurement.
+
 ## 2026.08.0223 — 2026-08-03
 
 ### Measured

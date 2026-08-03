@@ -643,3 +643,214 @@ describe('constants', () => {
         expect(newStore(makeAttachmentWorld()).THRESHOLD_CHARS).toBe(4000)
     })
 })
+
+// ---------------------------------------------------------------------------
+// Section-aware excerpts (issue #91).
+//
+// THE DEFECT THIS REPLACES, measured on gpinst01.
+//
+// `_truncate` is a blind character-offset slice. For an `agent_trace` result
+// that put the REASSURING sections in the retained head and tail — resolution,
+// reads, notes, header, evidence_basis, every one of them saying "state
+// completed, every read ok" — and elided 16,969 of 18,969 chars in the middle,
+// which is where `tool_calls[].response_digest`, `script_errors` and the
+// failure signatures live.
+//
+// Seed 03's entire answer is one of those response digests:
+// `{ok:true, matched:false, category:"Hardware", rules_in_table:0}`. Seed 01's
+// spec says outright that it exists to stress artifact paging. The excerpt read
+// as a clean bill of health for a run that failed, and runs reaching
+// `read_artifact` fell 10/10 -> 3/10 -> 0/10 as the excerpt grew richer.
+//
+// So: the tool declares which of its sections are diagnostic, and the store
+// fills the budget in that order. Whole sections only, so the excerpt is
+// always valid JSON rather than a chopped string, and every dropped section is
+// NAMED — a silently dropped section is the whole reason this issue exists.
+// ---------------------------------------------------------------------------
+describe('section-aware excerpts (#91)', () => {
+    const PRIORITY = ['script_errors', 'header', 'tool_calls', 'task_stats', 'reads', 'task_tree']
+
+    /** An agent_trace-shaped result: small diagnostic sections, huge task_tree. */
+    function traceResult() {
+        return {
+            success: true,
+            data: {
+                tool: 'PaToolAgentTrace',
+                resolution: { mode: 'execution' },
+                reads: { sn_aia_execution_plan: 'ok' },
+                notes: ['a note'],
+                header: { state: 'completed', state_reason: '', failure_signature: [] },
+                task_tree: [{ big: filler(6000) }],
+                task_stats: { total: 8 },
+                tool_calls: [
+                    { tool_name: 'lookup_routing_rule', response_digest: '{"ok":true,"matched":false,"rules_in_table":0}' },
+                ],
+                script_errors: [],
+                // Key order mirrors the real PaToolAgentTrace payload: bulky
+                // messages and conversation sit AFTER tool_calls, which is
+                // what pushes the tool-call digests out of reach of the 500-
+                // char tail as well as the 1500-char head. Without these the
+                // fixture is not the payload the defect was found in, and the
+                // differential test passes for the wrong reason.
+                messages: [{ content_digest: filler(1200) }],
+                conversation: { messages: [{ text_digest: filler(1200) }] },
+                evidence_basis: { plan_rows: 1 },
+            },
+        }
+    }
+
+    function excerptOf(result, priority) {
+        const store = newStore(null, { excerptHeadChars: 1500, excerptTailChars: 500 })
+        return store.store('', 'agent_trace', result, priority).excerpt
+    }
+
+    /** The same payload through the OLD blind path, for a differential check. */
+    function blindExcerptOf(result) {
+        const store = newStore(null, { excerptHeadChars: 1500, excerptTailChars: 500 })
+        return store.store('', 'no_priority_tool', result).excerpt
+    }
+
+    it('keeps the answer that blind truncation elided', () => {
+        // Differential, not absolute: asserting only that the new excerpt
+        // contains the answer would pass even if nothing had changed, because
+        // a head/tail slice sometimes catches it by luck. The point is that
+        // the blind path LOSES it and the priority path KEEPS it.
+        const result = traceResult()
+        expect(blindExcerptOf(result)).not.toContain('rules_in_table')
+        expect(excerptOf(result, PRIORITY)).toContain('rules_in_table')
+    })
+
+    it('drops the bulky low-priority section instead of the diagnostic ones', () => {
+        const excerpt = excerptOf(traceResult(), PRIORITY)
+        expect(excerpt).not.toContain(filler(6000))
+        expect(excerpt).toContain('"header"')
+        expect(excerpt).toContain('"tool_calls"')
+    })
+
+    it('names every section it dropped — a silent drop is the defect itself', () => {
+        const excerpt = excerptOf(traceResult(), PRIORITY)
+        expect(excerpt).toMatch(/task_tree/)
+        expect(excerpt).toMatch(/omitted|dropped|elided/i)
+    })
+
+    it('stays parseable JSON — a chopped string is what it replaces', () => {
+        const excerpt = excerptOf(traceResult(), PRIORITY)
+        expect(() => JSON.parse(excerpt)).not.toThrow()
+    })
+
+    it('a section too large to fit is skipped, not partially serialised', () => {
+        // task_tree first in priority, and far too big: it must be skipped
+        // whole so the smaller diagnostic sections still land, rather than
+        // emitting half an object.
+        const excerpt = excerptOf(traceResult(), ['task_tree', 'tool_calls', 'header'])
+        expect(() => JSON.parse(excerpt)).not.toThrow()
+        expect(excerpt).toContain('lookup_routing_rule')
+        expect(excerpt).not.toContain(filler(6000))
+    })
+
+    it('carries sections the priority list forgot, after the ones it names', () => {
+        // A key absent from the list must not become invisible — that is the
+        // same silent-omission failure in a new place.
+        const excerpt = excerptOf(traceResult(), ['header'])
+        const parsed = JSON.parse(excerpt)
+        expect(Object.keys(parsed).length).toBeGreaterThan(1)
+    })
+
+    it('falls back to head/tail when no priority is declared', () => {
+        const store = newStore(null, { excerptHeadChars: 1500, excerptTailChars: 500 })
+        const excerpt = store.store('', 'other_tool', traceResult()).excerpt
+        expect(excerpt).toContain('…[elided')
+    })
+
+    it('falls back to head/tail when the payload is not an object (R-9)', () => {
+        const store = newStore(null, { excerptHeadChars: 1500, excerptTailChars: 500 })
+        const excerpt = store.store('', 'agent_trace', filler(9000), PRIORITY).excerpt
+        expect(excerpt).toContain('…[elided')
+    })
+
+    it('respects the same budget — the envelope is spent better, not grown', () => {
+        const excerpt = excerptOf(traceResult(), PRIORITY)
+        // 2000 retained + the note naming what was dropped; nowhere near the
+        // 4000-char threshold the whole mechanism exists to stay under.
+        expect(excerpt.length).toBeLessThan(4000)
+    })
+})
+
+// ---------------------------------------------------------------------------
+// The excerpt states the FACT; the envelope owns the AFFORDANCE (#91 round 1).
+//
+// The first cut of section-aware excerpting embedded "Read them with
+// read_artifact" in the excerpt itself. On the degraded paths — no run anchor,
+// run not found, attachment API absent, write failed — `_degraded` returns
+// `artifact_id: null` with a note saying in so many words that "paged
+// retrieval via read_artifact is not available for it", while the excerpt
+// sitting inside the SAME object told the model to go and page. R-19b: a
+// status may never contradict the notes next to it.
+//
+// `applyThreshold` already had this discipline for `pages`/`page_size` — its
+// own comment says a page count beside a null artifact_id "reads, to the LLM
+// consuming this envelope, as an instruction to make N read_artifact calls
+// that cannot succeed". The excerpt reintroduced it one layer down.
+//
+// Division of labour: the excerpt says WHAT was omitted, always. The envelope
+// note says HOW to get it, only when there is something to get.
+// ---------------------------------------------------------------------------
+describe('a degraded excerpt never promises paging (#91)', () => {
+    const PRIORITY = ['header', 'tool_calls', 'task_tree']
+
+    function bulky() {
+        return {
+            success: true,
+            data: { header: { state: 'completed' }, tool_calls: [{ tool_name: 't' }], task_tree: [{ big: filler(6000) }] },
+        }
+    }
+
+    function degradedResult(world, options) {
+        const store = newStore(world, Object.assign({ excerptHeadChars: 1500, excerptTailChars: 500 }, options || {}))
+        // No run anchor — the cheapest degrade path, reached before any Glide.
+        return store.store('', 'agent_trace', bulky(), PRIORITY)
+    }
+
+    it('names the omitted sections even when paging is unavailable', () => {
+        const res = degradedResult()
+        expect(res.degraded).toBe('no_run_anchor')
+        expect(res.excerpt).toContain('task_tree')
+    })
+
+    it('does not tell the model to read_artifact when there is no artifact', () => {
+        const res = degradedResult()
+        expect(res.artifact_id).toBeNull()
+        expect(res.excerpt).not.toMatch(/read_artifact/i)
+    })
+
+    it('the envelope note still explains the loss — the fact is never dropped', () => {
+        const res = degradedResult()
+        expect(res.note).toMatch(/not available/i)
+        expect(res.note).toMatch(/unseen rather than absent/i)
+    })
+
+    it('the degraded note describes the mode that actually ran', () => {
+        // "the middle is unreachable" is head/tail language. In section mode
+        // what was dropped is a NAMED SET, not a contiguous middle, and the
+        // note must not describe a loss the excerpt contradicts.
+        expect(degradedResult().note).toMatch(/names the sections it omitted/i)
+
+        const store = newStore(null, { excerptHeadChars: 1500, excerptTailChars: 500 })
+        const blind = store.store('', 'no_priority_tool', bulky())
+        expect(blind.note).toMatch(/head and tail/i)
+    })
+
+    it('the stored path DOES carry the paging instruction, in the note', () => {
+        const world = makeAttachmentWorld()
+        const store = newStore(world, { excerptHeadChars: 1500, excerptTailChars: 500 })
+        const res = store.store('run1', 'agent_trace', bulky(), PRIORITY)
+
+        expect(res.stored).toBe(true)
+        expect(res.artifact_id).toBeTruthy()
+        // Affordance lives in the note, exactly once, and not in the excerpt.
+        expect(res.note).toMatch(/read_artifact/i)
+        expect(res.excerpt).not.toMatch(/read_artifact/i)
+        // The fact still travels with the excerpt.
+        expect(res.excerpt).toContain('task_tree')
+    })
+})

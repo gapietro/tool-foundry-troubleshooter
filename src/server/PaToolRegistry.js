@@ -111,6 +111,34 @@ PaToolRegistry.prototype = {
                 layer: 'layer 1',
                 readOnly: true,
                 destructive: false,
+                // #91 — which sections survive truncation, most diagnostic
+                // first. A real trace is ~19KB against a 2,000-char excerpt
+                // budget, and the blind head/tail slice this replaces kept
+                // `resolution`/`reads`/`notes`/`header` and `evidence_basis`
+                // (all of which say "state completed, every read ok") while
+                // eliding `tool_calls`, `script_errors` and the failure
+                // signatures. Seed 03's whole answer — `rules_in_table: 0` —
+                // is a tool-call response digest, i.e. exactly what was being
+                // thrown away. `header` ranks high because it carries
+                // `failure_signature`; `task_tree` ranks last because its task
+                // outputs are the bulk and the least load-bearing.
+                excerptPriority: [
+                    'script_errors',
+                    'header',
+                    'tool_calls',
+                    'tool_call_stats',
+                    'latency_flags',
+                    'task_stats',
+                    'field_warnings',
+                    'reads',
+                    'notes',
+                    'message_stats',
+                    'evidence_basis',
+                    'resolution',
+                    'messages',
+                    'conversation',
+                    'task_tree',
+                ],
                 description:
                     "Replays a failing AI Agent execution - diagnostic layer 1, and the place to start. It returns the plan header (state, state_reason, status, objective, timings), the task tree, every tool call with its status and error message, the message stream with server-script stack errors mined out of it, plus failure signatures and latency flags. Do NOT use it to inspect how an agent is configured - it reports what happened on one run, not what the agent was set up to do; agent_config answers that. UNDERSTANDING TOOL INPUTS: pass an execution plan sys_id, or an agent name, or a JSON object with execution, agent, since or step. All of it is optional - with no argument at all you get a pick-list of recent execution plans to choose from. UNDERSTANDING TOOL OUTPUTS AND ERROR HANDLING: returns a summary object whose reads block gives a per-table read status. A section that is empty with status ok or empty means the data is genuinely absent; DENIED means a permission gap and says nothing about the run. Execution tasks and tool calls are counted separately and are NOT expected to match - the difference between task_stats and tool_call_stats is never a finding. Large traces come back as an excerpt plus an artifact id - page the rest with read_artifact rather than calling this again.",
                 factory: function () {
@@ -264,7 +292,7 @@ PaToolRegistry.prototype = {
             // it back through applyThreshold would store every page as a fresh
             // artifact instead of handing the page to the caller.
             if (!core.PAGED_OUTPUT) {
-                result = this._store().applyThreshold(runId, result, toolName)
+                result = this._store().applyThreshold(runId, result, toolName, entry.excerptPriority)
             }
 
             this._audit('logResult', { runId: runId, toolName: toolName, output: result })

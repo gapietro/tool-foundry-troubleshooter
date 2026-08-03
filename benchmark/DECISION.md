@@ -897,3 +897,82 @@ Unchanged: native remains the recommended path on this instance, and the Phase 1
   layer is what the scored pass would measure.
 - **Anything about native.** Not re-measured here either — §I4 confound 3 is still open.
 - **That model drift is not doing the work.** Four runs on one day, unbounded as ever.
+
+---
+
+## K. The excerpt was hiding the evidence (`2026.08.0225`, #91)
+
+Found while investigating §J5's step 2. Not a scored pass — two runs, seeds 01 and 03, on
+`2026.08.0225`.
+
+### K1. The defect
+
+`PaArtifactStore._truncate` sliced by character offset and knew nothing about what it was cutting.
+For an `agent_trace` result that meant:
+
+| | kept? | content | what it said |
+|---|---|---|---|
+| head (1500) | ✅ | `resolution`, `reads`, `notes`, `header` | state completed, every read `ok` |
+| middle (16,969 of 18,969 chars) | ❌ | `tool_calls`, `script_errors`, failure signatures | **the evidence** |
+| tail (500) | ✅ | `evidence_basis` | every read `ok` |
+
+**Both retained sections were the reassuring ones.** Seed 03's entire answer — `rules_in_table: 0` —
+is a `tool_calls[].response_digest`, i.e. precisely what was being discarded. Seed 01's spec exists
+to stress artifact paging.
+
+Runs reaching `read_artifact` had fallen 10/10 (`0216`) → 3/10 (`0218`) → 0/10 (`0220`) → 0/4
+(`0222`) as the excerpt grew richer after #72 — big enough to look like a complete answer, stocked
+with the parts that say nothing is wrong. **The two defects never overlapped:** at `0216` the model
+paged and could not read what it fetched (#72's 200-char channel); from `0218` it could read but no
+longer paged. This is the first version where it can do both.
+
+### K2. What changed, measured
+
+**Seed 03 (TR1000112) — the seeded answer is cited for the first time in any custom-harness run.**
+The excerpt led with `script_errors`, `header`, `tool_calls`, and the report said *"the tool call to
+`lookup_routing_rule` returned 0 rules found for the 'Hardware' category"*, citing
+`"Tool call response: 'rules_in_table': 0"`. Every prior run on this seed reported no failure at all.
+
+**And it was rejected.** Both citations were `source: trace`, so the evidence rule refused the root
+cause and the run ended `failed`.
+
+**Seed 01 (TR1000113) — unchanged.** `complete`, inconclusive, no root cause. Its defect is invisible
+in a trace by construction (the word-typed priority is dropped by an Integer column while
+`gr.update()` reports success), so it still needs `schema_lookup` or `query_table`. Still 1 tool call.
+
+### K3. What this establishes, and what it does not
+
+Establishes: **the excerpt, not the model's willingness, was hiding layer 1.** Given the evidence, the
+model finds the seeded cause and states it plainly. That is a different failure mode from every
+previous pass, and the first time the harness has produced the right finding on a seed.
+
+Does not establish any score movement. Seed 03's report was rejected; seed 01's was empty; depth is
+unchanged at one tool call on both. `0216` paged 10/10 and scored 0/10 — visibility is necessary, not
+sufficient.
+
+### K4. §I4 confound 2 is no longer theoretical
+
+The seed-03 rejection **is** the line-48 contradiction, now with a concrete failing case rather than
+a reading of two texts. `agent-doctor-instructions.md:48` offers an escape — *"name the candidate root
+cause, name the layer that would confirm it, and mark it UNCONFIRMED"* — that **does not exist in the
+contract**, which requires trace PLUS one of config/schema/data on every root cause with no
+UNCONFIRMED exemption. A model that has correctly diagnosed a seed from the trace alone cannot say so.
+
+Two ways out, and they are not equivalent:
+
+1. **Give the contract the exemption the playbook already promises** — allow a trace-only root cause
+   when it is marked UNCONFIRMED, priced like the inconclusive path. Makes the two texts agree by
+   moving the contract, which is custom-harness-only.
+2. **Make the model take the second step** — the correct move on seed 03 was `query_table` against the
+   routing table, which would have produced both a `data` citation and the right layer (5, not 1).
+   That is the depth problem again, and #88 showed pressure alone produces fabrication.
+
+(1) is cheap, harness-only, and unblocks a diagnosis the harness has already earned. It does not
+produce depth. Both should be read alongside §J5's ordering: native must be re-measured in the same
+pass as any change to the shared instructions file.
+
+### K5. Deliberately not propagated to native
+
+`PaScriptToolAdapter` — the native harness's tool entry point — does **not** pass a priority. Moving
+both harnesses at once is the confound (§H7-4, §I4 item 3) that made three passes harder to read than
+they needed to be. Propagate once the custom-harness measurement is in.
