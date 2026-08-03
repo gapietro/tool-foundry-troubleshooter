@@ -80,16 +80,24 @@ const { stripComments } = require('./_stripComments')
  *   tool output        the 7 cores + PaToolReadKit               both harnesses
  *   paged evidence     PaArtifactStore.js                        both harnesses
  *   repair-turn text   PaFixReport.js                            custom harness
+ *   system prompt      PaAgentLoop.js                            custom harness
+ *   LLM envelope       PaLlmProxy.js                             custom harness
+ *   tool envelope      PaScriptToolAdapter.js                    native harness
  *
- * The last two were missing from the first version of this list, which was
+ * The last five were missing from the first version of this list, which was
  * under-inclusive against the rule it enforces: the rule binds any text the
- * harness can put in front of the model, and both of these qualify.
+ * harness can put in front of the model, and all five qualify.
  * PaArtifactStore writes the excerpt and degradation notes that come back
  * through read_artifact; PaFixReport's validation problem text is fed VERBATIM
  * into the model's repair turn (issue #81 — the repair turn receives the draft
- * and the validation problems, and nothing else). Both were swept by hand and
- * found clean when the gap was spotted; they are listed here so that stays true
- * automatically rather than by anyone remembering to re-read them.
+ * and the validation problems, and nothing else); PaAgentLoop BUILDS THE SYSTEM
+ * PROMPT, including the fallback playbook used when the instruction read fails;
+ * PaLlmProxy wraps every call to the model; PaScriptToolAdapter is the native
+ * harness's tool envelope. A guard about model-facing text that skipped the
+ * file assembling the prompt was the exact shape of gap #89 exists to close.
+ * All five were swept by hand and found clean when the gaps were spotted; they
+ * are listed here so that stays true automatically rather than by anyone
+ * remembering to re-read them.
  *
  * NOT scanned, and the distinction is the whole point: benchmark/seed-app/**
  * is the fixture that IMPLEMENTS the defects, and benchmark/** docs ARE the
@@ -107,6 +115,9 @@ const SCAN_TARGETS = [
     'src/server/PaToolRegistry.js',
     'src/server/PaArtifactStore.js',
     'src/server/PaFixReport.js',
+    'src/server/PaAgentLoop.js',
+    'src/server/PaLlmProxy.js',
+    'src/server/PaScriptToolAdapter.js',
     'src/fluent/agent-doctor.now.ts',
 ].map((f) => ({ file: f, stripComments: true }))
     // The instructions doc is scanned WHOLE. All of it is model-facing, so
@@ -149,6 +160,18 @@ function findTokens(target, tokens) {
 }
 
 describe('no seeded answer reaches a model-facing string (issue #89)', () => {
+    it('scans every model-facing source — 16 of them', () => {
+        // A target with a WRONG path fails loudly: findTokens readFileSync's
+        // it and throws. A target that is DELETED fails silently — its `it`
+        // simply stops being generated, the suite still reports all-green,
+        // and coverage shrinks with nothing to show for it. Silent
+        // under-coverage is the failure mode this whole issue is about, so
+        // the roster size is pinned rather than left implicit. Changing this
+        // number is a deliberate act; changing it downward should need a
+        // reason in the commit message.
+        expect(SCAN_TARGETS).toHaveLength(16)
+    })
+
     SCAN_TARGETS.forEach((target) => {
         it(target.file + ' names no seed answer', () => {
             const hits = findTokens(target, allTokens())

@@ -1459,7 +1459,7 @@ describe('reference statistics are labelled, never mistakable for this agent (is
         expect(caveat).toMatch(/heuristic/i)
     })
 
-    it('the populated-script finding carries no remembered stack line', () => {
+    it('the populated-script finding carries no trace of the benchmark specimen', () => {
         const { result } = run(
             { agent: 'Seed Agent', section: 'instructions' },
             world({
@@ -1472,13 +1472,44 @@ describe('reference statistics are labelled, never mistakable for this agent (is
             (f) => f.finding === 'context_processing_script_populated'
         )[0]
 
-        // The worst instance of the family: "threw at line 42" inside a
-        // FINDING, next to a `subject` naming the real record, with
-        // agent_trace's script_errors — which carry a real `line` — cited in
-        // the very next sentence. Nothing about that anecdote needed a line
-        // number; only that it has thrown in practice.
+        // ROUND 1 (#85): the worst instance of the family — "threw at line
+        // 42" inside a FINDING, next to a `subject` naming the real record,
+        // with agent_trace's script_errors (which carry a real `line`) cited
+        // in the very next sentence.
         expect(finding).toBeDefined()
         expect(finding.detail).not.toMatch(/at line \d+/i)
-        expect(finding.detail).toMatch(/state=Completed/)
+
+        // ROUND 2 (#89): this assertion used to REQUIRE /state=Completed/,
+        // pinning the then-policy of keeping the anecdote minus its line
+        // number. That policy is superseded and the assertion is inverted on
+        // purpose. "…terminating a run that reported state=Completed with an
+        // empty state_reason" is, word for word, the REASON a benchmark
+        // specimen was chosen (a run invisible from its plan header), and a
+        // real administrator has no referent for it. The whole anecdote goes,
+        // not just its line number.
+        expect(finding.detail).not.toMatch(/state=Completed/i)
+        expect(finding.detail).not.toMatch(/state_reason/i)
+        expect(finding.detail).not.toMatch(/specimen|reference instance/i)
+
+        // Removal must not cost the diagnosis. The mechanism — the field is
+        // populated by the platform and such a body can throw — is what makes
+        // the finding actionable, and it is stated generically.
+        expect(finding.detail).toMatch(/populated/i)
+        expect(finding.detail).toMatch(/throw/i)
+        expect(finding.next_step).toMatch(/script_errors/)
+
+        // The section note is the other half of the pair: on its own each
+        // string was arguable, together they gave the gate's answer minus the
+        // line number. Neither may name the specimen.
+        //
+        // The pattern deliberately does NOT include "agent copy". A first
+        // draft matched /specimen|AGENT copy/i and failed on the surviving
+        // note, which says the platform "populates the agent copy" — required
+        // domain vocabulary naming which of the two records is written, not a
+        // leak. That is #89's own authoring rule biting inside its own test:
+        // a pattern that fires on honest text is a bad pattern, not a finding.
+        expect(result.data.instructions.note).not.toMatch(/specimen/i)
+        expect(result.data.instructions.note).not.toMatch(/known failure/i)
+        expect(result.data.instructions.note).toMatch(/misses half the failure surface/)
     })
 })
