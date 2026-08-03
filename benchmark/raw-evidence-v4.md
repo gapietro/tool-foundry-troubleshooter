@@ -1990,3 +1990,499 @@ own validation-failure path — no re-fire was needed or applied, since
 two terminal shapes.
 
 ---
+
+## Seed 05 — scored run block (Task 9)
+
+**Target: no execution plan sys_id — seed 05's agent never fired, by
+design, so there is nothing for `sn_aia_execution_plan` to hold.** Both
+harnesses were invoked with the composed body recovered verbatim in Task 4
+(`benchmark/raw-evidence-v4.md`, "Seed 05 request body recovery" section
+above), unchanged and identical across both repetitions of each harness:
+
+- **Native prompt** (both runs, verbatim): `Diagnose: the agent "Seed 05
+  Ticket Acknowledger" should have triaged bench ticket
+  29fd09c42b6a4bd417a6ffbeee91bfb0 within the last 24 hours and never ran.`
+- **Custom body** (both runs, verbatim): `{"agent": "Seed 05 Ticket
+  Acknowledger", "timeframe": "last 24 hours", "description": "A bench
+  ticket was created (sys_id 29fd09c42b6a4bd417a6ffbeee91bfb0) and the
+  agent that should have triaged it never ran."}`
+
+These are scored rows, not a gate. No seed spec file was read before or
+during firing — only the symptom text above was sent to either harness.
+Order fired: native run 1 → custom run 1 → native run 2 (fresh conversation)
+→ custom run 2 (fresh POST), matching the brief's interleaving requirement
+exactly (no batching by harness). Native runs were fired with
+`waitForCompletion=false` and located/polled afterward via multi-record
+query on `sn_aia_execution_plan` (there being no pre-existing fixture plan
+to query by sys_id, unlike seeds 01–04) plus `servicenow_aia_trace`, in
+accordance with the non-stale verification requirement. Custom runs were
+polled via `GET /runs/{run_id}` to terminal, never a single-record
+`servicenow_query`.
+
+### Native run 1 (Agent Doctor, `e1392946828940e5a708fc51b0a5e954`)
+
+Prompt (verbatim, per above).
+
+- Execution ID `5aa332282b6a871817a6ffbeee91bf13` — this is Agent Doctor's
+  own execution plan for the diagnostic run itself (there is no fixture
+  plan for seed 05 to distinguish it from), conversation
+  `46a3b22c2be6871817a6ffbeee91bf9a`.
+- Fired 2026-08-03 22:11:10Z (per multi-record `sn_aia_execution_plan`
+  `sys_created_on=2026-08-03 22:11:11`). **Terminal state: Completed**
+  (`servicenow_aia_trace`: Started 2026-08-03 18:11:11 / Ended 18:13:59
+  instance-local; cross-checked via multi-record `sn_aia_execution_plan`
+  query: `sys_updated_on=2026-08-03 22:13:59`, `state=completed`).
+- **Wall clock: 168s** (both the trace duration and the multi-record
+  `sys_created_on`→`sys_updated_on` delta agree).
+- **Tool-call count: 9** — `agent_trace` ×1, `agent_config` ×1,
+  `read_artifact` ×3, `query_table` ×2, `genai_log` ×1, `log_analysis` ×1
+  (17 execution tasks total, per `servicenow_aia_trace`).
+
+Full text of the Fix Report (pulled from `sys_cs_message`
+`c7447e2c2b6a871817a6ffbeee91bf4b`, `payload.value`, the message the
+user/caller actually sees):
+
+> ## Fix Report — Seed 05 Ticket Acknowledger
+>
+> ---
+>
+> ### FAILURE SUMMARY
+>
+> The agent **Seed 05 Ticket Acknowledger** was expected to triage bench
+> ticket `29fd09c42b6a4bd417a6ffbeee91bfb0` ("New starter needs laptop
+> provisioned before Monday", priority 3, created 2026-08-02 01:29:53) but
+> produced **no execution at all**. The root cause is a single, confirmed
+> defect: the trigger configuration **Seed 05 Bench Ticket Created** is set
+> to **inactive** (`active = 0`). Because the trigger is off, the platform
+> never fires the business rule that would create an execution plan, so no
+> agent run was ever scheduled. The agent record's own description confirms
+> the intent: *"Benchmark seed - the agent is fine, its trigger is not."*
+>
+> ---
+>
+> ### LAYERS SWEPT
+>
+> | # | Layer | Status |
+> |---|-------|--------|
+> | 1 | Execution trace | **SWEPT** — `sn_aia_execution_plan` returned empty (status ok/empty); genuine absence confirmed. |
+> | 2 | Agent instructions | **SWEPT** — instructions present (118 chars); context_processing_script auto-populated boilerplate (2,124 chars). |
+> | 3 | Tool definitions | **SWEPT** — zero tools attached (`sn_aia_agent_tool_m2m` empty, status ok/empty); no tool defects possible. |
+> | 4 | Data schemas | **SWEPT** — `x_snc_tsbench_ticket` confirmed to exist; `number` and `state` columns absent on this table (field warnings noted, not relevant to this failure). |
+> | 5 | Data | **SWEPT** — target record exists and is readable on `x_snc_tsbench_ticket`. |
+> | 6 | GenAI stack | **SWEPT** — no execution plan existed, so no LLM calls were made; consistent with trigger never firing. |
+> | 7 | Trigger and wiring | **SWEPT** — trigger found; `active = 0` confirmed. |
+> | — | Platform logs | **UNAVAILABLE** — `syslog` has `caller_access = Caller Restriction`; this application cannot lift that restriction. An instance administrator must relax `caller_access` on `syslog` or export logs directly. This layer was **not** reported as clean. |
+>
+> ---
+>
+> ### ROOT CAUSES
+>
+> #### Root Cause 1 — Inactive trigger *(primary)*
+>
+> | Attribute | Value |
+> |-----------|-------|
+> | **Layer** | 7 — Trigger and wiring |
+> | **Component** | `sn_aia_trigger_configuration` — "Seed 05 Bench Ticket Created" |
+> | **Finding** | Trigger is **inactive** (`active = 0`). The platform will not evaluate its condition or fire the agent while this flag is off, regardless of how many matching records are created on `x_snc_tsbench_ticket`. |
+> | **Evidence** | `sn_aia_trigger_configuration` sys_id `bfb77d6c64884500a80203ee029436ee`, field `active`, value `"0"` — read via `agent_config` (artifact `e5b3f6282b6a871817a6ffbeee91bf13`, triggers section); corroborated by `overview.active_trigger_links = 0` and `active_trigger_configurations = 0` on `sn_aia_agent` sys_id `a4b7ef5d793346ea861730c6d28b8f58`; and by `sn_aia_execution_plan` returning genuinely empty in layer 1. |
+> | **Confidence** | **CONFIRMED** — layers 1 and 7 agree; agent description explicitly names the trigger as the defect. |
+>
+> #### Secondary Observation — No tools attached
+>
+> | Attribute | Value |
+> |-----------|-------|
+> | **Layer** | 3 — Tool definitions |
+> | **Finding** | `tool_count = 0`. The instruction asks the agent to restate the short description and priority. If trigger context does not carry those values, the agent will have no way to look them up. This is **not** the cause of the current failure (the agent never ran) but may block correct execution after the trigger is activated. |
+> | **Evidence** | `sn_aia_agent_tool_m2m` read status `empty`; `agent_config` overview `tool_count = 0`, `active_tool_count = 0`. |
+> | **Confidence** | **CONFIRMED** as an absence; whether a tool is *required* depends on trigger context content — verify after Fix 1. |
+>
+> #### Secondary Observation — No run-as identity / no access roles
+>
+> | Attribute | Value |
+> |-----------|-------|
+> | **Layer** | 7 — Trigger and wiring |
+> | **Finding** | `sys_agent_access_role_configuration` is empty and the trigger names no run-as identity (`identity_resolution = none`). ACL alignment cannot be verified from configuration alone. |
+> | **Evidence** | `agent_config` access_alignment section: `run_as_paths.none = 1`; `required_role_count = 0`; `comparison_status = not_possible`. |
+> | **Confidence** | **UNCONFIRMED** as a defect — confirmed or cleared by inspecting the initiating user's roles from a real run via `agent_trace`. |
+>
+> ---
+>
+> ### FIXES
+>
+> #### Fix 1 — Activate the trigger *(required)*
+>
+> | Attribute | Value |
+> |-----------|-------|
+> | **Target type** | Configuration |
+> | **Target** | `sn_aia_trigger_configuration`, sys_id `bfb77d6c64884500a80203ee029436ee`, field `active` |
+> | **Current** | `0` (inactive) |
+> | **Proposed** | `1` (active) |
+> | **Rationale** | The trigger is the sole gate between a new `x_snc_tsbench_ticket` record and an execution plan. While it is off, no run is possible regardless of any other configuration. The trigger condition (`short_descriptionISNOTEMPTY`) and objective template are already correctly set. |
+>
+> #### Fix 2 — Verify tool availability after Fix 1 *(advisory)*
+>
+> | Attribute | Value |
+> |-----------|-------|
+> | **Target type** | Tool schema / wiring |
+> | **Target** | `sn_aia_agent` sys_id `a4b7ef5d793346ea861730c6d28b8f58` — tool bindings |
+> | **Current** | Zero tools attached |
+> | **Proposed** | Attach a tool capable of reading `short_description` and `priority` from `x_snc_tsbench_ticket` if those fields are not already injected by trigger context |
+> | **Rationale** | The instruction requires restating the ticket's short description and priority. Without a lookup tool or context injection, the agent cannot source those values. Confirm after Fix 1 produces a real run. |
+>
+> ---
+>
+> ### VERIFICATION
+>
+> 1. Set `active = 1` on `sn_aia_trigger_configuration` sys_id `bfb77d6c64884500a80203ee029436ee`.
+> 2. Insert or re-save a record on `x_snc_tsbench_ticket` with a non-empty `short_description` (the trigger condition is `short_descriptionISNOTEMPTY`).
+> 3. Call `agent_trace` with agent name **Seed 05 Ticket Acknowledger** — expect at least one execution plan with `state = complete` or in-progress.
+> 4. Confirm the task tree includes an acknowledgement response restating the short description and priority.
+> 5. If the run errors citing a missing field or empty context, apply Fix 2 (attach a record-lookup tool).
+> 6. If the run is denied or produces an empty result due to permissions, take the initiating user from the trace and compare their roles against any access role configuration added in AI Agent Studio.
+>
+> ---
+>
+> ### DATA MARKERS
+>
+> The following record values were quoted as evidence and should be
+> redacted before this report leaves the instance:
+>
+> - `x_snc_tsbench_ticket` sys_id `29fd09c42b6a4bd417a6ffbeee91bfb0`:
+>   - `short_description`: *"New starter needs laptop provisioned before Monday"*
+>   - `priority`: *3*
+>   - `sys_created_on`: *2026-08-02 01:29:53*
+
+No conversation id belonging to a prior fixture run is quoted anywhere in
+this report — unlike seeds 03/04, seed 05 has no pre-existing execution
+history to leak into DATA MARKERS, since the agent genuinely never ran
+before these four diagnostic invocations. No CAUTION note applies here.
+
+### Custom run 1 (`x_snc_troubleshoot`)
+
+Body (verbatim, per above).
+
+- Run ID `d3a372282b6a871817a6ffbeee91bf8d` (`TR1000134`),
+  `conversation_ref` `custom-1-1785795075711-111384052`, polled via
+  `GET .../runs/{run_id}` (trusted over any single-record `servicenow_query`,
+  which is stale on this instance).
+- Fired 2026-08-03 22:11:15Z. **Terminal state: failed** — the transcript's
+  last entry (seq 5, `ts=2026-08-03 22:11:34`) is a `system` actor entry
+  reading `fix_report failed validation and could not be repaired`, and the
+  run's `status` field reads `"failed"` with `fix_report: null`.
+- **Wall clock: ~19s** (22:11:15 POST → 22:11:34 terminal transcript entry).
+- **Tool-call count: 1** (`agent_trace`).
+
+The model's one tool call passed `{"execution":
+"29fd09c42b6a4bd417a6ffbeee91bfb0"}` — it extracted the bench ticket sys_id
+out of the `description` field and misused it as an `execution` argument,
+the same mis-extraction documented against this identical request body in
+the Task 4 recovery section above (Path 2). The tool correctly reported a
+genuine absence (`No sn_aia_execution_plan row with sys_id
+"29fd09c42b6a4bd417a6ffbeee91bfb0"`).
+
+This run reached a valid terminal state on the **first** LLM attempt at a
+`fix_report` (transcript seq 3, `ts=2026-08-03 22:11:29`) being rejected,
+then a **second** attempt (seq 4, `ts=2026-08-03 22:11:34`) also rejected,
+after which the run terminated `failed` rather than looping further — this
+is the harness's own validation gate rejecting the run, not a run that
+failed to reach terminal, so no re-fire applies (brief §5's re-fire clause
+is for runs that never reach terminal).
+
+**Validation error (verbatim, `error` field):**
+
+> fix_report failed validation and could not be repaired: root_causes[0]
+> (sn_aia_execution_plan): evidence rule violation — layer 1 is
+> UNAVAILABLE, so no trace citation is required, but a diagnosis of an
+> absence still needs corroboration. Cite at least TWO DISTINCT sources
+> from config/schema/data — found 0. Two citations of the same source is
+> one source.
+
+**Rejected report (verbatim, `fix_report_rejected.report`):**
+
+```json
+{
+  "failure_summary": "The agent did not run for the created bench ticket (sys_id 29fd09c42b6a4bd417a6ffbeee91bfb0) because no execution plan exists, indicating the agent never triggered. The absence of an execution plan confirms the agent did not start.",
+  "layers_swept": {
+    "1": {"status": "UNAVAILABLE", "reason": "No sn_aia_execution_plan row exists for the provided sys_id, as reported by agent_trace"},
+    "2": {"status": "NOT_SWEPT", "reason": "Agent configuration requires inspection to confirm trigger wiring"},
+    "3": {"status": "NOT_SWEPT", "reason": "Tool definitions are part of agent configuration but not yet inspected"},
+    "4": {"status": "NOT_SWEPT", "reason": "Data schemas are not required to explain the absence of an execution plan"},
+    "5": {"status": "NOT_SWEPT", "reason": "Data existence is irrelevant if the agent never triggered"},
+    "6": {"status": "NOT_SWEPT", "reason": "GenAI stack is not relevant to a non-triggered agent"},
+    "7": {"status": "NOT_SWEPT", "reason": "Trigger and wiring configuration must be validated to confirm failure cause"}
+  },
+  "root_causes": [
+    {
+      "layer": "1",
+      "component": "sn_aia_execution_plan",
+      "finding": "No execution plan exists for the provided sys_id",
+      "evidence": [
+        {"source": "trace", "detail": "agent_trace reported 'No sn_aia_execution_plan row with sys_id \"29fd09c42b6a4bd417a6ffbeee91bfb0\""}
+      ],
+      "confidence": "UNCONFIRMED",
+      "would_confirm": "7"
+    }
+  ],
+  "fixes": [
+    {
+      "target_type": "configuration",
+      "target": "agent trigger configuration",
+      "current": "unknown",
+      "proposed": "validate trigger conditions and record associations",
+      "rationale": "Ensure the agent is properly wired to trigger on ticket creation"
+    }
+  ],
+  "verification": "Re-run the agent or check the trigger configuration in the agent record to confirm it fires on new tickets",
+  "data_markers": []
+}
+```
+
+**Fix_report shape:** the third shape seen in this pass — `status:
+"failed"`, `fix_report: null`, with the LLM's rejected attempt preserved
+under `fix_report_rejected.report` plus a `fix_report_rejected.problems`
+string. Same family as seed 04's custom run 1 — the harness's
+post-generation validation gate refusing a `root_causes` entry that cited
+zero corroborating sources for a claimed absence. Named per the brief's
+instruction, not scored here.
+
+### Native run 2 (Agent Doctor, `e1392946828940e5a708fc51b0a5e954`, fresh conversation)
+
+Prompt (verbatim, per above).
+
+- Execution ID `4e74b66c2baacf14f243fed2ce91bf31`, conversation
+  `79743aec2b6acf14f243fed2ce91bfe3` (distinct from native run 1's
+  `46a3b22c2be6871817a6ffbeee91bf9a`).
+- Fired 2026-08-03 22:14:42Z (per multi-record `sn_aia_execution_plan`
+  `sys_created_on=2026-08-03 22:14:43`). **Terminal state: Completed**
+  (`servicenow_aia_trace`: Started 2026-08-03 18:14:43 / Ended 18:16:34
+  instance-local; cross-checked via multi-record `sn_aia_execution_plan`
+  query: `sys_updated_on=2026-08-03 22:16:34`, `state=completed`).
+- **Wall clock: 111s** (both the trace duration and the multi-record
+  `sys_created_on`→`sys_updated_on` delta agree).
+- **Tool-call count: 7** — `agent_trace` ×1, `agent_config` ×1,
+  `read_artifact` ×3, `query_table` ×1, `genai_log` ×1 (14 execution tasks
+  total). Unlike native run 1, this run did not call `log_analysis`.
+
+Full text of the Fix Report (pulled from `sys_cs_message`
+`c9e43e202beacf14f243fed2ce91bf6e`, `payload.value`):
+
+> ## Fix Report — Seed 05 Ticket Acknowledger
+>
+> ---
+>
+> ### FAILURE SUMMARY
+>
+> The agent **Seed 05 Ticket Acknowledger** was expected to triage bench
+> ticket `29fd09c42b6a4bd417a6ffbeee91bfb0` ("New starter needs laptop
+> provisioned before Monday", Priority 3, created 2026-08-02 01:29:53 UTC)
+> but produced zero execution plans. The agent is wired to a single trigger
+> — **Seed 05 Bench Ticket Created** — via use case **Seed 05 Ticket
+> Acknowledgement**. That trigger record is **inactive (`active = 0`)**. An
+> inactive trigger fires no business rule, so the platform never submitted
+> the ticket to the agent. No execution ever started.
+>
+> ---
+>
+> ### LAYERS SWEPT
+>
+> | # | Layer | Status |
+> |---|-------|--------|
+> | 1 | Execution trace | **SWEPT** — zero execution plans found; absence confirmed as genuine (read status `empty`, not `DENIED`) |
+> | 2 | Instructions | **SWEPT** — instructions present and coherent (118 chars); context_processing_script is boilerplate auto-populated by platform |
+> | 3 | Tool definitions | **SWEPT** — zero tools attached; no tool smells possible; not a blocker because the agent's task requires no tool calls |
+> | 4 | Data schemas | **SWEPT** — `x_snc_tsbench_ticket` confirmed to exist; `state` field absent on this custom table (minor schema note only) |
+> | 5 | Data | **SWEPT** — target ticket confirmed present and readable |
+> | 6 | GenAI stack | **NOT SWEPT (full)** — the agent never reached the model layer, so a full capability audit adds no diagnostic value. A 100-row sample of capability definitions was reviewed; no errors found. A full sweep is unnecessary until the trigger is fixed and the agent actually runs. |
+> | 7 | Trigger and wiring | **SWEPT** — trigger found, link found, root cause confirmed here |
+>
+> > **Platform log layer (log_analysis):** NOT SWEPT. The `syslog` table restricts cross-scope callers and this tool cannot lift that restriction. Because the agent never triggered, no scoped execution sys_id exists to pass. An instance administrator with the `admin` role can query `syslog` directly if deeper platform-level evidence is needed after the fix is applied.
+>
+> ---
+>
+> ### ROOT CAUSES
+>
+> #### RC-1 — Trigger is inactive
+>
+> | Field | Value |
+> |-------|-------|
+> | **Layer** | 7 — Trigger and wiring |
+> | **Component** | `sn_aia_trigger_configuration` › Seed 05 Bench Ticket Created |
+> | **Finding** | The trigger record has `active = 0`; the platform will never fire it regardless of matching records |
+> | **Evidence** | `sn_aia_trigger_configuration` sys_id `bfb77d6c64884500a80203ee029436ee`, field `active`, value `"0"` (agent_config artifact, triggers section) |
+> | **Confidence** | **CONFIRMED** — the trigger link exists, the use case is wired, the ticket exists and satisfies the condition `short_descriptionISNOTEMPTY`; the only defect is the inactive flag |
+>
+> ---
+>
+> ### FIXES
+>
+> #### Fix 1 — Activate the trigger
+>
+> | Field | Value |
+> |-------|-------|
+> | **Target type** | Configuration |
+> | **Target** | `sn_aia_trigger_configuration` › sys_id `bfb77d6c64884500a80203ee029436ee` |
+> | **Current** | `active = false` |
+> | **Proposed** | `active = true` |
+> | **Rationale** | An inactive trigger emits no business rule event. Activating it causes the platform to fire on every `x_snc_tsbench_ticket` insert where `short_description IS NOT EMPTY`, which is the condition already authored on the record. |
+>
+> > **No other fixes are required.** Instructions, use case wiring, team membership, and the ticket record are all correct. The agent has no tools but does not need any for a pure acknowledgement task.
+>
+> ---
+>
+> ### VERIFICATION
+>
+> 1. Navigate to **AI Agent Studio → Triggers**, open **Seed 05 Bench Ticket Created**, and confirm `Active` is now checked.
+> 2. Insert a new record into `x_snc_tsbench_ticket` with a non-empty `short_description` and any priority value.
+> 3. Run `agent_trace` with agent name **Seed 05 Ticket Acknowledger** — expect at least one execution plan with `state = complete` or `state = in_progress`.
+> 4. Confirm the plan's objective contains the ticket's short description and priority restated by the agent.
+> 5. *(Optional)* To back-triage ticket `29fd09c42b6a4bd417a6ffbeee91bfb0`, manually invoke the agent via the **startAiAgentConversation** API, passing the ticket sys_id in `contextMemory`.
+>
+> ---
+>
+> ### DATA MARKERS
+>
+> The following record data was quoted as evidence and should be redacted
+> before this report crosses the instance boundary:
+>
+> - `x_snc_tsbench_ticket` sys_id `29fd09c42b6a4bd417a6ffbeee91bfb0` — `short_description`: *"New starter needs laptop provisioned before Monday"*, `priority`: `3`, `sys_created_on`: `2026-08-02 01:29:53`
+
+No conversation id belonging to a prior fixture run is quoted anywhere in
+this report either, for the same reason as native run 1 above.
+
+### Custom run 2 (`x_snc_troubleshoot`, fresh POST)
+
+Body (verbatim, per above).
+
+- Run ID `8b74ba282baacf14f243fed2ce91bfb3` (`TR1000136`),
+  `conversation_ref` `custom-1-1785795286947-789130395` (distinct token
+  from custom run 1's `custom-1-1785795075711-111384052`), polled via
+  `GET .../runs/{run_id}`.
+- Fired 2026-08-03 22:14:47Z. **Terminal state: failed** — the transcript's
+  last entry (seq 5, `ts=2026-08-03 22:15:03`) is a `system` actor entry
+  reading `fix_report failed validation and could not be repaired`, and the
+  run's `status` field reads `"failed"` with `fix_report: null`.
+- **Wall clock: ~16s** (22:14:47 POST → 22:15:03 terminal transcript entry).
+- **Tool-call count: 1** (`agent_trace`).
+
+Same mis-extraction as custom run 1: the model's one tool call passed
+`{"execution": "29fd09c42b6a4bd417a6ffbeee91bfb0"}`, misusing the bench
+ticket sys_id as an execution-plan argument, and the tool correctly
+reported the genuine absence.
+
+This run also reached terminal via the harness's own validation-failure
+path — first attempt (seq 3, `ts=2026-08-03 22:14:59`) rejected, second
+attempt (seq 4, `ts=2026-08-03 22:15:03`) also rejected, then `failed`. No
+re-fire applies, per the same reasoning as custom run 1.
+
+**Validation error (verbatim, `error` field — identical text to custom run
+1's):**
+
+> fix_report failed validation and could not be repaired: root_causes[0]
+> (sn_aia_execution_plan): evidence rule violation — layer 1 is
+> UNAVAILABLE, so no trace citation is required, but a diagnosis of an
+> absence still needs corroboration. Cite at least TWO DISTINCT sources
+> from config/schema/data — found 0. Two citations of the same source is
+> one source.
+
+**Rejected report (verbatim, `fix_report_rejected.report`):**
+
+```json
+{
+  "failure_summary": "The agent did not run for the created bench ticket (sys_id 29fd09c42b6a4bd417a6ffbeee91bfb0) because no execution plan exists, indicating the agent never triggered. The absence of an execution plan confirms the agent did not start.",
+  "layers_swept": {
+    "1": {"status": "UNAVAILABLE", "reason": "No sn_aia_execution_plan row exists for the provided sys_id, as reported by agent_trace"},
+    "2": {"status": "NOT_SWEPT", "reason": "Agent configuration requires inspection to confirm trigger wiring"},
+    "3": {"status": "NOT_SWEPT", "reason": "Tool definitions require inspection to confirm agent tool setup"},
+    "4": {"status": "NOT_SWEPT", "reason": "Data schemas require inspection to confirm agent input/output fields"},
+    "5": {"status": "NOT_SWEPT", "reason": "Data existence requires inspection to confirm agent input records"},
+    "6": {"status": "NOT_SWEPT", "reason": "GenAI stack requires inspection to confirm capability mapping"},
+    "7": {"status": "NOT_SWEPT", "reason": "Trigger and wiring require inspection to confirm agent activation logic"}
+  },
+  "root_causes": [
+    {
+      "layer": "1",
+      "component": "sn_aia_execution_plan",
+      "finding": "No execution plan exists for the provided sys_id",
+      "evidence": [
+        {"source": "trace", "detail": "agent_trace reported 'No sn_aia_execution_plan row with sys_id \"29fd09c42b6a4bd417a6ffbeee91bfb0\"'"}
+      ],
+      "confidence": "UNCONFIRMED",
+      "would_confirm": "7"
+    }
+  ],
+  "fixes": [
+    {
+      "target_type": "configuration",
+      "target": "agent trigger configuration",
+      "current": "unknown",
+      "proposed": "Verify trigger conditions and ensure the bench ticket meets applicability criteria",
+      "rationale": "The agent did not trigger because no execution plan was created, indicating a failure in trigger activation logic or record matching"
+    }
+  ],
+  "verification": "Re-run the agent or check the trigger configuration to confirm the bench ticket now triggers the agent",
+  "data_markers": []
+}
+```
+
+**Fix_report shape:** the same third shape as custom run 1 — `status:
+"failed"`, `fix_report: null`, `fix_report_rejected` populated. Both
+custom runs on this seed converged on the identical validation failure
+mode (zero corroborating sources for an absence claim on an UNAVAILABLE
+layer), differing only in wording of `finding`/`fixes`/`verification` and
+layer 2–7 `reason` text. Named per the brief's instruction, not scored
+here.
+
+**Note on identity verification:** all four run identities are distinct —
+two native conversation ids (`46a3b22c2be6871817a6ffbeee91bf9a`,
+`79743aec2b6acf14f243fed2ce91bfe3`) and two custom run sys_ids
+(`d3a372282b6a871817a6ffbeee91bf8d`, `8b74ba282baacf14f243fed2ce91bfb3`)
+with two distinct `conversation_ref` anchor tokens, confirmed by direct
+query of `x_snc_troubleshoot_run` and `sn_aia_execution_plan` rather than
+inference from timing. No anchor collision — the "one anchor per user per
+30 min" fallback did not trigger despite both custom runs sharing the same
+`user` (admin) and firing ~3.5 minutes apart, and both native runs sharing
+the same session pattern firing ~3.5 minutes apart. No fixture-owned
+conversation id exists for this seed to be mistaken for a run identity
+(unlike seeds 03/04's CAUTION notes), since seed 05 has no prior execution
+history at all.
+
+### Result summary
+
+| Run | Identity | Terminal state | Wall clock | Tool calls |
+|---|---|---|---|---|
+| Native run 1 | conversation `46a3b22c2be6871817a6ffbeee91bf9a` | Completed | 168s | 9 |
+| Custom run 1 | run `d3a372282b6a871817a6ffbeee91bf8d` (TR1000134) | failed (fix_report rejected by validation) | ~19s | 1 |
+| Native run 2 | conversation `79743aec2b6acf14f243fed2ce91bfe3` | Completed | 111s | 7 |
+| Custom run 2 | run `8b74ba282baacf14f243fed2ce91bfb3` (TR1000136) | failed (fix_report rejected by validation) | ~16s | 1 |
+
+**Both native runs identified the identical root cause** — the
+`sn_aia_trigger_configuration` record `bfb77d6c64884500a80203ee029436ee`
+("Seed 05 Bench Ticket Created") has `active = 0`, so the platform never
+fires the business rule that would create an execution plan for **Seed 05
+Ticket Acknowledger**, and no run was ever scheduled — both rated
+**CONFIRMED**. Native run 1 additionally called `log_analysis` and flagged
+two secondary observations (zero tools attached; no run-as identity/access
+roles) that native run 2 did not raise as separately-numbered findings
+(run 2's report folds the no-tools point into a one-line aside rather than
+a scored secondary observation). **Both custom runs made the identical
+tool call** — `agent_trace` with `{"execution":
+"29fd09c42b6a4bd417a6ffbeee91bfb0"}`, misusing the ticket sys_id extracted
+from the request's `description` field as an execution-plan argument (the
+same mis-extraction the Task 4 recovery section documented against this
+identical body) — got a genuine-absence response, attempted a `root_causes`
+entry naming the absence at `UNCONFIRMED` confidence with only one cited
+source, and had both attempts rejected by the harness's own validation gate
+for insufficient corroboration on an UNAVAILABLE layer. Neither custom run
+reached the trigger-configuration root cause both native runs found. This
+is **not** a tool-access gap: `src/server/PaToolRegistry.js` shows the
+custom harness's own `agent_config` tool explicitly covers "diagnostic
+layers 2, 3 and 7" and returns "the trigger wiring walked from both the
+agent-direct and team-usecase branches" — the same data both native runs
+used to find the inactive trigger. Both custom runs had that tool available
+and never called it; each made exactly one tool call (`agent_trace`) before
+attempting (and failing) a `fix_report`. The miss traces to the model
+stopping after a single tool call on an `UNAVAILABLE` layer 1, not to any
+capability the harness lacks. This is the last of the five seed blocks; all
+20 scored rows across seeds 01–05 are now recorded in this file.
+
+---
