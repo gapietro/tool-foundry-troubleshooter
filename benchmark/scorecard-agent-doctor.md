@@ -218,12 +218,25 @@ the harness, not a scoring inconvenience: record it in `notes` rather than movin
 ```
 servicenow_query  table = x_snc_troubleshoot_audit
                   query = run=<sys_id from step 1>^action_type=result
-                  fields = tool_name
+                  fields = tool_name, input, output
 ```
 
 Take the **distinct** `tool_name` values. `action_type='result'` is deliberate: an `intent` row
 records what the agent *meant* to call, and a tool that was attempted but never returned has not
 swept anything.
+
+**Take `input` and `output` too, and read them** (#96). The trail records what each call asked for
+and what it returned, not merely that it happened — that is what §E2's `agent_config` rule is
+derived from, and reading only `tool_name` throws it away. In code the same rows come back from
+`PaAuditLogger.toolCalls(runId)`, in creation order, `input` on intent rows and `output` on result
+and error rows. (`invokedTools(runId)` answers the narrower "was this tool ever called", and
+dedupes; it is the wrong reader for this column.)
+
+**One caveat that must travel with any payload read.** `PaAuditLogger` digests payloads head+tail
+past 4,000 chars, so a string in the elided middle is absent from the audit row while being present
+in what the model received. **A hit is evidence; a miss is not.** Both values §E2 relies on are in
+the preserved part — `sections_returned` sits in the head — but a scorer searching for anything
+else must say which of the two they found.
 
 ### E2. Distinct tool names are NOT the layer count
 
@@ -250,6 +263,26 @@ Fill the column as `n/7` **plus the layer numbers**, e.g. `1/7 (L1)` or `4/7 (L1
 **`agent_config` counts for all three of its layers only if the diagnosis actually used them.** If
 the run called `agent_config` and discussed only the instruction text, record `L2` and say so in
 `notes`; do not credit L3 and L7 for a call that never looked at them.
+
+**Derive the credit from the call, not from the claim** (#96). Until this rule landed, "the
+diagnosis actually used it" was read off the Fix Report's own prose — the party with an interest —
+and it was wrong once in twelve rows (seed 03 run 2, corrected below). The trail settles half of it
+outright, and only half:
+
+| | |
+|---|---|
+| **Necessary — measured** | `agent_config` cannot credit a layer whose section the call did not return. Read `sections_returned` out of the call's `output` (step 2 above) and map it: `instructions` → **L2**, `tools` → **L3**, `triggers` → **L7**. `overview` maps to no layer. A section that never rendered is a layer that was not swept, whatever the report says. |
+| **Sufficient — still judged** | Receiving a section is not using it. The scorer still decides whether the diagnosis used what it got, and still says so in `notes`. |
+
+So the trail can **refute** a layer credit and cannot **confer** one. Two shapes to know, both live
+in the corpus:
+
+- **A call with no `section` returns all four** (`_resolveSections`), so `{"agent":"…"}` and a bare
+  agent name are unqualified calls — L2/L3/L7 are all *eligible*, none automatic.
+- **An unqualified call can still return nothing.** If the identifier matches no `sn_aia_agent` or
+  `sn_aia_usecase` row the tool returns `sections_returned: []` with a resolution note, and no
+  layer was swept. This is not hypothetical: it is what the smoke gate's only `agent_config` call
+  did (`DECISION.md` §N4). **Read `sections_returned`; do not infer it from the argument.**
 
 ### E3. `layers_available` has its own query — it is READ, not assumed
 
@@ -290,19 +323,27 @@ the only column the Task 12 gate consumes.
 > `src/server/tools/PaToolAgentConfig.js` (a note on the `instructions` section naming the smoke
 > gate's specimen, and a `detail` restating `benchmark/README.md`'s reason for choosing it) and
 > `src/server/tools/PaToolGenAiLog.js` (a `capability_unresolvable` `next_step` carrying seed 04's
-> construction taxonomy). Any native run that pulled `section=instructions` received the
-> `PaToolAgentConfig` note. Which rows below did so is **inferred, not recorded**: the six rows
-> crediting layer 2 must have read the instruction text under §E2's used-layers discipline, which
-> implies an unqualified or `section=instructions` call — but no entry in this scorecard records the
-> `section` argument any run passed, so this is reasoning rather than a record. (The one directly
-> evidenced case is a native v2 row on `scorecard-custom-harness.md`, not one of these.)
+> construction taxonomy).
+>
+> **Which rows received the `PaToolAgentConfig` note is measured, not inferred** (#96, superseding
+> this note's first version): the audit trail records both the `section` each run asked for and the
+> `sections_returned` the tool rendered. **Five of the ten rows below received it** — seed 02 runs 1
+> and 2, seed 04 run 2, and seed 05 runs 1 and 2, each of which called `agent_config` without a
+> `section` and got all four. **The other five did not:** seed 01 runs 1–2, seed 03 runs 1–2 and
+> seed 04 run 1 each passed `section:"tools"` and received `["tools"]` alone. (Both native rows on
+> `scorecard-custom-harness.md` also received it, for 7 of the 12 native rows on record.)
+>
+> **The `PaToolGenAiLog` `capability_unresolvable` text reached no row at all.** It fires only in
+> `check_config` mode; the corpus holds exactly two such calls — seed 04 runs 1 and 2 — and both
+> recorded `"findings":0`.
 >
 > **No row is restated and no score movement is claimed.** The removed text named the smoke gate's
 > specimen and the reason it was chosen; the smoke gate is a pass/fail gate rather than one of the
-> ten scored rows, and no scored seed's expected layer, component or fix appeared in it. The reason
-> to record this is reproducibility: these rows were measured against a version of a shared core that
-> no longer exists. Full exposure analysis, including what is *not* established for
-> `PaToolGenAiLog.js`, is in `DECISION.md` §M3; the annotation decision itself is in §M4.
+> ten scored rows, and no scored seed's expected layer, component or fix appeared in it — and the
+> gate itself never received the note either (its `agent_config` call matched no agent record). The
+> reason to record this is reproducibility: these rows were measured against a version of a shared
+> core that no longer exists. Full per-row measurement is in `DECISION.md` §N3–§N5; §M3/§M4 carry
+> the superseded inference-based grade and what #89 concluded on the day.
 
 | seed | run # | run_id (conversation_id) | root_cause_layer_correct | fix_target_correct | evidence_cites_trace_and_config | fix_usable_unedited | total /6 | **passes_gate** | layers_swept (n/7, which) | layers_available (n/7, which) | cause_of_death | continuous_tool_execution_limit | max_auto_executions (per tool) | tool_calls | assists_consumed | wall_clock | failure_behavior | notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -311,7 +352,7 @@ the only column the Task 12 gate consumes.
 | 02 | 1 | `86015dc42baa4bd417a6ffbeee91bf51` | 0 | 1 | 1 | 0 | 2 | **0** | 4/7 (L1,L2,L3,L7) | 7/7 (measured) | completed | 25 | 10 × all 7 tools | 5 | not measurable | 102s | graceful_partial | Named L3 "zero tools bound" (runtime-accurate) vs expected L2 instruction. `fix_target` 1 (partial): "supply a lookup tool" is half of the seed's own sanctioned fix; instruction half absent. Fix is an outline, not appliable → 0. See seed-2 construction finding in DECISION.md §D2. |
 | 02 | 2 | `cff195842b2e4314f243fed2ce91bfd1` | 0 | 1 | 1 | 0 | 2 | **0** | 4/7 (L1,L2,L3,L7) | 7/7 (measured) | completed | 25 | 10 × all 7 tools | 7 | not measurable | 151s | graceful_partial | Identical diagnosis to run 1 — consistent across the doubled runs. Same scoring rationale. |
 | 03 | 1 | `f3a2950c2baa4bd417a6ffbeee91bfb4` | 2 | 2 | 1 | 1 | 6 | **1** | 4/7 (L1,L3,L5,L6) | 7/7 (measured) | completed | 25 | 10 × all 7 tools | 9 | not measurable | 172s | n/a — success | `genuinely_empty` verdict CONFIRMED by two independent reads. Report claims 6/7 swept; E2 strict derivation credits 4/7 (L2 "instructions section not pulled" by its own admission; L4 claimed implicit via query_table, schema_lookup not called). K26 tool smells as secondary findings. |
-| 03 | 2 | `e1c319c02b6e4314f243fed2ce91bf68` | 2 | 2 | 1 | 1 | 6 | **1** | 5/7 (L1,L2,L3,L5,L6) | 7/7 (measured) | completed | 25 | 10 × all 7 tools | 8 | not measurable | 150s | n/a — success | Consistent with run 1. genai_log identified 2 successful LLM calls (model `claude-sonnet-4-6`). L4 again claimed implicit — not credited. |
+| 03 | 2 | `e1c319c02b6e4314f243fed2ce91bf68` | 2 | 2 | 1 | 1 | 6 | **1** | 4/7 (L1,L3,L5,L6) | 7/7 (measured) | completed | 25 | 10 × all 7 tools | 8 | not measurable | 150s | n/a — success | Consistent with run 1. genai_log identified 2 successful LLM calls (model `claude-sonnet-4-6`). L4 again claimed implicit — not credited. **`layers_swept` corrected 5/7 → 4/7 (#96):** L2 was credited on the run's prose, but its only `agent_config` call passed `section:"tools"` and returned `["tools"]` (audit row on TR1000043) — the instructions section never rendered, so L2 was not swept. Run 1 said the same about itself and was correctly denied L2. Rubric columns, `total /6` and `passes_gate` unchanged. |
 | 04 | 1 | `228411882b6e4314f243fed2ce91bf24` | 2 | 2 | 1 | 1 | 6 | **1** | 5/7 (L1,L3,L4,L5,L6) | 7/7 (measured) | completed | 25 | 10 × all 7 tools | 14 | not measurable | 211s | n/a — success | Found the dangling `api` on definition `904c0485…` and proposed repointing to `936e514a53b3b110f028ddeeff7b128c` — the exact healthy value, discovered independently from working definitions. Decoy partially bit (empty `connection` named co-cause, co-fix) but did NOT displace the api fix → not the "connection and nothing else" case. |
 | 04 | 2 | `ecc5dd482bea4bd417a6ffbeee91bf2d` | 2 | 0 | 1 | 0 | 3 | **0** | 6/7 (L1,L2,L3,L5,L6,L7) | 7/7 (measured) | completed | 25 | 10 × all 7 tools | 10 | not measurable | 206s | n/a — completed with wrong fix | **Canonical decoy row (2/0/1/0).** Named empty `connection` as PRIMARY cause reading the capability parent record; never read the definition row's `api`. Also hallucinated table name `sn_tsbench_ticket` → false "table does not exist" RC-2. Doubled runs SPLIT (run 1 hit / run 2 decoy) — the measured inconsistent-behavior specimen. |
 | 05 | 1 | `1b37994c2b2e4bd417a6ffbeee91bf5a` | 2 | 2 | 1 | 1 | 6 | **1** | 4/7 (L1,L2,L3,L7) | 7/7 (measured) | completed | 25 | 10 × all 7 tools | 5 | not measurable | 92s | n/a — success | Named the SPECIFIC gate — `sn_aia_trigger_configuration.active=0` on `bfb77d6c…` — with m2m link verified intact (`m2m_active=1`) → full 2/2 under the two-gates rule, not partial. Bonus: flagged missing run-as identity as UNCONFIRMED advisory (the seed spec's own open SDK 4.9.0 concern). |
@@ -336,7 +377,10 @@ the only column the Task 12 gate consumes.
   → `x_snc_troubleshoot_run.conversation_ref` → `x_snc_troubleshoot_audit` `action_type=result`
   distinct tools), then mapped through §E2 with the used-layers discipline for `agent_config`.
   Where a run's own sweep table claimed more than the derivation supports, the derivation won and
-  the claim is noted (seed 3 rows).
+  the claim is noted (seed 3 rows). **Re-derived against the recorded call arguments 2026-08-03
+  (#96)**, once §E2 gained the measured-necessary-condition rule: eleven of the twelve native rows
+  on record reconciled, and seed 03 run 2's L2 credit did not — corrected in the row above. No
+  rubric column and no `passes_gate` value moved; `DECISION.md` §N6 has the accounting.
 - **`layers_available`** was read fresh per run via the §E3 m2m query; all runs returned the same
   7 active bindings → 7/7. This differs from the template's forward-looking expectation of 1/7,
   which described the pre-Tasks-7/8 build; #32's blocker was cleared before this benchmark ran.

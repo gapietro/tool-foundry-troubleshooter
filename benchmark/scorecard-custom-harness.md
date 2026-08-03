@@ -324,6 +324,14 @@ that task's sys_id.
 > (instruction text)"* in a root-cause entry directly — so its call returned the instructions section
 > and the removed note travelled with it as a sibling key.
 >
+> **Both rows are now measured rather than reasoned** (#96): each called `agent_config` as
+> `{"agent":"cd050d48…"}` with no `section`, and each recorded
+> `sections_returned: ["overview","instructions","tools","triggers"]` (TR1000068, TR1000069). Run 2's
+> prose citation is corroborated by its own tool output rather than standing alone as the evidence.
+> The `PaToolGenAiLog` text reached neither row: run 1's single `genai_log` call ran
+> `for_execution`, a mode that cannot raise `capability_unresolvable`, and run 2 never called
+> `genai_log` at all. `DECISION.md` §N3–§N5.
+>
 > **No row is restated and no score movement is claimed.** The removed text named the **smoke gate's**
 > specimen and the reason it was chosen, not any seed's answer: no scored seed's expected layer,
 > component or fix appeared in it, and the smoke gate is a pass/fail gate rather than one of the

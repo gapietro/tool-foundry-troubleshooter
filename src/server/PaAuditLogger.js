@@ -15,6 +15,9 @@
  *   logResult({runId, toolName, output, ...})
  *   logError({runId, toolName, error, ...})
  *     -> {logged:true, audit_id} | {logged:false, degraded:<reason>}
+ *   invokedTools(runId)  -> which tools this run called, deduplicated (#79)
+ *   toolCalls(runId)     -> every call, in order, with its payload (#96)
+ *     -> {available:true, ...} | {available:false, degraded:<reason>, ...}
  *
  * ---------------------------------------------------------------------------
  * THE PROPERTY THAT MATTERS MOST
@@ -180,6 +183,100 @@ PaAuditLogger.prototype = {
 
     _noTools: function (reason) {
         return { available: false, degraded: reason, tools: [] }
+    },
+
+    /**
+     * `invokedTools`'s sibling: the same rows, with what each call actually
+     * carried. #96.
+     *
+     * WHY BOTH EXIST. `invokedTools` answers "was this tool ever invoked in
+     * this run", which is the question fabrication fails, and it collapses
+     * repeats to do it. That collapse is exactly wrong for the question #96
+     * asks — *which* `agent_config` call reached the instructions section —
+     * where two calls to one tool are two different facts. So this returns
+     * every row, in creation order, undeduplicated.
+     *
+     * WHY THE PAYLOAD AND NOT JUST THE ARGUMENT. #96 was filed to grade an
+     * exposure claim from the recorded `input`, and the measurement it drove
+     * showed the argument alone cannot settle it: three `agent_config` calls
+     * named no `section` — which returns all four — and still returned
+     * `sections_returned: []`, because the agent they named resolved to no
+     * record. The claim was only decidable from the RESULT payload. A reader
+     * that returned arguments alone would have graded those three as exposed
+     * and been wrong on all three, which is the same by-label-not-by-fact
+     * defect (#79) the audit trail exists to settle.
+     *
+     * `payload` is `input` on an intent row and `output` on a result or error
+     * row, mirroring what `_write` populates — reading the other column would
+     * return a blank, R-6's failure shape aimed at the read side.
+     *
+     * WHAT THIS CANNOT TELL YOU, and both limits are load-bearing:
+     *
+     *   1. **The payload is DIGESTED past MAX_PAYLOAD_CHARS** (head + tail —
+     *      see PAYLOAD DISCIPLINE). A value in the elided middle is absent
+     *      here while being present in what the model actually received. So a
+     *      HIT is evidence; a MISS is not evidence of absence, and a caller
+     *      searching for a string must say which of the two it found. The
+     *      `artifact_id` in the head is the route to the full text.
+     *   2. **Intent rows do not pair with result rows.** The table carries no
+     *      call id, and `created` is second-granularity — ties are the normal
+     *      case in a burst, not an exotic one. `created` is here so a human
+     *      can line a call up against an execution trace, NOT so a caller can
+     *      match an argument to its result. A tool called twice in one second
+     *      cannot be paired from this data, and inventing the pairing would
+     *      put a made-up fact into the one place the project treats as ground
+     *      truth.
+     *
+     * `invokedTools`'s partial-trail caveat applies here unchanged, and this
+     * method deliberately does NOT layer on top of it: doing so would make
+     * every #79 citation check read two 4,000-char payload columns per row
+     * that it never looks at, on the fix-report path.
+     *
+     * @param {*} runId sys_id of the run row; may be absent or non-string (R-9)
+     * @returns {Object} {available:true, calls:[{tool,action,payload,created}]}
+     *                 | {available:false, degraded:String, calls:[]}
+     */
+    toolCalls: function (runId) {
+        try {
+            var id = this._trim(this._norm(runId), this.MAX_RECORD_ID_CHARS)
+            // Same reason as invokedTools: an unfiltered query would return
+            // every other run's calls, read as this run's evidence.
+            if (!id) return this._noCalls('no_run_id')
+            if (typeof GlideRecord === 'undefined') return this._noCalls('glide_unavailable')
+
+            var gr = new GlideRecord(this.AUDIT_TABLE)
+            gr.addQuery('run', id)
+            gr.orderBy('sys_created_on')
+            gr.query()
+
+            var calls = []
+            while (gr.next()) {
+                var name = this._normToolName(gr.getValue('tool_name'))
+                // A nameless row cannot be attributed to a tool, so it cannot
+                // be evidence about one — skipped, as in invokedTools.
+                if (!name) continue
+
+                var action = this._normToolName(gr.getValue('action_type'))
+                calls.push({
+                    tool: name,
+                    action: action,
+                    payload: this._norm(
+                        action === 'intent' ? gr.getValue('input') : gr.getValue('output')
+                    ),
+                    created: this._norm(gr.getValue('sys_created_on')),
+                })
+            }
+
+            if (calls.length === 0) return this._noCalls('no_audit_rows')
+            return { available: true, calls: calls }
+        } catch (e) {
+            // R-1: `e` is deliberately not inspected.
+            return this._noCalls('query_failed')
+        }
+    },
+
+    _noCalls: function (reason) {
+        return { available: false, degraded: reason, calls: [] }
     },
 
     /**
