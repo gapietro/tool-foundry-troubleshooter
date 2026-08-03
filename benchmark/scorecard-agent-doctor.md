@@ -290,8 +290,12 @@ the only column the Task 12 gate consumes.
 > `src/server/tools/PaToolAgentConfig.js` (a note on the `instructions` section naming the smoke
 > gate's specimen, and a `detail` restating `benchmark/README.md`'s reason for choosing it) and
 > `src/server/tools/PaToolGenAiLog.js` (a `capability_unresolvable` `next_step` carrying seed 04's
-> construction taxonomy). Native runs that pulled `section=instructions` — the six rows below
-> crediting layer 2, per §E2's used-layers discipline — received the `PaToolAgentConfig` note.
+> construction taxonomy). Any native run that pulled `section=instructions` received the
+> `PaToolAgentConfig` note. Which rows below did so is **inferred, not recorded**: the six rows
+> crediting layer 2 must have read the instruction text under §E2's used-layers discipline, which
+> implies an unqualified or `section=instructions` call — but no entry in this scorecard records the
+> `section` argument any run passed, so this is reasoning rather than a record. (The one directly
+> evidenced case is a native v2 row on `scorecard-custom-harness.md`, not one of these.)
 >
 > **No row is restated and no score movement is claimed.** The removed text named the smoke gate's
 > specimen and the reason it was chosen; the smoke gate is a pass/fail gate rather than one of the

@@ -869,6 +869,17 @@ depth work succeeded.** The residual gap is the blind rule itself, which binds A
 *instructions* and not its *tool output*. Filed as **#89**, together with the observation that the
 #85 audit swept for statistics and never swept for answers.
 
+**Correction (2026-08-03, §M3):** the blanket *"no run has ever invoked `agent_config`"* is **false
+and is retracted.** The v2 pass reached it in 2 of 10 runs — runs 9 and 10
+(`scorecard-custom-harness.md`). The conclusion survives, **scoped to the custom harness** and for a
+different reason than the one given: both of those calls passed `section:"triggers"`, and the leaked
+string is assembled inside `_instructions` (`src/server/tools/PaToolAgentConfig.js`), which
+`section:"triggers"` never reaches. Custom-harness exposure is therefore still zero — from the
+`section` argument in those two runs, and from non-invocation in every other pass (0/10 v3, 0/10
+Task 10, 0/4 v4 smoke). Unscoped, the sentence is false in the other direction too: §M3 grades the
+note as having shipped on **native**. What does not survive is shallowness as the *whole* explanation
+of why the leak stayed harmless.
+
 ### J5. What this changes about the roadmap
 
 §I5 said depth was the only thing left. That still holds, and the target has moved from "why does the
@@ -1212,9 +1223,16 @@ as the native-shared surface — are **untouched**. On the brief's literal trigg
 An annotation is nonetheless warranted, and `scorecard-agent-doctor.md` carries one. Both changed
 files are tool *cores*, and both harnesses execute them: native through `PaScriptToolAdapter` (the
 `Now.include` in `src/fluent/script-includes.now.ts`), custom through `PaToolRegistry.dispatch`. §M3
-establishes that the `PaToolAgentConfig` note reached native runs on 8 of the 12 native rows on
-record. Native's standing rows were therefore scored against a version of a shared core that no
-longer exists, which is a reproducibility fact about those rows whether or not it moved a score.
+grades the `PaToolAgentConfig` note as having reached 8 of the 12 native rows on record, and the two
+halves of that 8 are not equally graded: **established** on one row (`eed25e8c…`, which cites the
+instruction text directly), **inferred** on the other seven from their L2 credit under §E2's
+used-layers discipline, with no record anywhere of the `section` argument those seven passed. The
+annotation therefore rests on the inferred half for seven of the eight rows it covers.
+
+It is still warranted on that grade. One row is enough to establish that the note **did** ship on
+native — the fact §M3 settles in the other direction for the custom harness — and the annotation
+claims only that these rows were scored against a version of a shared core that no longer exists,
+which is a reproducibility fact about those rows whether or not it moved a score.
 
 The annotation is deliberately narrow, and says three things: which two cores changed and when; that
 native runs pulling `section=instructions` received the removed note; and that the removed text named
