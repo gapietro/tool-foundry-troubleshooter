@@ -775,3 +775,82 @@ describe('section-aware excerpts (#91)', () => {
         expect(excerpt.length).toBeLessThan(4000)
     })
 })
+
+// ---------------------------------------------------------------------------
+// The excerpt states the FACT; the envelope owns the AFFORDANCE (#91 round 1).
+//
+// The first cut of section-aware excerpting embedded "Read them with
+// read_artifact" in the excerpt itself. On the degraded paths — no run anchor,
+// run not found, attachment API absent, write failed — `_degraded` returns
+// `artifact_id: null` with a note saying in so many words that "paged
+// retrieval via read_artifact is not available for it", while the excerpt
+// sitting inside the SAME object told the model to go and page. R-19b: a
+// status may never contradict the notes next to it.
+//
+// `applyThreshold` already had this discipline for `pages`/`page_size` — its
+// own comment says a page count beside a null artifact_id "reads, to the LLM
+// consuming this envelope, as an instruction to make N read_artifact calls
+// that cannot succeed". The excerpt reintroduced it one layer down.
+//
+// Division of labour: the excerpt says WHAT was omitted, always. The envelope
+// note says HOW to get it, only when there is something to get.
+// ---------------------------------------------------------------------------
+describe('a degraded excerpt never promises paging (#91)', () => {
+    const PRIORITY = ['header', 'tool_calls', 'task_tree']
+
+    function bulky() {
+        return {
+            success: true,
+            data: { header: { state: 'completed' }, tool_calls: [{ tool_name: 't' }], task_tree: [{ big: filler(6000) }] },
+        }
+    }
+
+    function degradedResult(world, options) {
+        const store = newStore(world, Object.assign({ excerptHeadChars: 1500, excerptTailChars: 500 }, options || {}))
+        // No run anchor — the cheapest degrade path, reached before any Glide.
+        return store.store('', 'agent_trace', bulky(), PRIORITY)
+    }
+
+    it('names the omitted sections even when paging is unavailable', () => {
+        const res = degradedResult()
+        expect(res.degraded).toBe('no_run_anchor')
+        expect(res.excerpt).toContain('task_tree')
+    })
+
+    it('does not tell the model to read_artifact when there is no artifact', () => {
+        const res = degradedResult()
+        expect(res.artifact_id).toBeNull()
+        expect(res.excerpt).not.toMatch(/read_artifact/i)
+    })
+
+    it('the envelope note still explains the loss — the fact is never dropped', () => {
+        const res = degradedResult()
+        expect(res.note).toMatch(/not available/i)
+        expect(res.note).toMatch(/unseen rather than absent/i)
+    })
+
+    it('the degraded note describes the mode that actually ran', () => {
+        // "the middle is unreachable" is head/tail language. In section mode
+        // what was dropped is a NAMED SET, not a contiguous middle, and the
+        // note must not describe a loss the excerpt contradicts.
+        expect(degradedResult().note).toMatch(/names the sections it omitted/i)
+
+        const store = newStore(null, { excerptHeadChars: 1500, excerptTailChars: 500 })
+        const blind = store.store('', 'no_priority_tool', bulky())
+        expect(blind.note).toMatch(/head and tail/i)
+    })
+
+    it('the stored path DOES carry the paging instruction, in the note', () => {
+        const world = makeAttachmentWorld()
+        const store = newStore(world, { excerptHeadChars: 1500, excerptTailChars: 500 })
+        const res = store.store('run1', 'agent_trace', bulky(), PRIORITY)
+
+        expect(res.stored).toBe(true)
+        expect(res.artifact_id).toBeTruthy()
+        // Affordance lives in the note, exactly once, and not in the excerpt.
+        expect(res.note).toMatch(/read_artifact/i)
+        expect(res.excerpt).not.toMatch(/read_artifact/i)
+        // The fact still travels with the excerpt.
+        expect(res.excerpt).toContain('task_tree')
+    })
+})

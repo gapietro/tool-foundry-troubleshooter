@@ -134,13 +134,14 @@ PaArtifactStore.prototype = {
         var budget = this.EXCERPT_HEAD_CHARS + this.EXCERPT_TAIL_CHARS
         var excerpt = this._buildExcerpt(content, text, excerptPriority, budget)
 
-        if (!runId) return this._degraded(excerpt, total, 'no_run_anchor')
+        var sectioned = this._canSection(content, excerptPriority)
+        if (!runId) return this._degraded(excerpt, total, 'no_run_anchor', sectioned)
 
         var run = this._getRun(runId)
-        if (!run) return this._degraded(excerpt, total, 'run_not_found')
+        if (!run) return this._degraded(excerpt, total, 'run_not_found', sectioned)
 
         if (typeof GlideSysAttachment === 'undefined') {
-            return this._degraded(excerpt, total, 'attachment_api_unavailable')
+            return this._degraded(excerpt, total, 'attachment_api_unavailable', sectioned)
         }
 
         var fileName = this._fileName(runId, toolName)
@@ -152,7 +153,7 @@ PaArtifactStore.prototype = {
             artifactId = null
         }
 
-        if (!artifactId) return this._degraded(excerpt, total, 'attachment_write_failed')
+        if (!artifactId) return this._degraded(excerpt, total, 'attachment_write_failed', sectioned)
 
         var pages = Math.ceil(total / this.MAX_PAGE_CHARS)
         return {
@@ -415,7 +416,17 @@ PaArtifactStore.prototype = {
         }
 
         if (dropped.length) {
-            kept._excerpt = 'Sections omitted for size: ' + dropped.join(', ') + '. Read them with read_artifact.'
+            // States the FACT only. The retrieval AFFORDANCE belongs to the
+            // envelope's `note`, which is the only thing that knows whether
+            // an artifact was actually written: on every degraded path
+            // (`no_run_anchor`, `run_not_found`, `attachment_api_unavailable`,
+            // `attachment_write_failed`) `_degraded` returns artifact_id null
+            // and a note saying paged retrieval is NOT available — an excerpt
+            // telling the model to page anyway contradicts the status sitting
+            // beside it (R-19b), and sends it after an artifact that does not
+            // exist. `applyThreshold` already draws this line for `pages` and
+            // `page_size`; this is the same line, one layer down.
+            kept._excerpt = 'Sections omitted for size: ' + dropped.join(', ') + '.'
         }
 
         try {
@@ -504,7 +515,7 @@ PaArtifactStore.prototype = {
      * named. Deliberately carries no `content` key — a degraded store must not
      * become a back door for the 35KB it exists to keep out of the prompt.
      */
-    _degraded: function (excerpt, total, reason) {
+    _degraded: function (excerpt, total, reason, sectioned) {
         return {
             stored: false,
             artifact_id: null,
@@ -517,7 +528,10 @@ PaArtifactStore.prototype = {
                 ' chars but could not be stored as an artifact (' +
                 reason +
                 '), so paged retrieval via read_artifact is not available for it. ' +
-                'Only the excerpt below exists — treat the middle of this payload as unseen rather than absent.',
+                'Only the excerpt below exists — treat what is missing from it as unseen rather than absent. ' +
+                (sectioned
+                    ? 'The excerpt names the sections it omitted; those sections are UNREACHABLE for this run.'
+                    : 'The excerpt is the head and tail; the middle is UNREACHABLE for this run.'),
         }
     },
 
