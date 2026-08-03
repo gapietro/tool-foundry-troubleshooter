@@ -570,6 +570,55 @@ PaFixReport.prototype = {
     },
 
     /**
+     * PUBLIC. "Is this report a surrender?" — for PaAgentLoop's effort floor
+     * (#88). Deliberately LOOSER than `_isInconclusiveWithoutFixes`.
+     *
+     * The floor asks this BEFORE `validate` runs, so what it gets is the
+     * model's RAW draft — and a raw draft routinely omits keys the schema
+     * requires. Live on gpinst01 (TR1000109 and TR1000110, 2026-08-03) both
+     * runs submitted a report with NO `fixes` key at all: validate rejected
+     * it, the repair turn appended the missing keys, and the repaired report
+     * passed. The evidence is still in the stored report, where `fixes` sits
+     * AFTER `inconclusive` rather than in its schema position before it.
+     *
+     * The strict predicate requires `fixes` to BE an array, so it answered
+     * false on those drafts and the floor stood down silently — on exactly
+     * the surrender it was built to catch. **An absent key is not a
+     * populated one:** a report with no `fixes` proposes no fixes, and a
+     * report with no `root_causes` names no root cause. Treating absence as
+     * emptiness is the whole difference between the two predicates.
+     *
+     * `_isInconclusiveWithoutFixes` keeps its strictness — `validate` is
+     * entitled to demand the schema, and it is the thing that enforces it.
+     * The question HERE is "is this a surrender?", never "is this valid?".
+     *
+     * The predicate lives in this file rather than in the loop because the
+     * report contract belongs here; two copies of "what counts as a fix-less
+     * inconclusive" would drift the first time the contract moved, silently.
+     *
+     * @param {Object} report a RAW, pre-validation draft
+     * @returns {Boolean}
+     */
+    isFixlessInconclusive: function (report) {
+        if (!this._isPlainObject(report)) return false
+
+        // An `inconclusive` object is the one thing that must be PRESENT —
+        // it is what distinguishes "I could not conclude" from a report that
+        // simply has not been filled in yet.
+        if (!this._isPlainObject(report.inconclusive)) return false
+
+        return this._isEmptyOrAbsentArray(report.root_causes) && this._isEmptyOrAbsentArray(report.fixes)
+    },
+
+    /** Absent, null, or an empty array — all "nothing here". A non-empty
+     *  array is something; a non-array value present is NOT nothing either,
+     *  so it correctly answers false rather than being read as empty. */
+    _isEmptyOrAbsentArray: function (value) {
+        if (value === undefined || value === null) return true
+        return this._isArray(value) && value.length === 0
+    },
+
+    /**
      * How many of the seven layers the report CLAIMS to have swept. Used to
      * price the inconclusive path: a claim to have swept a layer is a claim
      * to have looked at something, and looking at something is citable.

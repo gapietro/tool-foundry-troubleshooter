@@ -1508,3 +1508,71 @@ describe('finding 3 — auditAvailable:true with an empty invokedTools list fail
         expect(result.valid).toBe(false)
     })
 })
+
+// ---------------------------------------------------------------------------
+// isFixlessInconclusive — the surrender predicate, on a PRE-VALIDATION draft.
+//
+// LIVE FAILURE THIS PINS (gpinst01 TR1000109/TR1000110, 2026-08-03).
+//
+// PaAgentLoop's effort floor (#88) asks this question BEFORE validate runs, so
+// what it hands over is the model's raw draft — and a raw draft routinely
+// omits keys the schema requires. Both live runs submitted a report with NO
+// `fixes` key at all; validate rejected it, the repair turn appended the
+// missing keys (visible in the stored report, where `fixes` sits AFTER
+// `inconclusive` instead of before it), and the repaired report validated.
+//
+// The strict internal predicate `_isInconclusiveWithoutFixes` requires
+// `fixes` to BE an array, so on those drafts it answered false and the floor
+// stood down without firing — on exactly the surrender it exists to catch.
+//
+// The question the floor asks is "is this a surrender?", not "is this
+// schema-valid?" — validate owns the second one. A report with no `fixes` key
+// proposes no fixes; a report with no `root_causes` key names no root cause.
+// The strict form stays as it is for validate's own use.
+// ---------------------------------------------------------------------------
+describe('isFixlessInconclusive on a raw draft (#88)', () => {
+    const report = new (loadScriptInclude('PaFixReport.js', {}).PaFixReport)()
+
+    const draft = {
+        failure_summary: 's',
+        layers_swept: { 1: { status: 'SWEPT', reason: 'agent_trace provided execution details' } },
+        root_causes: [],
+        inconclusive: { evidence_read: [{ source: 'trace', detail: 'd' }], needed_to_conclude: 'agent_config' },
+    }
+
+    it('an absent fixes key is no fixes — the live draft shape', () => {
+        expect(report.isFixlessInconclusive(draft)).toBe(true)
+    })
+
+    it('an absent root_causes key is no root cause', () => {
+        const noRc = Object.assign({}, draft)
+        delete noRc.root_causes
+        expect(report.isFixlessInconclusive(noRc)).toBe(true)
+    })
+
+    it('still true for the fully-populated post-validation shape', () => {
+        expect(report.isFixlessInconclusive(Object.assign({}, draft, { fixes: [], verification: '' }))).toBe(true)
+    })
+
+    it('false when a fix is proposed', () => {
+        expect(report.isFixlessInconclusive(Object.assign({}, draft, { fixes: [{ target: 't' }] }))).toBe(false)
+    })
+
+    it('false when a root cause is named', () => {
+        expect(
+            report.isFixlessInconclusive(Object.assign({}, draft, { root_causes: [{ layer: 1, statement: 'x' }] }))
+        ).toBe(false)
+    })
+
+    it('false without an inconclusive object — that is not the surrender path', () => {
+        const noInc = Object.assign({}, draft)
+        delete noInc.inconclusive
+        expect(report.isFixlessInconclusive(noInc)).toBe(false)
+    })
+
+    it('degrades on junk rather than throwing (R-9)', () => {
+        expect(report.isFixlessInconclusive(null)).toBe(false)
+        expect(report.isFixlessInconclusive('nope')).toBe(false)
+        expect(report.isFixlessInconclusive([])).toBe(false)
+    })
+})

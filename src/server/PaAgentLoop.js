@@ -114,6 +114,18 @@ PaAgentLoop.prototype = {
     MAX_ITERATIONS: 15,
     BUDGET_MS: 300000,
 
+    /** #88: how many times one run may defer a surrender. Mirrors the
+     *  one-repair-turn policy in `_handleFixReport` — a floor that can fire
+     *  repeatedly can spend the whole budget losing an argument and end in
+     *  `partial`, which is no report at all. */
+    MAX_EFFORT_PUSHBACKS: 1,
+
+    /** #88: the floor stands down below this share of BUDGET_MS remaining, so
+     *  it can never convert a usable honest report into a bound-triggered
+     *  `partial`. A fraction rather than an absolute so it tracks whatever
+     *  budget the operator configured. */
+    EFFORT_FLOOR_BUDGET_FRACTION: 0.25,
+
     /** The installed native agent this class reads its default playbook
      *  from — see `_defaultPlaybook()`. */
     AGENT_NAME: 'Agent Doctor',
@@ -179,9 +191,16 @@ PaAgentLoop.prototype = {
         var promptBlock = this._safePromptBlock()
         var startMs = this._now()
 
+        // Threaded into _step so the effort floor (#88) can see its own
+        // headroom and its own spend. `pushbacks` is per-RUN, not per-step —
+        // the floor fires at most MAX_EFFORT_PUSHBACKS times however many
+        // iterations the run takes.
+        var loopState = { iteration: 0, startMs: startMs, pushbacks: 0 }
+
         var iteration = 0
         while (true) {
             iteration += 1
+            loopState.iteration = iteration
 
             // BOUNDS FIRST — see the file header's BOUNDS ARE A FLOOR note.
             // Neither check ever fires mid-reasoning; both fire only before
@@ -193,10 +212,11 @@ PaAgentLoop.prototype = {
                 return this._finishPartial(rid, 'exceeded the ' + this.BUDGET_MS + 'ms diagnosis time budget')
             }
 
-            var stepResult = this._step(rid, playbook, promptBlock, req)
+            var stepResult = this._step(rid, playbook, promptBlock, req, loopState)
             if (stepResult.terminal) return stepResult.outcome
-            // else: a non-terminal tool_call was dispatched and observed —
-            // loop again with the enlarged transcript.
+            // else: a non-terminal tool_call was dispatched and observed, or
+            // the effort floor deferred a surrender — loop again with the
+            // enlarged transcript.
         }
     },
 
@@ -208,7 +228,7 @@ PaAgentLoop.prototype = {
      * @returns {Object} {terminal:false} to keep looping, or
      *          {terminal:true, outcome:<the run() return value>} to stop.
      */
-    _step: function (runId, playbook, promptBlock, request) {
+    _step: function (runId, playbook, promptBlock, request, loopState) {
         var context = this._runs().loadContext(runId)
         var prompt = this._buildPrompt(playbook, promptBlock, context, request)
 
@@ -242,7 +262,21 @@ PaAgentLoop.prototype = {
         }
 
         if (action.action === 'fix_report') {
-            return { terminal: true, outcome: this._handleFixReport(runId, action.report) }
+            // #88 — the effort floor. A surrender that names tools it never
+            // called is deferred, not rejected: the run keeps going and ends
+            // in a real report. See _effortFloorNudge.
+            var decision = this._effortFloorDecision(runId, action.report, loopState)
+            if (decision.note) {
+                this._runs().appendTranscript(runId, { actor: 'system', result_digest: decision.note })
+            }
+            if (decision.fire) {
+                if (this._isPlainObject(loopState)) loopState.pushbacks = this._num(loopState.pushbacks) + 1
+                return { terminal: false }
+            }
+            // `decision.audit` is the trail already resolved by the floor —
+            // handing it on keeps _auditContext's one-read-per-fix-report
+            // promise instead of querying the same rows twice.
+            return { terminal: true, outcome: this._handleFixReport(runId, action.report, decision.audit) }
         }
 
         // Unreachable in practice — PaLlmProxy._parseResponse rejects any
@@ -250,6 +284,262 @@ PaAgentLoop.prototype = {
         // success:true — but degrade rather than crash if it ever happens
         // (R-9): treat it as an empty observation and let the model re-plan.
         return { terminal: false }
+    },
+
+    // =======================================================================
+    // The effort floor on the inconclusive path (issue #88)
+    // =======================================================================
+
+    /**
+     * Returns the nudge text when a fix-less inconclusive report should be
+     * DEFERRED rather than accepted, or null to let it through.
+     *
+     * ---------------------------------------------------------------------
+     * WHAT THIS EXISTS TO STOP — measured, not imagined
+     * ---------------------------------------------------------------------
+     * The v4 smoke (benchmark/raw-evidence-v4-smoke.md, DECISION.md §J) fired
+     * four runs on 2026.08.0222. Every one invoked exactly ONE tool,
+     * `agent_trace`, and stopped — having spent 2 LLM turns of 15 and 10-17
+     * seconds of a 300,000ms budget. They were not confused about the next
+     * step. TR1000107's report named `agent_config`, `schema_lookup` and
+     * `genai_log` as what it needed, and gave "No agent_config call made to
+     * inspect instructions" as its reason for six of seven layers. Then it
+     * filed, and the loop stamped it valid.
+     *
+     * PaFixReport._checkInconclusive prices the inconclusive path at one
+     * `evidence_read` citation per layer claimed SWEPT. That defeats sweep
+     * INFLATION and demonstrably works — v2's "all seven layers SWEPT on two
+     * reads" row has no successor. But the cost rises monotonically with
+     * sweeps and has NO FLOOR, so its minimum sits at one sweep and two
+     * citations, and the model sits on that minimum. Honest surrender became
+     * the cheapest structurally valid output: in v3 it fabricated and was
+     * rejected; in v4 it surrenders honestly and is accepted. Both stop at one
+     * tool call. The loop was accepting a report the benchmark scores 0.
+     *
+     * ---------------------------------------------------------------------
+     * WHY A CONTINUATION AND NOT A VALIDATION FAILURE
+     * ---------------------------------------------------------------------
+     * The obvious home for this is PaFixReport.validate. It is the wrong one:
+     * #81 established that the repair turn cannot gather evidence — it gets
+     * one LLM call and no tools — so a rejection reading "you never called
+     * agent_config" is unfixable BY CONSTRUCTION, and the run would end
+     * `failed` instead of merely shallow. That converts surrender into
+     * failure rather than into depth. Here the report is not rejected at all;
+     * it is simply not the last word, and the run continues normally.
+     *
+     * ---------------------------------------------------------------------
+     * THE TRIGGER IS SELF-CONVICTION, NOT SUSPICION
+     * ---------------------------------------------------------------------
+     * The floor fires only when the report ITSELF names a registered tool
+     * that the audit trail says was never invoked — in `needed_to_conclude`
+     * or in a NOT_SWEPT layer reason. The model convicted itself; nothing is
+     * inferred. A report whose `needed_to_conclude` names nothing specific
+     * ("No failure state detected in execution trace") is ACCEPTED — that is
+     * a real escape hatch and a deliberate one. The alternative rule, "push
+     * back on any unswept layer whose tool exists", has no escape hatch but
+     * forces calls the model may have good reason to skip; `log_analysis`'s
+     * own description says it usually reports the layer unavailable on this
+     * instance.
+     *
+     * Four independent reasons to stand down, each of which would otherwise
+     * make the floor worse than the thing it fixes:
+     *   1. Already fired this run. One push-back, mirroring the existing
+     *      one-repair-turn policy — a floor that can fire repeatedly can burn
+     *      the whole budget in a surrender loop and end in `partial`, i.e. no
+     *      report at all.
+     *   2. Not the surrender path (a root cause or a fix is present). The
+     *      evidence rule already polices those.
+     *   3. Not enough headroom — fewer than 2 iterations left, or less than
+     *      EFFORT_FLOOR_BUDGET_FRACTION of the time budget. Turning a usable
+     *      honest report into a bound-triggered `partial` is strictly worse
+     *      than the shallow report the floor is trying to prevent.
+     *   4. The audit trail is unreadable. "Cannot tell which tools ran" is
+     *      not "no tools ran" — same reasoning as _auditContext's degrade
+     *      (R-6, and DESIGN.md's standing rule that a denied read is never
+     *      rendered as an absence). Guessing here would spend a turn for
+     *      nothing.
+     *
+     * ---------------------------------------------------------------------
+     * IT SAYS WHAT IT DECIDED, EVERY TIME
+     * ---------------------------------------------------------------------
+     * The first deployed build declined to fire on a real gpinst01 run
+     * (TR1000109) and left nothing behind to say which guard declined. The
+     * report's text was truncated in the stored transcript, so the decision
+     * was unrecoverable after the fact. A silent decline is indistinguishable
+     * from a decision never taken — the same shape as R-3's premature
+     * conclusion, Rule #42's invisible ACL gap, and every other defect this
+     * project has paid for. So on the surrender path the floor ALWAYS writes
+     * a transcript note, fired or not, naming the guard that decided. It stays
+     * quiet on reports that are not surrenders, because a note on every
+     * ordinary report is noise, and noise is what hides a real signal.
+     *
+     * @returns {Object} {fire: Boolean, note: String|null, audit: Object|null}
+     */
+    _effortFloorDecision: function (runId, report, loopState) {
+        var state = this._isPlainObject(loopState) ? loopState : {}
+        // Not the surrender path (or we cannot tell): decide nothing, say
+        // nothing. R-9 — an injected collaborator without the predicate stands
+        // the floor down rather than letting it guess.
+        var quiet = { fire: false, note: null, audit: null }
+
+        var reports = this._reports()
+        if (!reports || typeof reports.isFixlessInconclusive !== 'function') return quiet
+        if (!reports.isFixlessInconclusive(report)) return quiet
+
+        // ---- from here the run IS surrendering, so every exit is explained --
+
+        // 1. one push-back per run
+        if (this._num(state.pushbacks) >= this.MAX_EFFORT_PUSHBACKS) {
+            return this._floorStandsDown('it already fired once in this run, and fires at most once', null)
+        }
+
+        // 3a. iterations — need one for the tool call and one for the report
+        var iterationsLeft = this.MAX_ITERATIONS - this._num(state.iteration)
+        if (iterationsLeft < 2) {
+            return this._floorStandsDown(
+                'only ' +
+                    iterationsLeft +
+                    ' reasoning iteration(s) of ' +
+                    this.MAX_ITERATIONS +
+                    ' remain — too few to spend one and still return a report',
+                null
+            )
+        }
+
+        // 3b. wall clock
+        var elapsed = this._now() - this._num(state.startMs)
+        var remaining = this.BUDGET_MS - elapsed
+        if (remaining < this.BUDGET_MS * this.EFFORT_FLOOR_BUDGET_FRACTION) {
+            return this._floorStandsDown(
+                'only ' + remaining + 'ms of the ' + this.BUDGET_MS + 'ms time budget remains',
+                null
+            )
+        }
+
+        // 4. what actually ran
+        var audit = this._auditContext(runId)
+        if (!audit.auditAvailable) {
+            return this._floorStandsDown(
+                'the audit trail for this run is unreadable, so which tools were called cannot be established — ' +
+                    'cannot tell is not the same as did not call',
+                audit
+            )
+        }
+
+        var missing = this._namedButUninvoked(audit, report)
+        if (!missing.length) {
+            return this._floorStandsDown(
+                'the report names no registered tool that this run did not already call',
+                audit
+            )
+        }
+
+        return {
+            fire: true,
+            audit: audit,
+            note: this._effortFloorNudge(missing),
+        }
+    },
+
+    /** A stand-down decision, with the reason recorded rather than implied. */
+    _floorStandsDown: function (reason, audit) {
+        return {
+            fire: false,
+            audit: audit || null,
+            note:
+                'EFFORT FLOOR stood down and this inconclusive report is being accepted as final: ' +
+                reason +
+                '.',
+        }
+    },
+
+    /** The text handed back to the model when the floor fires. */
+    _effortFloorNudge: function (missing) {
+        return (
+            'EFFORT FLOOR fired — INCOMPLETE SWEEP, this diagnosis was not accepted as final. Your report named ' +
+            missing.join(', ') +
+            ' as needed to reach a conclusion, and the audit trail for this run shows ' +
+            (missing.length === 1 ? 'that tool was' : 'those tools were') +
+            ' never called. You have budget remaining. Call ' +
+            (missing.length === 1 ? 'it' : 'them') +
+            ' now and then submit your report — a report that names the evidence it lacks, while the ' +
+            'tool that would supply it sits unused, is a stopping point rather than a diagnosis. If a ' +
+            'tool genuinely cannot help, call it and say what it returned, or stop naming it.'
+        )
+    },
+
+    /**
+     * Registered tool names the report NAMES as needed but the audit trail
+     * says were never invoked.
+     *
+     * Scans `inconclusive.needed_to_conclude` plus every NOT_SWEPT layer
+     * reason — TR1000107 named nothing in the former and all three tools
+     * across the latter, so reading only one of them would have missed it.
+     * SWEPT reasons are deliberately NOT scanned: "agent_trace provided
+     * execution details" names a tool that was, by definition, called.
+     *
+     * Matching is plain substring against the registry's own names rather
+     * than a constructed regex: the names are `snake_case` with no
+     * containment relationships between them, and a built regex on Rhino is
+     * more failure surface than this needs.
+     */
+    _namedButUninvoked: function (audit, report) {
+        var invoked = {}
+        var i
+        for (i = 0; i < audit.invokedTools.length; i++) {
+            invoked[this._lower(audit.invokedTools[i])] = true
+        }
+
+        var haystack = this._lower(this._effortFloorText(report))
+        if (!haystack) return []
+
+        var registered = this._registeredToolNames()
+        var out = []
+        for (i = 0; i < registered.length; i++) {
+            var name = registered[i]
+            if (invoked[name]) continue
+            if (haystack.indexOf(name) === -1) continue
+            out.push(name)
+        }
+        return out
+    },
+
+    /** `needed_to_conclude` + every NOT_SWEPT layer reason, concatenated. */
+    _effortFloorText: function (report) {
+        var r = this._isPlainObject(report) ? report : {}
+        var parts = []
+
+        var inc = this._isPlainObject(r.inconclusive) ? r.inconclusive : {}
+        if (this._nonEmptyString(inc.needed_to_conclude)) parts.push(inc.needed_to_conclude)
+
+        var ls = this._isPlainObject(r.layers_swept) ? r.layers_swept : {}
+        for (var key in ls) {
+            if (!Object.prototype.hasOwnProperty.call(ls, key)) continue
+            var entry = ls[key]
+            if (!this._isPlainObject(entry)) continue
+            if (this._str(entry.status) === 'SWEPT') continue
+            if (this._nonEmptyString(entry.reason)) parts.push(entry.reason)
+        }
+
+        return parts.join(' ')
+    },
+
+    /** Names from the registry — never a second hand-typed roster. */
+    _registeredToolNames: function () {
+        var out = []
+        try {
+            var listed = this._tools().list()
+            if (!this._isArray(listed)) return out
+            for (var i = 0; i < listed.length; i++) {
+                var name = this._lower(listed[i] && listed[i].name)
+                if (name) out.push(name)
+            }
+        } catch (e) {
+            // R-1: `e` is deliberately not inspected. A registry that cannot
+            // list its tools disables the floor rather than the run.
+            return []
+        }
+        return out
     },
 
     _dispatchTool: function (runId, action) {
@@ -290,8 +580,11 @@ PaAgentLoop.prototype = {
      * valid, invalid, not even another fix_report, or an LLM failure — is
      * final; there is no second repair attempt.
      */
-    _handleFixReport: function (runId, report) {
-        var context = this._auditContext(runId)
+    _handleFixReport: function (runId, report, auditCtx) {
+        // The effort floor may already have resolved the trail on this same
+        // report — reuse it rather than paying for the identical query twice
+        // (see _auditContext's own note on why once per fix-report).
+        var context = this._isPlainObject(auditCtx) ? auditCtx : this._auditContext(runId)
 
         var validated = this._reports().validate(report, context)
         if (validated.valid) {
@@ -903,6 +1196,19 @@ PaAgentLoop.prototype = {
     _str: function (value) {
         if (value === null || value === undefined) return ''
         return String(value)
+    },
+
+    /** Missing/blank/NaN all read as 0 — the effort floor's counters must
+     *  never become NaN and silently disable themselves (NaN >= n is false,
+     *  so a NaN pushback count would let the floor fire forever). */
+    _num: function (value) {
+        if (value === null || value === undefined || value === '') return 0
+        var n = Number(value)
+        return isNaN(n) ? 0 : n
+    },
+
+    _lower: function (value) {
+        return this._str(value).toLowerCase()
     },
 
     type: 'PaAgentLoop',

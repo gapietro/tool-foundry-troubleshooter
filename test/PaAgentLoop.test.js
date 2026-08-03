@@ -44,6 +44,20 @@ function fakeTools(dispatchResults) {
         promptBlock: function () {
             return 'TOOLBLOCK'
         },
+        // The real PaToolRegistry.list() — the effort floor (#88) needs the
+        // registered names to tell "a tool this run never called" from an
+        // arbitrary noun in the report's prose.
+        list: function () {
+            return [
+                { name: 'agent_trace' },
+                { name: 'agent_config' },
+                { name: 'schema_lookup' },
+                { name: 'query_table' },
+                { name: 'genai_log' },
+                { name: 'log_analysis' },
+                { name: 'read_artifact' },
+            ]
+        },
         dispatch: function (name, args, runCtx) {
             calls.push({ name: name, args: args, runCtx: runCtx })
             if (typeof dispatchResults === 'function') return dispatchResults(name, args, runCtx, calls.length)
@@ -112,6 +126,20 @@ function fakeFixReport(validateResults) {
         // hand-copied schema string. See test file header.
         schemaText: function () {
             return 'STUB_SCHEMA_TEXT'
+        },
+        // #88: the fix-less-inconclusive predicate lives in PaFixReport (it
+        // owns the report contract) and the loop asks rather than
+        // re-deriving it. Mirrors the real method.
+        isFixlessInconclusive: function (report) {
+            const r = report || {}
+            return (
+                Array.isArray(r.root_causes) &&
+                r.root_causes.length === 0 &&
+                Array.isArray(r.fixes) &&
+                r.fixes.length === 0 &&
+                !!r.inconclusive &&
+                typeof r.inconclusive === 'object'
+            )
         },
     }
 }
@@ -801,5 +829,468 @@ describe('audit context plumbing', () => {
         expect(() => loop._handleFixReport('run1', { failure_summary: 'x' })).not.toThrow()
         expect(fixReport.contextCalls[0].auditAvailable).toBe(false)
         expect(fixReport.contextCalls[0].invokedTools).toEqual([])
+    })
+})
+
+// ---------------------------------------------------------------------------
+// The effort floor on the inconclusive path (issue #88).
+//
+// WHAT THIS EXISTS TO STOP, measured rather than imagined.
+//
+// The v4 smoke (benchmark/raw-evidence-v4-smoke.md, DECISION.md §J) fired four
+// runs on 2026.08.0222. All four invoked exactly ONE tool, agent_trace, and
+// stopped — with 2 LLM turns used of 15 and 10-17 seconds of a 300,000ms
+// budget. They were not confused about the next step. TR1000107's report named
+// agent_config, schema_lookup and genai_log as what it needed, and gave "No
+// agent_config call made to inspect instructions" as its reason for six of
+// seven layers. Then it filed the report and the loop stamped it valid.
+//
+// PaFixReport._checkInconclusive prices the inconclusive path at one
+// evidence_read citation per layer claimed SWEPT. That defeats sweep
+// INFLATION and demonstrably works. But the cost rises monotonically with
+// sweeps and has NO FLOOR, so its minimum sits at one sweep and two citations
+// — and the model sits on that minimum. Honest surrender became the cheapest
+// structurally valid output.
+//
+// The floor is a LOOP CONTINUATION, not a validation rejection, and that is
+// load-bearing: #81 established that the repair turn cannot gather evidence,
+// so rejecting the report would convert surrender into FAILURE rather than
+// into depth. Here the run simply keeps going and ends in a real report.
+//
+// Fires at most ONCE per run, mirroring the existing one-repair-turn policy.
+// ---------------------------------------------------------------------------
+describe('effort floor on the inconclusive path (#88)', () => {
+    /** A fix-less inconclusive report — the exact shape all four v4 runs filed. */
+    function inconclusive(needed, layers) {
+        return {
+            failure_summary: 'The execution completed with no errors.',
+            layers_swept: layers || {
+                1: { status: 'SWEPT', reason: 'agent_trace provided execution details' },
+                2: { status: 'NOT_SWEPT', reason: 'no configuration issues observed' },
+            },
+            root_causes: [],
+            fixes: [],
+            verification: '',
+            data_markers: [],
+            inconclusive: {
+                evidence_read: [{ source: 'trace', detail: 'agent_trace output' }],
+                needed_to_conclude: needed,
+            },
+        }
+    }
+
+    function fixReportAction(report) {
+        return { success: true, raw: 'raw', action: { action: 'fix_report', report: report } }
+    }
+
+    const toolCallAction = {
+        success: true,
+        raw: 'raw',
+        action: { action: 'tool_call', tool: 'agent_config', args: { agent: 'Seed 03 Category Router' } },
+    }
+
+    function systemNotes(runs) {
+        return runs.transcript.filter((e) => e.actor === 'system').map((e) => e.result_digest)
+    }
+
+    // -- fires ---------------------------------------------------------------
+
+    it('keeps looping when the report names a registered tool the run never called', () => {
+        const runs = fakeRunManager()
+        const tools = fakeTools([{ success: true, data: { ok: true } }])
+        const fixReport = fakeFixReport([{ valid: true, normalized: { ok: true } }])
+        const llm = fakeLlm([
+            // turn 1: surrender, naming three tools it never called (TR1000107)
+            fixReportAction(
+                inconclusive('Further inspection of agent configuration, data schemas, and GenAI stack via agent_config, schema_lookup, and genai_log tools')
+            ),
+            // turn 2: after the push-back, it goes and gets one
+            toolCallAction,
+            // turn 3: files a real report
+            fixReportAction(inconclusive('nothing further')),
+        ])
+        const audit = fakeAuditLogger({ available: true, tools: ['agent_trace'] })
+
+        const out = load({
+            llmProxy: llm,
+            toolRegistry: tools,
+            runManager: runs,
+            fixReport: fixReport,
+            auditLogger: audit,
+            playbook: 'P',
+            now: () => 0,
+        }).run('run1', {})
+
+        expect(out.outcome).toBe('fix_report')
+        // The whole point: a second tool call happened that would not have.
+        expect(tools.calls.map((c) => c.name)).toEqual(['agent_config'])
+        // The first report was never validated — it was not rejected, it was
+        // deferred. Only the second one reached the validator.
+        expect(fixReport.calls).toHaveLength(1)
+    })
+
+    it('names the specific uninvoked tools in the transcript, not a generic scolding', () => {
+        const runs = fakeRunManager()
+        const llm = fakeLlm([
+            fixReportAction(inconclusive('would need agent_config and genai_log')),
+            toolCallAction,
+            fixReportAction(inconclusive('done')),
+        ])
+
+        load({
+            llmProxy: llm,
+            toolRegistry: fakeTools([{ success: true, data: {} }]),
+            runManager: runs,
+            fixReport: fakeFixReport([{ valid: true, normalized: {} }]),
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            playbook: 'P',
+            now: () => 0,
+        }).run('run1', {})
+
+        const note = systemNotes(runs).join(' ')
+        expect(note).toContain('agent_config')
+        expect(note).toContain('genai_log')
+        // A tool it did NOT name must not be invented into the nudge.
+        expect(note).not.toContain('query_table')
+        // and the nudge has to reach the model, not just the audit log
+        expect(llm.calls[1]).toContain('agent_config')
+    })
+
+    it('counts a tool named only in a NOT_SWEPT reason', () => {
+        const runs = fakeRunManager()
+        const llm = fakeLlm([
+            // needed_to_conclude names nothing; the layer reasons do — this is
+            // TR1000107's actual shape for layers 2-7.
+            fixReportAction(
+                inconclusive('further investigation', {
+                    1: { status: 'SWEPT', reason: 'agent_trace provided execution details' },
+                    4: { status: 'NOT_SWEPT', reason: 'No schema_lookup call made to validate data schemas' },
+                })
+            ),
+            toolCallAction,
+            fixReportAction(inconclusive('done')),
+        ])
+
+        const tools = fakeTools([{ success: true, data: {} }])
+        load({
+            llmProxy: llm,
+            toolRegistry: tools,
+            runManager: runs,
+            fixReport: fakeFixReport([{ valid: true, normalized: {} }]),
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            playbook: 'P',
+            now: () => 0,
+        }).run('run1', {})
+
+        expect(tools.calls).toHaveLength(1)
+        expect(systemNotes(runs).join(' ')).toContain('schema_lookup')
+    })
+
+    // -- does not fire -------------------------------------------------------
+
+    it('accepts a report that names no tool at all — vagueness is not convicted', () => {
+        const runs = fakeRunManager()
+        const fixReport = fakeFixReport([{ valid: true, normalized: {} }])
+        const llm = fakeLlm([fixReportAction(inconclusive('No failure state detected in execution trace'))])
+
+        const out = load({
+            llmProxy: llm,
+            toolRegistry: fakeTools([]),
+            runManager: runs,
+            fixReport: fixReport,
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            playbook: 'P',
+            now: () => 0,
+        }).run('run1', {})
+
+        expect(out.outcome).toBe('fix_report')
+        expect(fixReport.calls).toHaveLength(1)
+    })
+
+    it('accepts when every tool the report names was actually invoked', () => {
+        const runs = fakeRunManager()
+        const fixReport = fakeFixReport([{ valid: true, normalized: {} }])
+        const llm = fakeLlm([fixReportAction(inconclusive('agent_config showed nothing conclusive'))])
+
+        const out = load({
+            llmProxy: llm,
+            toolRegistry: fakeTools([]),
+            runManager: runs,
+            fixReport: fixReport,
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace', 'agent_config'] }),
+            playbook: 'P',
+            now: () => 0,
+        }).run('run1', {})
+
+        expect(out.outcome).toBe('fix_report')
+        expect(fixReport.calls).toHaveLength(1)
+    })
+
+    it('leaves a report that names a root cause alone — this is not the inconclusive path', () => {
+        const runs = fakeRunManager()
+        const fixReport = fakeFixReport([{ valid: true, normalized: {} }])
+        const withCause = inconclusive('would also want agent_config')
+        withCause.root_causes = [{ layer: 1, statement: 'the script threw' }]
+        const llm = fakeLlm([fixReportAction(withCause)])
+
+        const out = load({
+            llmProxy: llm,
+            toolRegistry: fakeTools([]),
+            runManager: runs,
+            fixReport: fixReport,
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            playbook: 'P',
+            now: () => 0,
+        }).run('run1', {})
+
+        expect(out.outcome).toBe('fix_report')
+        expect(fixReport.calls).toHaveLength(1)
+    })
+
+    it('leaves a report that proposes fixes alone', () => {
+        const runs = fakeRunManager()
+        const fixReport = fakeFixReport([{ valid: true, normalized: {} }])
+        const withFixes = inconclusive('would also want agent_config')
+        withFixes.fixes = [{ target: 'x', change: 'y' }]
+        const llm = fakeLlm([fixReportAction(withFixes)])
+
+        const out = load({
+            llmProxy: llm,
+            toolRegistry: fakeTools([]),
+            runManager: runs,
+            fixReport: fixReport,
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            playbook: 'P',
+            now: () => 0,
+        }).run('run1', {})
+
+        expect(out.outcome).toBe('fix_report')
+        expect(fixReport.calls).toHaveLength(1)
+    })
+
+    it('does not fire when the audit trail is unavailable — cannot tell is not did not call', () => {
+        // Same reasoning as _auditContext's degrade: an unreadable audit trail
+        // says nothing about which tools ran, and pushing back on a guess
+        // would burn a turn for nothing.
+        const runs = fakeRunManager()
+        const fixReport = fakeFixReport([{ valid: true, normalized: {} }])
+        const llm = fakeLlm([fixReportAction(inconclusive('would need agent_config'))])
+
+        const out = load({
+            llmProxy: llm,
+            toolRegistry: fakeTools([]),
+            runManager: runs,
+            fixReport: fixReport,
+            auditLogger: fakeAuditLogger({ available: false, degraded: 'no_audit_rows', tools: [] }),
+            playbook: 'P',
+            now: () => 0,
+        }).run('run1', {})
+
+        expect(out.outcome).toBe('fix_report')
+        expect(fixReport.calls).toHaveLength(1)
+    })
+
+    // -- bounded -------------------------------------------------------------
+
+    it('fires at most once — a second surrender is accepted', () => {
+        const runs = fakeRunManager()
+        const fixReport = fakeFixReport([{ valid: true, normalized: {} }])
+        const llm = fakeLlm([
+            fixReportAction(inconclusive('would need agent_config')),
+            // pushed back, and surrenders again naming the same tool
+            fixReportAction(inconclusive('still would need agent_config')),
+        ])
+
+        const out = load({
+            llmProxy: llm,
+            toolRegistry: fakeTools([]),
+            runManager: runs,
+            fixReport: fixReport,
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            playbook: 'P',
+            now: () => 0,
+        }).run('run1', {})
+
+        expect(out.outcome).toBe('fix_report')
+        expect(llm.calls).toHaveLength(2)
+        expect(fixReport.calls).toHaveLength(1)
+    })
+
+    it('does not fire without headroom to spend — a report beats a partial', () => {
+        // Pushing back with one iteration left converts a usable honest report
+        // into `partial` with no report at all, which is strictly worse than
+        // the surrender the floor exists to discourage.
+        const runs = fakeRunManager()
+        const fixReport = fakeFixReport([{ valid: true, normalized: {} }])
+        const llm = fakeLlm([fixReportAction(inconclusive('would need agent_config'))])
+
+        const out = load({
+            llmProxy: llm,
+            toolRegistry: fakeTools([]),
+            runManager: runs,
+            fixReport: fixReport,
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            playbook: 'P',
+            now: () => 0,
+            maxIterations: 1,
+        }).run('run1', {})
+
+        expect(out.outcome).toBe('fix_report')
+        expect(fixReport.calls).toHaveLength(1)
+    })
+
+    it('does not fire when the time budget is nearly spent', () => {
+        const runs = fakeRunManager()
+        const fixReport = fakeFixReport([{ valid: true, normalized: {} }])
+        const llm = fakeLlm([fixReportAction(inconclusive('would need agent_config'))])
+        // start at 0, and by the time the report lands 95% of the budget is gone
+        const clock = fakeClock([0, 9500, 9500, 9500, 9500])
+
+        const out = load({
+            llmProxy: llm,
+            toolRegistry: fakeTools([]),
+            runManager: runs,
+            fixReport: fixReport,
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            playbook: 'P',
+            now: clock,
+            budgetMs: 10000,
+        }).run('run1', {})
+
+        expect(out.outcome).toBe('fix_report')
+        expect(fixReport.calls).toHaveLength(1)
+    })
+
+    it('degrades to accepting when the injected fixReport has no predicate (R-9)', () => {
+        const runs = fakeRunManager()
+        const fixReport = fakeFixReport([{ valid: true, normalized: {} }])
+        delete fixReport.isFixlessInconclusive
+        const llm = fakeLlm([fixReportAction(inconclusive('would need agent_config'))])
+
+        const out = load({
+            llmProxy: llm,
+            toolRegistry: fakeTools([]),
+            runManager: runs,
+            fixReport: fixReport,
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            playbook: 'P',
+            now: () => 0,
+        }).run('run1', {})
+
+        expect(out.outcome).toBe('fix_report')
+    })
+})
+
+// ---------------------------------------------------------------------------
+// The effort floor must SAY what it decided (#88, found in live verification).
+//
+// The first deployed build declined to fire on a real gpinst01 run (TR1000109)
+// and left nothing behind explaining why. The report's own text was truncated
+// in the stored transcript, so the decision was unrecoverable after the fact
+// and the guard that declined could not be identified from the record.
+//
+// That is the same shape as every defect this project has spent itself on: a
+// silent decline is indistinguishable from a decision never taken. The floor
+// now records its reasoning on the surrender path — fired or not — for the
+// same reason `evidence_basis`, `field_warnings` and the INCOMPLETE bound
+// marker exist.
+//
+// It stays quiet on reports that are not surrenders; a note on every ordinary
+// report would be noise, and noise is what makes a real signal unreadable.
+// ---------------------------------------------------------------------------
+describe('effort floor states its decision (#88)', () => {
+    function inconclusive(needed) {
+        return {
+            failure_summary: 's',
+            layers_swept: { 1: { status: 'SWEPT', reason: 'agent_trace provided execution details' } },
+            root_causes: [],
+            fixes: [],
+            verification: '',
+            data_markers: [],
+            inconclusive: { evidence_read: [{ source: 'trace', detail: 'd' }], needed_to_conclude: needed },
+        }
+    }
+
+    function fixReportAction(report) {
+        return { success: true, raw: 'raw', action: { action: 'fix_report', report: report } }
+    }
+
+    function floorNotes(runs) {
+        return runs.transcript
+            .filter((e) => e.actor === 'system')
+            .map((e) => e.result_digest)
+            .filter((d) => d.indexOf('EFFORT FLOOR') !== -1)
+    }
+
+    function runWith(opts) {
+        const runs = fakeRunManager()
+        const audit = fakeAuditLogger(
+            opts.audit || { available: true, tools: ['agent_trace'] }
+        )
+        load({
+            llmProxy: fakeLlm(opts.responses),
+            toolRegistry: fakeTools([{ success: true, data: {} }]),
+            runManager: runs,
+            fixReport: fakeFixReport([{ valid: true, normalized: {} }, { valid: true, normalized: {} }]),
+            auditLogger: audit,
+            playbook: 'P',
+            now: opts.now || (() => 0),
+            maxIterations: opts.maxIterations,
+        }).run('run1', {})
+        return { runs: runs, audit: audit }
+    }
+
+    it('records why it stood down when the report names no uninvoked tool', () => {
+        const { runs } = runWith({ responses: [fixReportAction(inconclusive('nothing specific'))] })
+        const notes = floorNotes(runs)
+
+        expect(notes).toHaveLength(1)
+        expect(notes[0]).toMatch(/names no registered tool/i)
+    })
+
+    it('records why it stood down when it has already fired once', () => {
+        const { runs } = runWith({
+            responses: [
+                fixReportAction(inconclusive('need agent_config')),
+                fixReportAction(inconclusive('still need agent_config')),
+            ],
+        })
+        const notes = floorNotes(runs)
+
+        // one FIRED note, then one STOOD DOWN note naming the cap
+        expect(notes).toHaveLength(2)
+        expect(notes[1]).toMatch(/already fired/i)
+    })
+
+    it('records why it stood down when the audit trail is unreadable', () => {
+        const { runs } = runWith({
+            responses: [fixReportAction(inconclusive('need agent_config'))],
+            audit: { available: false, degraded: 'no_audit_rows', tools: [] },
+        })
+        expect(floorNotes(runs)[0]).toMatch(/audit trail/i)
+    })
+
+    it('records why it stood down when there is no headroom', () => {
+        const { runs } = runWith({
+            responses: [fixReportAction(inconclusive('need agent_config'))],
+            maxIterations: 1,
+        })
+        expect(floorNotes(runs)[0]).toMatch(/iteration/i)
+    })
+
+    it('says nothing at all on a report that is not a surrender', () => {
+        const withCause = inconclusive('need agent_config')
+        withCause.root_causes = [{ layer: 1, statement: 'the script threw' }]
+        const { runs } = runWith({ responses: [fixReportAction(withCause)] })
+
+        expect(floorNotes(runs)).toHaveLength(0)
+    })
+
+    it('resolves the audit trail once per fix-report, not once per consumer', () => {
+        // _auditContext's own docstring: a repair turn makes no tool calls, so
+        // a second query returns the same set at twice the cost. The floor
+        // must not quietly reintroduce the double read it was warned about.
+        const { audit } = runWith({ responses: [fixReportAction(inconclusive('need agent_config'))] })
+        expect(audit.calls).toHaveLength(1)
     })
 })
