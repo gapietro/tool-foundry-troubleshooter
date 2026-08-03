@@ -251,7 +251,7 @@ No `module.exports` — Task 3 adds the scan to **this same file**, so `SPECIMEN
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `npx jest test/blindRule.test.js`
-Expected: FAIL — 10 failures, one pair per specimen: `expect(received).not.toBeNull()`. The `toHaveLength(6)` assertion passes. This proves the parser detects an unguarded specimen, which is the property Task 2 exists to establish.
+Expected: FAIL — 12 failures, one pair per specimen (6 specimens × 2 assertions: `not.toBeNull()` and `toBeGreaterThan(0)`). The `toHaveLength(6)` assertion passes, so 12 of 13. This proves the parser detects an unguarded specimen, which is the property Task 2 exists to establish.
 
 - [ ] **Step 3: Declare tokens on seed 01**
 
