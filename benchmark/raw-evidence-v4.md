@@ -688,6 +688,20 @@ Full `fix_report` (structurally identical to custom run 1's, same
 }
 ```
 
+**Note on custom `fix_report` shape:** both seed-01 custom runs (run 1 and
+run 2, above) returned this `inconclusive`-keyed shape — `root_causes: []`,
+`fixes: []`, `verification: ""`, and an `inconclusive` object carrying
+`evidence_read` / `needed_to_conclude`. The Task 3 smoke-gate custom run
+(`benchmark/raw-evidence-v4.md`, "Smoke gate" section above) returned a
+different shape for the same field: a populated `root_causes` array (one
+entry, `context_processing_script` line 42) with an explicit
+`confidence: "UNCONFIRMED"` marker, and no `inconclusive` key at all. So the
+custom harness emits at least two structurally different report shapes for
+an inconclusive-or-uncertain diagnosis, and a scorer working this pass's 20
+rows will encounter both. This file does not rule on how either shape
+should be scored — that reconciliation is left to whoever builds the
+rubric.
+
 **Note on identity verification:** all four run identities are distinct —
 two native conversation ids (`e7c7eae82b2acb14f243fed2ce91bf79`,
 `1098e2602ba6cf14f243fed2ce91bfe1`) and two custom run sys_ids
