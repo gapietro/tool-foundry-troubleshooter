@@ -11,6 +11,49 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0226 — 2026-08-03
+
+### Fixed
+- **The contract had no UNCONFIRMED exemption, so a correct trace-only diagnosis was unreportable
+  (#93).** `docs/agent/agent-doctor-instructions.md:48` promises the model an escape from the
+  evidence rule — *"name the candidate root cause, name the layer that would confirm it, and mark it
+  UNCONFIRMED"* — that `PaFixReport._checkEvidenceRule` never honoured. Its only passing routes were
+  (A) trace plus one of config/schema/data, and (B) the #78 absence path. Neither admitted a
+  trace-only cause under any confidence marker, so a model that correctly diagnosed a seed *from the
+  trace alone* was structurally forbidden from saying so. `DECISION.md` §K2 is the failing case:
+  the first correct seeded diagnosis this harness ever produced — seed 03's `rules_in_table: 0`,
+  which **is** a tool-call response digest and therefore trace evidence by construction — was
+  rejected for citing only the trace, and the run ended `failed`.
+
+  Added as **path (C)**, checked after A and B so it can only widen; nothing that validated before
+  can newly fail. A trace-only root cause now validates when it is marked `UNCONFIRMED`, names the
+  layer that would confirm it in a new `would_confirm` field, that layer is **not** marked `SWEPT`
+  in `layers_swept`, and the cause cites at least one piece of evidence per layer it claims to have
+  swept — `_checkInconclusive`'s pricing, reused per §K4's *"priced like the inconclusive path"*.
+
+  The sweep cross-check is the fabrication guard: a sweep claim and a still-needed claim about the
+  same layer contradict each other, and #88 established that this model, pressed to produce more,
+  produces claims rather than tool calls. The digit scan behind it requires the word "layer"
+  (`/\blayers?\s*([1-7])\b/`) rather than scanning bare digits, because `sn_aia_agent_tool_m2m`
+  contains a 2 and a false positive there would invent a contradiction that rejects an honest report.
+
+### Notes
+- **Every path-C rejection is repairable without tools** — a missing marker, an unparseable
+  `would_confirm`, a contradictory sweep claim, an under-cited sweep list. That is the property #81
+  lacks: the single repair turn has no tool access, so a citation-shortfall rejection is unfixable
+  by construction. This path is not.
+- **Custom-harness only, deliberately.** `PaFixReport` is reached from `PaAgentLoop` and
+  `PaRestHandlers` and nowhere else; the native harness's entry point is `PaScriptToolAdapter`.
+  `docs/agent/agent-doctor-instructions.md` is **not** edited — it already promises the behaviour in
+  prose — so native's instructions stay byte-identical and §J5's "re-measure native in the same
+  pass" constraint does not apply. Same containment reasoning as §K5.
+- **This produces no depth.** §K4 remedy (2) — making the model take the second step — remains the
+  open half, and #82 / §H8's acceptance test is untouched by this change.
+- The model learns the field from `PaFixReport.schemaText()` only, which `repairPrompt` embeds and
+  `PaAgentLoop._schemaText` reads — the single-sourcing established in #64/#65.
+
+---
+
 ## 2026.08.0225 — 2026-08-03
 
 ### Fixed
