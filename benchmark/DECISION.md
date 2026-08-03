@@ -1080,8 +1080,14 @@ while applying it for the first time.
 Agent Doctor's *instructions* — the only channel that existed when it was written for the native
 harness. It now binds instructions (`docs/agent/agent-doctor-instructions.md`), tool descriptions
 (`src/server/PaToolRegistry.js`, mirrored into `src/fluent/agent-doctor.now.ts`) and **tool output**
-(the seven cores in `src/server/tools/` plus `src/server/PaToolReadKit.js`). All three reach both
-harnesses. Tool output is the most direct of them: it lands in the reasoning loop at the moment of
+— which is defined by a principle rather than a file list: *any text the harness can put in front of
+the model*. The seven cores in `src/server/tools/` and `src/server/PaToolReadKit.js` are the obvious
+members; `PaArtifactStore.js`'s excerpts, `PaFixReport.js`'s repair-turn text, `PaAgentLoop.js`'s
+**system prompt**, `PaLlmProxy.js`'s envelope and `PaScriptToolAdapter.js`'s native envelope are bound
+by the same words, and a leak in any of them is a rule violation rather than merely a test failure.
+All three channels reach the model on both harnesses, though individual files are harness-specific
+(`PaAgentLoop`/`PaFixReport`/`PaLlmProxy` custom-only, `PaScriptToolAdapter` native-only).
+Tool output is the most direct of them: it lands in the reasoning loop at the moment of
 diagnosis rather than in a preamble read once at the start.
 
 **Each specimen declares its own answers.** Five seed specs and the `README.md` smoke gate each carry
@@ -1164,12 +1170,17 @@ call requested `section:"triggers"`"*, and run 10's is the same call shape, the 
 overclaim. `section=triggers` returns no instructions, so the note did not ship on either. That
 settles the open question: **no custom-harness run, scored or smoke, ever received it.**
 
-**On native it did ship, and that is established rather than inferred.** `scorecard-agent-doctor.md`
-§E2 credits `agent_config` layer 2 only when the diagnosis actually used the instruction text; 6 of
-the 10 standing native rows carry L2 (seed 02 ×2, seed 03 run 2, seed 04 run 2, seed 05 ×2), as do
-both native seed-02 v2 rows. The clearest single case is `eed25e8c…`, whose notes record evidence
-citing *"`agent_config` (instruction text)"* inside a root-cause entry. The note is a sibling key of
-that instruction text in the same returned object, so it travelled with it.
+**On native it did ship — directly evidenced on one row, inferred on the other seven.**
+`scorecard-agent-doctor.md` §E2 credits `agent_config` layer 2 only when the diagnosis actually used
+the instruction text; 6 of the 10 standing native rows carry L2 (seed 02 ×2, seed 03 run 2, seed 04
+run 2, seed 05 ×2), as do both native seed-02 v2 rows. **Established** on `eed25e8c…`, whose notes
+record evidence citing *"`agent_config` (instruction text)"* inside a root-cause entry: that call
+demonstrably returned the instructions section, and the note is a sibling key of that text in the
+same returned object, so it travelled with it. **Inferred** on the remaining seven: L2 credit under
+§E2's used-layers discipline implies the instruction text was read, which implies an unqualified or
+`section=instructions` call. That is sound reasoning and it is what §M4's annotation rests on — but
+no scorecard or raw-evidence entry records the `section` argument those runs passed, so it is
+reasoning rather than a record, and the distinction is kept rather than rounded up.
 
 **What that exposure did and did not contaminate.** The removed text names the **smoke gate's**
 specimen and `README.md`'s reason for choosing it. The smoke gate is a pass/fail gate, explicitly
@@ -1221,6 +1232,15 @@ is defective; it derives from **R-22**, a whole-table measurement on this instan
 — and R-22 is the same finding that caused seed 04 to be re-targeted from `connection` to `api` in
 the first place, so the seed and the instruction inherit one ruling rather than the instruction having
 been taught the seed. It *tilts* toward seed 04's layer; it does not *tell*.
+
+**Its twin was considered and ruled the same way.** `src/server/tools/PaToolGenAiLog.js`'s
+`connection_note` carries the same R-22 content in the *more direct* channel — tool output, which
+lands mid-reasoning rather than in a preamble — and so deserved the harder look, not the lighter one.
+It is likewise **not** a leak, and for a reason the instructions line cannot claim: the tool scopes
+the three bindings as *"what this mode checks"*, an honest statement of its own coverage beside
+`stats.check_names`, where the instruction phrases them as *"where defects live"*. A tool naming the
+checks it performs is the opposite of a hint. Recorded because §M5 otherwise reads as if the
+instructions file were the only instance of this sentence in the repository.
 
 It is left in place, and the reason is procedural rather than a shrug: the file is native-shared, so
 moving it relocates an unmeasured native baseline — which §J5 forbids before the v4 pass — for

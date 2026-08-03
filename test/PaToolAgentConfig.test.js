@@ -1498,6 +1498,14 @@ describe('reference statistics are labelled, never mistakable for this agent (is
         expect(finding.detail).toMatch(/throw/i)
         expect(finding.next_step).toMatch(/script_errors/)
 
+        // The removal's whole rationale is that the ACTIONABLE half of the
+        // anecdote survives in next_step — "a run can throw here and still
+        // look healthy in the plan header". Nothing asserted that phrasing,
+        // so it could have evaporated in a later edit and taken the case for
+        // the removal with it, silently. Pinned here.
+        expect(finding.next_step).toMatch(/throw here/i)
+        expect(finding.next_step).toMatch(/plan header/i)
+
         // The section note is the other half of the pair: on its own each
         // string was arguable, together they gave the gate's answer minus the
         // line number. Neither may name the specimen.

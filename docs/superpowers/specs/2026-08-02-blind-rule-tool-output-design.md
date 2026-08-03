@@ -32,10 +32,11 @@ written for the native harness.
 **line 42**. The tool was handing the model the gate's answer, mid-reasoning, on any agent with a
 populated `context_processing_script`.
 
-It never fired, because **no run has ever invoked `agent_config`** — 0/10 in v3, 0/10 in Task 10,
-0/4 in the v4 smoke. The leak was harmless only because the harness was too shallow to reach it,
-and it would have activated at precisely the moment the depth work succeeded — which is the thing
-every open workstream is trying to cause.
+It never fired on the custom harness: `agent_config` was uninvoked in v3 (0/10), Task 10 (0/10) and
+the v4 smoke (0/4), and the two v2 runs that reached it (runs 9 and 10) both requested
+**`section:"triggers"`**, which returns no instructions. The leak was harmless only because the
+harness was too shallow to reach it, and it would have activated at precisely the moment the depth
+work succeeded — which is the thing every open workstream is trying to cause.
 
 The instance was removed by PR #87 as a side-effect of the #85 statistics sweep. **The rule is what
 remains open.** The #85 audit swept for *statistics*; it never swept for *answers*.

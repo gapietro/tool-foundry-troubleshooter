@@ -9,6 +9,12 @@ two-digit daily counter. Incremented on every merge to `main`.
 > `x_snc_troubleshoot/x-snc-troubleshoot/2026.07.3001/src/server/script.ts` — so every version
 > bump rewrites those paths in the installed app. Verified 2026-07-30 on SDK 4.9.2.
 
+> **Note on the dates.** Entries are newest-first by version, and a date can look like it runs
+> backwards across a boundary — `2026.08.0227` is dated 2026-08-02 directly above `2026.08.0226`
+> dated 2026-08-03. That is correct, not a typo: the earlier entries carry the UTC date while local
+> time was still 2026-08-02. The **version** ordering is authoritative; dates are not, and no
+> existing date should be "corrected" on the strength of this appearance.
+
 ---
 
 ## 2026.08.0227 — 2026-08-02
@@ -22,10 +28,12 @@ two-digit daily counter. Incremented on every merge to `main`.
 
   The leak that proved it: until `2026.08.0222`, `PaToolAgentConfig` emitted *"an auto-populated
   body on this instance threw at line 42"* inside a finding — the smoke gate's own expected
-  answer — on any agent with a populated `context_processing_script`. It never fired because no
-  run has ever invoked `agent_config` (0/10 in v3, 0/10 in Task 10, 0/4 in the v4 smoke). The
-  leak was harmless only because the harness was too shallow to reach it, and would have
-  activated at exactly the moment the depth work succeeded. PR #87 removed that instance while
+  answer — on any agent with a populated `context_processing_script`. It never fired on the
+  custom harness: `agent_config` went uninvoked in v3 (0/10), Task 10 (0/10) and the v4 smoke
+  (0/4), and the two v2 runs that did reach it (runs 9 and 10) both asked for
+  `section:"triggers"`, which returns no instructions. The leak was harmless only because the
+  harness was too shallow to reach it, and would have activated at exactly the moment the depth
+  work succeeded. PR #87 removed that instance while
   sweeping for *statistics* (#85); it never swept for *answers*.
 
   The rule now binds all three channels — instructions, tool descriptions, tool output.

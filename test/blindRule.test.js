@@ -11,10 +11,12 @@
  * FINDING — the gate's own expected answer, handed to the model mid-reasoning,
  * on any agent with a populated context_processing_script.
  *
- * It never fired, because no run has ever invoked agent_config: 0/10 in v3,
- * 0/10 in Task 10, 0/4 in the v4 smoke. The leak was harmless only because the
- * harness was too shallow to reach it, and would have activated at exactly the
- * moment the depth work succeeded.
+ * It never fired on the custom harness: agent_config was uninvoked in v3
+ * (0/10), Task 10 (0/10) and the v4 smoke (0/4), and the two v2 runs that
+ * reached it (runs 9 and 10) both asked for section:"triggers", which returns
+ * no instructions. The leak was harmless only because the harness was too
+ * shallow to reach it, and would have activated at exactly the moment the
+ * depth work succeeded.
  *
  * PR #87 removed that instance while sweeping for STATISTICS (#85). It never
  * swept for ANSWERS. This file is that sweep, made permanent.
@@ -68,6 +70,17 @@ function readTokenBlock(absPath) {
         .split('\n')
         .map((line) => line.trim())
         .filter((line) => line.length > 0)
+}
+
+/**
+ * How many ```blind-rule-tokens fences a specimen carries. readTokenBlock's
+ * match is non-global and silently takes the FIRST, so a second block would be
+ * declared-looking and entirely unscanned — a silent way to be unguarded, which
+ * is the failure mode this whole file exists to close. The design says exactly
+ * one block per specimen; this is what makes "exactly" hold.
+ */
+function countTokenBlocks(absPath) {
+    return (fs.readFileSync(absPath, 'utf8').match(/```blind-rule-tokens\n/g) || []).length
 }
 
 const { stripComments } = require('./_stripComments')
@@ -170,6 +183,29 @@ describe('no seeded answer reaches a model-facing string (issue #89)', () => {
         // number is a deliberate act; changing it downward should need a
         // reason in the commit message.
         expect(SCAN_TARGETS).toHaveLength(16)
+
+        // The count alone does not close its own failure mode: a SUBSTITUTION
+        // (delete one target, add another) keeps it at 16 while coverage
+        // moves. Pin the paths, so any roster change — shrink, swap or
+        // rename — has to be made here, deliberately, in the diff.
+        expect(SCAN_TARGETS.map((t) => t.file).sort()).toEqual([
+            'docs/agent/agent-doctor-instructions.md',
+            'src/fluent/agent-doctor.now.ts',
+            'src/server/PaAgentLoop.js',
+            'src/server/PaArtifactStore.js',
+            'src/server/PaFixReport.js',
+            'src/server/PaLlmProxy.js',
+            'src/server/PaScriptToolAdapter.js',
+            'src/server/PaToolReadKit.js',
+            'src/server/PaToolRegistry.js',
+            'src/server/tools/PaToolAgentConfig.js',
+            'src/server/tools/PaToolAgentTrace.js',
+            'src/server/tools/PaToolGenAiLog.js',
+            'src/server/tools/PaToolLogAnalysis.js',
+            'src/server/tools/PaToolQueryTable.js',
+            'src/server/tools/PaToolReadArtifact.js',
+            'src/server/tools/PaToolSchemaLookup.js',
+        ])
     })
 
     SCAN_TARGETS.forEach((target) => {
@@ -222,8 +258,12 @@ describe('the scanner itself works (controls)', () => {
 
 describe('every specimen declares its answer tokens (issue #89)', () => {
     SPECIMENS.forEach((s) => {
-        it(s.label + ' has a blind-rule-tokens block', () => {
+        it(s.label + ' has exactly one blind-rule-tokens block', () => {
             expect(readTokenBlock(s.file)).not.toBeNull()
+
+            // Not "at least one": a second block is read by nothing and
+            // scanned against nothing, while looking like a declaration.
+            expect(countTokenBlocks(s.file)).toBe(1)
         })
 
         it(s.label + ' declares at least one token', () => {

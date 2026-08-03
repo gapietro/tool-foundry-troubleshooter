@@ -40,12 +40,22 @@ for the native harness. There are now three, and the rule binds all of them:
 |---|---|---|
 | Instructions | `docs/agent/agent-doctor-instructions.md` | both harnesses |
 | Tool descriptions | `src/server/PaToolRegistry.js` (single-sourced), mirrored into `src/fluent/agent-doctor.now.ts` | both harnesses |
-| Tool output | the 7 cores in `src/server/tools/` + `src/server/PaToolReadKit.js` | both harnesses |
+| Tool output | **any text the harness can put in front of the model** — e.g. the 7 cores in `src/server/tools/`, `src/server/PaToolReadKit.js` | both harnesses |
+
+**The third channel is defined by that principle, not by the file list.** The files named are
+illustration, and the list is longer than the obvious members: `src/server/PaArtifactStore.js` writes
+the excerpt and degradation notes that come back through `read_artifact`; `src/server/PaFixReport.js`
+supplies the validation text fed verbatim into the repair turn; `src/server/PaAgentLoop.js` **builds
+the system prompt**; `src/server/PaLlmProxy.js` wraps every call to the model; and
+`src/server/PaScriptToolAdapter.js` is native's tool envelope. A leak in any of them is bound by the
+rule directly — not merely caught by the test. `test/blindRule.test.js` scans 16 sources today; that
+roster tracks the principle and must grow with it, rather than defining it.
 
 Tool output is the most direct of the three: it lands in the reasoning loop at the moment of
 diagnosis, not in a preamble read once at the start. Until `2026.08.0222`, `PaToolAgentConfig`
-emitted this gate's own expected answer — *"threw at line 42"* — inside a finding. It never fired
-only because no run has ever invoked `agent_config`, and it would have activated at exactly the
+emitted this gate's own expected answer — *"threw at line 42"* — inside a finding. It never fired on
+the custom harness only because the two runs that ever reached `agent_config` (v2 runs 9 and 10) both
+asked for `section:"triggers"`, which returns no instructions; it would have activated at exactly the
 moment the depth work succeeded (#89, `DECISION.md` §J4, §M).
 
 Two guards enforce the mechanical half:
