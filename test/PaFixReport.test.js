@@ -1508,3 +1508,331 @@ describe('finding 3 — auditAvailable:true with an empty invokedTools list fail
         expect(result.valid).toBe(false)
     })
 })
+
+// =========================================================================
+// #93 — the UNCONFIRMED trace-only exemption (path C).
+//
+// `docs/agent/agent-doctor-instructions.md:48` promises the model an escape
+// from the evidence rule — *"name the candidate root cause, name the layer
+// that would confirm it, and mark it UNCONFIRMED"* — that the contract never
+// honoured. `benchmark/DECISION.md` §K2: on `2026.08.0225` the harness
+// produced its first correct seeded diagnosis (seed 03, `rules_in_table: 0`)
+// and `_checkEvidenceRule` threw it away, because both citations were
+// `source: trace`.
+//
+// Path C is a THIRD passing route, checked after A and B, so it can only
+// widen. What it costs, and why:
+//
+//   confidence === 'UNCONFIRMED'  the claim is marked as what it is
+//   would_confirm names a layer   the missing evidence is named, per line 48
+//   that layer is not SWEPT       a sweep claim and a "still needed" claim
+//                                 about the same layer contradict; #88 showed
+//                                 this model fabricates rather than declines
+//   one citation per SWEPT layer  the inconclusive path's pricing, reused
+// =========================================================================
+
+/** Layer statuses with `numbers` marked NOT_SWEPT and the rest SWEPT. */
+function sweptExcept(numbers) {
+    const layers = sweptLayers()
+    numbers.forEach((n) => {
+        layers[n] = { status: 'NOT_SWEPT', reason: 'not reached before the tool budget ran out' }
+    })
+    return layers
+}
+
+/**
+ * A trace-only root cause on path C. Layer 5 is the missing evidence, so
+ * layer 5 is NOT_SWEPT and the other six are — hence six citations.
+ */
+function unconfirmedReport(overrides, causeOverrides) {
+    const cause = Object.assign(
+        {
+            layer: 'layer 1',
+            component: 'lookup_routing_rule tool call',
+            finding: 'the tool returned 0 rules for the Hardware category',
+            evidence: [
+                { source: 'trace', detail: "Tool call response: 'rules_in_table': 0" },
+                { source: 'trace', detail: 'sn_aia_execution_plan TR1000112 state=Completed' },
+                { source: 'trace', detail: 'tool_calls[2].status = ok' },
+                { source: 'trace', detail: 'script_errors: none' },
+                { source: 'trace', detail: 'header.objective names the Hardware category' },
+                { source: 'trace', detail: 'message_stats: 4 messages' },
+            ],
+            confidence: 'UNCONFIRMED',
+            would_confirm: 'layer 5 — query_table against the routing rule table',
+        },
+        causeOverrides || {}
+    )
+
+    return validReport(
+        Object.assign(
+            {
+                layers_swept: sweptExcept([5]),
+                root_causes: [cause],
+            },
+            overrides || {}
+        )
+    )
+}
+
+describe('#93 path C — a trace-only root cause marked UNCONFIRMED', () => {
+    test('UNCONFIRMED + would_confirm naming an unswept layer + priced citations → valid', () => {
+        expect(load().validate(unconfirmedReport()).valid).toBe(true)
+    })
+
+    test('seed 03 regression: the report §K2 records as rejected now validates', () => {
+        // The real shape — one tool call, so one layer SWEPT and one citation.
+        const report = validReport({
+            failure_summary: 'The routing lookup returned no rules, so the agent had nothing to route on.',
+            layers_swept: Object.assign(sweptExcept([2, 3, 4, 5, 6, 7]), { 1: { status: 'SWEPT' } }),
+            root_causes: [
+                {
+                    layer: 'layer 1',
+                    component: 'lookup_routing_rule',
+                    finding: "the tool call returned 0 rules found for the 'Hardware' category",
+                    evidence: [{ source: 'trace', detail: "Tool call response: 'rules_in_table': 0" }],
+                    confidence: 'UNCONFIRMED',
+                    would_confirm: 'layer 5 — query_table against the routing rule table',
+                },
+            ],
+        })
+
+        expect(load().validate(report, auditCtx(['agent_trace'])).valid).toBe(true)
+    })
+
+    test('trace-only WITHOUT the confidence marker is still rejected, with the old message', () => {
+        const report = unconfirmedReport(undefined, { confidence: 'CONFIRMED' })
+        const result = load().validate(report)
+
+        expect(result.valid).toBe(false)
+        expect(result.problems.some((p) => p.indexOf('evidence rule') !== -1)).toBe(true)
+        expect(result.problems.some((p) => p.indexOf('cites only the trace') !== -1)).toBe(true)
+    })
+
+    test('an absent confidence field does not open path C', () => {
+        const cause = {
+            layer: 'layer 1',
+            component: 'lookup_routing_rule tool call',
+            finding: 'the tool returned 0 rules',
+            evidence: [{ source: 'trace', detail: "'rules_in_table': 0" }],
+            would_confirm: 'layer 5',
+        }
+        const report = validReport({ layers_swept: sweptExcept([2, 3, 4, 5, 6, 7]), root_causes: [cause] })
+
+        expect(load().validate(report).valid).toBe(false)
+    })
+
+    test('UNCONFIRMED without would_confirm is rejected, and the problem names the field', () => {
+        const report = unconfirmedReport(undefined, { would_confirm: undefined })
+        const result = load().validate(report)
+
+        expect(result.valid).toBe(false)
+        expect(result.problems.some((p) => p.indexOf('would_confirm') !== -1)).toBe(true)
+    })
+
+    test('a would_confirm that names no layer is rejected, and the problem says how to phrase one', () => {
+        const report = unconfirmedReport(undefined, { would_confirm: 'reading the routing table would confirm it' })
+        const result = load().validate(report)
+
+        expect(result.valid).toBe(false)
+        expect(result.problems.some((p) => p.indexOf('would_confirm') !== -1)).toBe(true)
+        expect(result.problems.some((p) => p.indexOf('layer 5') !== -1)).toBe(true)
+    })
+
+    test('a bare layer number in would_confirm is accepted', () => {
+        expect(load().validate(unconfirmedReport(undefined, { would_confirm: '5' })).valid).toBe(true)
+    })
+
+    test('digits inside a table name are NOT read as layer numbers', () => {
+        // sn_aia_agent_tool_m2m contains a 2; layer 2 is SWEPT here, so a
+        // naive digit scan would invent a contradiction.
+        const report = unconfirmedReport(undefined, {
+            would_confirm: 'layer 5 — query_table against sn_aia_agent_tool_m2m',
+        })
+
+        expect(load().validate(report).valid).toBe(true)
+    })
+})
+
+describe('#93 path C — the sweep cross-check', () => {
+    test('naming a layer that is marked SWEPT is a contradiction and is rejected', () => {
+        const report = unconfirmedReport({ layers_swept: sweptLayers() })
+        const result = load().validate(report)
+
+        expect(result.valid).toBe(false)
+        expect(result.problems.some((p) => p.indexOf('would_confirm') !== -1 && p.indexOf('SWEPT') !== -1)).toBe(true)
+    })
+
+    test('the contradiction problem names the offending layer', () => {
+        const report = unconfirmedReport({ layers_swept: sweptLayers() })
+        const result = load().validate(report)
+
+        expect(
+            result.problems.some((p) => p.indexOf('would_confirm') !== -1 && p.indexOf('layer 5') !== -1)
+        ).toBe(true)
+    })
+
+    test('EVERY layer named must be unswept — one swept out of two is still a contradiction', () => {
+        const report = unconfirmedReport(
+            { layers_swept: sweptExcept([5]) },
+            { would_confirm: 'layer 4 or layer 5 would settle it' }
+        )
+
+        expect(load().validate(report).valid).toBe(false)
+    })
+
+    test('two unswept layers named together is fine', () => {
+        const report = unconfirmedReport(
+            { layers_swept: sweptExcept([4, 5]) },
+            { would_confirm: 'layer 4 or layer 5 would settle it' }
+        )
+        // Five layers SWEPT now, so five citations suffice.
+        report.root_causes[0].evidence = report.root_causes[0].evidence.slice(0, 5)
+
+        expect(load().validate(report).valid).toBe(true)
+    })
+
+    test('a layer marked UNAVAILABLE is not a contradiction — it was not swept', () => {
+        const layers = sweptExcept([5])
+        layers[5] = { status: 'UNAVAILABLE', reason: 'query_table is not attached to this agent' }
+        const report = unconfirmedReport({ layers_swept: layers })
+
+        expect(load().validate(report).valid).toBe(true)
+    })
+})
+
+describe('#93 path C — priced like the inconclusive path', () => {
+    test('fewer citations than layers marked SWEPT is rejected', () => {
+        const report = unconfirmedReport()
+        report.root_causes[0].evidence = report.root_causes[0].evidence.slice(0, 3)
+        const result = load().validate(report)
+
+        expect(result.valid).toBe(false)
+        expect(result.problems.some((p) => p.indexOf('SWEPT') !== -1)).toBe(true)
+    })
+
+    test('the pricing problem tells the model it can mark layers NOT_SWEPT instead', () => {
+        const report = unconfirmedReport()
+        report.root_causes[0].evidence = report.root_causes[0].evidence.slice(0, 3)
+        const result = load().validate(report)
+
+        expect(result.problems.some((p) => p.indexOf('NOT_SWEPT') !== -1)).toBe(true)
+    })
+
+    test('marking layers honestly NOT_SWEPT drops the bill — one sweep, one citation', () => {
+        const report = unconfirmedReport({
+            layers_swept: Object.assign(sweptExcept([2, 3, 4, 5, 6, 7]), { 1: { status: 'SWEPT' } }),
+        })
+        report.root_causes[0].evidence = report.root_causes[0].evidence.slice(0, 1)
+
+        expect(load().validate(report).valid).toBe(true)
+    })
+})
+
+describe('#93 path C — monotonicity and containment', () => {
+    test('MONOTONICITY: every existing valid report is unaffected', () => {
+        expect(load().validate(validReport()).valid).toBe(true)
+    })
+
+    test('MONOTONICITY: path A wins first — trace + config passes even when marked UNCONFIRMED', () => {
+        const report = validReport({
+            root_causes: [
+                Object.assign(validReport().root_causes[0], {
+                    confidence: 'UNCONFIRMED',
+                    // No would_confirm, and every layer is SWEPT: path C would
+                    // reject this twice over. Path A must return before it.
+                }),
+            ],
+        })
+
+        expect(load().validate(report).valid).toBe(true)
+    })
+
+    test('MONOTONICITY: path B is unaffected — absence diagnosis still passes without a confidence marker', () => {
+        const report = absenceReport([
+            { source: 'config', detail: 'sn_aia_trigger_configuration.active = false' },
+            { source: 'schema', detail: 'active is boolean, default true' },
+        ])
+
+        expect(load().validate(report).valid).toBe(true)
+    })
+
+    test('the citation cross-check still applies on path C — a trace citation from a run that read no trace fails', () => {
+        const report = unconfirmedReport({
+            layers_swept: Object.assign(sweptExcept([2, 3, 4, 5, 6, 7]), { 1: { status: 'SWEPT' } }),
+        })
+        report.root_causes[0].evidence = report.root_causes[0].evidence.slice(0, 1)
+
+        const result = load().validate(report, auditCtx(['schema_lookup']))
+
+        expect(result.valid).toBe(false)
+        expect(result.problems.some((p) => p.indexOf('unsupported citation') !== -1)).toBe(true)
+    })
+
+    test('path C does not leak into inconclusive.evidence_read — that path is unchanged', () => {
+        const report = validReport({
+            layers_swept: sweptExcept([2, 3, 4, 5, 6, 7]),
+            root_causes: [],
+            fixes: [],
+            verification: undefined,
+            inconclusive: {
+                evidence_read: [{ source: 'trace', detail: 'sn_aia_execution_plan: state Completed' }],
+                needed_to_conclude: 'a read of the routing table',
+            },
+        })
+
+        expect(load().validate(report).valid).toBe(true)
+    })
+
+    test('an UNCONFIRMED root cause still owes a fix and a verification step', () => {
+        const report = unconfirmedReport({ fixes: [] })
+
+        expect(load().validate(report).valid).toBe(false)
+    })
+
+    test('would_confirm survives into `normalized` untouched', () => {
+        const result = load().validate(unconfirmedReport())
+
+        expect(result.normalized.root_causes[0].would_confirm).toBe(
+            'layer 5 — query_table against the routing rule table'
+        )
+    })
+
+    test('renderMarkdown surfaces would_confirm, so a human sees what is missing', () => {
+        const reports = load()
+        const normalized = reports.validate(unconfirmedReport()).normalized
+
+        expect(reports.renderMarkdown(normalized)).toEqual(expect.stringContaining('query_table against the routing'))
+    })
+})
+
+describe('#93 schemaText contract additions', () => {
+    test('schemaText documents would_confirm so the model knows the field exists', () => {
+        expect(load().schemaText()).toEqual(expect.stringContaining('would_confirm'))
+    })
+
+    test('schemaText states the UNCONFIRMED marker by name', () => {
+        expect(load().schemaText()).toEqual(expect.stringContaining('UNCONFIRMED'))
+    })
+
+    test('schemaText states the sweep cross-check', () => {
+        const text = load().schemaText()
+
+        expect(text.indexOf('would_confirm') !== -1 && text.indexOf('SWEPT') !== -1).toBe(true)
+    })
+
+    test('schemaText states the citation-per-SWEPT-layer price on the UNCONFIRMED path too', () => {
+        const text = load().schemaText()
+        const clause = text.split('\n').filter((l) => l.indexOf('would_confirm') !== -1)
+
+        expect(clause.length).toBeGreaterThan(0)
+        expect(clause.join(' ')).toEqual(expect.stringContaining('SWEPT'))
+    })
+
+    test('schemaText tells the model the exemption does not excuse not looking', () => {
+        const text = load().schemaText()
+        const clause = text.split('\n').filter((l) => l.indexOf('would_confirm') !== -1)
+
+        expect(clause.join(' ')).toEqual(expect.stringContaining('NOT_SWEPT'))
+    })
+})

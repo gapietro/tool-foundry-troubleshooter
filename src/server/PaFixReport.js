@@ -337,11 +337,16 @@ PaFixReport.prototype = {
         }
 
         for (var i = 0; i < rcs.length; i++) {
-            this._checkRootCause(rcs[i], i, problems, ctx)
+            this._checkRootCause(rcs[i], i, problems, ctx, report)
         }
     },
 
-    _checkRootCause: function (rc, index, problems, ctx) {
+    /**
+     * `report` is threaded through purely for path C (#93): the sweep
+     * cross-check and the citation-per-sweep price are both properties of
+     * `layers_swept`, which lives on the report rather than on the cause.
+     */
+    _checkRootCause: function (rc, index, problems, ctx, report) {
         var label = 'root_causes[' + index + ']'
         if (!this._isPlainObject(rc)) {
             problems.push(label + ' must be an object')
@@ -361,7 +366,7 @@ PaFixReport.prototype = {
             return
         }
 
-        this._checkEvidenceRule(rc.evidence, label, causeName, problems, ctx)
+        this._checkEvidenceRule(rc.evidence, label, causeName, problems, ctx, rc, report)
     },
 
     /**
@@ -491,9 +496,12 @@ PaFixReport.prototype = {
      *   (A) at least one 'trace' citation PLUS at least one config/schema/
      *       data citation — the original rule, untouched;
      *   (B) layer 1 UNAVAILABLE plus at least TWO DISTINCT non-trace sources
-     *       — the absence-diagnosis path (#78).
+     *       — the absence-diagnosis path (#78);
+     *   (C) a trace-only cause MARKED UNCONFIRMED that names the layer which
+     *       would confirm it — the exemption `agent-doctor-instructions.md:48`
+     *       already promises the model (#93). Priced in `_checkUnconfirmed`.
      *
-     * B is an ADDITIONAL route, never a replacement: A returns first, so
+     * B and C are ADDITIONAL routes, never replacements: A returns first, so
      * nothing that passes today can newly fail here. The rule's real content
      * is "one layer is a candidate, not a conclusion" — two independent
      * sources. B preserves that and relaxes only the PRIVILEGED STATUS of the
@@ -510,7 +518,7 @@ PaFixReport.prototype = {
      * (Task 4 brief, Step 1) and names the cause, so a repair prompt — or a
      * human — can find it without re-deriving which entry failed.
      */
-    _checkEvidenceRule: function (evidence, label, causeName, problems, ctx) {
+    _checkEvidenceRule: function (evidence, label, causeName, problems, ctx, rc, report) {
         var tally = this._checkEvidenceEntries(evidence, label + '.evidence', problems, ctx)
 
         // (A) — the original rule. Checked first so B can only ever widen.
@@ -538,10 +546,133 @@ PaFixReport.prototype = {
             return
         }
 
+        // (C) — the UNCONFIRMED exemption. Attempted ONLY when the report
+        // claims it, so a cause that never marked itself unconfirmed still
+        // gets the original message rather than a lecture about a field it
+        // did not use.
+        if (this._claimsUnconfirmed(rc)) {
+            this._checkUnconfirmed(evidence, rc, report, label, causeName, problems)
+            return
+        }
+
         problems.push(
             label + ' (' + causeName + '): evidence rule violation — evidence cites only the trace; ' +
-                'at least one config, schema, or data citation is required'
+                'at least one config, schema, or data citation is required. If the trace alone genuinely ' +
+                'settles it and you cannot reach a second layer, set confidence to UNCONFIRMED and name the ' +
+                'layer that would confirm it in `would_confirm` — an unconfirmed candidate that names its ' +
+                'missing evidence is a valid report.'
         )
+    },
+
+    /** True when the cause marks itself UNCONFIRMED (case- and space-tolerant). */
+    _claimsUnconfirmed: function (rc) {
+        if (!this._isPlainObject(rc)) return false
+        var c = String(rc.confidence === null || rc.confidence === undefined ? '' : rc.confidence)
+        return c.replace(/^\s+|\s+$/g, '').toUpperCase() === 'UNCONFIRMED'
+    },
+
+    /**
+     * Path C (#93), the exemption `agent-doctor-instructions.md:48` promises
+     * and the contract never honoured. `benchmark/DECISION.md` §K2: the first
+     * correct seeded diagnosis this harness ever produced — seed 03's
+     * `rules_in_table: 0`, which IS a tool-call response digest and therefore
+     * trace evidence by construction — was rejected for citing only the
+     * trace, with no way to say "correct, and not yet confirmed".
+     *
+     * What it costs, and why each cost is here:
+     *
+     *   `would_confirm` names a LAYER — line 48 asks for the layer, not a
+     *   vague gesture at more work, and a layer number is the only part of
+     *   that sentence this method can check.
+     *
+     *   That layer must not be marked SWEPT — a sweep claim and a
+     *   still-needed claim about the SAME layer contradict each other, and
+     *   one of the two is false. #88 established that this model, pressed to
+     *   produce more, produces claims rather than tool calls; an exemption
+     *   with no self-consistency check is exactly that pressure with a
+     *   sanctioned output shape.
+     *
+     *   One citation per SWEPT layer — `_checkInconclusive`'s pricing,
+     *   reused deliberately (§K4: "priced like the inconclusive path"). An
+     *   unconfirmed cause resting on one layer should not be CHEAPER than an
+     *   honest "I could not tell".
+     *
+     * Every rejection here is fixable by editing the report — a marker, a
+     * phrasing, a layer status, a citation list. That is the property #81
+     * lacks: the single repair turn has no tools, so a rejection it cannot
+     * fix without one is unfixable by construction. This path is repairable.
+     */
+    _checkUnconfirmed: function (evidence, rc, report, label, causeName, problems) {
+        var prefix = label + ' (' + causeName + '): '
+
+        if (!this._nonEmptyString(rc.would_confirm)) {
+            problems.push(
+                prefix + 'evidence rule violation — a trace-only root cause is allowed when it is marked ' +
+                    'UNCONFIRMED, but it must also name the layer that would confirm it in a `would_confirm` ' +
+                    'string (e.g. "layer 5 — query_table against the routing table"). Add `would_confirm`, or ' +
+                    'gather a config/schema/data citation and drop the UNCONFIRMED marker.'
+            )
+            return
+        }
+
+        var named = this._layersNamedBy(rc.would_confirm)
+        if (named.length === 0) {
+            problems.push(
+                prefix + 'would_confirm must name a layer NUMBER between 1 and 7 — write "layer 5" (or a bare ' +
+                    '"5"), not only a prose description, so the missing evidence is identified. Got: "' +
+                    rc.would_confirm + '".'
+            )
+            return
+        }
+
+        var ls = this._isPlainObject(report) && this._isPlainObject(report.layers_swept) ? report.layers_swept : {}
+        var contradicted = []
+        for (var i = 0; i < named.length; i++) {
+            var entry = ls[named[i]]
+            if (this._isPlainObject(entry) && entry.status === 'SWEPT') contradicted.push('layer ' + named[i])
+        }
+        if (contradicted.length > 0) {
+            problems.push(
+                prefix + 'would_confirm names ' + contradicted.join(', ') + ', which layers_swept marks SWEPT — ' +
+                    'a layer you already swept cannot also be the evidence you still need. Either mark that ' +
+                    'layer NOT_SWEPT with a reason, or cite what the sweep actually returned as ' +
+                    this._nonTraceEvidenceSources().join('/') + ' evidence and drop the UNCONFIRMED marker.'
+            )
+            return
+        }
+
+        var swept = this._countSweptLayers(report)
+        if (evidence.length < swept) {
+            problems.push(
+                prefix + 'an UNCONFIRMED trace-only root cause cites ' + evidence.length + ' piece(s) of ' +
+                    'evidence but layers_swept marks ' + swept + ' layer(s) SWEPT — cite at least one piece of ' +
+                    'evidence per layer you claim to have swept. If you did not actually sweep a layer, mark it ' +
+                    'NOT_SWEPT or UNAVAILABLE with a reason rather than claiming it.'
+            )
+        }
+    },
+
+    /**
+     * Layer numbers named by a `would_confirm` string. Deliberately NOT a
+     * bare digit scan: table names carry digits (`sn_aia_agent_tool_m2m`
+     * contains a 2), and a false positive here invents a contradiction that
+     * rejects an honest report. Requires the word "layer", falling back to a
+     * string that is nothing BUT a digit.
+     */
+    _layersNamedBy: function (text) {
+        var found = []
+        var re = /\blayers?\s*([1-7])\b/gi
+        var match = re.exec(text)
+        while (match !== null) {
+            var n = parseInt(match[1], 10)
+            if (this._indexOf(found, n) === -1) found.push(n)
+            match = re.exec(text)
+        }
+        if (found.length === 0) {
+            var bare = /^\s*([1-7])\s*$/.exec(text)
+            if (bare) found.push(parseInt(bare[1], 10))
+        }
+        return found
     },
 
     /**
@@ -800,7 +931,8 @@ PaFixReport.prototype = {
                 'REQUIRED when status is not SWEPT'
         )
         lines.push(
-            'root_causes: array of {layer, component, finding, evidence, confidence?} — NON-EMPTY unless you ' +
+            'root_causes: array of {layer, component, finding, evidence, confidence?, would_confirm?} — ' +
+                'NON-EMPTY unless you ' +
                 'supply the `inconclusive` object described below; layer is the ' +
                 'layer number as a string "1".."7" (a bare JSON number 1-7 is also accepted and normalized to a ' +
                 'string); component is a non-empty string naming the specific record/table/field; finding is a ' +
@@ -808,8 +940,11 @@ PaFixReport.prototype = {
                 'where source is a string, one of ' + this._evidenceSources().join('|') + ', and detail is a ' +
                 'non-empty string citation (table, sys_id, field, or value); EVERY root cause needs at least one ' +
                 '"trace" evidence entry PLUS at least one of ' + this._nonTraceEvidenceSources().join('|') +
-                ' (the evidence rule) — UNLESS nothing ever ran, in which case see the absence rule below; ' +
-                'confidence, if present, is a string (e.g. CONFIRMED or UNCONFIRMED)'
+                ' (the evidence rule) — UNLESS nothing ever ran, in which case see the absence rule below, OR ' +
+                'you mark the cause UNCONFIRMED, in which case see the unconfirmed rule below; ' +
+                'confidence, if present, is a string (e.g. CONFIRMED or UNCONFIRMED); would_confirm, ' +
+                'REQUIRED when confidence is UNCONFIRMED and your evidence is trace-only, is a string naming ' +
+                'the layer that would confirm the cause'
         )
         lines.push(
             'fixes: array of {target_type, target, current, proposed, rationale} — NON-EMPTY unless root_causes ' +
@@ -867,6 +1002,20 @@ PaFixReport.prototype = {
                 this._nonTraceEvidenceSources().join('/') + ' instead. Two citations of the same source ' +
                 'are one source. This is a fully acceptable root cause — do NOT invent a trace citation to ' +
                 'satisfy the evidence rule.'
+        )
+        lines.push(
+            'IF THE TRACE ALONE SETTLES IT, SAY SO AND MARK IT UNCONFIRMED — you do not need a second layer. ' +
+                'When the execution trace genuinely identifies the cause and you could not reach a ' +
+                'config/schema/data source to corroborate it, set confidence to UNCONFIRMED and name the layer ' +
+                'that would confirm it in would_confirm, as a layer NUMBER: "layer 5 — query_table against the ' +
+                'routing table". A correct diagnosis marked UNCONFIRMED is a valid report and is always better ' +
+                'than dropping the finding or inventing a citation. Two conditions: the layer named in ' +
+                'would_confirm must NOT be marked SWEPT in layers_swept — if you swept it, it is not the ' +
+                'evidence you are missing, so cite what it returned instead — and the cause must cite at least ' +
+                'one piece of evidence per layer marked SWEPT, exactly as the inconclusive path does. Mark ' +
+                'layers you did not reach NOT_SWEPT with a reason and that requirement drops with them. ' +
+                'PREFER confirming it: if a tool call can reach the second layer, make the call. This is the ' +
+                'route for when you could not, not a way to skip looking.'
         )
 
         return lines.join('\n')
@@ -946,6 +1095,12 @@ PaFixReport.prototype = {
                 lines.push('     - ' + this._str(e.source) + ': ' + this._str(e.detail))
             }
             lines.push('   confidence: ' + this._str(rc.confidence))
+            // #93 — an unconfirmed cause that named its missing evidence must
+            // show that naming to the human too, or the Markdown output
+            // reads as a bare hedge.
+            if (this._nonEmptyString(rc.would_confirm)) {
+                lines.push('   would confirm: ' + this._str(rc.would_confirm))
+            }
             lines.push('')
         }
 
