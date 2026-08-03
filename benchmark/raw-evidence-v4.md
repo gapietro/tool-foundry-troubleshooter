@@ -1097,3 +1097,432 @@ verdict is being rendered.
 
 All four runs reached a valid terminal state on the first attempt; no
 re-fire was needed.
+
+---
+
+## Seed 03 — scored run block (Task 7)
+
+**Target: execution plan `c4cd01842b6a4bd417a6ffbeee91bfc3`.** These are
+scored rows, not a gate. Invocation text sent to each harness was exactly
+the brief's text and nothing else — no seed spec file was read before
+firing. Order fired: native run 1 → custom run 1 → native run 2 (fresh
+conversation) → custom run 2 (fresh POST), matching the brief's interleaving
+requirement exactly (no batching by harness). Native runs were fired with
+`waitForCompletion=false` and located/polled afterward via multi-record
+query on `sn_aia_execution_plan` and `servicenow_aia_trace`, in accordance
+with the non-stale verification requirement.
+
+### Native run 1 (Agent Doctor, `e1392946828940e5a708fc51b0a5e954`)
+
+Prompt: `Diagnose execution plan c4cd01842b6a4bd417a6ffbeee91bfc3.`
+
+- Execution ID `49eda2242b2acf14f243fed2ce91bf39`, conversation
+  `fced2ee82be6cf14f243fed2ce91bfc1`
+- Fired 2026-08-03 21:45:58Z (per multi-record `sn_aia_execution_plan`
+  `sys_created_on`). **Terminal state: Completed** (`servicenow_aia_trace`:
+  Started 2026-08-03 17:45:58 / Ended 17:48:29 instance-local; cross-checked
+  via multi-record `sn_aia_execution_plan` query:
+  `sys_updated_on=2026-08-03 21:48:30`, `state=completed`).
+- **Wall clock: 151s** (trace-reported duration).
+- **Tool-call count: 9** — `agent_trace` ×1, `read_artifact` ×4,
+  `genai_log` ×1, `agent_config` ×1, `query_table` ×1, `schema_lookup` ×1
+  (19 execution tasks total, per `servicenow_aia_trace`).
+
+Full text of the Fix Report (pulled from `sys_cs_message`
+`257e62682b2acf14f243fed2ce91bfb1`, `payload.value`, the message the
+user/caller actually sees):
+
+> ## Fix Report — Execution Plan `c4cd01842b6a4bd417a6ffbeee91bfc3`
+>
+> ---
+>
+> ### FAILURE SUMMARY
+>
+> The user submitted a hardware routing request ("my monitor is flickering
+> and needs replacement"). The agent **Seed 03 Category Router** ran to
+> completion without error, but produced no routing result. The tool
+> `lookup_routing_rule` queried the routing table `x_snc_tsbench_routing`
+> for the category **Hardware** and returned `matched: false,
+> rules_in_table: 0`. The table is genuinely empty — it contains no rows at
+> all, so no category can ever match. The LLM correctly interpreted the
+> empty result and reported the failure to the user via FALLBACK. The plan
+> state is **Completed**, but the functional outcome is a routing miss: no
+> assignment group was resolved.
+>
+> ---
+>
+> ### LAYERS SWEPT
+>
+> | Layer | Status | Notes |
+> |-------|--------|-------|
+> | 1 — Execution trace | **SWEPT** | agent_trace on execution plan `c4cd01842b6a4bd417a6ffbeee91bfc3` |
+> | 2 — Instructions | **NOT SWEPT** | Trace pointed to a data defect before instructions became suspect; agent instructions did not contribute to the failure |
+> | 3 — Tool definitions | **SWEPT** | agent_config tools section; script body confirmed |
+> | 4 — Data schemas | **SWEPT** | schema_lookup on `x_snc_tsbench_routing` |
+> | 5 — Data | **SWEPT** | query_table on `x_snc_tsbench_routing`; genuinely_empty confirmed |
+> | 6 — GenAI stack | **SWEPT** | genai_log for_execution; 2 LLM calls, both success, no errors |
+> | 7 — Trigger and wiring | **NOT SWEPT** | Trace showed the agent was invoked and ran normally; trigger/wiring was not implicated |
+> | Platform logs | **NOT SWEPT** | log_analysis is unavailable on most instances due to syslog cross-scope restrictions. An instance administrator must grant cross-scope read on `syslog` to sweep this layer |
+>
+> ---
+>
+> ### ROOT CAUSES
+>
+> **Root Cause 1**
+>
+> | Field | Value |
+> |-------|-------|
+> | **Layer** | 5 — Data |
+> | **Component** | Table `x_snc_tsbench_routing` (label: Bench Routing Rule) |
+> | **Finding** | The routing table is genuinely empty. Zero rows exist with or without ACL filtering. No category-to-assignment-group mapping is present, so `lookup_routing_rule` can never match any request. |
+> | **Evidence** | query_table → `x_snc_tsbench_routing` → `read_status: empty`, `unfiltered_row_count: 0`, `verdict: genuinely_empty`; tool call response → `matched: false, rules_in_table: 0` |
+> | **Confidence** | **CONFIRMED** — unfiltered count is 0; the table exists and is readable |
+>
+> **Root Cause 2 (secondary / hardening)**
+>
+> | Field | Value |
+> |-------|-------|
+> | **Layer** | 3 — Tool definitions |
+> | **Component** | Tool `lookup_routing_rule`, binding `3bacb3ef18454586b86a87f11ffaae9a` — input schema |
+> | **Finding** | The `category` input is declared `mandatory: false`. If the LLM omits the input, the tool silently queries with a null category and returns `matched: false`, which is indistinguishable from a genuine no-match. |
+> | **Evidence** | agent_config tools section → `input_schema: [{"name":"category","mandatory":false}]` |
+> | **Confidence** | **CONFIRMED** as a defect; did not cause this specific run (category "Hardware" was correctly passed), but will cause silent failures in future runs |
+>
+> ---
+>
+> ### FIXES
+>
+> **Fix 1 — Seed the routing table**
+>
+> | Field | Value |
+> |-------|-------|
+> | **Target type** | Data |
+> | **Target** | Table `x_snc_tsbench_routing` (Bench Routing Rule) |
+> | **Current** | 0 rows |
+> | **Proposed** | Insert at minimum one row per routable category (e.g., `category = Hardware`, `assignment_group = <target group name>`). Add rows for all categories the agent is expected to handle. |
+> | **Rationale** | The tool can only match a rule that exists. With zero rows, every request will fail regardless of the category supplied. |
+>
+> **Fix 2 — Mark `category` input mandatory**
+>
+> | Field | Value |
+> |-------|-------|
+> | **Target type** | Tool schema |
+> | **Target** | Tool `lookup_routing_rule` (sn_aia_tool), input schema field `category` |
+> | **Current** | `"mandatory": false` |
+> | **Proposed** | `"mandatory": true` |
+> | **Rationale** | Prevents silent null-category queries that return `matched: false` and are indistinguishable from a genuine no-match. The LLM will be forced to supply a value or the platform will surface an input-validation error before the script runs. |
+>
+> ---
+>
+> ### VERIFICATION
+>
+> 1. Insert at least one routing row into `x_snc_tsbench_routing` (e.g., `category = Hardware`).
+> 2. Replay the original conversation or submit a new request: *"Please route this hardware request."*
+> 3. Expect the tool call to return `matched: true` and an `assignment_group` value.
+> 4. Expect the agent's final message to name the resolved assignment group.
+> 5. Optionally test with a category that has no row to confirm the no-match path still returns a clear message.
+>
+> ---
+>
+> ### DATA MARKERS
+>
+> The following record data was observed during diagnosis and should be
+> redacted before this report leaves the instance:
+>
+> - User profile message content: email `admin@example.com`, name "System
+>   Administrator", sys_id of the admin user — sourced from execution
+>   message stream, `sn_aia_message`, seq `19fc016ab190000001`
+
+### Custom run 1 (`x_snc_troubleshoot`)
+
+Body: `{"execution": "c4cd01842b6a4bd417a6ffbeee91bfc3", "mode": "diagnose"}`
+
+- Run ID `56ed26242b2acf14f243fed2ce91bf16` (`TR1000126`), polled via
+  `GET .../runs/{run_id}` (trusted over any single-record `servicenow_query`,
+  which is stale on this instance).
+- Fired 2026-08-03 21:46:01Z. **Terminal state: complete** (last transcript
+  entry `2026-08-03 21:46:20`).
+- **Wall clock: ~19s.**
+- **Tool-call count: 1** (`agent_trace`).
+
+Full `fix_report`:
+
+```json
+{
+  "failure_summary": "The AI Agent execution for routing a hardware request (monitor replacement) completed successfully but did not match any routing rules. The tool call to 'lookup_routing_rule' returned 0 rules in the table, indicating a potential misconfiguration or missing rules for the 'Hardware' category.",
+  "layers_swept": {
+    "1": {"status": "SWEPT", "reason": "agent_trace provided execution details and tool call results"},
+    "2": {"status": "NOT_SWEPT", "reason": "Instructions were not explicitly requested; focus remained on execution trace and tool output"},
+    "3": {"status": "NOT_SWEPT", "reason": "Tool definitions were not inspected due to trace indicating a data gap (0 rules found)"},
+    "4": {"status": "NOT_SWEPT", "reason": "Schema lookup not performed as the issue appeared data-related (missing rules)"},
+    "5": {"status": "NOT_SWEPT", "reason": "Data existence not verified due to trace indicating rules were absent"},
+    "6": {"status": "NOT_SWEPT", "reason": "GenAI stack not inspected as the failure occurred in the tool layer"},
+    "7": {"status": "NOT_SWEPT", "reason": "Trigger wiring not analyzed as the root cause appeared in tool execution"}
+  },
+  "root_causes": [
+    {
+      "layer": "1",
+      "component": "lookup_routing_rule tool call",
+      "finding": "No routing rules found for the 'Hardware' category",
+      "evidence": [
+        {"source": "trace", "detail": "Tool response: 'rules_in_table': 0"},
+        {"source": "trace", "detail": "Execution status: Success but no valid route identified"}
+      ],
+      "confidence": "UNCONFIRMED",
+      "would_confirm": "layer 4 — schema_lookup to verify routing rule schema requirements"
+    }
+  ],
+  "fixes": [
+    {
+      "target_type": "tool schema",
+      "target": "lookup_routing_rule tool configuration",
+      "current": "No rules defined for 'Hardware' category",
+      "proposed": "Add routing rules for 'Hardware' category (e.g., monitor replacement)",
+      "rationale": "The tool found 0 rules, indicating a missing configuration to handle hardware requests"
+    }
+  ],
+  "verification": "Re-run the agent and verify the tool call returns matched rules with a non-zero 'rules_in_table' value",
+  "data_markers": []
+}
+```
+
+**Fix_report shape:** the POPULATED-`root_causes` shape (one entry, confidence
+`UNCONFIRMED`, non-empty `fixes`, non-empty `verification` string, **no**
+`inconclusive` key) — the same shape family as the Task 3 smoke-gate custom
+run, NOT the `inconclusive`-keyed shape seen in both seed 01 and both seed
+02 custom runs. Named per the brief's instruction, not scored here.
+
+### Native run 2 (Agent Doctor, `e1392946828940e5a708fc51b0a5e954`, fresh conversation)
+
+Prompt: `Diagnose execution plan c4cd01842b6a4bd417a6ffbeee91bfc3.`
+
+- Execution ID `7c0eeea42be6871817a6ffbeee91bf26`, conversation
+  `2c0eaea42be6871817a6ffbeee91bff3` (distinct from native run 1's
+  `fced2ee82be6cf14f243fed2ce91bfc1`)
+- Fired 2026-08-03 21:46:30Z (per multi-record `sn_aia_execution_plan`
+  `sys_created_on`). **Terminal state: Completed** (`servicenow_aia_trace`:
+  Started 2026-08-03 17:46:30 / Ended 17:49:02 instance-local;
+  cross-checked via multi-record `sn_aia_execution_plan` query:
+  `sys_updated_on=2026-08-03 21:49:03`, `state=completed`).
+- **Wall clock: 153s** (trace-reported duration).
+- **Tool-call count: 9** — `agent_trace` ×1, `read_artifact` ×5,
+  `agent_config` ×1, `query_table` ×1, `schema_lookup` ×1 (19 execution
+  tasks total).
+
+Full text of the Fix Report (pulled from `sys_cs_message`
+`319e6ee82be6871817a6ffbeee91bf0e`, `payload.value`):
+
+> ## Fix Report — Execution Plan `c4cd01842b6a4bd417a6ffbeee91bfc3`
+>
+> ---
+>
+> ### FAILURE SUMMARY
+>
+> The user submitted: *"Please route this hardware request: my monitor is
+> flickering and needs replacement."* The agent resolved the category as
+> **Hardware**, called the `lookup_routing_rule` tool correctly, and
+> received a well-formed response — but that response reported `matched:
+> false` and `rules_in_table: 0`. The tool executed without error; the
+> routing table `x_snc_tsbench_routing` simply contains no rows. Because
+> there was nothing to match against, the agent fell back and told the user
+> it could not find a routing rule. The run state is **Completed** (not
+> errored), but the functional objective — routing the request to an
+> assignment group — was not achieved.
+>
+> ---
+>
+> ### LAYERS SWEPT
+>
+> | Layer | Status | Notes |
+> |-------|--------|-------|
+> | 1 · Execution trace | **SWEPT** | Full task tree and tool call retrieved |
+> | 2 · Agent instructions | **NOT SWEPT** | Trace showed no instruction-parsing error; data absence was established before instructions needed review |
+> | 3 · Tool definitions | **SWEPT** | Tool script and input schema retrieved via agent_config |
+> | 4 · Data schemas | **SWEPT** | `x_snc_tsbench_routing` confirmed to exist with correct columns |
+> | 5 · Data | **SWEPT** | Table confirmed genuinely empty |
+> | 6 · GenAI stack | **NOT SWEPT** | Two GenAI tasks completed successfully; no model-call failure in the trace; stack did not need further audit |
+> | 7 · Trigger and wiring | **NOT SWEPT** | Access Verification task passed; run was triggered and executed normally |
+> | Platform logs | **UNAVAILABLE** | `log_analysis` is blocked on most instances — the syslog table restricts cross-scope callers. An instance administrator must grant cross-scope syslog access to sweep this layer |
+>
+> ---
+>
+> ### ROOT CAUSES
+>
+> **RC-1 — Routing table is empty**
+>
+> | Attribute | Value |
+> |-----------|-------|
+> | Layer | 5 · Data |
+> | Component | Table `x_snc_tsbench_routing`, all rows |
+> | Finding | The table exists and has the correct schema (`category`, `assignment_group`) but contains zero records. The tool cannot match any category because there is nothing to match against. |
+> | Evidence | `query_table` → table `x_snc_tsbench_routing`, read_status `empty`, unfiltered_row_count `0`, verdict `genuinely_empty` (sn_aia_tools_execution sys_id `0acd45842b6a4bd417a6ffbeee91bfa1`; tool response `{"ok":true,"matched":false,"category":"Hardware","rules_in_table":0}`) |
+> | Confidence | **CONFIRMED** — two independent checks (GlideRecordSecure read + unfiltered COUNT) both returned 0 |
+>
+> ---
+>
+> ### FIXES
+>
+> **Fix 1 — Seed the routing table**
+>
+> | Attribute | Value |
+> |-----------|-------|
+> | Target type | Data |
+> | Target | Table `x_snc_tsbench_routing` |
+> | Current | 0 rows |
+> | Proposed | Insert at minimum one row per category the agent is expected to handle. For the failing case: `category = Hardware`, `assignment_group = <target group name>`. Add rows for every other category in scope. |
+> | Rationale | The tool script queries this table directly. Without rows, `matched` is always `false` regardless of the input category. |
+>
+> **Fix 2 (recommended, secondary) — Mark the `category` input as mandatory**
+>
+> | Attribute | Value |
+> |-----------|-------|
+> | Target type | Tool schema |
+> | Target | `sn_aia_agent_tool_m2m` binding `3bacb3ef18454586b86a87f11ffaae9a`, field `inputs` → `mandatory` flag for the `category` parameter |
+> | Current | `"mandatory": false` |
+> | Proposed | `"mandatory": true` |
+> | Rationale | The input is structurally required for the query. Marking it optional allows the model to omit it; the tool then silently queries with a null category and returns no match. |
+>
+> **Fix 3 (recommended, secondary) — Add negative guidance to the tool description**
+>
+> | Attribute | Value |
+> |-----------|-------|
+> | Target type | Tool schema |
+> | Target | `sn_aia_tool` `3bd31a0be63d4e81856598dbd2c96788`, field `description` |
+> | Current | `"Looks up the assignment group for a category in the bench routing table. Give it a category name. Returns the matching assignment group, or reports explicitly that no rule matched."` |
+> | Proposed | Append: `"Use only for category-to-group routing lookups. Do not call this tool if the category is unknown or if the request does not require group assignment."` |
+> | Rationale | The tool-quality scan flagged `description_no_negative_guidance` and `description_no_input_guidance` (medium severity). Without boundaries the model may reach for this tool in inappropriate contexts. |
+>
+> ---
+>
+> ### VERIFICATION
+>
+> 1. Insert at least one row into `x_snc_tsbench_routing` with `category =
+>    Hardware` and a valid `assignment_group` value.
+> 2. Re-run the agent with the same objective: *"Please route this hardware
+>    request: my monitor is flickering and needs replacement."*
+> 3. Expect the tool response to return `{"ok": true, "matched": true,
+>    "category": "Hardware", "assignment_group": "<inserted value>",
+>    "rules_in_table": 1}`.
+> 4. Expect the agent's final message to name the resolved assignment group
+>    rather than reporting no match.
+>
+> ---
+>
+> ### DATA MARKERS
+>
+> The following record data was observed during diagnosis and should be
+> redacted before this report leaves the instance:
+>
+> - User profile message: user email, first name, last name, sys_id,
+>   user_id (from `sn_aia_message` sys_id `54cd01842b6a4bd417a6ffbeee91bfc9`)
+> - Conversation sys_id: `44cd85402b6a4bd417a6ffbeee91bf79`
+> - Sender sys_id in `sys_cs_message`: `6816f79cc0a8016401c5a33be04be441`
+
+**CAUTION — a quoted id that is NOT one of this run's identities:** both
+native Fix Reports above quote or embed `conversation:
+44cd85402b6a4bd417a6ffbeee91bf79`. Native run 1's own `agent_trace` tool
+output surfaced this value inside the trace JSON header
+(`"conversation":"44cd85402b6a4bd417a6ffbeee91bf79"`) as part of the
+FIXTURE's own prior seeded execution history (the same execution plan
+`c4cd01842b6a4bd417a6ffbeee91bfc3` was originally run once to seed the
+defect, before this task's four diagnostic runs). Native run 2's Fix Report
+lists this same value again, explicitly labeled "Conversation sys_id," in
+its DATA MARKERS section — quoted as evidence read from the trace, not as
+that run's own conversation. **This id belongs to the fixture under
+diagnosis, not to this task's runs**, and must not be confused with the two
+native run identities below (`fced2ee82be6cf14f243fed2ce91bfc1`,
+`2c0eaea42be6871817a6ffbeee91bff3`).
+
+### Custom run 2 (`x_snc_troubleshoot`, fresh POST)
+
+Body: `{"execution": "c4cd01842b6a4bd417a6ffbeee91bfc3", "mode": "diagnose"}`
+
+- Run ID `5d0eae242b2acf14f243fed2ce91bfd9` (`TR1000128`), polled via
+  `GET .../runs/{run_id}`.
+- Fired 2026-08-03 21:46:28Z (approx — immediately following native run 2's
+  fire). **Terminal state: complete** (last transcript entry
+  `2026-08-03 21:46:40`).
+- **Wall clock: ~12s.**
+- **Tool-call count: 1** (`agent_trace`).
+
+Full `fix_report` (same POPULATED-`root_causes` shape family as custom run
+1, same substantive finding):
+
+```json
+{
+  "failure_summary": "The AI Agent execution for routing a hardware request (monitor flickering) completed successfully but did not match any routing rules. The tool call to 'lookup_routing_rule' returned 0 rules in the table, indicating a potential misconfiguration or missing rules for the 'Hardware' category.",
+  "layers_swept": {
+    "1": {"status": "SWEPT", "reason": "agent_trace provided execution details and tool call results"},
+    "2": {"status": "NOT_SWEPT", "reason": "Instructions were not explicitly requested; focus remained on execution trace and tool output"},
+    "3": {"status": "NOT_SWEPT", "reason": "Tool definitions were not inspected beyond the tool call output"},
+    "4": {"status": "NOT_SWEPT", "reason": "Data schema validation was not performed"},
+    "5": {"status": "NOT_SWEPT", "reason": "Data existence was not verified via query_table"},
+    "6": {"status": "NOT_SWEPT", "reason": "GenAI stack details were not inspected beyond the tool call"},
+    "7": {"status": "NOT_SWEPT", "reason": "Trigger/wiring configuration was not reviewed"}
+  },
+  "root_causes": [
+    {
+      "layer": "1",
+      "component": "tool_call for 'lookup_routing_rule'",
+      "finding": "No routing rules matched the 'Hardware' category",
+      "evidence": [
+        {"source": "trace", "detail": "tool_call response: 'rules_in_table': 0"},
+        {"source": "trace", "detail": "execution status: 'completed' with no errors"}
+      ],
+      "confidence": "UNCONFIRMED",
+      "would_confirm": "layer 4 (schema_lookup) to verify the routing table structure or layer 5 (query_table) to check for existing rules"
+    }
+  ],
+  "fixes": [
+    {
+      "target_type": "tool schema",
+      "target": "lookup_routing_rule tool configuration",
+      "current": "rules_in_table: 0 for 'Hardware' category",
+      "proposed": "Ensure routing rules for 'Hardware' category exist in the target table",
+      "rationale": "The tool call indicates no rules were found, suggesting a misconfiguration or missing data in the routing table"
+    }
+  ],
+  "verification": "Re-run the agent and verify the 'lookup_routing_rule' tool call returns a non-zero 'rules_in_table' value",
+  "data_markers": []
+}
+```
+
+**Fix_report shape:** also the POPULATED-`root_causes` shape — same family
+as custom run 1. Both seed 03 custom runs' `root_causes[0]` name the
+identical finding (`lookup_routing_rule` / category Hardware /
+`rules_in_table: 0`) at `confidence: "UNCONFIRMED"`, differing only in
+wording of `finding`/`evidence`/`would_confirm` text. This is the first
+seed in this pass where both custom runs used the populated-`root_causes`
+shape rather than the `inconclusive`-keyed shape seen in all four seed
+01/02 custom runs — recorded as a shape-variance observation, not ruled on.
+
+**Note on identity verification:** all four run identities are distinct —
+two native conversation ids (`fced2ee82be6cf14f243fed2ce91bfc1`,
+`2c0eaea42be6871817a6ffbeee91bff3`) and two custom run sys_ids
+(`56ed26242b2acf14f243fed2ce91bf16`, `5d0eae242b2acf14f243fed2ce91bfd9`),
+confirmed by direct multi-record query of `sn_aia_execution_plan` (native)
+and by the distinct `run_id`/`number` pairs returned from each `POST
+/analyze` call (custom) — not by inference from timing. No anchor collision
+observed. Per the CAUTION note above, the fixture's own prior conversation
+id (`44cd85402b6a4bd417a6ffbeee91bf79`), which appears inside both native
+Fix Reports as quoted evidence, was excluded from this identity set.
+
+### Result summary
+
+| Run | Identity | Terminal state | Wall clock | Tool calls |
+|---|---|---|---|---|
+| Native run 1 | conversation `fced2ee82be6cf14f243fed2ce91bfc1` | Completed | 151s | 9 |
+| Custom run 1 | run `56ed26242b2acf14f243fed2ce91bf16` (TR1000126) | complete | ~19s | 1 |
+| Native run 2 | conversation `2c0eaea42be6871817a6ffbeee91bff3` | Completed | 153s | 9 |
+| Custom run 2 | run `5d0eae242b2acf14f243fed2ce91bfd9` (TR1000128) | complete | ~12s | 1 |
+
+**Both native runs and both custom runs converged on the same substantive
+finding** — the `lookup_routing_rule` tool call for category Hardware
+returned `matched: false, rules_in_table: 0` because the routing table
+`x_snc_tsbench_routing` is empty. Native named this CONFIRMED (with a
+secondary finding on the tool's `mandatory: false` input schema flag);
+custom named the same table-emptiness signal but rated it UNCONFIRMED
+without sweeping layers 4/5 to confirm the table read. All four runs
+reached a valid terminal state on the first attempt; no re-fire was needed.
+
+---
