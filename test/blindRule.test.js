@@ -78,6 +78,18 @@ const { stripComments } = require('./_stripComments')
  *   instructions       docs/agent/agent-doctor-instructions.md   both harnesses
  *   tool descriptions  PaToolRegistry.js -> agent-doctor.now.ts  both harnesses
  *   tool output        the 7 cores + PaToolReadKit               both harnesses
+ *   paged evidence     PaArtifactStore.js                        both harnesses
+ *   repair-turn text   PaFixReport.js                            custom harness
+ *
+ * The last two were missing from the first version of this list, which was
+ * under-inclusive against the rule it enforces: the rule binds any text the
+ * harness can put in front of the model, and both of these qualify.
+ * PaArtifactStore writes the excerpt and degradation notes that come back
+ * through read_artifact; PaFixReport's validation problem text is fed VERBATIM
+ * into the model's repair turn (issue #81 — the repair turn receives the draft
+ * and the validation problems, and nothing else). Both were swept by hand and
+ * found clean when the gap was spotted; they are listed here so that stays true
+ * automatically rather than by anyone remembering to re-read them.
  *
  * NOT scanned, and the distinction is the whole point: benchmark/seed-app/**
  * is the fixture that IMPLEMENTS the defects, and benchmark/** docs ARE the
@@ -93,6 +105,8 @@ const SCAN_TARGETS = [
     'src/server/tools/PaToolReadArtifact.js',
     'src/server/PaToolReadKit.js',
     'src/server/PaToolRegistry.js',
+    'src/server/PaArtifactStore.js',
+    'src/server/PaFixReport.js',
     'src/fluent/agent-doctor.now.ts',
 ].map((f) => ({ file: f, stripComments: true }))
     // The instructions doc is scanned WHOLE. All of it is model-facing, so

@@ -80,6 +80,6 @@ how a token is chosen.
 
 ```blind-rule-tokens
 Seed 03 Category Router
-x_snc_tsbench_routing_rule
+x_snc_tsbench_routing
 rules_in_table
 ```
