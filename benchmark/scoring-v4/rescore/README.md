@@ -54,6 +54,51 @@ eight. This fact needs to survive independently of the probe report, because
 `.superpowers/sdd/` is gitignored and is deleted when the parent plan completes — this README is
 the durable record of it.
 
+## Redaction pass — issue #100
+
+After these 8 packets were built, issue #100 established that a seed's
+specification (packet §2) can itself narrate what *earlier* diagnostic runs
+found and — in some cases — literally what grade those runs received, which
+contaminates a blind scorer's independence just as much as showing it the
+operator's own scores. Because these packets embed each seed's spec file in
+full, the same leak was present here: `**OBSERVED AT TASK 12 (2026-08-02) —
+the prediction held.**` callouts under seed 03, 04, and 05's specs (naming
+what a prior seed execution measured and, for seed 03 and 05, stating what
+"both scored runs" diagnosed or flagged), and a `## History: the v1
+construction was refuted at Task 12` section under seed 02's spec (stating
+that "Agent Doctor diagnosed exactly that in both scored runs, which were
+scored strictly against the expected layer-2 answer"). 7 of the 8 packets
+carried at least one such block — `rescore-02` and `rescore-03` (seed 02),
+`rescore-04` and `rescore-05` (seed 03), `rescore-06` and `rescore-07` (seed
+04), and `rescore-08` (seed 05). `rescore-01` (seed 01) needed no change —
+seed 01's spec only ever carried a `**PREDICTED, NOT OBSERVED.**` disclaimer
+that no seed had been run yet, never a prior-run outcome.
+
+Each leaking block was removed in place and replaced with the same neutral
+marker line the sibling `packets-redacted/` directory uses, so the redaction
+stays visible and auditable rather than silent:
+
+```
+> [prior-pass observations removed — see issue #100]
+```
+
+Nothing else was touched: the rubric (§1), the rest of each seed spec (§2) —
+including seed 04's decoy-scoring rule (`row 2 / 0 / … / 0, passes_gate = 0`
+for naming the empty `connection`) and seed 05's partial-credit case (1 of 2
+on `fix_target_correct` for naming "inactive" without the specific gate),
+both of which are scoring guidance, not prior-run narrative, and were left
+intact — each run's own Fix Report (§3), and each run's scorecard
+measurements (§4) were left exactly as they were. The operator's original
+scores were never in these packets to begin with (see "What was deliberately
+excluded" below) and this pass did not introduce any.
+
+This matches `benchmark/scoring-v4/packets-redacted/`'s approach exactly: same
+distinction (grading guidance stays, prior-run outcome narrative goes), same
+marker text. Verified by grepping all 8 packets for the literal patterns named
+in #100 — `scored 6/6`, `2/6`, `2/0/1/0`, `OBSERVED AT TASK 12`, `both scored
+runs`, `the doubled scored runs` — plus `SPLIT` and `refuted at Task 12`, with
+zero hits after the edit.
+
 ## What was deliberately excluded from every packet
 
 - **The operator's original scores.** No `passes_gate` value, no `/6` total, no filled rubric

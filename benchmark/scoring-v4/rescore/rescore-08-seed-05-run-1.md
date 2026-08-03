@@ -150,18 +150,7 @@ reason is honest; a `0` is a measurement that did not happen.
 
 ## The defect
 
-> **OBSERVED AT TASK 12 (2026-08-02) — the prediction held.** The m2m gate was
-> PATCHed on post-install and re-read `true`
-> (`sn_aia_trigger_agent_usecase_m2m` `ba30d8775b0c4cebb960c58830590d5d`);
-> the trigger config stayed `active=false` as seeded. Ticket
-> `29fd09c42b6a4bd417a6ffbeee91bfb0` (non-empty short_description) was inserted
-> and **no execution plan was created anywhere on the instance** in the
-> following minutes — the absence the seed exists to produce. Both scored runs
-> named the specific gate (`sn_aia_trigger_configuration.active` on
-> `bfb77d6c64884500a80203ee029436ee`) with the m2m link verified intact, and
-> both flagged the empty run-as as an UNCONFIRMED advisory. The run-as
-> question below **stays open**: the trigger was never activated, so whether
-> it fires with empty run-as remains unmeasured.
+> [prior-pass observations removed — see issue #100]
 
 `sn_aia_trigger_configuration.active` is `false`. Everything else is correct
 and published: the agent's instructions are fine, the workflow is published,

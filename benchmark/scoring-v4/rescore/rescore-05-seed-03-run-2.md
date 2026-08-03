@@ -149,12 +149,7 @@ reason is honest; a `0` is a measurement that did not happen.
 
 ## The defect
 
-> **OBSERVED AT TASK 12 (2026-08-02) — the prediction held.** Seed execution
-> `c4cd01842b6a4bd417a6ffbeee91bfc3`: `lookup_routing_rule` returned
-> `{ok: true, matched: false, category: "Hardware", rules_in_table: 0}` — the
-> measured GlideAggregate count, not a constant. Both scored runs diagnosed
-> layer 5 with the `genuinely_empty` verdict (unfiltered count 0, ACL denial
-> ruled out).
+> [prior-pass observations removed — see issue #100]
 
 The table exists, the tool queries it correctly, and the instructions are
 unambiguous. The table is empty. Every lookup returns `matched: false`. This

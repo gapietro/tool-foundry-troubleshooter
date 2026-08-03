@@ -149,13 +149,7 @@ reason is honest; a `0` is a measurement that did not happen.
 
 ## The defect
 
-> **OBSERVED AT TASK 12 (2026-08-02) — the prediction held.** The primary
-> construction installed without refusal (no fallback needed), the placeholder
-> was substituted with capability sys_id `92ff62af516741769c437feb88c80ef3` and
-> verified in the installed script, and the seed execution
-> `16ddc10c2baa4314f243fed2ce91bf15` produced the predicted signature:
-> `OneExtendUtil.execute` returned `status: "error"`, message "Plan invalid…",
-> `capabilities: {}`, and the tool returned `ok: false`.
+> [prior-pass observations removed — see issue #100]
 
 The capability definition `x_snc_tsbench_unmapped_capability` exists and is
 reachable, but its `api` — the **mandatory** pointer at the `sys_hub_flow`
