@@ -976,3 +976,92 @@ pass as any change to the shared instructions file.
 `PaScriptToolAdapter` — the native harness's tool entry point — does **not** pass a priority. Moving
 both harnesses at once is the confound (§H7-4, §I4 item 3) that made three passes harder to read than
 they needed to be. Propagate once the custom-harness measurement is in.
+
+---
+
+## L. The UNCONFIRMED exemption (`2026.08.0226`, #93)
+
+§K4 remedy (1), built and smoked. Not a scored pass — two runs, seed 03, on `2026.08.0226`,
+against the same execution `c4cd01842b6a4bd417a6ffbeee91bfc3`.
+
+### L1. What was changed
+
+`PaFixReport._checkEvidenceRule` gained a third passing route, checked after A and B so it can only
+widen. A trace-only root cause validates when it is marked `UNCONFIRMED`, names the confirming layer
+in a new `would_confirm` field, that layer is not marked `SWEPT`, and the cause cites one piece of
+evidence per layer it claims to have swept (`_checkInconclusive`'s pricing, reused). Custom-harness
+only — `docs/agent/agent-doctor-instructions.md` is untouched, so §J5's re-measure constraint does
+not apply and §K5's confound is not reopened.
+
+### L2. The model adopted the field on first exposure, unprompted
+
+Both runs produced the intended shape without ever having seen it before, from `schemaText()` alone:
+
+```
+"confidence":    "UNCONFIRMED",
+"would_confirm": "layer 5 — query_table against the routing table"
+```
+
+It named **layer 5** — the seed's own expected layer — and the tool that would reach it. That is the
+strongest evidence available that the contract text is legible: asked what would confirm its
+trace-only finding, the model answers with the correct next step, and then does not take it.
+
+### L3. TR1000115 — `complete`, and the first of its kind on this seed
+
+| | |
+|---|---|
+| status | `complete` (validated on the repair turn) |
+| root cause | layer 1, `lookup_routing_rule tool call`, UNCONFIRMED |
+| evidence | 1 × `trace`: `"tool_call response: 'rules_in_table': 0"` |
+| layers_swept | 1/7 SWEPT, six honest NOT_SWEPT with reasons |
+| tool calls | 1 (`agent_trace`) |
+
+Seed 03's run history in full: v3 `failed` (fabricated `config` citations), Task 12-era `complete`
+but inconclusive with no root cause, §K2 `failed` (correct finding, rejected for trace-only
+citations), and now **`complete` with a named root cause that cites the seeded answer**. That
+sequence has never reached this state before.
+
+### L4. It still does not pass the gate, and this was predictable
+
+`passes_gate = root_cause_layer_correct == 2 AND fix_usable_unedited == 1`. The report names
+**layer 1**; seed 03's expected layer is **5**. So `root_cause_layer_correct = 0` and the run fails
+the gate no matter how clean the rest of the report is. §K4 said this in advance — *"the correct
+move on seed 03 was `query_table` … which would have produced both a `data` citation and the right
+layer (5, not 1)"* — and the smoke confirms it rather than discovering it.
+
+**What the exemption bought is a diagnosis that survives instead of being discarded.** What it did
+not buy, and was never going to, is the second tool call. The `would_confirm` value is the model
+naming `query_table` in the same breath as declining to call it.
+
+### L5. TR1000114 — the pricing rule fired, on an inflated sweep claim
+
+The first run `failed`, and the reading matters. It claimed **two** layers SWEPT — layer 1, and layer
+6 with the reason *"agent_trace included Gen AI step metadata"* — while citing one piece of evidence.
+Two rejections followed, and they are the same lie counted twice:
+
+- the pre-existing #79b check: layer 6 SWEPT is unsupported, the run never invoked `genai_log` or
+  `log_analysis`;
+- the new path-C price: 2 layers claimed SWEPT, 1 citation.
+
+**#79b would have rejected that report with or without this change** — the pricing rule did not
+create a new failure, it charged an existing one a second time. TR1000115 marked every unreached
+layer NOT_SWEPT with a reason and passed at the same depth, on the same evidence. That is the price
+behaving as designed: it is paid by inflated sweep claims and free to an honest one.
+
+### L6. Every path-C rejection is repairable without tools
+
+TR1000114's repair turn had a tool-free fix available — drop the layer 6 claim — and did not take
+it; TR1000115 reached the same contract by producing an honest layer report first. This is the
+property #81 lacks: a citation-shortfall rejection cannot be repaired by a turn with no tool access,
+so the repair turn burns an LLM call restating a report it cannot improve. A path-C rejection names
+a marker, a phrasing, a layer status or a citation count — all editable. #81's four options should be
+re-read with that in mind; the dominant rejection reason has changed shape.
+
+### L7. What this smoke does not establish
+
+No score movement, and none is claimed. Two runs, one seed, unscored. Depth is unchanged at 1–2 tool
+calls; `schema_lookup`, `query_table` and `genai_log` were not invoked, so §H8's acceptance test is
+still unmet across 25 runs. §K4 remedy (2) — making the model take the second step — is untouched and
+remains the milestone blocker. The one incidental observation worth carrying: TR1000114 called
+`read_artifact`, the first paging on this seed since `0216`, which belongs to #91 rather than to this
+change.
