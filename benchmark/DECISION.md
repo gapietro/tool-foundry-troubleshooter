@@ -797,3 +797,103 @@ Two concrete follow-ups the rows point at, beyond #81:
 - **The gate's honesty premise now holds, so the score is worth more than it was.** A passing v3 report
   cannot rest on a fabricated citation. That makes "0/10 with 5 inconclusive" a trustworthy number in
   a way the earlier passes' numbers were not.
+
+---
+
+## J. The v4 smoke (`2026.08.0222`) — #85 answered, and it was not the cause
+
+Four runs, 2026-08-03, `gpinst01`, seeds 01 and 03 only. Raw evidence:
+`raw-evidence-v4-smoke.md`. **Not a scored pass** — no native control, no blind scoring, no rubric.
+It answers one pre-registered question, and is recorded because the answer is negative.
+
+### J1. The question and the answer
+
+§I5 named the #85 tool-output defect as a plausible contributor to the depth collapse: six of ten v3
+runs built their entire diagnosis on `agent_trace`'s illustrative "27 tasks / 19 calls" note, and a
+run that believes it has confirmed a layer-1 root cause in its first tool result has no reason to
+open a second layer. `2026.08.0222` removed it.
+
+**Question, fixed before firing:** does removing the false finding produce a second tool call?
+
+**Answer: no.** Audit-derived, 8 rows across 4 runs, one `intent` + one `result` each, all
+`agent_trace`. Mean tool calls per run **1.0**, identical to v3. Zero runs reached any second layer.
+
+The seeds were chosen adversarially in the fix's favour — all four of their v3 rows are named in #85
+as having built on the note. If it were load-bearing, it would have shown here.
+
+### J2. What the fix did do
+
+| | v3, seeds 01+03 | v4 smoke |
+|---|---|---|
+| Runs building a root cause on the note | 4 / 4 | **0 / 4** |
+| `root_causes` emitted | ≥1 each, all seed-irrelevant | **0** |
+| Terminal status | 3 `failed`, 1 `complete` | **4 `complete`** |
+
+The defect #85 describes is gone. Note the status flip: removing the false root cause converted
+three validator rejections into accepted honest inconclusives — **without adding a single tool
+call.** That is the whole finding of this smoke, and it is not the one that was being looked for.
+
+### J3. The mechanism, which is now visible
+
+Depth is not an ignorance problem. TR1000107's report names `agent_config`, `schema_lookup` and
+`genai_log` — three tools it did not invoke — as what it would need, and gives *"No agent_config
+call made to inspect instructions"* as its per-layer reason for six of seven layers. Then it files
+the report and the loop stamps **`fix_report validated`**. Budget was untouched: 2 LLM turns of 15,
+10–17 seconds of 300.
+
+`PaFixReport._checkInconclusive` prices the inconclusive path at one `evidence_read` citation per
+layer claimed `SWEPT`. That is a sound defence against sweep inflation and it demonstrably works —
+v2's "all seven layers SWEPT on two reads" row has no successor. But the cost function rises
+monotonically with sweeps and has **no floor**, so its minimum is one sweep and two citations, and
+the model sits on that minimum in 4 of 4 runs.
+
+**Honest surrender is now the cheapest structurally valid output.** In v3 the model fabricated and
+was rejected; now it surrenders honestly and is accepted. Both stop at one tool call. #78/#79
+converted the failure mode without moving depth — which §I2 half-saw ("claim-avoidance rather than
+claim-earning") and this smoke makes mechanical.
+
+The loop accepts a report the benchmark scores 0. That misalignment, not the tool output, is where
+depth is lost. Filed as **#88** with a fix direction (a minimum-effort floor in `PaAgentLoop` rather
+than a rejection in `validate`, because #81 makes a rejection unfixable by construction).
+
+### J4. A blind-rule leak, found while verifying this
+
+`README.md`'s smoke gate expects `context_processing_script` **line 42**. Until `2026.08.0222`,
+`PaToolAgentConfig` emitted *"an auto-populated body on this instance threw at line 42"* inside a
+finding — the gate's expected answer, handed to the model mid-reasoning. Removed by PR #87 as part
+of the #85 sweep, and now guarded by `test/referenceStatistics.test.js`.
+
+It had never fired, because no run has ever invoked `agent_config`. **The leak was harmless only
+because the harness was too shallow to reach it, and would have activated at exactly the moment the
+depth work succeeded.** The residual gap is the blind rule itself, which binds Agent Doctor's
+*instructions* and not its *tool output*. Filed as **#89**, together with the observation that the
+#85 audit swept for statistics and never swept for answers.
+
+### J5. What this changes about the roadmap
+
+§I5 said depth was the only thing left. That still holds, and the target has moved from "why does the
+model not look?" to a specific, testable claim: **the loop lets it stop.** #88 is now the head of the
+queue, ahead of a v4 scored pass — running ten more rows against an unchanged termination rule would
+buy another 0/10 and no new information.
+
+Sequence, in order:
+
+1. **#88** — put a floor under the inconclusive path.
+2. **#89** — broaden the blind rule to bind tool output, and sweep the six other cores for
+   answer-shaped constants (the #85 sweep looked for statistics only).
+3. **Then** the v4 scored pass: ten rows, blind, audit-derived, **with native re-measured the same
+   day** to close §H7-4 / §I4 confound 3. §I4 confound 2 (`agent-doctor-instructions.md:48`) should
+   be resolved in that same pass — the reason it has been left alone twice is that editing it moves
+   the unmeasured native baseline, and that objection disappears in a pass where native is
+   re-measured.
+
+Unchanged: native remains the recommended path on this instance, and the Phase 1b milestone is
+**not met**.
+
+### J6. What this smoke does not establish
+
+- **Anything about the other three seeds.** Seeds 02, 04 and 05 were not run.
+- **That #88's floor will improve depth.** It forces more tool calls; whether they land on the right
+  layer is what the scored pass would measure.
+- **Anything about native.** Not re-measured here either — §I4 confound 3 is still open.
+- **That model drift is not doing the work.** Four runs on one day, unbounded as ever.

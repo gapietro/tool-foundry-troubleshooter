@@ -11,6 +11,50 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0223 — 2026-08-03
+
+### Measured
+- **v4 smoke on `2026.08.0222` — #85 answered, and it was not the cause of the depth collapse.**
+  Four runs, seeds 01 and 03, chosen because all four of their v3 rows are named in #85 as having
+  built their diagnosis on the illustrative note. Audit-derived from `x_snc_troubleshoot_audit`:
+  8 rows, one `intent` + one `result` per run, **all `agent_trace`**. Mean tool calls per run
+  **1.0 — identical to v3.** Zero runs reached a second layer. `benchmark/raw-evidence-v4-smoke.md`;
+  reading in `benchmark/DECISION.md` §J. **Not a scored pass** — no native control, no blind
+  scoring, no rubric.
+- **The #85 fix works, and its effect is orthogonal to depth.** Runs building a root cause on the
+  note: 4/4 in v3 → **0/4**. `root_causes` emitted: ≥1 each (all seed-irrelevant) → **0**. Terminal
+  status: 3 `failed`, 1 `complete` → **4 `complete`**. Removing the false root cause converted
+  validator rejections into accepted honest inconclusives *without adding a single tool call*.
+- **The depth mechanism is now visible, and it is the loop, not the tool output (#88).** The model
+  names the tools it did not call as its reason for not sweeping those layers — TR1000107 names
+  `agent_config`, `schema_lookup` and `genai_log` — and then files a report the loop stamps
+  `fix_report validated`. Budget was untouched: 2 LLM turns of 15, 10–17 seconds of 300.
+  `PaFixReport._checkInconclusive` prices the inconclusive path per layer claimed `SWEPT`, which
+  defeats sweep inflation but **rises monotonically with no floor**, so its minimum is one sweep and
+  two citations. Honest surrender is now the cheapest structurally valid output, and the loop accepts
+  a report the benchmark scores 0.
+- **A blind-rule leak, found while verifying the above (#89).** Until `2026.08.0222`,
+  `PaToolAgentConfig` emitted *"an auto-populated body on this instance threw at line 42"* — the
+  smoke gate's expected answer (`context_processing_script` line 42, confirmed live in
+  `sn_aia_message`) — inside a finding, mid-reasoning. Removed by PR #87 as part of the #85 sweep
+  and now guarded by `test/referenceStatistics.test.js`. It had never fired because no run has ever
+  invoked `agent_config`: **the leak was harmless only because the harness was too shallow to reach
+  it**, and would have activated at exactly the moment the depth work succeeded.
+
+### Fixed
+- **`raw-evidence-v3.md`'s read-consistency advice was unsafe and is corrected in
+  `raw-evidence-v4-smoke.md`.** v3 recorded that single-record table reads went stale and said to
+  trust `GET /runs/{id}`. This pass saw the inverse: `GET /runs/{id}` reported `queued` for over four
+  minutes after TR1000108 had finished, while a range query read `complete`. Both paths go stale and
+  the direction varies — poll both, or derive from `x_snc_troubleshoot_audit`, which was consistent
+  throughout.
+
+### Not established by this version
+- **Anything about seeds 02, 04 and 05**, which were not run; **anything about native**, not
+  re-measured (§I4 confound 3 still open); **that #88's floor will improve depth** — it forces more
+  tool calls, and whether they land on the right layer is what a scored pass would measure; and
+  **that model drift is not doing the work** — four runs, one day, unbounded as ever.
+
 ## 2026.08.0222 — 2026-08-02
 
 ### Fixed
