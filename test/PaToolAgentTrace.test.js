@@ -759,3 +759,127 @@ describe('ordering is applied at the database', () => {
         expect(cs).toEqual(['sequence', 'sys_created_on', 'sys_id'])
     })
 })
+
+// ---------------------------------------------------------------------------
+// The task-vs-tool-call note (issue #85).
+//
+// This note used to read "Execution tasks are NOT 1:1 with tool calls (27
+// tasks / 19 calls in a measured run)". The 27 and the 19 came from an
+// illustrative run measured once during the build, and they shipped in every
+// payload. In the v3 scored benchmark pass six of ten scored runs plus the
+// smoke run read them as findings about the run under diagnosis and built
+// their whole root cause on the supposed discrepancy; one proposed, as its
+// fix, adding the very note it had misread.
+//
+// The counts are now this run's own. A reader who treats them as run data is
+// now RIGHT, which is the only version of this note that cannot backfire.
+// ---------------------------------------------------------------------------
+describe('task-vs-tool-call note carries this run\'s counts (issue #85)', () => {
+    const { makeGlideRecordSecure, makeQueryingGlideRecordSecure, makeGlideDateTime } = require('./_glideStub')
+
+    const ok = (total) => ({ total: total, read_status: 'ok' })
+    const denied = { total: 0, read_status: 'DENIED' }
+
+    test('states the counts it is given, whatever they are', () => {
+        expect(trace._taskVsToolCallNote(ok(27), ok(19))).toContain('27')
+        expect(trace._taskVsToolCallNote(ok(27), ok(19))).toContain('19')
+        expect(trace._taskVsToolCallNote(ok(4), ok(4))).toContain('4')
+    })
+
+    test('a run with nothing in it reports zero, not a remembered run', () => {
+        const note = trace._taskVsToolCallNote(ok(0), ok(0))
+        expect(note).toMatch(/\b0\b/)
+        expect(note).not.toMatch(/\b(27|19)\b/)
+    })
+
+    // -----------------------------------------------------------------------
+    // A DENIED read is not a measured zero (Bugbot round 1, R-6 / R-19b).
+    //
+    // Both totals come from row arrays that are EMPTY on a cross-scope denial
+    // as surely as on a genuinely empty run, so "This run recorded 0 execution
+    // task(s) and 0 tool call(s)" was being asserted about rows nobody could
+    // read. That contradicts evidence_basis sitting in the same payload — "a
+    // zero with DENIED is a permission gap and says nothing about the run" —
+    // and R-19b forbids a note contradicting the status beside it.
+    //
+    // It is also the SAME defect class this PR exists to fix: a number in a
+    // note that is not what it appears to be. Worse in one respect, because a
+    // fabricated zero is the exact shape of "the agent called no tools",
+    // which is a confident wrong diagnosis rather than a harmless one.
+    // -----------------------------------------------------------------------
+    test('a DENIED task read is reported as unknown, never as zero tasks', () => {
+        const note = trace._taskVsToolCallNote(denied, ok(3))
+        expect(note).toMatch(/unknown/i)
+        expect(note).toContain('DENIED')
+        expect(note).toContain('sn_aia_execution_task')
+        expect(note).not.toMatch(/recorded 0 /)
+        // The readable side is still stated — a denial on one read says
+        // nothing about the other.
+        expect(note).toContain('3')
+    })
+
+    test('a DENIED tool-call read is reported as unknown, never as zero calls', () => {
+        const note = trace._taskVsToolCallNote(ok(5), denied)
+        expect(note).toMatch(/unknown/i)
+        expect(note).toContain('sn_aia_tools_execution')
+        expect(note).toContain('5')
+    })
+
+    test('says a denial is a permission gap rather than an absence', () => {
+        const note = trace._taskVsToolCallNote(denied, denied)
+        expect(note.toLowerCase()).toContain('permission')
+        expect(note).not.toMatch(/\b0\b/)
+    })
+
+    test('the emitted note never claims a count on a denied read', () => {
+        const ctx = loadScriptInclude('tools/PaToolAgentTrace.js', {
+            GlideRecordSecure: makeQueryingGlideRecordSecure(
+                { sn_aia_execution_plan: [{ sys_id: 'plan0000000000000000000000000001' }] },
+                { denied: ['sn_aia_execution_task', 'sn_aia_tools_execution'] }
+            ),
+            GlideDateTime: makeGlideDateTime(),
+        })
+
+        const r = new ctx.PaToolAgentTrace().execute({ execution: 'plan0000000000000000000000000001' })
+        const note = r.data.notes.join(' ')
+
+        expect(r.data.task_stats.read_status).toBe('DENIED')
+        expect(r.data.tool_call_stats.read_status).toBe('DENIED')
+        expect(note).not.toMatch(/recorded 0 /)
+        expect(note).toMatch(/unknown/i)
+    })
+
+    test('says the gap between the two counts is not a finding', () => {
+        // The v3 runs did not merely notice the difference — they reported it
+        // as a CONFIRMED layer-1 defect. Telling a reader the counts differ is
+        // not enough; the note has to forbid the conclusion.
+        expect(trace._taskVsToolCallNote(ok(9), ok(3)).toLowerCase()).toContain('not a finding')
+    })
+
+    test('the emitted note matches the run\'s own task_stats and tool_call_stats', () => {
+        const ctx = loadScriptInclude('tools/PaToolAgentTrace.js', {
+            GlideRecordSecure: makeGlideRecordSecure({
+                sn_aia_execution_plan: [{ sys_id: 'plan0000000000000000000000000001' }],
+                sn_aia_execution_task: [
+                    { sys_id: 'task0000000000000000000000000001', order: '100', type: 'tool', status: 'success' },
+                    { sys_id: 'task0000000000000000000000000002', order: '200', type: 'gen_ai', status: 'success' },
+                    { sys_id: 'task0000000000000000000000000003', order: '300', type: 'tool', status: 'success' },
+                ],
+                sn_aia_tools_execution: [{ sys_id: 'te000000000000000000000000000001', execution_plan_id: 'plan0000000000000000000000000001' }],
+            }),
+            GlideDateTime: makeGlideDateTime(),
+        })
+
+        const r = new ctx.PaToolAgentTrace().execute({ execution: 'plan0000000000000000000000000001' })
+        const note = r.data.notes.join(' ')
+
+        expect(r.data.task_stats.total).toBe(3)
+        expect(r.data.tool_call_stats.total).toBe(1)
+        // The numbers in the note and the numbers in the stats blocks are the
+        // same numbers, from the same read. Nothing else may appear.
+        expect(note).toContain('3')
+        expect(note).toContain('1')
+        expect(note).not.toContain('27')
+        expect(note).not.toContain('19')
+    })
+})

@@ -784,6 +784,16 @@ Two concrete follow-ups the rows point at, beyond #81:
   run as a finding about the run under diagnosis, and then proposing fixes for it. The note is
   actively harmful in its current form and should be removed or restated so it cannot be mistaken for
   run data.
+  **Fixed in `2026.08.0222` (issue #85).** The note now carries this run's own task and tool-call
+  counts, so a reader who treats them as run data is right; the guidance moved to the tool
+  description as well. The audit that followed found **five more sites** of the same shape across
+  `agent_config` and `genai_log` — including a remembered stack line (`threw at line 42`) inside a
+  finding whose `next_step` points at `agent_trace`'s `script_errors`, which carry a real `line`.
+  Those counts are kept (R-22 item 4 requires the denominator) behind a new
+  `PaToolReadKit.REFERENCE_STAT` label, and `test/referenceStatistics.test.js` fails the build if a
+  new one appears unlabelled. **This does not close #82.** Whether the note was a cause of the depth
+  collapse or merely a passenger is unmeasured, and §I4's four confounds are untouched — only a
+  re-run answers it.
 - **The gate's honesty premise now holds, so the score is worth more than it was.** A passing v3 report
   cannot rest on a fabricated citation. That makes "0/10 with 5 inconclusive" a trustworthy number in
   a way the earlier passes' numbers were not.
