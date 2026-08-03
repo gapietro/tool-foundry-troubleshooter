@@ -538,3 +538,196 @@ describe('invokedTools', () => {
         expect(logger.invokedTools(RUN).tools).toEqual(['agent_trace'])
     })
 })
+
+// =========================================================================
+// toolCalls — the read side, with arguments (#96)
+// =========================================================================
+
+/**
+ * A row with a payload. `input` and `output` are the two payload columns
+ * `_write` uses, and which one is populated depends on `action_type` — so a
+ * reader that picks the wrong one gets a blank, which is R-6's failure shape
+ * aimed at the read side.
+ */
+function payloadRow(run, tool, actionType, payload, created) {
+    const row = {
+        sys_id: 'p' + tool + actionType + (created || ''),
+        run: run,
+        tool_name: tool,
+        action_type: actionType,
+        sys_created_on: created || '2026-08-02 01:00:00',
+    }
+    if (actionType === 'intent') row.input = payload
+    else row.output = payload
+    return row
+}
+
+describe('toolCalls', () => {
+    test('returns every row in creation order, with tool, action and payload', () => {
+        const { logger } = load({
+            world: {
+                rows: {
+                    [AUDIT_TABLE]: [
+                        payloadRow(RUN, 'agent_config', 'result', '{"sections":[]}', '2026-08-02 01:02:00'),
+                        payloadRow(RUN, 'agent_config', 'intent', '{"section":"tools"}', '2026-08-02 01:01:00'),
+                    ],
+                },
+            },
+        })
+
+        const res = logger.toolCalls(RUN)
+
+        expect(res.available).toBe(true)
+        expect(res.calls).toEqual([
+            {
+                tool: 'agent_config',
+                action: 'intent',
+                payload: '{"section":"tools"}',
+                created: '2026-08-02 01:01:00',
+            },
+            {
+                tool: 'agent_config',
+                action: 'result',
+                payload: '{"sections":[]}',
+                created: '2026-08-02 01:02:00',
+            },
+        ])
+    })
+
+    test('reads `input` for intent rows and `output` for result and error rows', () => {
+        // This is the whole point of the accessor: #96 measured the exposure of
+        // a leak from the RESULT payload (`sections_returned`), because the
+        // intent argument alone could not settle it — a call naming no section
+        // still returns nothing when its target fails to resolve.
+        const { logger } = load({
+            world: {
+                rows: {
+                    [AUDIT_TABLE]: [
+                        payloadRow(RUN, 'agent_config', 'intent', 'ARGS', '2026-08-02 01:01:00'),
+                        payloadRow(RUN, 'agent_config', 'result', 'RESULT', '2026-08-02 01:02:00'),
+                        payloadRow(RUN, 'query_table', 'error', 'BOOM', '2026-08-02 01:03:00'),
+                    ],
+                },
+            },
+        })
+
+        expect(logger.toolCalls(RUN).calls.map((c) => c.payload)).toEqual(['ARGS', 'RESULT', 'BOOM'])
+    })
+
+    test('does NOT deduplicate — two calls to one tool are two entries', () => {
+        // The difference from `invokedTools`, and the reason both exist:
+        // "was this tool ever invoked" collapses repeats, "what did each call
+        // ask for" must not.
+        const { logger } = load({
+            world: {
+                rows: {
+                    [AUDIT_TABLE]: [
+                        payloadRow(RUN, 'agent_config', 'intent', 'first', '2026-08-02 01:01:00'),
+                        payloadRow(RUN, 'agent_config', 'intent', 'second', '2026-08-02 01:04:00'),
+                    ],
+                },
+            },
+        })
+
+        const calls = logger.toolCalls(RUN).calls
+        expect(calls.length).toBe(2)
+        expect(calls.map((c) => c.payload)).toEqual(['first', 'second'])
+    })
+
+    test('a row with no payload yields an empty string, not a missing key', () => {
+        const { logger } = load({
+            world: { rows: { [AUDIT_TABLE]: [auditRow(RUN, 'agent_trace', 'intent')] } },
+        })
+
+        expect(logger.toolCalls(RUN).calls[0].payload).toBe('')
+    })
+
+    test('ignores rows belonging to another run', () => {
+        const { logger } = load({
+            world: {
+                rows: {
+                    [AUDIT_TABLE]: [
+                        payloadRow(RUN, 'agent_trace', 'intent', 'mine'),
+                        payloadRow('otherrun0000000000000000000000', 'agent_trace', 'intent', 'theirs'),
+                    ],
+                },
+            },
+        })
+
+        expect(logger.toolCalls(RUN).calls.map((c) => c.payload)).toEqual(['mine'])
+    })
+
+    test('blank tool_name rows are skipped, matching invokedTools', () => {
+        const { logger } = load({
+            world: {
+                rows: {
+                    [AUDIT_TABLE]: [
+                        { sys_id: 'b1', run: RUN, tool_name: '', action_type: 'intent', input: 'x' },
+                        payloadRow(RUN, 'agent_trace', 'intent', 'kept'),
+                    ],
+                },
+            },
+        })
+
+        expect(logger.toolCalls(RUN).calls.map((c) => c.tool)).toEqual(['agent_trace'])
+    })
+
+    test('zero rows is UNAVAILABLE, not an empty success', () => {
+        const { logger } = load({ world: { rows: { [AUDIT_TABLE]: [] } } })
+
+        const res = logger.toolCalls(RUN)
+
+        expect(res.available).toBe(false)
+        expect(res.degraded).toBe('no_audit_rows')
+        expect(res.calls).toEqual([])
+    })
+
+    test('absent runId degrades rather than returning every row in the table', () => {
+        const { logger } = load({
+            world: { rows: { [AUDIT_TABLE]: [payloadRow(RUN, 'agent_trace', 'intent', 'x')] } },
+        })
+
+        const res = logger.toolCalls(undefined)
+
+        expect(res.available).toBe(false)
+        expect(res.degraded).toBe('no_run_id')
+        expect(res.calls).toEqual([])
+    })
+
+    test('a throwing query degrades without touching the exception object (R-1)', () => {
+        const { logger } = load({ world: { throwOnQuery: hostileException() } })
+
+        const res = logger.toolCalls(RUN)
+
+        expect(res.available).toBe(false)
+        expect(res.degraded).toBe('query_failed')
+        expect(res.calls).toEqual([])
+    })
+
+    test('no GlideRecord at all degrades rather than throwing', () => {
+        const { logger } = load({ noGlide: true })
+
+        const res = logger.toolCalls(RUN)
+
+        expect(res.available).toBe(false)
+        expect(res.degraded).toBe('glide_unavailable')
+        expect(res.calls).toEqual([])
+    })
+
+    test('invokedTools is unchanged by the sibling — it still dedupes and returns names', () => {
+        // #96 scope: the sibling is additive. #79's contract, which PaFixReport
+        // depends on, must read identically after it lands.
+        const { logger } = load({
+            world: {
+                rows: {
+                    [AUDIT_TABLE]: [
+                        payloadRow(RUN, 'agent_config', 'intent', 'a'),
+                        payloadRow(RUN, 'agent_config', 'result', 'b'),
+                    ],
+                },
+            },
+        })
+
+        expect(logger.invokedTools(RUN)).toEqual({ available: true, tools: ['agent_config'] })
+    })
+})

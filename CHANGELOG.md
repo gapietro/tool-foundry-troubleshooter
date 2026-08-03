@@ -17,6 +17,65 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0301 — 2026-08-03
+
+### Fixed
+- **The audit trail already recorded the tool arguments, so four exposure grades were inferred
+  where they could be measured (#96).** `DECISION.md` §M3 graded #89's `PaToolAgentConfig` leak as
+  reaching *"1 row established + 7 inferred"* and §M4 cited *"8 of the 12 native rows"*, both on the
+  stated premise that no artifact records which `section` a run asked for. Both harnesses have
+  recorded it since Task 9 — `PaToolRegistry.js:284` and `PaScriptToolAdapter.js:127` each call
+  `logIntent({..., input: args})` before the tool runs — and gpinst01 holds 22 `agent_config` intent
+  rows covering every scored run.
+
+  Measured from the trail, reading both the recorded argument and the `sections_returned` the tool
+  actually rendered: **7 of the 12 native rows, every one established.** The inferred/established
+  split described a limitation that did not exist. Custom-harness exposure is **zero**, as §M3
+  concluded, now measured rather than reasoned — and measured for a call shape §M3 never considered
+  (`{"execution":…}` with no `section`, which its reasoning would have graded as exposed).
+
+- **The smoke gate was never contaminated — §M3's strongest claim, refuted by its own trail (#96).**
+  §M3 held that the gate *"has been passing under those conditions"*. The gate run's single
+  `agent_config` call passed an identifier matching no `sn_aia_agent` or `sn_aia_usecase` row and
+  returned `sections_returned: []`, so no section rendered and the note never shipped. The gate
+  reached its expected answer from the trace, without instruction text at all. The harness finding
+  underneath it is the more useful half: the gate's only layer-2/3/7 probe swept nothing, and
+  nothing outside the audit trail recorded that.
+
+- **Leak 1's exposure closes at zero (#96).** §M3 could not bound `PaToolGenAiLog`'s
+  `capability_unresolvable` text and declined to guess. It fires only in `check_config` mode; the
+  corpus holds exactly two such calls (seed 04 runs 1–2) and both recorded `"findings":0` — a count
+  the payload digest preserves in its tail, so the absence is read rather than inferred from a
+  missing string.
+
+- **One filled scorecard cell was contradicted by the trail (#96).** Seed 03 run 2 was credited
+  `layers_swept 5/7 (L1,L2,L3,L5,L6)`, but its only `agent_config` call passed `section:"tools"` and
+  received `["tools"]` — the instructions section never rendered, so L2 was not swept. Corrected to
+  `4/7 (L1,L3,L5,L6)`. **No gate movement:** `passes_gate` consumes `root_cause_layer_correct` and
+  `fix_usable_unedited` only, and eleven of the twelve native rows reconciled unchanged.
+
+### Added
+- **`PaAuditLogger.toolCalls(runId)` — the read side, with arguments (#96).** Every audit row for a
+  run in creation order, undeduplicated, as `{tool, action, payload, created}`; `payload` is `input`
+  on an intent row and `output` on a result or error row, mirroring the write path. `invokedTools`
+  is untouched and still answers #79's narrower deduplicated question. Two limits are documented on
+  the method because a consumer that forgets them draws a false conclusion: payloads are digested
+  head+tail, so **a hit is evidence and a miss is not**, and intent rows **do not pair** with result
+  rows — the table carries no call id and timestamps are second-granularity.
+
+### Changed
+- **`scorecard-agent-doctor.md` §E2 derives `agent_config`'s layer credit from the call, not the
+  claim (#96).** Necessary condition, measured: a layer whose section the call did not return
+  cannot be credited (`instructions` → L2, `tools` → L3, `triggers` → L7, read from
+  `sections_returned`). Sufficient condition, still judged: receiving a section is not using it. The
+  trail can refute a credit and cannot confer one. §E1 now collects `input`/`output` alongside
+  `tool_name` and names `toolCalls` as the code path.
+- **The #89 scorecard annotations name the affected rows** instead of describing an inference, on
+  both `scorecard-agent-doctor.md` and `scorecard-custom-harness.md`. §M3/§M4 are kept as filed with
+  superseded-by-§N banners — what #89 concluded on the day is part of the record.
+
+---
+
 ## 2026.08.0227 — 2026-08-02
 
 ### Fixed

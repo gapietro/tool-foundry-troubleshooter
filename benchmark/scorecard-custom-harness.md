@@ -324,6 +324,14 @@ that task's sys_id.
 > (instruction text)"* in a root-cause entry directly — so its call returned the instructions section
 > and the removed note travelled with it as a sibling key.
 >
+> **Both rows are now measured rather than reasoned** (#96): each called `agent_config` as
+> `{"agent":"cd050d48…"}` with no `section`, and each recorded
+> `sections_returned: ["overview","instructions","tools","triggers"]` (TR1000068, TR1000069). Run 2's
+> prose citation is corroborated by its own tool output rather than standing alone as the evidence.
+> The `PaToolGenAiLog` text reached neither row: run 1's single `genai_log` call ran
+> `for_execution`, a mode that cannot raise `capability_unresolvable`, and run 2 never called
+> `genai_log` at all. `DECISION.md` §N3–§N5.
+>
 > **No row is restated and no score movement is claimed.** The removed text named the **smoke gate's**
 > specimen and the reason it was chosen, not any seed's answer: no scored seed's expected layer,
 > component or fix appeared in it, and the smoke gate is a pass/fail gate rather than one of the
@@ -354,7 +362,7 @@ by this task beyond the seed 4/5 gate checks recorded above.**
 | 01 | 1 | `715e41c42b6a4bd417a6ffbeee91bf29` | 2 | 2 | 1 | 1 | 6 | **1** | 4/7 (L1,L3,L4,L5) | Word→Integer mismatch found from both sides (M18 full credit) |
 | 01 | 2 | `2fdf8d0c2baa4314f243fed2ce91bfa3` | 2 | 2 | 1 | 1 | 6 | **1** | 4/7 (L1,L3,L4,L5) | Full structured fix incl. word→int map code, guard, test |
 | 03 | 1 | `f3a2950c2baa4bd417a6ffbeee91bfb4` | 2 | 2 | 1 | 1 | 6 | **1** | 4/7 (L1,L3,L5,L6) | `genuinely_empty` verdict confirmed by two independent reads |
-| 03 | 2 | `e1c319c02b6e4314f243fed2ce91bf68` | 2 | 2 | 1 | 1 | 6 | **1** | 5/7 (L1,L2,L3,L5,L6) | Consistent with run 1 |
+| 03 | 2 | `e1c319c02b6e4314f243fed2ce91bf68` | 2 | 2 | 1 | 1 | 6 | **1** | 4/7 (L1,L3,L5,L6) | Consistent with run 1. `layers_swept` corrected 5/7 → 4/7 (#96) — its `agent_config` call returned `["tools"]`, so L2 was not swept; see the source scorecard's row |
 | 04 | 1 | `228411882b6e4314f243fed2ce91bf24` | 2 | 2 | 1 | 1 | 6 | **1** | 5/7 (L1,L3,L4,L5,L6) | Found dangling `api`, proposed the exact healthy repoint value |
 | 04 | 2 | `ecc5dd482bea4bd417a6ffbeee91bf2d` | 2 | 0 | 1 | 0 | 3 | **0** | 6/7 (L1,L2,L3,L5,L6,L7) | Canonical decoy row (2/0/1/0) — named empty `connection` as primary cause |
 | 05 | 1 | `1b37994c2b2e4bd417a6ffbeee91bf5a` | 2 | 2 | 1 | 1 | 6 | **1** | 4/7 (L1,L2,L3,L7) | Named the specific gate, m2m verified intact |

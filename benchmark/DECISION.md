@@ -1166,6 +1166,16 @@ after a first draft claimed all three review layers had each caught something.
 
 ### M3. Exposure — what each leak actually reached, and what is not established
 
+> **⚠ Superseded in part by §N (`2026.08.0301`, #96).** Everything below was reasoned from the
+> committed scorecards on the stated premise that no artifact records which `section` a run
+> asked for. **The audit trail records it, and has since Task 9.** Measured: leak 2 reached
+> **7 of the 12 native rows, every one established** (not "1 established + 7 inferred"); custom
+> exposure is zero as concluded, now measured; **leak 1's exposure is zero**, closing the
+> question this section left open; and the smoke-gate contamination claim below is **refuted** —
+> the gate's `agent_config` call matched no agent and returned no sections. §N carries the
+> measurement and the per-row table. This section is kept as filed, because what #89 concluded on
+> the day is part of the record.
+
 The stronger claim available — that leak 2 "shipped on the smoke-gate runs and both harnesses' Task
 12 scored runs" — is **not** supported as stated, and is narrowed here.
 
@@ -1228,6 +1238,11 @@ halves of that 8 are not equally graded: **established** on one row (`eed25e8c�
 instruction text directly), **inferred** on the other seven from their L2 credit under §E2's
 used-layers discipline, with no record anywhere of the `section` argument those seven passed. The
 annotation therefore rests on the inferred half for seven of the eight rows it covers.
+
+> **⚠ Superseded by §N (#96).** The count is **7, not 8**, and none of it is inferred — the
+> `section` argument *and* the sections actually returned are recorded on every one of the 12
+> rows. §N3 has the table. The scorecard annotations were rewritten to name the affected rows
+> instead of describing an inference.
 
 It is still warranted on that grade. One row is enough to establish that the note **did** ship on
 native — the fact §M3 settles in the other direction for the custom harness — and the annotation
@@ -1293,3 +1308,190 @@ a pass that re-measures native removes it.
 
 Unchanged: native remains the recommended path on this instance, and the Phase 1b milestone is
 **not met**.
+
+---
+
+## N. The trail already held the answer (`2026.08.0301`, #96)
+
+**Not a pass** — no runs were fired, and no number in §A moves. What moves is four exposure
+grades in §M3/§M4 that were reasoned from committed markdown while the instance held the
+measurement, one derived column on one scored row, and the rule that produces that column.
+
+### N1. The premise that was wrong
+
+§M3 graded leak 2's exposure as **one row established and seven inferred**, and left leak 1's
+exposure *"bounded but not fully settled … the guess is not offered"*. §M4 cited **8 of the 12
+native rows** and said the annotation *"rests on the inferred half for seven of the eight rows
+it covers"*. Every one of those grades rested on the same stated premise: that no artifact
+records which `section` a run asked for.
+
+**Both harnesses have recorded it since Task 9.** `src/server/PaToolRegistry.js:284` (custom)
+and `src/server/PaScriptToolAdapter.js:127` (native) each call
+`logIntent({runId, toolName, input: args})` **before** the tool runs, and the matching
+`logResult` records what came back; `x_snc_troubleshoot_audit.input` and `.output` are
+`MultiLineTextColumn`s of 65,536 chars. gpinst01 holds **22 `agent_config`** and **11
+`genai_log`** intent rows, covering every run named in this file.
+
+This is #79's defect one level up, and in the instrument built to prevent it: a claim graded by
+what a label permits rather than by what the instance recorded.
+
+### N2. How it was measured
+
+The §E1 two-step, then a second reading of the same rows:
+
+1. `x_snc_troubleshoot_run.conversation_ref` → the run row. All 12 native scored conversations
+   resolve — 13 rows for 12 conversations, because seed 05 run 2's anchor race (§R-3, TR1000047 /
+   TR1000048) left the loser row behind as designed. The loser carries no audit rows.
+2. `x_snc_troubleshoot_audit` `run=<sys_id>` → every call, with `input` on the intent row and
+   `output` on the result row.
+
+**Two independent readings per row, and they agree on all 12.** The `input` says what the model
+asked for; `sections_returned` inside the recorded `output` says what the tool actually rendered.
+The second is the one that decides, and §N4 is why: three calls in the corpus name no `section`
+— which returns all four — and still returned nothing.
+
+### N3. Leak 2 — 7 of 12, every one established
+
+`PaToolAgentConfig`'s removed `note` is returned by `_instructions`, unconditionally, whenever
+that section renders (`PaToolAgentConfig.js:841`). So "did this row receive it" is exactly
+"does its `sections_returned` contain `instructions`", and that string is recorded.
+
+| Native scored row | Run | Recorded `input` | `sections_returned` | Received it |
+|---|---|---|---|---|
+| seed 01 run 1 | TR1000038 | `{"agent":"914db68f…","section":"tools"}` | `["tools"]` | no |
+| seed 01 run 2 | TR1000039 | `{"agent":"914db68f…","section":"tools"}` | `["tools"]` | no |
+| seed 02 run 1 | TR1000040 | `{"agent":"cd050d48…"}` | all four | **yes** |
+| seed 02 run 2 | TR1000041 | `cd050d48…` (bare string) | all four | **yes** |
+| seed 03 run 1 | TR1000042 | `{"agent":"0bbf1b00…","section":"tools"}` | `["tools"]` | no |
+| seed 03 run 2 | TR1000043 | `{"agent":"0bbf1b00…","section":"tools"}` | `["tools"]` | no |
+| seed 04 run 1 | TR1000044 | `{"agent":"8bac1f84…","section":"tools"}` | `["tools"]` | no |
+| seed 04 run 2 | TR1000045 | `{"agent":"8bac1f84…"}` | all four | **yes** |
+| seed 05 run 1 | TR1000046 | `Seed 05 Ticket Acknowledger` (bare string) | all four | **yes** |
+| seed 05 run 2 | TR1000047 | `Seed 05 Ticket Acknowledger` (bare string) | all four | **yes** |
+| seed 02 v2 run 1 (`scorecard-custom-harness.md`) | TR1000068 | `{"agent":"cd050d48…"}` | all four | **yes** |
+| seed 02 v2 run 2 (`scorecard-custom-harness.md`) | TR1000069 | `{"agent":"cd050d48…"}` | all four | **yes** |
+
+**7 of 12, and the inferred/established split does not survive** — it described a limitation
+that did not exist. §M3's one "established" row (`eed25e8c…`, TR1000069) is in the set, reached
+by the same evidence as the other six rather than by its own special citation.
+
+`eed25e8c…` also shows why the old reasoning was fragile even where it landed correctly: §M3
+established it from the model's *prose* citing "`agent_config` (instruction text)", which is the
+Fix Report's own claim about itself. The trail establishes it from the tool's output.
+
+**Across the whole audit table, exactly seven `agent_config` calls ever returned the
+`instructions` section, and all seven are the rows above.** Custom-harness exposure is
+**zero, measured** — a strengthening of §M3's conclusion rather than a correction, and it now
+covers a call shape §M3 never considered: the two custom smoke calls (TR1000049, TR1000053)
+passed `{"execution":"c9d63a93…"}` with no `section` at all, which §M3's reasoning would have
+graded as exposed. They returned `sections_returned: []` (see §N4).
+
+### N4. The smoke gate never received it — §M3's contamination claim is refuted
+
+§M3's remaining strong claim was that the leak *"contaminated the gate itself"*, that any gate
+run reading the instructions section *"was told that a known failure specimen on this instance
+threw in the agent copy"*, and that *"the gate has been passing under those conditions"*.
+
+**It is not what happened.** The smoke gate run (`742c45c8…`, TR1000037) made exactly one
+`agent_config` call, and it is recorded:
+
+```
+input   {"agent":"601672d32b1a83d0f243fed2ce91bf3e","section":"instructions"}
+output  "mode":"list", "matched_agents":[], "matched_usecases":[], "sections_returned":[]
+        note: No sn_aia_agent and no sn_aia_usecase matched "601672d3…"
+              (searched sys_id, name and internal_name on both).
+              Read status — sn_aia_agent: empty, sn_aia_usecase: empty.
+```
+
+The identifier the model passed matches no agent record on the instance, so **no section
+rendered and the note never shipped**. A later native probe run made two `agent_config` calls —
+the same identifier, and `{"agent":"PA GP Probe Agent"}` — and both returned
+`sections_returned: []` (TR1000056), as did the two custom smoke calls (TR1000049, TR1000053).
+**Corpus-wide exposure of leak 2 is the seven rows in §N3 and nothing else** — no smoke run of
+either harness, native or custom, ever received it.
+
+§M3's parenthetical *"which the gate's own expected answer requires it to do"* is wrong on the
+same evidence: the gate reached its expected answer — `context_processing_script` line 42,
+`InternalError`, from the `sn_aia_message` `script_errors` evidence — **without any instruction
+text at all**. Its `agent_config` call returned nothing and the diagnosis was correct anyway.
+
+**A harness finding falls out of this, and it is the more useful half.** The gate's only
+layer-2/3/7 probe silently swept nothing, and no column recorded that. `layers_swept` is derived
+for scored rows, but the smoke gate is a pass/fail gate with no scorecard row, so a tool call
+that resolved to an empty read left no trace anywhere except the audit trail. That the run
+passed regardless does not make the empty sweep invisible — it makes it *unnoticed*, which is
+§H5's failure mode aimed at the gate rather than at a seed.
+
+### N5. Leak 1 — zero, and §M3's open question closes
+
+§M3 could not bound leak 1 (`PaToolGenAiLog`'s `capability_unresolvable` `next_step`), because
+*"the finding's presence or absence in a native run's tool output was never captured"*. It was
+captured. Two facts settle it:
+
+1. **`capability_unresolvable` fires only in `check_config` mode**, and the corpus contains
+   exactly **two** `check_config` calls — seed 04 run 1 (TR1000044) and seed 04 run 2
+   (TR1000045). The other nine `genai_log` calls, custom's two included, ran `for_execution`,
+   which cannot raise the finding at all. So at most 2 of 12 rows were ever eligible.
+2. **Both report `"findings":0`** in `evidence_basis` — no finding of any kind fired on either
+   call, so `capability_unresolvable` did not. Their payloads are ~51,000 chars and the audit
+   digest elides 48,979 of them, but `evidence_basis` sits at the **tail**, which the digest
+   preserves by construction (see `PaAuditLogger`'s PAYLOAD DISCIPLINE). The count is read, not
+   inferred from an absent string.
+
+**Leak 1's corpus-wide exposure is zero, measured.** The guess §M3 declined to offer is no
+longer needed.
+
+### N6. One filled cell is contradicted — seed 03 run 2
+
+§E2's used-layers discipline lets `agent_config` credit layers 2, 3 and 7 *"only if the diagnosis
+actually used them"*. Read against the trail, eleven of the twelve rows reconcile. One does not:
+
+**seed 03 run 2 (`e1c319c0…`, TR1000043) is credited `5/7 (L1,L2,L3,L5,L6)`, and its only
+`agent_config` call returned `["tools"]`.** It never received instruction text, so L2 cannot be
+credited — the layer was not swept. Its sibling run 1 said so about itself (*"instructions
+section not pulled"*) and was correctly denied L2; run 2's note says *"consistent with run 1"*
+while the cell is not.
+
+Corrected in `scorecard-agent-doctor.md` to **`4/7 (L1,L3,L5,L6)`**, with the derivation named in
+`notes`. **No gate movement:** `passes_gate` consumes `root_cause_layer_correct` and
+`fix_usable_unedited` only (§A2), and neither changes. §A's verdict, the 7/10, the band and every
+other row stand exactly as filed.
+
+That this is the *only* contradiction is worth stating: the derivation was sound eleven times out
+of twelve. The point is not that the scorer was unreliable — it is that "the diagnosis discussed
+instruction text" was being read off the diagnosis, which is the party with an interest.
+
+### N7. What the method changes
+
+The trail can decide the necessary half of §E2's rule, and only the necessary half. Written into
+`scorecard-agent-doctor.md` §E2 as a two-part test:
+
+- **Necessary, and measured:** `agent_config` cannot credit a layer whose section the call did
+  not return. `instructions` → L2, `tools` → L3, `triggers` → L7; `overview` maps to no layer.
+  Read `sections_returned` from the run's audit `result` row. A section that never rendered is a
+  layer that was not swept, whatever the Fix Report says.
+- **Sufficient, and still read from the diagnosis:** receiving a section does not mean using it.
+  The scorer still judges whether the diagnosis used what it got.
+
+So the trail can **refute** a layer credit but cannot **confer** one — which is the honest shape,
+and the reason this is a change of rule rather than a change of scorer.
+
+`PaAuditLogger.toolCalls(runId)` (#96) is the read-side accessor this needs: every audit row for a
+run, in creation order, with `input` on intent rows and `output` on result and error rows.
+`invokedTools(runId)` is unchanged and still answers #79's narrower question.
+
+### N8. What this does not establish
+
+- **No score movement, and none is claimed.** §A's verdict, the gate tally, every rubric column
+  and every `passes_gate` value stand as filed. One derived column on one row is corrected.
+- **A digest miss is not an absence.** Payloads are digested head+tail past 4,000 chars, so a
+  string in the elided middle is invisible here while being present in what the model received.
+  Every measurement above rests on a value the digest **preserves** — `sections_returned` in the
+  head, `evidence_basis` in the tail — or on a positive hit. `toolCalls`'s header says this, and
+  a future caller that searches payload text must say which of the two it found.
+- **It does not re-open the leaks.** Both are removed and both are pinned by
+  `test/blindRule.test.js`. What changed is the record of what they reached, not their status.
+- **It says nothing about depth.** §K4 remedy 2 / §L7 — making the model take the second step —
+  remains the milestone blocker, untouched by anything here.
+- **The v4 pass is still the next thing.** §M7's queue is unchanged; this pass removes an
+  inference from the record it will be read against, and hands it a measurable `layers_swept`.
