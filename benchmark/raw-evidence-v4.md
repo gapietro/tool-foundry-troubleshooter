@@ -2516,14 +2516,26 @@ instance.
   the tool→layer map in the brief (`agent_trace`→L1, `agent_config`→L2/L3/L7
   refined by `sections_returned`, `schema_lookup`→L4, `query_table`→L5,
   `genai_log`→L6, `log_analysis`→no layer of its own, `read_artifact`→not a
-  layer). For every `agent_config` result row, the **full, untruncated**
-  `output` field was pulled via the Table API (not the query tool's display,
-  which elides mid-string) and `sections_returned` read directly — this
-  field sits in the payload head and survives the digest intact in all 7
-  cases where `agent_config` was called.
+  layer). For every `agent_config` result row, the `output` FIELD was pulled
+  whole via the Table API (not the query tool's display, which elides
+  mid-string) — the PAYLOAD inside that field is itself digested
+  (`"truncated":true`, head+tail past 4,000 chars), so this is not a claim
+  that the entire payload was examined. The absence claim about
+  `instructions` in the seed-01 disagreement below still stands on solid
+  ground: `sections_returned` is a short, closed list that sits in the
+  payload HEAD and was read intact (not reconstructed or inferred) in all 7
+  cases where `agent_config` was called — the digest hazard applies to the
+  rest of the payload, not to this one field.
 - **Tool-call count and order** are the count and creation-order sequence of
   `action_type='result'` rows (each tool call is one intent+result pair in
-  this schema).
+  this schema). Several result rows within the same run share
+  `sys_created_on` to the second (the underlying timestamp has no
+  sub-second precision in what was returned), so where two or more calls
+  tie, the recorded intra-run ORDER is this task's reading of the row
+  return sequence, not an independently measured sequence. It changes no
+  count and no layer credit — flagged so a later reader does not lean on
+  the exact call-by-call order within a same-second cluster as more
+  precise than it is.
 - **LLM-call count, native:** `sn_aia_execution_task` where
   `execution_plan=<native run's own plan sys_id>^type=agent^order=100` → one
   row → `sn_aia_gen_ai_m2m` where `source_id=<that task sys_id>^source_table
@@ -2534,15 +2546,36 @@ instance.
   own `x_snc_troubleshoot_run.transcript`, pulled untruncated via the Table
   API. Multiple `llm` entries occur on runs with more than one `fix_report`
   attempt (validation retries) — each attempt is its own LLM call.
-- **`layers_available`** was re-queried fresh at this task (not copied from
-  Task 2 or the seed-fixture section above): `sn_aia_agent_tool_m2m` where
-  `agent=e1392946828940e5a708fc51b0a5e954^active=true` → **7 rows**
-  (`agent_trace, agent_config, schema_lookup, query_table, genai_log,
-  log_analysis, read_artifact`, all `active=true`, `max_auto_executions=10`)
-  — unchanged from the pre-flight reading. This single query covers all 20
-  rows: it is the shared underlying agent/tool-registry config both
-  harnesses' tool calls resolve against, not a per-run value, and it did not
-  drift across the pass.
+- **`layers_available` — two separate sources, one per harness, each
+  actually read, not assumed symmetric with the other.** Native and custom
+  resolve their tool rosters through different code paths, so this column
+  was measured twice, not once:
+  - **Native (10 rows):** `sn_aia_agent_tool_m2m` where
+    `agent=e1392946828940e5a708fc51b0a5e954^active=true`, re-queried fresh
+    at this task (not copied from Task 2 or the seed-fixture section above)
+    → **7 rows** (`agent_trace, agent_config, schema_lookup, query_table,
+    genai_log, log_analysis, read_artifact`, all `active=true`,
+    `max_auto_executions=10`) — unchanged from the pre-flight reading.
+  - **Custom (10 rows):** the custom harness does not resolve tools through
+    `sn_aia_agent_tool_m2m` at all — its `GET /tools` endpoint
+    (`src/fluent/rest-api.now.ts`, `shortDescription: "The diagnostic tool
+    roster the custom harness reasons over — PaToolRegistry.list()"`) is
+    served by `src/server/rest/PaRestHandlers.js` `tools: function () { var
+    list = this._tools().list(); return {status:200, body:{tools: ...
+    list}} }` — `PaToolRegistry.list()` returned **verbatim**, no filtering
+    applied at the REST layer. `PaToolRegistry.list()` itself
+    (`src/server/PaToolRegistry.js`) iterates `_registry()`, a hardcoded map
+    read directly for this fix: it contains exactly **7 keys** —
+    `agent_trace, agent_config, schema_lookup, query_table, genai_log,
+    log_analysis, read_artifact` — the identical roster to native's, with no
+    `active`/enabled flag in this registry to filter on (every registered
+    entry is unconditionally listed). So the custom side's 7/7 rests on a
+    direct source read (the registry map itself), the same evidentiary
+    footing as the native side's live query — not an assumption that the
+    two harnesses share one underlying config. They do not: they are two
+    independently-measured 7/7s that happen to agree, per `benchmark/
+    scorecard-custom-harness.md:108`'s prior independent measurement of the
+    same registry via `GET /tools`.
 
 ### Master table (compact)
 
