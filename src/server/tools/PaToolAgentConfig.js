@@ -831,11 +831,17 @@ PaToolAgentConfig.prototype = {
             agent: agentOut,
             usecases: ucOut,
             script_findings: findings,
+            // This note used to add that "the known failure specimen on this
+            // instance threw in the AGENT copy". A real administrator has no
+            // referent for that phrase — it only parses with a benchmark
+            // specimen open — and it paired with the detail in
+            // _scriptFindings to hand a model the smoke gate's answer minus
+            // its line number (issue #89). The R-7/R-16 guidance is the
+            // asymmetry itself, and it survives without the anecdote.
             note:
                 'context_processing_script and applicability_script are read from BOTH sn_aia_agent and ' +
-                'sn_aia_usecase. The platform populates the agent copy whether or not you declare it, and ' +
-                'the known failure specimen on this instance threw in the AGENT copy — reading one side ' +
-                'misses half the failure surface (DESIGN.md R-7, R-16).',
+                'sn_aia_usecase. The platform populates the agent copy whether or not you declare it, so ' +
+                'reading one side misses half the failure surface (DESIGN.md R-7, R-16).',
         }
     },
 
@@ -857,12 +863,21 @@ PaToolAgentConfig.prototype = {
                 // as run data (issue #85). What the anecdote is FOR is that a
                 // populated body has thrown in practice; the line it threw at
                 // adds nothing and invites the misread.
+                //
+                // The rest of the anecdote went the same way in round 2 of
+                // #89's review. "…has thrown at runtime, terminating a run
+                // that reported state=Completed with an empty state_reason"
+                // is, word for word, the REASON a benchmark specimen was
+                // chosen — a run invisible from its plan header. Naming the
+                // mechanism generically loses nothing: the actionable half
+                // ("a run can throw here and still look healthy in the plan
+                // header") is already in next_step, where it belongs.
                 detail:
                     'The script is populated (' +
                     entry.context_processing_script.length +
                     ' chars). Fluent omission does not leave this field empty — the platform writes ' +
-                    'boilerplate into it — and an auto-populated body on the reference instance has thrown ' +
-                    'at runtime, terminating a run that reported state=Completed with an empty state_reason.',
+                    'boilerplate into it — and an auto-populated body can throw at runtime (DESIGN.md ' +
+                    'R-7, R-16).',
                 next_step:
                     'Cross-check agent_trace script_errors for a source matching this record. A run can ' +
                     'throw here and still look healthy in the plan header.',

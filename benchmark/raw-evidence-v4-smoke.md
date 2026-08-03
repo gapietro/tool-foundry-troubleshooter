@@ -153,6 +153,15 @@ part: **the leak was harmless only because the harness was too shallow to reach 
 activated at exactly the moment the depth work succeeded. The residual gap is the rule itself, which
 binds Agent Doctor's *instructions* and not its *tool output*. See #89.
 
+> **Correction (2026-08-03, `DECISION.md` §M3) — this record was later refined.** *"No run has ever
+> invoked `agent_config`"* is **false as written** and is retracted. The v2 pass reached it in 2 of 10
+> runs, runs 9 and 10 (`scorecard-custom-harness.md`). The conclusion holds **for the custom harness**
+> on a different basis: both calls passed `section:"triggers"`, and the leaked string is built inside
+> `_instructions` (`src/server/tools/PaToolAgentConfig.js`), so that section could not return it —
+> which, with non-invocation in every other custom pass, keeps custom-harness exposure at zero.
+> Unscoped the sentence is also false the other way: §M3 grades the note as having shipped on
+> **native**. Shallowness alone is no longer the whole explanation for why the leak stayed harmless.
+
 ---
 
 ## A read-consistency note — this CORRECTS `raw-evidence-v3.md`

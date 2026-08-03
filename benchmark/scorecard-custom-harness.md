@@ -315,6 +315,22 @@ LLM-call count via the corrected `sn_aia_gen_ai_m2m` linkage (Task 9): query the
 `sn_aia_execution_task` (`type=agent`, `order=100`), then count `sn_aia_gen_ai_m2m` rows keyed to
 that task's sys_id.
 
+> **These two rows were scored before the #89 blind-rule fix (`2026.08.0227`).** Two tool cores the
+> native harness executes through `PaScriptToolAdapter` changed after both rows were filed:
+> `src/server/tools/PaToolAgentConfig.js` (a note on the `instructions` section naming the smoke
+> gate's specimen, and a `detail` restating `benchmark/README.md`'s reason for choosing it) and
+> `src/server/tools/PaToolGenAiLog.js` (a `capability_unresolvable` `next_step` carrying seed 04's
+> construction taxonomy). Both rows credit layer 2, and run 2 (`eed25e8c…`) cites *"`agent_config`
+> (instruction text)"* in a root-cause entry directly — so its call returned the instructions section
+> and the removed note travelled with it as a sibling key.
+>
+> **No row is restated and no score movement is claimed.** The removed text named the **smoke gate's**
+> specimen and the reason it was chosen, not any seed's answer: no scored seed's expected layer,
+> component or fix appeared in it, and the smoke gate is a pass/fail gate rather than one of the
+> scored rows. The reason to record this is reproducibility — these rows were measured against a
+> version of a shared core that no longer exists. Full exposure analysis is in `DECISION.md` §M3; the
+> annotation decision is in §M4, and the same note is on `scorecard-agent-doctor.md`'s standing rows.
+
 | seed | run # | run_id (conversation_id) | root_cause_layer_correct | fix_target_correct | evidence_cites_trace_and_config | fix_usable_unedited | total /6 | **passes_gate** | layers_swept (n/7, which) | layers_available (n/7) | cause_of_death | continuous_tool_execution_limit | max_auto_executions | tool_calls | LLM calls | wall_clock | notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 02 | 1 | `1191de002ba6c314f243fed2ce91bf4d` | 2 | 2 | 1 | 0 | 5 | **0** | 5/7 (L1,L2,L3,L6,L7) | 7/7 (measured) | completed | 25 | 10 × all 7 tools | 11 | 8 | 232s | RC-3 names layer 2 CONFIRMED ("instructions name no tool and no output action") — matches the seed's expected diagnosis. RC-1 (primary) is layer 3 ("missing routing tool") — a real, correctly-evidenced co-finding, not a miss, per the same multi-root-cause precedent Task 12 used for seed 4. Fix 3 (instructions) uses a literal placeholder `[routing tool name]` — not appliable unedited → `fix_usable_unedited=0`. Also flags a real `active_tool_count=0` vs `binding.active="1"` discrepancy (UNCONFIRMED, advisory). |

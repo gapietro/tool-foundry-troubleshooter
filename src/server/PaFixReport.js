@@ -434,7 +434,7 @@ PaFixReport.prototype = {
      * appears in the run's audit trail. The map is deliberately PERMISSIVE —
      * the goal is to stop fabrication, not to add new pedantry, which is the
      * exact failure mode #78 exists to fix. `genai_log` supports `config`
-     * because seed 03's answer (a dangling `api`) is found through it and is
+     * because seed 04's answer (a dangling `api`) is found through it and is
      * legitimately configuration evidence; a strict 1:1 map would reject that
      * honest citation.
      *

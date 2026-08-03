@@ -140,3 +140,17 @@ stated here rather than left to the scorer:
 ## Safety
 
 Touches only `x_snc_tsbench_ticket`, owned by the fixture app. Nothing shared.
+
+## Blind-rule tokens
+
+Strings that would give this seed's answer away if they reached a model-facing
+string. Guarded by `../../test/blindRule.test.js` — see that file's header for
+how a token is chosen.
+
+```blind-rule-tokens
+Seed 01 Ticket Prioritizer
+x_snc_tsbench_ticket
+set_ticket_priority
+priority_stored
+priority_requested
+```

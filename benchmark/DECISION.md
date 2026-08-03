@@ -869,6 +869,17 @@ depth work succeeded.** The residual gap is the blind rule itself, which binds A
 *instructions* and not its *tool output*. Filed as **#89**, together with the observation that the
 #85 audit swept for statistics and never swept for answers.
 
+**Correction (2026-08-03, §M3):** the blanket *"no run has ever invoked `agent_config`"* is **false
+and is retracted.** The v2 pass reached it in 2 of 10 runs — runs 9 and 10
+(`scorecard-custom-harness.md`). The conclusion survives, **scoped to the custom harness** and for a
+different reason than the one given: both of those calls passed `section:"triggers"`, and the leaked
+string is assembled inside `_instructions` (`src/server/tools/PaToolAgentConfig.js`), which
+`section:"triggers"` never reaches. Custom-harness exposure is therefore still zero — from the
+`section` argument in those two runs, and from non-invocation in every other pass (0/10 v3, 0/10
+Task 10, 0/4 v4 smoke). Unscoped, the sentence is false in the other direction too: §M3 grades the
+note as having shipped on **native**. What does not survive is shallowness as the *whole* explanation
+of why the leak stayed harmless.
+
 ### J5. What this changes about the roadmap
 
 §I5 said depth was the only thing left. That still holds, and the target has moved from "why does the
@@ -1065,3 +1076,220 @@ still unmet across 25 runs. §K4 remedy (2) — making the model take the second
 remains the milestone blocker. The one incidental observation worth carrying: TR1000114 called
 `read_artifact`, the first paging on this seed since `0216`, which belongs to #91 rather than to this
 change.
+
+---
+
+## M. The blind rule binds tool output (`2026.08.0227`, #89)
+
+§J5's item 2 of 3. **Not a pass of any kind** — no runs were fired and no number in this file moves.
+What changes is the rule that makes every number in this file mean anything, plus what turned up
+while applying it for the first time.
+
+### M1. What was changed
+
+**The rule now binds three channels, not one.** `README.md`'s blind rule bound the text that becomes
+Agent Doctor's *instructions* — the only channel that existed when it was written for the native
+harness. It now binds instructions (`docs/agent/agent-doctor-instructions.md`), tool descriptions
+(`src/server/PaToolRegistry.js`, mirrored into `src/fluent/agent-doctor.now.ts`) and **tool output**
+— which is defined by a principle rather than a file list: *any text the harness can put in front of
+the model*. The seven cores in `src/server/tools/` and `src/server/PaToolReadKit.js` are the obvious
+members; `PaArtifactStore.js`'s excerpts, `PaFixReport.js`'s repair-turn text, `PaAgentLoop.js`'s
+**system prompt**, `PaLlmProxy.js`'s envelope and `PaScriptToolAdapter.js`'s native envelope are bound
+by the same words, and a leak in any of them is a rule violation rather than merely a test failure.
+All three channels reach the model on both harnesses, though individual files are harness-specific
+(`PaAgentLoop`/`PaFixReport`/`PaLlmProxy` custom-only, `PaScriptToolAdapter` native-only).
+Tool output is the most direct of them: it lands in the reasoning loop at the moment of
+diagnosis rather than in a preamble read once at the start.
+
+**Each specimen declares its own answers.** Five seed specs and the `README.md` smoke gate each carry
+a fenced ` ```blind-rule-tokens ` block — 18 tokens across the six. A new seed is covered the moment
+its spec lands and fails the build until its tokens are declared.
+
+**Two mechanical guards, one comment stripper.** `test/blindRule.test.js` (answers, #89) scans 16
+model-facing sources for those tokens, comment-stripped, and fails the build on a hit; the roster
+size is pinned, because a *deleted* target silently stops generating its `it` while the suite stays
+green. Three controls run against real files: two positive (the matcher fires, case-insensitively),
+one negative (a token inside a genuine comment does not fire). It is paired with
+`test/referenceStatistics.test.js` (statistics, #85), and the two now share
+`test/_stripComments.js` so they cannot drift.
+
+**A token names the answer, not the vocabulary of the question.**
+`sn_aia_trigger_configuration` is seed 05's answer *and* a table `agent_config` must query to sweep
+layer 7; `context_processing_script` is the smoke gate's answer *and* a field that same tool must
+read. Neither is declared. There is deliberately no stop-list: a too-generic token reddens the suite,
+and that failure is the signal to pick a better token.
+
+### M2. The sweep found two leaks, and the automated guard found neither
+
+Both are in tool output. Both were found by a human reading, with the specimens open.
+
+**Leak 1 — `src/server/tools/PaToolGenAiLog.js` (`f0e49b1`), found by the hand sweep.** The
+`capability_unresolvable` finding's `next_step` called its own signature *"the FALLBACK signature
+rather than the primary provider-mapping one"*. That two-member taxonomy exists in exactly one place
+in this repository — seed 04's spec — and naming one member tells a model by elimination that the
+other is a **provider-mapping** failure, which is seed 04's answer. The tell is that the sentence is
+incomprehensible to a real administrator: nobody diagnosing an actual capability has a referent for
+"the FALLBACK signature". Replaced with a contrast between two checks the tool performs on the record
+in front of it (`capability_unresolvable` vs `api_dangling`) — observable, instance-general, and
+still useful.
+
+**No token could have caught this one.** The leak is *framing*, not a value: the load-bearing words
+are "primary" and "fallback", which are ordinary English appearing throughout honest code, and there
+is no distinctive surrounding phrase in seed 04's spec to declare instead. The guard catches leaked
+values; only a reader with the specimens open catches leaked framing. The two halves of the sweep
+cover disjoint failure modes, which is why #89 asked for both.
+
+**Leak 2 — `src/server/tools/PaToolAgentConfig.js` (`64ed1b4`), found by an independent reviewer
+after the hand sweep.** The `note` returned by every `section=instructions` call read *"the known
+failure specimen on this instance threw in the AGENT copy"* — naming the smoke gate's specimen, and
+failing the same real-administrator test that convicted leak 1. Its sibling `detail` on
+`context_processing_script_populated` carried *"terminating a run that reported state=Completed with
+an empty state_reason"*, which is near-verbatim `README.md` step 3's stated **reason for choosing**
+that specimen. The pair handed a model the gate's answer minus only "line 42" — the one half Task 2
+had declared as a token on the assumption it was the only unguarded one. Both clauses removed; the
+R-7/R-16 guidance they sat in survives intact.
+
+The hand sweep had already read that function and had explicitly *kept* the sibling `detail`, on the
+reasoning that it explained why a plan header cannot be trusted. That reasoning was wrong on a fact
+that a re-read settles: the `next_step` immediately below already says the same thing generically.
+Recorded because it is the useful part — the sweep applied "is this a measurement?" and stopped,
+without applying "would a real user understand this?" two files after using that test successfully.
+
+**The automated guard's record on this episode is 0 for 2.** Its first full run reported every scan
+target passing (`8f2df96`), before either leak was found. Its later changes (`5ec68fe`, `64ed1b4`)
+were repairs to its own token list and target roster, driven by manual review — a token that could
+match nothing, and a roster missing five model-facing files including the one that assembles the
+system prompt. **The guard's value is prospective, not diagnostic:** it pins both leaks closed
+permanently and covers 16 targets automatically from here, so the next leak of a declared value fails
+a build instead of waiting for someone to notice. `README.md` was corrected to say this (`5e30e1b`)
+after a first draft claimed all three review layers had each caught something.
+
+### M3. Exposure — what each leak actually reached, and what is not established
+
+The stronger claim available — that leak 2 "shipped on the smoke-gate runs and both harnesses' Task
+12 scored runs" — is **not** supported as stated, and is narrowed here.
+
+**Leak 2 shipped only on `section=instructions` calls.** `_resolveSections` returns all four sections
+when `section` is omitted, `all`, or unrecognised, so an unqualified call carries the note; an
+explicit `section` other than `instructions` does not.
+
+**Across every custom-harness scored run, exposure is zero.** `agent_config` was invoked in 0 of 10
+runs in the Task 10 pass (§E), 0 of 10 in v3 (`raw-evidence-v3.md`), and 0 of 4 in the v4 smoke
+(`raw-evidence-v4-smoke.md`). The v2 pass reached it in 2 of 10 — runs 9 and 10, both seed 05 — and
+`scorecard-custom-harness.md` records the section for **both**: run 9's is *"the sole `agent_config`
+call requested `section:"triggers"`"*, and run 10's is the same call shape, the basis of its L2/L3
+overclaim. `section=triggers` returns no instructions, so the note did not ship on either. That
+settles the open question: **no custom-harness run, scored or smoke, ever received it.**
+
+**On native it did ship — directly evidenced on one row, inferred on the other seven.**
+`scorecard-agent-doctor.md` §E2 credits `agent_config` layer 2 only when the diagnosis actually used
+the instruction text; 6 of the 10 standing native rows carry L2 (seed 02 ×2, seed 03 run 2, seed 04
+run 2, seed 05 ×2), as do both native seed-02 v2 rows. **Established** on `eed25e8c…`, whose notes
+record evidence citing *"`agent_config` (instruction text)"* inside a root-cause entry: that call
+demonstrably returned the instructions section, and the note is a sibling key of that text in the
+same returned object, so it travelled with it. **Inferred** on the remaining seven: L2 credit under
+§E2's used-layers discipline implies the instruction text was read, which implies an unqualified or
+`section=instructions` call. That is sound reasoning and it is what §M4's annotation rests on — but
+no scorecard or raw-evidence entry records the `section` argument those runs passed, so it is
+reasoning rather than a record, and the distinction is kept rather than rounded up.
+
+**What that exposure did and did not contaminate.** The removed text names the **smoke gate's**
+specimen and `README.md`'s reason for choosing it. The smoke gate is a pass/fail gate, explicitly
+*"not one of the 10 scored rows"*, and its answer is not any seed's answer — no scored seed's expected
+layer, component or fix appears in the removed strings. So: **no scored row's answer was leaked to
+it, and no score is called into question.** What was contaminated is the gate itself. Any gate run
+that read the instructions section — which the gate's own expected answer requires it to do — was
+told that a known failure specimen on this instance threw in the agent copy of
+`context_processing_script`, and separately that such a run reports `state=Completed` with an empty
+`state_reason`. That is the gate's answer minus its line number, and the gate has been passing under
+those conditions.
+
+**Leak 1's exposure is bounded but not fully settled.** `capability_unresolvable` fires only when a
+definition's `capability` reference resolves to no `sys_one_extend_capability` row. Seed 04's
+capability record is real by construction — a mismatch there is the seed's declared **void**
+condition (`README.md` step 2) — so no scorable seed-04 row can carry that finding. Custom-harness
+exposure is zero outright: `genai_log` was never invoked in any custom run in any pass. Native did
+invoke it, and an unfiltered `check_config` audits up to `MAX_DEFINITIONS` rows of the whole table,
+so a native layer-6 sweep could in principle have raised the finding against some unrelated OOB
+definition. **Nothing in the scorecards or the raw evidence records whether it did**, and the
+finding's presence or absence in a native run's tool output was never captured. That is the bound;
+the guess is not offered.
+
+### M4. Native movement, and the scorecard annotation
+
+`src/server/PaToolRegistry.js` and `src/fluent/agent-doctor.now.ts` — the two files §J5 and §K5 treat
+as the native-shared surface — are **untouched**. On the brief's literal trigger, no annotation is due.
+
+An annotation is nonetheless warranted, and `scorecard-agent-doctor.md` carries one. Both changed
+files are tool *cores*, and both harnesses execute them: native through `PaScriptToolAdapter` (the
+`Now.include` in `src/fluent/script-includes.now.ts`), custom through `PaToolRegistry.dispatch`. §M3
+grades the `PaToolAgentConfig` note as having reached 8 of the 12 native rows on record, and the two
+halves of that 8 are not equally graded: **established** on one row (`eed25e8c…`, which cites the
+instruction text directly), **inferred** on the other seven from their L2 credit under §E2's
+used-layers discipline, with no record anywhere of the `section` argument those seven passed. The
+annotation therefore rests on the inferred half for seven of the eight rows it covers.
+
+It is still warranted on that grade. One row is enough to establish that the note **did** ship on
+native — the fact §M3 settles in the other direction for the custom harness — and the annotation
+claims only that these rows were scored against a version of a shared core that no longer exists,
+which is a reproducibility fact about those rows whether or not it moved a score.
+
+The annotation is deliberately narrow, and says three things: which two cores changed and when; that
+native runs pulling `section=instructions` received the removed note; and that the removed text named
+the smoke gate's specimen rather than any scored seed's answer, so **no row is restated and no score
+movement is claimed**. Asserting contamination of a scored answer would be its own overclaim, of
+exactly the kind this section exists to prevent.
+
+### M5. One finding parked by ruling, deliberately
+
+`docs/agent/agent-doctor-instructions.md:67` tells the model that the mandatory bindings *"capability,
+api_type and api — are where defects live"*. A reviewer flagged it as naming seed 04's answer field.
+
+**Ruled domain guidance, not an answer.** It names three fields and says nothing about which of them
+is defective; it derives from **R-22**, a whole-table measurement on this instance, not from the seed
+— and R-22 is the same finding that caused seed 04 to be re-targeted from `connection` to `api` in
+the first place, so the seed and the instruction inherit one ruling rather than the instruction having
+been taught the seed. It *tilts* toward seed 04's layer; it does not *tell*.
+
+**Its twin was considered and ruled the same way.** `src/server/tools/PaToolGenAiLog.js`'s
+`connection_note` carries the same R-22 content in the *more direct* channel — tool output, which
+lands mid-reasoning rather than in a preamble — and so deserved the harder look, not the lighter one.
+It is likewise **not** a leak, and for a reason the instructions line cannot claim: the tool scopes
+the three bindings as *"what this mode checks"*, an honest statement of its own coverage beside
+`stats.check_names`, where the instruction phrases them as *"where defects live"*. A tool naming the
+checks it performs is the opposite of a hint. Recorded because §M5 otherwise reads as if the
+instructions file were the only instance of this sentence in the repository.
+
+It is left in place, and the reason is procedural rather than a shrug: the file is native-shared, so
+moving it relocates an unmeasured native baseline — which §J5 forbids before the v4 pass — for
+something that falls short of a leak. It belongs to §I4 confound 2 and should be resolved in the v4
+scored pass, where native is re-measured on the same day and the objection disappears. Recorded here
+as an open, reasoned, deliberate non-change rather than an oversight.
+
+### M6. What this does not establish
+
+- **No score movement, and none is claimed.** Nothing was run. Every row in §G–§L stands as filed.
+- **Depth is untouched.** §K4 remedy 2 / §L7 — making the model take the second step — remains the
+  milestone blocker, unaffected by anything here.
+- **A passing guard is not evidence of blindness.** It catches only what it was told to look for, and
+  §M2 is the demonstration: 16 targets green while two real leaks sat in two of them.
+- **The guard is a build-time source scan.** A leak assembled at *runtime* from live fixture data is
+  not caught and cannot be, since a tool reading the fixture app's tables will legitimately return
+  fixture strings. The blind rule has always been about authored text.
+- **That no third leak remains.** Two passes over these files (#87's, and this one) each found what
+  the previous pass missed. The honest reading of that sequence is that reading finds leaks and
+  finishes nothing.
+
+### M7. The queue
+
+§J5's item 2 of 3 is done. Item 1 (#88, a floor under the inconclusive path) and this item were the
+two preconditions.
+
+Next is the **v4 scored pass**: ten rows, blind, audit-derived, **with native re-measured the same
+day** to close §H7-4 / §I4 confound 3. §I4 confound 2 — both `agent-doctor-instructions.md:48` and
+the `:67` line parked in §M5 — should be resolved inside that same pass, for the reason §J5 gave: the
+objection to editing the shared instructions file is that it moves an unmeasured native baseline, and
+a pass that re-measures native removes it.
+
+Unchanged: native remains the recommended path on this instance, and the Phase 1b milestone is
+**not met**.

@@ -285,6 +285,25 @@ Blank template — one filled row per run. `run_id` is the run-identity key from
 `passes_gate` is `1`, `0` or `void` — computed by the rule in §A2, **not** from `total /6`. It is
 the only column the Task 12 gate consumes.
 
+> **These rows were scored before the #89 blind-rule fix (`2026.08.0227`).** Two tool cores that the
+> native harness executes through `PaScriptToolAdapter` changed after every row below was filed:
+> `src/server/tools/PaToolAgentConfig.js` (a note on the `instructions` section naming the smoke
+> gate's specimen, and a `detail` restating `benchmark/README.md`'s reason for choosing it) and
+> `src/server/tools/PaToolGenAiLog.js` (a `capability_unresolvable` `next_step` carrying seed 04's
+> construction taxonomy). Any native run that pulled `section=instructions` received the
+> `PaToolAgentConfig` note. Which rows below did so is **inferred, not recorded**: the six rows
+> crediting layer 2 must have read the instruction text under §E2's used-layers discipline, which
+> implies an unqualified or `section=instructions` call — but no entry in this scorecard records the
+> `section` argument any run passed, so this is reasoning rather than a record. (The one directly
+> evidenced case is a native v2 row on `scorecard-custom-harness.md`, not one of these.)
+>
+> **No row is restated and no score movement is claimed.** The removed text named the smoke gate's
+> specimen and the reason it was chosen; the smoke gate is a pass/fail gate rather than one of the
+> ten scored rows, and no scored seed's expected layer, component or fix appeared in it. The reason
+> to record this is reproducibility: these rows were measured against a version of a shared core that
+> no longer exists. Full exposure analysis, including what is *not* established for
+> `PaToolGenAiLog.js`, is in `DECISION.md` §M3; the annotation decision itself is in §M4.
+
 | seed | run # | run_id (conversation_id) | root_cause_layer_correct | fix_target_correct | evidence_cites_trace_and_config | fix_usable_unedited | total /6 | **passes_gate** | layers_swept (n/7, which) | layers_available (n/7, which) | cause_of_death | continuous_tool_execution_limit | max_auto_executions (per tool) | tool_calls | assists_consumed | wall_clock | failure_behavior | notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 01 | 1 | `715e41c42b6a4bd417a6ffbeee91bf29` | 2 | 2 | 1 | 1 | 6 | **1** | 4/7 (L1,L3,L4,L5) | 7/7 (measured) | completed | 25 | 10 × all 7 tools | 8 | not measurable (see §F) | 145s | n/a — success; unswept layers stated | Word→Integer mismatch found from both sides (M18 full credit). One `query_table` probe hit `incident` (wrong table), self-corrected. ~6 LLM calls. |

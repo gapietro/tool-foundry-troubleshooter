@@ -75,3 +75,14 @@ connect the agent to a groundable decision.
 ## Safety
 
 No data touched.
+
+## Blind-rule tokens
+
+Strings that would give this seed's answer away if they reached a model-facing
+string. Guarded by `../../test/blindRule.test.js` — see that file's header for
+how a token is chosen.
+
+```blind-rule-tokens
+Seed 02 Request Router
+measure_request
+```

@@ -144,3 +144,20 @@ per "The two gates" above.
 Touches only the fixture app's own agent, workflow, team, and trigger
 configuration, and inserts one row into `x_snc_tsbench_ticket`, owned by the
 fixture app. Nothing shared is modified.
+
+## Blind-rule tokens
+
+Strings that would give this seed's answer away if they reached a model-facing
+string. Guarded by `../../test/blindRule.test.js` — see that file's header for
+how a token is chosen.
+
+```blind-rule-tokens
+Seed 05 Ticket Acknowledger
+Seed 05 Ticket Acknowledgement
+Seed 05 Bench Ticket Created
+```
+
+Note on seed 05: `sn_aia_trigger_configuration` is its answer *and* a table
+`agent_config` must query to sweep layer 7. It is deliberately **not**
+declared, per the authoring rule. The seed-specific trigger and agent names
+carry the same information without firing on honest code.

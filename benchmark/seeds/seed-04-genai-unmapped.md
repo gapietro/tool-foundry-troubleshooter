@@ -236,3 +236,15 @@ Creates only its own capability definition and agent/tool records, owned by
 the fixture app. No existing capability, connection, or provider mapping on
 the instance is touched, unmapped or repointed. The dangling `api` value points
 at a sys_id that exists nowhere, so it cannot collide with a real flow.
+
+## Blind-rule tokens
+
+Strings that would give this seed's answer away if they reached a model-facing
+string. Guarded by `../../test/blindRule.test.js` — see that file's header for
+how a token is chosen.
+
+```blind-rule-tokens
+Seed 04 Summarizer
+x_snc_tsbench_unmapped_capability
+936e514a53b3b110f028ddeeff7b128c
+```

@@ -31,8 +31,52 @@ the scores mean anything:
 nothing was lost: the file that carries Agent Doctor's instructions — the playbook in the sense the
 rule means — is **`docs/agent/agent-doctor-instructions.md`**, the only file in `docs/agent/`. The
 rule's wording is preserved verbatim because it is the condition that makes the scores mean
-anything; read "the playbook" as that file. The rule binds anything that becomes part of Agent
-Doctor's instructions, whatever it ends up being called.
+anything; read "the playbook" as that file.
+
+**What the rule binds.** Instructions were the only channel that existed when this rule was written
+for the native harness. There are now three, and the rule binds all of them:
+
+| Channel | Source | Reaches |
+|---|---|---|
+| Instructions | `docs/agent/agent-doctor-instructions.md` | both harnesses |
+| Tool descriptions | `src/server/PaToolRegistry.js` (single-sourced), mirrored into `src/fluent/agent-doctor.now.ts` | both harnesses |
+| Tool output | **any text the harness can put in front of the model** — e.g. the 7 cores in `src/server/tools/`, `src/server/PaToolReadKit.js` | both harnesses |
+
+**The third channel is defined by that principle, not by the file list.** The files named are
+illustration, and the list is longer than the obvious members: `src/server/PaArtifactStore.js` writes
+the excerpt and degradation notes that come back through `read_artifact`; `src/server/PaFixReport.js`
+supplies the validation text fed verbatim into the repair turn; `src/server/PaAgentLoop.js` **builds
+the system prompt**; `src/server/PaLlmProxy.js` wraps every call to the model; and
+`src/server/PaScriptToolAdapter.js` is native's tool envelope. A leak in any of them is bound by the
+rule directly — not merely caught by the test. `test/blindRule.test.js` scans 16 sources today; that
+roster tracks the principle and must grow with it, rather than defining it.
+
+Tool output is the most direct of the three: it lands in the reasoning loop at the moment of
+diagnosis, not in a preamble read once at the start. Until `2026.08.0222`, `PaToolAgentConfig`
+emitted this gate's own expected answer — *"threw at line 42"* — inside a finding. It never fired on
+the custom harness only because the two runs that ever reached `agent_config` (v2 runs 9 and 10) both
+asked for `section:"triggers"`, which returns no instructions; it would have activated at exactly the
+moment the depth work succeeded (#89, `DECISION.md` §J4, §M).
+
+Two guards enforce the mechanical half:
+
+| Guard | Catches | Origin |
+|---|---|---|
+| `test/referenceStatistics.test.js` | reference **statistics** mistakable for run data | #85 |
+| `test/blindRule.test.js` | **answers** — the seeded diagnosis itself | #89 |
+
+`blindRule` reads the ` ```blind-rule-tokens ` block each specimen declares, so a new seed is
+covered the moment its spec lands and fails the build until its tokens are declared.
+
+**A passing suite is not evidence of blindness.** Neither guard can catch what it was not told to
+look for, and a token that names platform vocabulary a tool legitimately reads is a bad token
+rather than a finding. The #89 sweep bears this out: the automated guard's first full run reported
+every scan target clean, and both real leaks were found by humans reading — a hand sweep caught a
+framing leak in `PaToolGenAiLog` that no token could have matched (the leak was in what a finding
+implied by elimination, not in a value), and an independent adversarial review caught a second leak
+in `PaToolAgentConfig` that the hand sweep had already walked past. The guard's value here is
+prospective, not diagnostic: it pins both leaks closed permanently and covers all 16 targets
+automatically from here on, so the next leak fails a build instead of waiting for someone to notice.
 
 ## The protocol
 
@@ -74,6 +118,17 @@ the per-seed specs remain authoritative for the detail.
    all 5 tool calls `Success` — so it tests whether a diagnosis that stops at the header gets caught,
    not merely whether the tools can read rows. This is a pass/fail gate, not one of the 10 scored
    rows.
+
+   The smoke gate's own answer tokens, guarded by `../test/blindRule.test.js`:
+
+   ```blind-rule-tokens
+   c9d63a932bda8b9417a6ffbeee91bfd0
+   line 42
+   ```
+
+   `context_processing_script` is deliberately **not** a token: it is this
+   gate's answer *and* a field `agent_config` must read to sweep layer 4. A
+   token that fires on honest tool code is a bad token, not a finding.
 4. **2 runs per seed, in fresh conversations, for all 5 seeds — 10 scored runs.** Each run is blind:
    Agent Doctor's instructions, its tools, and the playbook carry no seed knowledge. The doubling
    measures the documented "inconsistent behavior on identical inputs" failure mode, not redundancy.
