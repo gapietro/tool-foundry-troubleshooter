@@ -111,3 +111,59 @@ returned **7 rows**, each `max_auto_executions=10`:
 **Measured `layers_available`: 7/7** — all seven tools are registered on the
 agent record read directly from the instance (not copied from a prior pass).
 The gap measured by scored runs is "did not look", never "could not look with".
+
+---
+
+## Smoke gate (Task 3) — both harnesses, not a scored row
+
+One run fired per harness against the standing smoke specimen (execution plan
+`c9d63a932bda8b9417a6ffbeee91bfd0`), invocation text exactly per the brief and
+nothing else. Bar: terminal with structurally valid output — not correct
+diagnosis. Full transcripts, timings, and complete Fix Report text are in
+`.superpowers/sdd/2026-08-03-v4-scored-pass/task-3-report.md`.
+
+### Native (Agent Doctor, `e1392946828940e5a708fc51b0a5e954`)
+
+Prompt: `Diagnose execution plan c9d63a932bda8b9417a6ffbeee91bfd0.`
+
+- Execution ID `0781aaec2ba2871817a6ffbeee91bfce`, conversation
+  `d2816aec2ba2871817a6ffbeee91bf4e`
+- **Terminal state: Completed** — **wall clock: 241s** — **11 tool calls**
+  (`agent_trace` ×1, `read_artifact` ×7, `agent_config` ×2, `genai_log` ×1,
+  `log_analysis` ×1)
+- Fix Report is well-formed (FAILURE SUMMARY / LAYERS SWEPT / ROOT CAUSES /
+  FIXES / VERIFICATION) and named `context_processing_script` line 42 as
+  RC-2 with CONFIRMED confidence — matching the known answer, consistent
+  with native also finding it at Task 9 and Task 12.
+
+**Gate: PASS.**
+
+### Custom (`x_snc_troubleshoot`)
+
+Body: `{"execution": "c9d63a932bda8b9417a6ffbeee91bfd0", "mode": "diagnose"}`
+
+- Run ID `5702a2242be2871817a6ffbeee91bfc9` (`TR1000117`), polled via
+  `GET .../runs/{run_id}` (trusted per the brief over any single-record
+  `servicenow_query`, which is stale on this instance)
+- **Terminal state: complete** — **wall clock: ~10s** — **1 tool call**
+  (`agent_trace`)
+- `fix_report` has all documented keys (`failure_summary`, `layers_swept`,
+  `root_causes`, `fixes`, `verification`, `data_markers`) and named
+  `context_processing_script` line 42 as the sole root cause — but only
+  Layer 1 was swept (all other layers `NOT_SWEPT`) and confidence is
+  explicitly `UNCONFIRMED`. Right answer, shallow evidence — flagged for
+  the scored pass, not treated as a gate signal.
+
+**Gate: PASS.**
+
+### Result
+
+| Harness | Terminal state | Wall clock | Tool calls | Line 42 named |
+|---|---|---|---|---|
+| Native (Agent Doctor) | Completed | 241s | 11 | YES |
+| Custom (`x_snc_troubleshoot`) | complete | ~10s | 1 | YES |
+
+Both harnesses passed: terminal, structurally valid output. Gate is
+terminality + structural validity, not correctness — both happened to name
+the known answer this time, which is not guaranteed to repeat across the 20
+scored runs. Pass may proceed.
