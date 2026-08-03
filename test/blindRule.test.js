@@ -70,6 +70,119 @@ function readTokenBlock(absPath) {
         .filter((line) => line.length > 0)
 }
 
+const { stripComments } = require('./_stripComments')
+
+/**
+ * Everything the harness can put in front of the model.
+ *
+ *   instructions       docs/agent/agent-doctor-instructions.md   both harnesses
+ *   tool descriptions  PaToolRegistry.js -> agent-doctor.now.ts  both harnesses
+ *   tool output        the 7 cores + PaToolReadKit               both harnesses
+ *
+ * NOT scanned, and the distinction is the whole point: benchmark/seed-app/**
+ * is the fixture that IMPLEMENTS the defects, and benchmark/** docs ARE the
+ * answer key. Both are full of tokens by construction; neither is model-facing.
+ */
+const SCAN_TARGETS = [
+    'src/server/tools/PaToolAgentTrace.js',
+    'src/server/tools/PaToolAgentConfig.js',
+    'src/server/tools/PaToolGenAiLog.js',
+    'src/server/tools/PaToolLogAnalysis.js',
+    'src/server/tools/PaToolQueryTable.js',
+    'src/server/tools/PaToolSchemaLookup.js',
+    'src/server/tools/PaToolReadArtifact.js',
+    'src/server/PaToolReadKit.js',
+    'src/server/PaToolRegistry.js',
+    'src/fluent/agent-doctor.now.ts',
+].map((f) => ({ file: f, stripComments: true }))
+    // The instructions doc is scanned WHOLE. All of it is model-facing, so
+    // there is no non-model-facing half to exempt.
+    .concat([{ file: 'docs/agent/agent-doctor-instructions.md', stripComments: false }])
+
+/** Every declared token across every specimen, with its source spec attached. */
+function allTokens() {
+    const out = []
+    SPECIMENS.forEach((s) => {
+        ;(readTokenBlock(s.file) || []).forEach((t) => out.push({ token: t, from: s.label }))
+    })
+    return out
+}
+
+/**
+ * Case-insensitive substring hits in already-prepared text, as
+ * {line, token, from, text}. Pure — no file I/O, no comment handling — so the
+ * POSITIVE control below can exercise THE REAL MATCHER on a planted line.
+ */
+function scanText(text, tokens) {
+    const hits = []
+
+    text.split('\n').forEach((line, i) => {
+        const haystack = line.toLowerCase()
+        tokens.forEach((t) => {
+            if (haystack.indexOf(t.token.toLowerCase()) === -1) return
+            hits.push({ line: i + 1, token: t.token, from: t.from, text: line.trim() })
+        })
+    })
+
+    return hits
+}
+
+/** scanText against a target file, with that target's comment policy applied. */
+function findTokens(target, tokens) {
+    const raw = fs.readFileSync(path.join(ROOT, target.file), 'utf8')
+    const text = target.stripComments ? stripComments(raw) : raw
+    return scanText(text, tokens).map((h) => Object.assign({ file: target.file }, h))
+}
+
+describe('no seeded answer reaches a model-facing string (issue #89)', () => {
+    SCAN_TARGETS.forEach((target) => {
+        it(target.file + ' names no seed answer', () => {
+            const hits = findTokens(target, allTokens())
+            expect(
+                hits.map(
+                    (h) =>
+                        h.file + ':' + h.line + '  [' + h.from + ': ' + h.token + ']  ' + h.text
+                )
+            ).toEqual([])
+        })
+    })
+})
+
+describe('the scanner itself works (controls)', () => {
+    it('POSITIVE: the real matcher catches a planted token', () => {
+        // A guard that passes because it silently matched NOTHING is
+        // indistinguishable from one that passes because the code is clean.
+        // This calls scanText -- the same function the scan above runs on every
+        // target -- so a matcher that stops matching fails HERE.
+        const hits = scanText("    detail: 'the Seed 03 Category Router never fired',", [
+            { token: 'Seed 03 Category Router', from: 'control' },
+        ])
+
+        expect(hits).toHaveLength(1)
+        expect(hits[0].line).toBe(1)
+        expect(hits[0].token).toBe('Seed 03 Category Router')
+    })
+
+    it('POSITIVE: the real matcher is case-insensitive', () => {
+        expect(
+            scanText('RULES_IN_TABLE', [{ token: 'rules_in_table', from: 'control' }])
+        ).toHaveLength(1)
+    })
+
+    it('NEGATIVE: a token inside a real comment does not fire', () => {
+        // PaToolRegistry.js documents the #91 section ranking by naming seed
+        // 03's whole answer -- `rules_in_table: 0` -- in a comment. That prose
+        // is exactly where the knowledge belongs and must stay writable. It is
+        // a real-file control: if comment-stripping ever breaks, this fails
+        // BEFORE the main scan turns into noise.
+        const registry = { file: 'src/server/PaToolRegistry.js', stripComments: true }
+        const raw = fs.readFileSync(path.join(ROOT, registry.file), 'utf8')
+
+        expect(raw.toLowerCase()).toContain('rules_in_table')
+        expect(findTokens(registry, [{ token: 'rules_in_table', from: 'control' }])).toEqual([])
+    })
+})
+
 describe('every specimen declares its answer tokens (issue #89)', () => {
     SPECIMENS.forEach((s) => {
         it(s.label + ' has a blind-rule-tokens block', () => {
