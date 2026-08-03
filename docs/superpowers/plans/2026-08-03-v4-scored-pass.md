@@ -224,17 +224,17 @@ git commit -m "bench: recover seed 05 request body for v4 (#98)"
 
 ---
 
-### Tasks 5–9: The run blocks, one task per seed
+### Task 5: Run block — seed 01 (target: execution plan `b07dc9082baa4314f243fed2ce91bf4b`)
 
-**Run these as five separate tasks — Task 5 = seed 01, Task 6 = seed 02, Task 7 = seed 03, Task 8 = seed 04, Task 9 = seed 05.** The steps below are identical for each; substitute the seed's target from this table.
+### Task 6: Run block — seed 02 (target: execution plan `4b315ecc2b66c314f243fed2ce91bfca`)
 
-| Seed | Target |
-|---|---|
-| 01 | execution plan `b07dc9082baa4314f243fed2ce91bf4b` |
-| 02 | execution plan `4b315ecc2b66c314f243fed2ce91bfca` |
-| 03 | execution plan `c4cd01842b6a4bd417a6ffbeee91bfc3` |
-| 04 | execution plan `16ddc10c2baa4314f243fed2ce91bf15` |
-| 05 | the body recovered in Task 4 |
+### Task 7: Run block — seed 03 (target: execution plan `c4cd01842b6a4bd417a6ffbeee91bfc3`)
+
+### Task 8: Run block — seed 04 (target: execution plan `16ddc10c2baa4314f243fed2ce91bf15`)
+
+### Task 9: Run block — seed 05 (target: the body recovered in Task 4)
+
+**The five headings above share the step list below.** Each is dispatched as its own task; substitute that seed's target from its heading. The controller composes each brief from this shared section — `scripts/task-brief` cannot split a shared body, and that is expected here rather than a defect.
 
 **Files:**
 - Modify: `benchmark/raw-evidence-v4.md` (append this seed's four runs)
