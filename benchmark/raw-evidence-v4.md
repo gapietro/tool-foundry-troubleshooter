@@ -175,3 +175,84 @@ Both harnesses passed: terminal, structurally valid output. Gate is
 terminality + structural validity, not correctness — both happened to name
 the known answer this time, which is not guaranteed to repeat across the 20
 scored runs. Pass may proceed.
+
+---
+
+## Seed 05 request body recovery (Task 4)
+
+Seed 05 has no execution plan by design (see the seed spec's "The defect")
+— its diagnostic request takes an `agent` + `timeframe` + `description` form
+rather than an `{"execution": ...}` form. Recovering the exact v3 text, not a
+paraphrase, was the whole deliverable of this task.
+
+**Path 1 (stored request on the v3 run records) — FAILED, and not just
+empty.** Queried `x_snc_troubleshoot_run` for both TR1000103
+(`ee3a71dc2baecfd417a6ffbeee91bfe5`) and TR1000104
+(`734a7dd02b6a0b14f243fed2ce91bf73`). `servicenow_schema` shows this table
+has **no `request` field at all** — the brief's assumed field name doesn't
+exist on the table. The plausible alternates (`context_summary`,
+`execution_ref`, `agent`) are empty on both rows, and the `transcript` field
+(pulled untruncated via `/api/now/table/x_snc_troubleshoot_run`) opens at
+`seq:1, actor:"llm"` with a tool-call decision — there is no `actor:"user"`
+(or equivalent) entry anywhere on the run record that carries the original
+inbound request text. The harness does not persist the raw request payload
+on this table at all.
+
+**Path 2 (audit trail's first intent row) — returned a real finding, but not
+the request text.** `x_snc_troubleshoot_audit` where
+`run=<sys_id>^action_type=intent`, first row for both runs:
+`tool_name=agent_trace`, `input={"execution":
+"29fd09c42b6a4bd417a6ffbeee91bfb0"}`. This confirms the diagnostic target
+delivered was the seed's bench ticket sys_id — the model pulled it out of the
+request's `description` text and mis-used it as an `execution` argument (the
+tool correctly reported a genuine absence, since a ticket sys_id is not an
+execution-plan sys_id). But this is the model's own derived tool-call
+argument, not the original request payload — it doesn't reproduce the
+`agent`/`timeframe`/`description` fields or their literal wording, so on its
+own it does not satisfy "recover the exact text."
+
+**Resolution — recovered from a preserved v2 artifact, not reconstructed
+from the seed spec.** Before falling through to Step 3's reconstruction,
+`.superpowers/sdd/2026-08-02-observation-channel/benchmark-raw-evidence-v2.md`
+was checked — a still-present (gitignored, unversioned) measurement record
+from the prior, v2, benchmark pass. It records the seed-05 request body
+verbatim, used identically across both of its own seed-05 runs (Run 9
+`a66d01182b22cfd417a6ffbeee91bf28` / TR1000089, and Run 10):
+
+> `{"agent": "Seed 05 Ticket Acknowledger", "timeframe": "last 24 hours",
+> "description": "A bench ticket was created (sys_id
+> 29fd09c42b6a4bd417a6ffbeee91bfb0) and the agent that should have triaged it
+> never ran."}`
+
+`benchmark/raw-evidence-v3.md` line 60 states in its own words that the ten
+v3 scored runs' "Request bodies [were] reused verbatim from the prior pass so
+the diagnostic targets are identical," explicitly naming seed 05 "in
+`agent`+`timeframe`+`description` form naming bench ticket
+`29fd09c42b6a4bd417a6ffbeee91bfb0`" — the same ticket sys_id embedded in the
+v2 body above. This is corroborated behaviorally, not just by citation: v3's
+own audit trail (Path 2 above) shows the model extracting that identical
+ticket sys_id into its first `agent_trace` call — the exact same
+(mis-)extraction documented against the identical body in the v2 evidence
+file. Both lines of evidence agree independently, so this text is treated as
+**RECOVERED** — an artifact of the actual prior pass, not a paraphrase built
+from the seed spec's prose — even though it surfaced from neither of the
+brief's two ServiceNow-query paths. **Step 3 (reconstruct from
+`seed-05-inactive-usecase.md`'s Trigger section) was not exercised; no
+invented text appears anywhere in this file for seed 05.**
+
+**Caveat for whoever scores seed 05 in this pass:** this text's provenance is
+one level removed from a live v3 database record — it is a copy preserved in
+another plan's gitignored evidence file, corroborated on two independent
+signals (v3's own "reused verbatim" claim, and the matching sys_id extraction
+in v3's live audit trail) but not independently certified byte-for-byte
+against whatever the v3 HTTP request actually carried over the wire, because
+that payload itself was never logged anywhere on the instance (Path 1's
+finding above). Worth a follow-up issue in its own right: the harness does
+not persist the inbound request text on `x_snc_troubleshoot_run` — only what
+its own model chooses to do with it.
+
+**Recovered seed 05 request body for this pass (v4), unchanged from v2/v3:**
+
+```json
+{"agent": "Seed 05 Ticket Acknowledger", "timeframe": "last 24 hours", "description": "A bench ticket was created (sys_id 29fd09c42b6a4bd417a6ffbeee91bfb0) and the agent that should have triaged it never ran."}
+```
