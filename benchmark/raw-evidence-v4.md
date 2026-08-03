@@ -730,3 +730,370 @@ CONFIRMED confidence, consistently across two independent conversations.
 attributable to insufficient tool access, since the one tool call made
 carried the discrepancy in its own output. All four runs reached a valid
 terminal state on the first attempt; no re-fire was needed.
+
+---
+
+## Seed 02 — scored run block (Task 6)
+
+**Target: execution plan `4b315ecc2b66c314f243fed2ce91bfca`.** These are
+scored rows, not a gate. Invocation text sent to each harness was exactly
+the brief's text and nothing else — no seed spec file was read before
+firing. Order fired: native run 1 → custom run 1 → native run 2 (fresh
+conversation) → custom run 2 (fresh POST), matching the brief's interleaving
+requirement exactly (no batching by harness).
+
+### Native run 1 (Agent Doctor, `e1392946828940e5a708fc51b0a5e954`)
+
+Prompt: `Diagnose execution plan 4b315ecc2b66c314f243fed2ce91bfca.`
+
+- Execution ID `418b66682ba6871817a6ffbeee91bfe2`, conversation
+  `748b62e42be2871817a6ffbeee91bfcd`
+- Fired 2026-08-03 21:35:35Z. **Terminal state: Completed** (per
+  `servicenow_aia_trace`: Started 2026-08-03 17:35:36 / Ended 17:36:51
+  instance-local; cross-checked via multi-record `sn_aia_execution_plan`
+  query: `sys_created_on=2026-08-03 21:35:35`, `sys_updated_on=2026-08-03
+  21:36:52`, `state=completed`, agreeing to within a second).
+- **Wall clock: 75s** (trace-reported duration; multi-record query gives
+  ~77s — consistent).
+- **Tool-call count: 5** — `agent_trace` ×1, `read_artifact` ×4 (12
+  execution tasks total, per `servicenow_aia_trace`).
+
+Full text of the Fix Report (pulled from `sys_cs_message`
+`47cb6ee82ba6871817a6ffbeee91bfba`, `payload.plainTextMessage`, the message
+the user/caller actually sees):
+
+> ## Fix Report — Execution Plan `4b315ecc2b66c314f243fed2ce91bfca`
+>
+> ---
+>
+> ### FAILURE SUMMARY
+>
+> No failure was observed. The execution plan completed successfully. The
+> agent **Seed 02 Request Router** received the objective "my laptop will
+> not boot," called the `measure_request` tool (which returned 23
+> characters, 5 words), made a second LLM reasoning step that correctly
+> identified the issue as a hardware/endpoint problem, and delivered a
+> formatted routing response assigning the request to **IT Support —
+> Hardware & Endpoint**. The final outbound message status was
+> **Delivered**. All six execution tasks carry status **Success** and no
+> failure signatures, script errors, or latency flags were recorded.
+>
+> ---
+>
+> ### LAYERS SWEPT
+>
+> | Layer | Status | Notes |
+> |-------|--------|-------|
+> | 1 – Execution trace | **SWEPT** | Full artifact read (15,850 chars, 4 pages). All tasks succeeded; no errors. |
+> | 2 – Agent instructions | **NOT SWEPT** | Trace showed no instruction-parse error or unexpected agent behaviour warranting this layer. |
+> | 3 – Tool definitions | **NOT SWEPT** | The one tool called (`measure_request`) executed and returned correct output; no signal of a schema defect. |
+> | 4 – Data schemas | **NOT SWEPT** | No blank-field returns or schema warnings in the trace. |
+> | 5 – Data | **NOT SWEPT** | Agent did not query a record that was missing or empty; routing was done from LLM reasoning, not a data lookup. |
+> | 6 – GenAI stack | **NOT SWEPT** | Both Gen AI tasks completed; LLM was called and responded correctly. No model-not-called or empty-response signal. |
+> | 7 – Trigger and wiring | **NOT SWEPT** | Run reached the agent and executed fully; no trigger-failure signal in the trace. |
+>
+> > **Platform log layer (log_analysis):** Not attempted. The `log_analysis`
+> > tool is unavailable on most instances due to cross-scope syslog
+> > restrictions. An instance administrator would need to grant cross-scope
+> > read on `syslog` to make this layer available. Given the clean trace,
+> > this gap does not affect the conclusion.
+>
+> ---
+>
+> ### ROOT CAUSES
+>
+> **None identified.** The execution completed without error. No root
+> cause exists to report.
+>
+> ---
+>
+> ### FIXES
+>
+> **None required.** The execution is functioning as designed.
+>
+> ---
+>
+> ### VERIFICATION
+>
+> To confirm this execution is representative and not a one-off lucky run:
+>
+> 1. Re-submit the same objective ("my laptop will not boot") via the same
+>    channel and confirm the plan reaches **state: completed** with the
+>    routing result delivered.
+> 2. In `sn_aia_execution_plan`, filter on `agent =
+>    cd050d48e810411d9f113fd530694fe6` and verify that recent plans share
+>    the same completed state with no failure signatures.
+> 3. If intermittent failures are suspected, call `agent_trace` with
+>    `{"agent": "Seed 02 Request Router", "since": "-24h"}` to list recent
+>    executions and identify any that did not complete.
+>
+> ---
+>
+> ### DATA MARKERS
+>
+> The following data items were observed in evidence and should be
+> redacted before this report leaves the instance boundary:
+>
+> - User e-mail: `admin@example.com` (seen in message stream, User Profile role)
+> - User sys_id: `6816f79cc0a8016401c5a33be04be441`
+> - Conversation sys_id: `f6315ecc2b66c314f243fed2ce91bf8a`
+>
+> ---
+>
+> > **Note to requester:** If you observed a specific symptom (e.g., wrong
+> > group assigned, no message shown, intermittent failure) that prompted
+> > this diagnosis, please share the symptom or a different execution plan
+> > sys_id. The run examined here shows no defect.
+
+### Custom run 1 (`x_snc_troubleshoot`)
+
+Body: `{"execution": "4b315ecc2b66c314f243fed2ce91bfca", "mode": "diagnose"}`
+
+- Run ID `e2db6ae42be6cf14f243fed2ce91bfee` (`TR1000123`),
+  `conversation_ref` `custom-1-1785793023854-561911382`, polled via
+  `GET .../runs/{run_id}` (trusted over any single-record `servicenow_query`,
+  which is stale on this instance).
+- Fired 2026-08-03 21:37:03Z. **Terminal state: complete** (last transcript
+  entry `2026-08-03 21:37:11`).
+- **Wall clock: ~8s.**
+- **Tool-call count: 1** (`agent_trace`).
+
+Full `fix_report`:
+
+```json
+{
+  "failure_summary": "The AI Agent execution for 'my laptop will not boot' completed successfully with a single tool call to 'measure_request' returning a success status. No errors were reported in the execution trace.",
+  "layers_swept": {
+    "1": {"status": "SWEPT", "reason": "agent_trace provided execution details"},
+    "2": {"status": "NOT_SWEPT", "reason": "No configuration issues observed in trace"},
+    "3": {"status": "NOT_SWEPT", "reason": "Tool definitions validated via successful tool call"},
+    "4": {"status": "NOT_SWEPT", "reason": "No schema issues indicated in trace"},
+    "5": {"status": "NOT_SWEPT", "reason": "Data existence not required for observed success"},
+    "6": {"status": "NOT_SWEPT", "reason": "GenAI stack not involved in this execution"},
+    "7": {"status": "NOT_SWEPT", "reason": "Trigger configuration not required for observed success"}
+  },
+  "root_causes": [],
+  "fixes": [],
+  "verification": "Re-run the agent execution to confirm consistent success",
+  "data_markers": [],
+  "inconclusive": {
+    "evidence_read": [
+      {"source": "trace", "detail": "agent_trace execution header and tool_call record"},
+      {"source": "trace", "detail": "tool_call response_digest showing success status"}
+    ],
+    "needed_to_conclude": "No additional evidence required - execution completed normally"
+  }
+}
+```
+
+**Fix_report shape:** the `inconclusive`-keyed shape (empty `root_causes`,
+empty `fixes`, and an `inconclusive` object carrying `evidence_read` /
+`needed_to_conclude`) — same shape family as both seed 01 custom runs, not
+the populated-`root_causes` shape seen at the Task 3 smoke gate. Named per
+the brief's instruction, not scored here.
+
+### Native run 2 (Agent Doctor, `e1392946828940e5a708fc51b0a5e954`, fresh conversation)
+
+Prompt: `Diagnose execution plan 4b315ecc2b66c314f243fed2ce91bfca.`
+
+- Execution ID `bd0caa282be6cf14f243fed2ce91bf22`, conversation
+  `a10caae42be6cf14f243fed2ce91bf89` (distinct from native run 1's
+  `748b62e42be2871817a6ffbeee91bfcd`)
+- Fired 2026-08-03 21:37:50Z. **Terminal state: Completed** (trace: Started
+  2026-08-03 17:37:50 / Ended 17:39:25 instance-local; cross-checked via
+  multi-record `sn_aia_execution_plan` query: `sys_created_on=2026-08-03
+  21:37:50`, `sys_updated_on=2026-08-03 21:39:26`, `state=completed`).
+- **Wall clock: 96s** (trace-reported duration; multi-record query gives
+  the same 96s).
+- **Tool-call count: 5** — `agent_trace` ×1, `read_artifact` ×4 (13
+  execution tasks total).
+
+Full text of the Fix Report (pulled from `sys_cs_message`
+`c96c6ae82be6cf14f243fed2ce91bf2c`, `payload.plainTextMessage`):
+
+> ## Fix Report — Execution Plan `4b315ecc2b66c314f243fed2ce91bfca`
+>
+> ---
+>
+> ### FAILURE SUMMARY
+>
+> Execution plan `4b315ecc2b66c314f243fed2ce91bfca` was submitted with the
+> objective **"my laptop will not boot"** against agent **Seed 02 Request
+> Router** on 2026-08-02 06:23:48 UTC.
+>
+> **The execution did not fail.** It completed in 21 seconds with all 6
+> tasks in status `success` and zero script errors. The agent called the
+> `measure_request` tool once (365 ms, success), received character/word
+> counts, then in a second LLM step routed the request to **"IT Support —
+> Hardware & Endpoint"** and delivered the assignment summary to the user
+> via `show_output_to_user`. The final outbound message status is
+> `Delivered`. No root cause exists because no failure occurred.
+>
+> ---
+>
+> ### LAYERS SWEPT
+>
+> | Layer | Status | Notes |
+> |-------|--------|-------|
+> | 1. Execution trace | **SWEPT** | Full artifact read (4 pages, 15,850 chars); all read statuses `ok`, no field warnings, no script errors. |
+> | 2. Instructions | **NOT SWEPT** | Trace shows no instruction-parse error, no unexpected model output, no early exit. No signal to justify the tool budget. |
+> | 3. Tool definitions | **NOT SWEPT** | The one tool call (`measure_request`, binding `da3f01db9aec41da835887210ed4b902`) executed and returned correct output. No schema defect indicated. |
+> | 4. Data schemas | **NOT SWEPT** | No blank field reads or schema warnings reported. No column mismatch to investigate. |
+> | 5. Data | **NOT SWEPT** | Agent answered from tool output, not from a record lookup. No missing-record signal present. |
+> | 6. GenAI stack | **NOT SWEPT** | Both Gen AI tasks completed successfully. No model-not-called or empty-response signal. To sweep this layer: call `genai_log` with `mode=for_execution` and `execution=4b315ecc2b66c314f243fed2ce91bfca`. |
+> | 7. Trigger / wiring | **NOT SWEPT** | Conversation completed (state `Completed`, `TopicFinished` delivered). No trigger or wiring defect indicated. |
+>
+> > **Platform log layer (log_analysis):** Not attempted. On most instances
+> > `syslog` is restricted to cross-scope callers and this tool reports the
+> > layer as unavailable. An instance administrator can grant cross-scope
+> > log access if platform-level entries (ACL denials, script errors
+> > outside the execution scope) need to be checked. Given the trace is
+> > fully clean, this is not blocking.
+>
+> ---
+>
+> ### ROOT CAUSES
+>
+> **None identified.**
+>
+> The execution plan reached state `Completed` with every task and tool
+> call carrying status `success`. No error messages, no script stack
+> traces, no latency flags, and no empty/denied reads were found in the
+> trace.
+>
+> ---
+>
+> ### FIXES
+>
+> **None required.**
+>
+> ---
+>
+> ### VERIFICATION
+>
+> To confirm the run is genuinely healthy end-to-end, an operator may
+> optionally run:
+>
+> - `genai_log` with `mode=for_execution`,
+>   `execution=4b315ecc2b66c314f243fed2ce91bfca`
+>   - **Expect:** Two LLM call rows, both status `success`, token counts
+>     consistent with the observed `llm_token_avg` of 209.
+>
+> No configuration changes are needed before re-running the agent.
+>
+> ---
+>
+> ### DATA MARKERS
+>
+> The following user-supplied content appeared in the trace and should be
+> **redacted** before this report crosses the instance boundary:
+>
+> - **User message text:** *(redacted — contained in `sn_aia_message`)*
+> - **User profile email:** *(redacted — found in `sn_aia_message` sys_id
+>   `07315ecc2b66c314f243fed2ce91bfd1`)*
+> - **User sys_id:** *(redacted — found in user profile message)*
+>
+> All other quoted values are configuration identifiers (sys_ids, table
+> names, field names) and carry no personal data.
+>
+> ---
+>
+> ### CONCLUSION
+>
+> The submitted execution plan ran to **successful completion**. If a
+> problem was observed, it may be in a *different* execution plan, or in
+> the downstream business outcome (e.g., the assigned group is incorrect)
+> rather than in the agent execution itself. Supplying the correct failing
+> execution plan sys_id, or describing the observed symptom in detail,
+> would allow a targeted re-diagnosis.
+
+### Custom run 2 (`x_snc_troubleshoot`, fresh POST)
+
+Body: `{"execution": "4b315ecc2b66c314f243fed2ce91bfca", "mode": "diagnose"}`
+
+- Run ID `e26c2eac2ba6871817a6ffbeee91bffa` (`TR1000125`),
+  `conversation_ref` `custom-1-1785793171983-948012343` (distinct token
+  from custom run 1's `custom-1-1785793023854-561911382`), polled via
+  `GET .../runs/{run_id}`.
+- Fired 2026-08-03 21:39:32Z. **Terminal state: complete** (last transcript
+  entry `2026-08-03 21:39:40`).
+- **Wall clock: ~8s.**
+- **Tool-call count: 1** (`agent_trace`).
+
+Full `fix_report` (same `inconclusive` shape as custom run 1, one field
+difference noted below):
+
+```json
+{
+  "failure_summary": "The AI Agent execution for 'my laptop will not boot' completed successfully with a single tool call to 'measure_request' returning a success status. No errors were reported in the execution trace.",
+  "layers_swept": {
+    "1": {"status": "SWEPT", "reason": "agent_trace provided execution details"},
+    "2": {"status": "NOT_SWEPT", "reason": "No instruction analysis required as execution succeeded"},
+    "3": {"status": "NOT_SWEPT", "reason": "Tool definitions not required for successful execution analysis"},
+    "4": {"status": "NOT_SWEPT", "reason": "No schema issues indicated in trace"},
+    "5": {"status": "NOT_SWEPT", "reason": "Data existence not required for successful execution analysis"},
+    "6": {"status": "NOT_SWEPT", "reason": "GenAI stack not required for successful execution analysis"},
+    "7": {"status": "NOT_SWEPT", "reason": "Trigger wiring not required for successful execution analysis"}
+  },
+  "root_causes": [],
+  "fixes": [],
+  "verification": "",
+  "data_markers": [],
+  "inconclusive": {
+    "evidence_read": [
+      {"source": "trace", "detail": "agent_trace execution header and tool_call details"},
+      {"source": "trace", "detail": "tool_call response_digest showing success status"}
+    ],
+    "needed_to_conclude": "No additional analysis required as execution completed successfully"
+  }
+}
+```
+
+**Fix_report shape:** also the `inconclusive`-keyed shape — same family as
+custom run 1 and both seed 01 custom runs. One structural variance within
+the shape, noted but not scored: custom run 1's `verification` field is a
+non-empty sentence ("Re-run the agent execution to confirm consistent
+success"), while custom run 2's `verification` field is an empty string.
+Both otherwise carry the same key set (`root_causes: []`, `fixes: []`,
+populated `inconclusive.evidence_read`/`needed_to_conclude`).
+
+**Note on identity verification:** all four run identities are distinct —
+two native conversation ids (`748b62e42be2871817a6ffbeee91bfcd`,
+`a10caae42be6cf14f243fed2ce91bf89`) and two custom run sys_ids
+(`e2db6ae42be6cf14f243fed2ce91bfee`, `e26c2eac2ba6871817a6ffbeee91bffa`)
+with two distinct `conversation_ref` anchor tokens, confirmed by direct
+query of `x_snc_troubleshoot_run` (`sys_idIN...` multi-record query) and
+`sn_aia_execution_plan` rather than inference from timing. No anchor
+collision — the "one anchor per user per 30 min" fallback did not trigger
+despite both custom runs sharing the same `user` (admin) and firing
+~2.5 minutes apart, and both native runs sharing the same session pattern
+firing ~2.3 minutes apart.
+
+### Judgement flag: all four runs converged on "no failure observed"
+
+Unlike seed 01 (where both native runs found the seeded defect and both
+custom runs missed it), **all four seed 02 runs — both harnesses, both
+repetitions — concluded the execution completed cleanly with no root
+cause to report.** Both native Fix Reports are detailed and confident
+("No failure was observed" / "The execution did not fail"), not hedged;
+both custom `fix_report`s independently reached the same empty-`root_causes`
+conclusion from the same single `agent_trace` read. This file does not
+rule on whether this is a true negative (the fixture's trace genuinely
+shows no defect signal for this target) or a shared miss across all four
+diagnostics (a seeded defect exists but none of the four runs surfaced
+it) — that determination is left to whoever scores this row against the
+seed 02 known-answer key. Recorded here because it is the kind of
+cross-harness agreement pattern a scorer needs flagged, not because a
+verdict is being rendered.
+
+### Result summary
+
+| Run | Identity | Terminal state | Wall clock | Tool calls |
+|---|---|---|---|---|
+| Native run 1 | conversation `748b62e42be2871817a6ffbeee91bfcd` | Completed | 75s | 5 |
+| Custom run 1 | run `e2db6ae42be6cf14f243fed2ce91bfee` (TR1000123) | complete | ~8s | 1 |
+| Native run 2 | conversation `a10caae42be6cf14f243fed2ce91bf89` | Completed | 96s | 5 |
+| Custom run 2 | run `e26c2eac2ba6871817a6ffbeee91bffa` (TR1000125) | complete | ~8s | 1 |
+
+All four runs reached a valid terminal state on the first attempt; no
+re-fire was needed.
