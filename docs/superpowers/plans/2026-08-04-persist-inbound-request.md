@@ -857,3 +857,26 @@ Include the live evidence from steps 3-5 in the PR body — the round-tripped re
 **Placeholder scan:** none — every code step carries the literal text to insert, and every test step carries the assertions.
 
 **Type consistency:** `REQUEST_CHARS`, `_serializeRequest`, `_requestFields`, `_forceFields` (PaRunManager); `_toBool`, `_requestBody` (PaRestHandlers); columns `request`, `request_truncated`. Each name is used identically in the task that defines it and in every task that consumes it. `_forceStatus` is removed in Task 2 step 5 and its one stale test comment is fixed in step 8.
+
+---
+
+## Amendments during execution
+
+Recorded so the plan matches what was built. Both were defects in Task 2's **test code** as
+originally written; the implementation code in the plan was correct and shipped unchanged.
+
+1. **Boolean assertions on the raw stub row.** Task 2's tests asserted
+   `expect(row.request_truncated).toBe(false)`. `test/_glideStub.js:298` coerces every
+   `setValue` through `String()`, matching the platform — a ServiceNow boolean column reads
+   back as a string, never a JS boolean. The established precedent is
+   `test/PaAuditLogger.test.js:149` (`toBe('false')`). Assertions changed to the string form.
+   No production impact: Task 4's `_toBool` was already specified to accept `'0'`/`'1'`/
+   `'true'`/`'false'` and real booleans, precisely because of this.
+
+2. **The circular-body assertion.** The test asserted `expect(row.request).toBe('')`, which
+   forced `_requestFields` to write an explicit empty string and so to distinguish "absent"
+   from "unserializable". Ruled against: §5's three-state table deliberately puts a body that
+   would not serialize in the *same* state as absent, and on the platform the distinction is a
+   no-op — a freshly inserted row's string column reads `''` whether or not `''` was written to
+   it. `_requestFields` stands as planned (null for both); the assertions became `toBeFalsy()`
+   for `request` and for `request_truncated`, since neither column is written in that case.
