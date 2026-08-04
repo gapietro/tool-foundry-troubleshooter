@@ -1562,7 +1562,7 @@ moving it would cost this pass its baseline for no correctness gain.
 | custom (`x_snc_troubleshoot`) | 10 valid, 0 void | **0 / 10 (0.0%)** | 0 / 60 | A — leaked packets, 10 independent scorers |
 
 The two scorecards are drawn from **different scoring rounds**, deliberately and with the argument
-stated in both files; §O5 and §O7 carry it. Gate arithmetic was recomputed by hand from each row's
+stated in both files; §O5 and §O7 carry it. Gate arithmetic was recomputed independently by script from each row's
 four column values across all 28 rows in the pass (20 v4 + 8 re-scored standing) — **zero
 mismatches**, and §A's constraint holds in all 28.
 
@@ -1616,8 +1616,8 @@ operator's ten against blind agents' ten and charges the difference to the model
 
 **The scorer population is not systematically harsher, and this was measured rather than assumed.**
 On the 8 re-scored rows, operator and blind scorer **agree on `passes_gate` in 7 of 8** — operator
-5/8, blind 4/8, one disagreement (seed 03 run 1, on `fix_usable_unedited`). Three of the eight also
-differ on `total /6` without changing the gate. A scorer population reading ~1 gate row lower on 8
+5/8, blind 4/8, one disagreement (seed 03 run 1, on `fix_usable_unedited`). Two of the eight also
+differ on `total /6` without changing the gate; a third (seed 03 run 1) is the gate-level split above. A scorer population reading ~1 gate row lower on 8
 cannot account for a 20-point gap on its own.
 
 **What is established, and what is only suggested.** A ~20-point difference at n=8 and n=10 is
@@ -1692,24 +1692,9 @@ reach the harness — they *are* the answer key. Scorer-packet blindness only be
 v3 moved scoring from the operator to blind agents, and the rule was never extended. Found at
 Task 12, when the re-score packet builder redacted the narratives and the mismatch surfaced.
 
-**The leak was worth about one row.** Holding scorer topology fixed (10 independent agents, one per
-row) and changing only the packets: **Round A, leaked → 2/10; Round C, redacted → 3/10.** Small, and
-in the direction predicted — the narratives describe native scoring *well*, so any anchoring pushed
-scores **up**, and removing it did not depress them. Custom scored `root_cause_layer_correct = 0` on
-all ten rows in the leaked round, which no anchoring toward a prior correct answer could produce.
-Validation that the redaction worked as intended rather than lobotomising the packet: one re-score
-independently reproduced seed 04's canonical `2/0/1/0` decoy row **from a redacted packet**, deriving
-it from the decoy scoring *rule* (kept) rather than the removed narrative. Guidance survived; the
-answer did not.
+**SUGGESTED — The leak moved the result by about one row, on the `fix_usable_unedited` column.** Holding scorer topology fixed (10 independent agents, one per row) and changing only the packets: **Round A, leaked → 2/10; Round C, redacted → 3/10.** The effect is small (n=1) and lands on the same indeterminate column (§O5's rubric-reproducibility finding). The leak's *direction* does not match an anchoring mechanism: the leaked packets carried narratives describing native scoring *well*, so anchoring toward those narratives should have pushed scores **up**; instead, the leaked round scored **lower** (2/10 vs 3/10 redacted), opposite to anchoring. Custom scored `root_cause_layer_correct = 0` on all ten rows in the leaked round, which no anchoring toward a prior correct answer could produce. Validation that the redaction worked as intended rather than lobotomising the packet: one re-score independently reproduced seed 04's canonical `2/0/1/0` decoy row **from a redacted packet**, deriving it from the decoy scoring *rule* (kept) rather than the removed narrative. Guidance survived; the answer did not.
 
-**Scorer topology moves the result by about two rows, and this had never been measured.** Holding
-packets fixed (all redacted) and changing only how scorers were dispatched: **one agent scoring ten
-rows sequentially → 5/10; ten independent agents on the identical packets → 3/10.** A single agent
-scoring a set in sequence is materially **more generous** than independent agents on the same
-material. This is a property of the benchmark's own instrument, not of either harness, and it is
-larger than the leak effect. It is why native's rows are sourced from Round C: Round C is the only
-round matching the standing-row re-scores' topology (independent agents, redacted packets), and
-§O3's comparison would be meaningless against any other.
+**SUGGESTED — Scorer topology moves the result by about two rows, on the `fix_usable_unedited` column, and this had never been measured.** Holding packets fixed (all redacted) and changing only how scorers were dispatched: **one agent scoring ten rows sequentially → 5/10; ten independent agents on the identical packets → 3/10.** The effect is moderate (n=2) and lands on the same indeterminate column. A single agent scoring a set in sequence is materially **more generous** than independent agents on the same material. This is a property of the benchmark's own instrument, not of either harness, and it is larger than the leak effect. It is why native's rows are sourced from Round C: Round C is the only round matching the standing-row re-scores' topology (independent agents, redacted packets), and §O3's comparison would be meaningless against any other.
 
 **A controller error, recorded plainly, because it is the same error the pass exists to avoid.**
 Round B changed **two** variables at once — the redaction *and* the scorer topology — so its
@@ -1719,12 +1704,7 @@ re-ran with independent scorers on the same redacted packets, isolating the vari
 kept rather than discarded, because B-vs-C is what measures the topology effect above.
 
 **A rubric-reproducibility finding: the blind pass did not apply one consistent rule to itself.**
-Across the two seed-03 standing rows, the *same style* of unfilled-placeholder fix
-(`assignment_group = <target group …>`) was scored `fix_usable_unedited = 0` on run 1 and `= 1` on
-run 2 — by the same blind re-scoring pass, whose own notes flag run 2 as "the closest call in the
-row" and reason that `assignment_group` is a plain `StringColumn` rather than a reference field. Not
-resolved here by picking a side; filed as a finding for whoever next revises §A, since it is a gap
-in the rubric's text, not a lapse by a scorer.
+Across the two seed-03 standing rows, both containing unfilled-placeholder fixes for `assignment_group` (run 1 with a literal placeholder, run 2 with prose), the *same style* was scored `fix_usable_unedited = 0` on run 1 and `= 1` on run 2 — by the same blind re-scoring pass, whose own notes flag run 2 as "the closest call in the row" and reason that `assignment_group` is a plain `StringColumn` rather than a reference field. **This same inconsistency recurs within v4's native round: rows 09 and 11, both seed 03, carry identical fix text `assignment_group = <target group name>`; row 09 is scored as "normal implementation discovery work" yielding `fix_usable_unedited = 1`, while row 11 is scored as "an unfilled placeholder" yielding 0.** Not resolved here by picking a side; filed as a finding for whoever next revises §A, since it is a gap in the rubric's text, not a lapse by a scorer.
 
 **The audit-derived layer rule refuted a NATIVE claim for the first time.** Both seed-01 native runs
 report layer 2 swept via `agent_config`; the recorded call requested `section:"tools"` and its
@@ -1773,7 +1753,7 @@ documents as covering layers 2/3/7 including trigger wiring, and which was avail
 is not a regression of #78; #78's path was entered and its condition genuinely unmet.** It is the
 depth failure surfacing at the validator instead of at the rubric. One structural note worth
 carrying: because path B returns, a run in the absence case **cannot fall through to path C**, so
-#93's UNCONFIRMED exemption is unreachable on the absence seed — both drafts carried
+#93's UNCONFIRMED exemption is unreachable for any report that declares layer 1 UNAVAILABLE — both drafts carried
 `would_confirm` and neither could be judged by C. Whether that ordering is right is a design
 question, filed here rather than answered.
 
@@ -1813,6 +1793,7 @@ cannot fully audit its own runs — and this is exactly the class of defect §N1
 - **The 3/10 and the 0/10 are not comparable to each other as capability numbers without §O4.** A
   harness that sweeps 1/7 on every row and one that sweeps up to 6/7 are failing different tests;
   the gate does not distinguish them and §O4 does.
+- **One of native's three gate passes (row 09, seed 03 run 1) turns on the unresolved rubric call.** §O5's rubric-reproducibility finding flags the `assignment_group` placeholder inconsistency within the v4 native round itself: identical text scored differently in rows 09 (pass) and 11 (fail) by the same blind pass. Row 09 is one of the three native rows that passed the gate, so the 3/10 result carries ±1 row of indeterminacy on this column.
 
 ### O8. The queue
 
@@ -1850,3 +1831,26 @@ not met.** The recommendation is now made on a smaller margin than §H8's — 3/
 measured the same day on the same version, rather than 8/10 against 1/10 measured a day apart — and
 §O3 is the reason to read that margin as a qualification of the old number rather than a
 deterioration of the gap.
+
+---
+
+## Fix Round 1 (2026-08-03, Code Review Corrections)
+
+**Issues addressed:** I1, I2, I3, M1, M2, M3 from §O code review.
+
+**Changes:**
+
+- **I1:** Extended §O5's rubric-reproducibility finding to note the same inconsistency recurs in v4's native round (rows 09 and 11, seed 03, identical text scored differently). Added §O7 bullet stating one of native's three gate passes (row 09) turns on this unresolved rubric call.
+
+- **I2:** Relabeled leak and topology effects in §O5 as SUGGESTED rather than established. Added effect sizes (n=1 for leak, n=2 for topology) and noted both land on the indeterminate `fix_usable_unedited` column. Clarified leak direction (lower score when packet leaked) contradicts anchoring mechanism (would expect higher score if anchoring toward described good outcomes).
+
+- **I3:** Corrected factual error in §O3: "Three of the eight" → "Two of the eight"; clarified the third case (seed 03 run 1) is the gate-level disagreement already noted above.
+
+- **M1:** Changed provenance label from "recomputed by hand" to "recomputed independently by script" (line 1565).
+
+- **M2:** Tightened §O6 scope on #93's UNCONFIRMED exemption: from "unreachable on the absence seed" to "unreachable for any report that declares layer 1 UNAVAILABLE" (line 1771).
+
+- **M3:** Adjusted §O5 placeholder description to not imply both standing rows carried literal placeholders: "run 1 with a literal placeholder, run 2 with prose" (line 1707).
+
+All changes are append-only in DECISION.md. No other files touched. No verified numbers moved.
+
