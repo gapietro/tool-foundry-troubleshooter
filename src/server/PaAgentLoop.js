@@ -148,6 +148,15 @@ PaAgentLoop.prototype = {
         this._nowFn = typeof o.now === 'function' ? o.now : null
         this._playbook = typeof o.playbook === 'string' ? o.playbook : null
 
+        // Depth gate state (issue #103). A run is one synchronous
+        // invocation, so instance fields are sufficient — no column, no
+        // schema change. `_heldTools` is the union of tools that close the
+        // gaps recorded at the FIRST hold; it is the only thing that can
+        // release the gate afterwards.
+        this._gateReleased = false
+        this._heldGaps = null
+        this._heldTools = null
+
         if (o.maxIterations > 0) this.MAX_ITERATIONS = o.maxIterations
         if (o.budgetMs > 0) this.BUDGET_MS = o.budgetMs
     },
@@ -412,6 +421,137 @@ PaAgentLoop.prototype = {
             return { readable: true, tools: [], degraded: reason }
         }
         return { readable: false, tools: [], degraded: reason }
+    },
+
+    /**
+     * THE DEPTH GATE (issue #103) — the floor `run()`'s bounds are not.
+     *
+     * DECISION.md §O4: the custom harness swept 1/7 on all 20 rows of the v4
+     * pass, and §H8's acceptance test is unmet across 45 runs. The v4 master
+     * table's reframing number is not "1 tool call" but "2 LLM calls" — turn
+     * 1 fetches, turn 2 concludes — so the single decision point after
+     * evidence exists is taken inside the same generation that first reads
+     * it. The model is not cutting an investigation short; it never begins
+     * one. Nothing in this loop ever said the diagnosis was unfinished.
+     *
+     * WHAT RELEASES IT, AND WHY THAT AND NOTHING ELSE
+     * #88 raised the COST of stopping and got fabrication, because a stop
+     * priced in text is paid in text. So the gate is discharged only by
+     * something the model cannot author: a row in the audit trail. And it is
+     * enforced HERE, in the loop, where "not yet" can still mean "loop
+     * again" — not in `PaFixReport.validate`, which fires after the run is
+     * over and which #81 records the repair turn cannot act on.
+     *
+     * The target is the model's OWN: a layer it marked `NOT_SWEPT` is it
+     * declaring a gap in its own words, and `_layerToolMap()` says which
+     * tools close it. The harness never names a tool (see `_holdBlock`).
+     *
+     * STICKY, DELIBERATELY
+     * The gap set is recorded at the FIRST hold and never re-derived. Without
+     * that the goalposts move — close layer 4, declare layer 5, be held again
+     * — and every run rides to `MAX_ITERATIONS`, since even native's best
+     * sweep in the v4 pass was 6/7. The gate buys exactly ONE forced beat,
+     * which is the size of the acceptance test. A run that then declines to
+     * act rides the bounds to `outcome:'partial'`, and that tail is counted
+     * rather than special-cased (issue #103, prediction P4).
+     *
+     * KNOWN TILT, ACCEPTED: `_layerToolMap()` gives `agent_config` three
+     * layers (2, 3, 7) against one apiece for layers 4 and 5, so the cheapest
+     * compliance is a single `agent_config` call — a built-in tilt AWAY from
+     * the tools the acceptance test measures. Pre-registered as P7 on #103
+     * rather than engineered around: if it happens the trail says so plainly,
+     * and "the gate mandates depth but does not direct it" is a clean
+     * finding that directs the next iteration.
+     *
+     * @param {String} runId
+     * @param {Object} action the terminal action the model just emitted
+     * @returns {Object} {hold:Boolean, gaps:Array, kind:'gaps'|'no_layer_report'}
+     */
+    _depthGate: function (runId, action) {
+        if (this._gateReleased) return { hold: false, gaps: [], kind: '' }
+
+        var trail = this._trailTools(runId)
+        if (!trail.readable) return { hold: false, gaps: [], kind: '' }
+
+        // Once a hold has been issued, the recorded set is the ONLY thing
+        // that can release the gate — later drafts never move it.
+        if (this._heldTools) {
+            if (this._anyOf(this._heldTools, trail.tools)) {
+                this._gateReleased = true
+                return { hold: false, gaps: [], kind: '' }
+            }
+            return { hold: true, gaps: this._heldGaps, kind: 'gaps' }
+        }
+
+        if (!this._isPlainObject(action) || action.action !== 'fix_report') {
+            // `answer` carries no `layers_swept`, so it declares no gap and
+            // there is nothing to enforce against. Hold and ask for a layer
+            // report; no run took this exit in the v4 pass.
+            return { hold: true, gaps: [], kind: 'no_layer_report' }
+        }
+
+        var open = this._openGaps(this._safeGaps(action.report), trail.tools)
+        if (open.length === 0) {
+            this._gateReleased = true
+            return { hold: false, gaps: [], kind: '' }
+        }
+
+        this._heldGaps = open
+        this._heldTools = this._unionTools(open)
+        return { hold: true, gaps: open, kind: 'gaps' }
+    },
+
+    /**
+     * Gap derivation, guarded. Same reasoning as `_safeSchemaText`: a broken
+     * or absent PaFixReport must degrade the GATE, never trap the run. An
+     * empty list means "no declared gap", which allows — failing open, in
+     * line with `_trailTools`' treatment of a degraded trail.
+     */
+    _safeGaps: function (report) {
+        try {
+            var gaps = this._reports().unsweptGaps(report)
+            return this._isArray(gaps) ? gaps : []
+        } catch (e) {
+            // R-1: `e` is deliberately not inspected.
+            return []
+        }
+    },
+
+    /** Gaps whose tools the trail shows were NEVER invoked. */
+    _openGaps: function (gaps, invoked) {
+        var list = this._isArray(gaps) ? gaps : []
+        var open = []
+        for (var i = 0; i < list.length; i++) {
+            if (!this._anyOf(list[i].tools, invoked)) open.push(list[i])
+        }
+        return open
+    },
+
+    /** Every tool that would close any of these gaps, de-duplicated. */
+    _unionTools: function (gaps) {
+        var out = []
+        for (var i = 0; i < gaps.length; i++) {
+            var tools = gaps[i].tools
+            for (var j = 0; j < tools.length; j++) {
+                var found = false
+                for (var k = 0; k < out.length; k++) {
+                    if (out[k] === tools[j]) found = true
+                }
+                if (!found) out.push(tools[j])
+            }
+        }
+        return out
+    },
+
+    _anyOf: function (candidates, invoked) {
+        var c = this._isArray(candidates) ? candidates : []
+        var inv = this._isArray(invoked) ? invoked : []
+        for (var i = 0; i < c.length; i++) {
+            for (var j = 0; j < inv.length; j++) {
+                if (c[i] === inv[j]) return true
+            }
+        }
+        return false
     },
 
     /**

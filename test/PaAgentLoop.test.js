@@ -75,7 +75,7 @@ function fakeRunManager() {
     }
 }
 
-function fakeFixReport(validateResults) {
+function fakeFixReport(validateResults, gaps) {
     const calls = []
     const contextCalls = []
     const renderCalls = { markdown: [], json: [] }
@@ -112,6 +112,12 @@ function fakeFixReport(validateResults) {
         // hand-copied schema string. See test file header.
         schemaText: function () {
             return 'STUB_SCHEMA_TEXT'
+        },
+        // Depth gate (#103). Gap DERIVATION is PaFixReport's own concern and
+        // is tested in test/PaFixReport.test.js; these loop tests inject the
+        // resulting list directly so they exercise gate logic only.
+        unsweptGaps: function () {
+            return gaps === undefined ? [] : gaps
         },
     }
 }
@@ -835,5 +841,118 @@ describe('depth gate (#103) — _trailTools', () => {
     test('a null result degrades', () => {
         const loop = load({ auditLogger: fakeAuditLogger(null) })
         expect(loop._trailTools('RUN1')).toEqual({ readable: false, tools: [], degraded: 'query_failed' })
+    })
+})
+
+describe('depth gate (#103) — _depthGate', () => {
+    const GAP2 = { layer: 2, name: 'Instructions', reason: 'r2', tools: ['agent_config'] }
+    const GAP4 = { layer: 4, name: 'Data schemas', reason: 'r4', tools: ['schema_lookup'] }
+    const GAP5 = { layer: 5, name: 'Data', reason: 'r5', tools: ['query_table', 'log_analysis'] }
+    const FIX = { action: 'fix_report', report: { layers_swept: {} } }
+
+    function gateLoop(tools, degraded, gaps) {
+        const result =
+            degraded === undefined
+                ? { available: true, tools: tools }
+                : { available: false, degraded: degraded, tools: [] }
+        return load({
+            auditLogger: fakeAuditLogger(result),
+            fixReport: fakeFixReport([], gaps === undefined ? [GAP2, GAP4] : gaps),
+        })
+    }
+
+    test('holds when the draft declares a gap the trail shows was never closed', () => {
+        const gate = gateLoop(['agent_trace'])._depthGate('RUN1', FIX)
+        expect(gate.hold).toBe(true)
+        expect(gate.kind).toBe('gaps')
+        expect(gate.gaps.map((g) => g.layer)).toEqual([2, 4])
+    })
+
+    test('allows when every declared gap has already been closed', () => {
+        const loop = gateLoop(['agent_trace', 'agent_config', 'schema_lookup'])
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(false)
+    })
+
+    test('holds on the SUBSET still open when only some gaps are closed', () => {
+        const gate = gateLoop(['agent_trace', 'agent_config'])._depthGate('RUN1', FIX)
+        expect(gate.hold).toBe(true)
+        expect(gate.gaps.map((g) => g.layer)).toEqual([4])
+    })
+
+    test('allows when the draft declares no gap at all', () => {
+        expect(gateLoop(['agent_trace'], undefined, [])._depthGate('RUN1', FIX).hold).toBe(false)
+    })
+
+    test('HOLDS on no_audit_rows — zero tool calls is the strongest gap', () => {
+        expect(gateLoop([], 'no_audit_rows')._depthGate('RUN1', FIX).hold).toBe(true)
+    })
+
+    test.each(['glide_unavailable', 'query_failed', 'no_run_id'])('allows on a degraded trail (%s)', (reason) => {
+        expect(gateLoop([], reason)._depthGate('RUN1', FIX).hold).toBe(false)
+    })
+
+    test('an answer action is held while the gate is unreleased', () => {
+        const gate = gateLoop(['agent_trace'])._depthGate('RUN1', { action: 'answer', text: 'done' })
+        expect(gate.hold).toBe(true)
+        expect(gate.kind).toBe('no_layer_report')
+    })
+
+    test('a throwing unsweptGaps degrades to allow rather than trapping the run (R-9)', () => {
+        const loop = load({
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            fixReport: {
+                unsweptGaps: function () {
+                    throw new Error('boom')
+                },
+            },
+        })
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(false)
+    })
+
+    test('STICKY: the recorded gap set releases the gate, and later gaps do not re-hold', () => {
+        let invoked = ['agent_trace']
+        let gaps = [GAP2, GAP4]
+        const loop = load({
+            auditLogger: {
+                invokedTools: function () {
+                    return { available: true, tools: invoked.slice() }
+                },
+            },
+            fixReport: {
+                unsweptGaps: function () {
+                    return gaps
+                },
+            },
+        })
+
+        // First evaluation records layers {2,4} -> tools {agent_config, schema_lookup}.
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(true)
+
+        // The model closes layer 2 only. That is in the recorded set.
+        invoked = ['agent_trace', 'agent_config']
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(false)
+
+        // A later draft naming a brand-new gap must NOT re-hold: the gate
+        // buys ONE forced beat, it does not chase a full sweep.
+        gaps = [GAP5]
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(false)
+    })
+
+    test('STICKY: re-emitting a terminal action without acting holds against the SAME set', () => {
+        let gaps = [GAP2, GAP4]
+        const loop = load({
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            fixReport: {
+                unsweptGaps: function () {
+                    return gaps
+                },
+            },
+        })
+        const first = loop._depthGate('RUN1', FIX)
+        // A second, narrower draft must still be judged on the original set.
+        gaps = [GAP5]
+        const second = loop._depthGate('RUN1', FIX)
+        expect(second.hold).toBe(true)
+        expect(second.gaps.map((g) => g.layer)).toEqual(first.gaps.map((g) => g.layer))
     })
 })
