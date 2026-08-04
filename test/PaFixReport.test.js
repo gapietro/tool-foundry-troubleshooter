@@ -1836,3 +1836,82 @@ describe('#93 schemaText contract additions', () => {
         expect(clause.join(' ')).toEqual(expect.stringContaining('NOT_SWEPT'))
     })
 })
+
+describe('unsweptGaps (#103)', () => {
+    function reportWith(layersSwept) {
+        return { layers_swept: layersSwept }
+    }
+
+    test('a NOT_SWEPT layer becomes a gap carrying its reason and tools', () => {
+        const fr = load()
+        const gaps = fr.unsweptGaps(
+            reportWith({
+                1: { status: 'SWEPT' },
+                4: { status: 'NOT_SWEPT', reason: 'no schema read was needed' },
+            })
+        )
+        expect(gaps).toEqual([
+            { layer: 4, name: 'Data schemas', reason: 'no schema read was needed', tools: ['schema_lookup'] },
+        ])
+    })
+
+    test('SWEPT and UNAVAILABLE are never gaps', () => {
+        const fr = load()
+        const gaps = fr.unsweptGaps(
+            reportWith({
+                1: { status: 'UNAVAILABLE', reason: 'nothing ever ran' },
+                2: { status: 'SWEPT' },
+                3: { status: 'SWEPT', reason: 'read the tool definitions' },
+            })
+        )
+        expect(gaps).toEqual([])
+    })
+
+    test('gaps come back ordered by layer number', () => {
+        const fr = load()
+        const gaps = fr.unsweptGaps(
+            reportWith({
+                5: { status: 'NOT_SWEPT', reason: 'r5' },
+                2: { status: 'NOT_SWEPT', reason: 'r2' },
+            })
+        )
+        expect(gaps.map((g) => g.layer)).toEqual([2, 5])
+    })
+
+    test('every gap carries at least one tool', () => {
+        const fr = load()
+        const gaps = fr.unsweptGaps(
+            reportWith({
+                1: { status: 'NOT_SWEPT', reason: 'r' },
+                2: { status: 'NOT_SWEPT', reason: 'r' },
+                3: { status: 'NOT_SWEPT', reason: 'r' },
+                4: { status: 'NOT_SWEPT', reason: 'r' },
+                5: { status: 'NOT_SWEPT', reason: 'r' },
+                6: { status: 'NOT_SWEPT', reason: 'r' },
+                7: { status: 'NOT_SWEPT', reason: 'r' },
+            })
+        )
+        expect(gaps).toHaveLength(7)
+        gaps.forEach((g) => expect(g.tools.length).toBeGreaterThan(0))
+    })
+
+    test('a layer number outside 1-7 is ignored', () => {
+        const fr = load()
+        const gaps = fr.unsweptGaps(reportWith({ 8: { status: 'NOT_SWEPT', reason: 'r' } }))
+        expect(gaps).toEqual([])
+    })
+
+    test('a missing reason degrades to an empty string rather than throwing', () => {
+        const fr = load()
+        const gaps = fr.unsweptGaps(reportWith({ 4: { status: 'NOT_SWEPT' } }))
+        expect(gaps).toEqual([{ layer: 4, name: 'Data schemas', reason: '', tools: ['schema_lookup'] }])
+    })
+
+    test.each([undefined, null, 'a string', 42, [], {}, { layers_swept: null }, { layers_swept: 'x' }])(
+        'malformed input %p returns an empty array',
+        (input) => {
+            const fr = load()
+            expect(fr.unsweptGaps(input)).toEqual([])
+        }
+    )
+})
