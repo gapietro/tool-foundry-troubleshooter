@@ -955,4 +955,65 @@ describe('depth gate (#103) — _depthGate', () => {
         expect(second.hold).toBe(true)
         expect(second.gaps.map((g) => g.layer)).toEqual(first.gaps.map((g) => g.layer))
     })
+
+    // -----------------------------------------------------------------------
+    // Fix round 1 finding: a malformed gap element (not a plain object, or a
+    // non-array `tools`) must degrade `_openGaps`/`_unionTools`, never throw
+    // inside `_depthGate` (R-9). Contract-guarded upstream by Task 1's
+    // `unsweptGaps()` shape, but the loop must not trust that blindly.
+    // -----------------------------------------------------------------------
+
+    test('a null entry in the gaps array is skipped, not treated as an open gap', () => {
+        const loop = gateLoop(['agent_trace'], undefined, [null, GAP4])
+
+        let gate
+        expect(() => {
+            gate = loop._depthGate('RUN1', FIX)
+        }).not.toThrow()
+
+        expect(gate.hold).toBe(true)
+        expect(gate.kind).toBe('gaps')
+        expect(gate.gaps).toEqual([GAP4])
+    })
+
+    test('a gap element with a missing or non-array tools field is skipped, not treated as an open gap', () => {
+        const missingTools = { layer: 3, name: 'Tool definitions', reason: 'r3' }
+        const nonArrayTools = { layer: 6, name: 'GenAI stack', reason: 'r6', tools: 'not-an-array' }
+        const loop = gateLoop(['agent_trace'], undefined, [missingTools, nonArrayTools, GAP4])
+
+        let gate
+        expect(() => {
+            gate = loop._depthGate('RUN1', FIX)
+        }).not.toThrow()
+
+        expect(gate.hold).toBe(true)
+        expect(gate.kind).toBe('gaps')
+        expect(gate.gaps).toEqual([GAP4])
+    })
+
+    test('a malformed element contributes no tools to the recorded (sticky) union', () => {
+        // Only GAP4's tool ('schema_lookup') should be able to release the
+        // gate — a malformed entry must not leak any tool into `_heldTools`.
+        let invoked = ['agent_trace']
+        const loop = load({
+            auditLogger: {
+                invokedTools: function () {
+                    return { available: true, tools: invoked.slice() }
+                },
+            },
+            fixReport: fakeFixReport([], [null, { layer: 3, tools: 'nope' }, GAP4]),
+        })
+
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(true)
+
+        // Invoking a tool that is NOT schema_lookup must not release the
+        // gate, even though it is what a malformed entry (had it been
+        // honored) might have named.
+        invoked = ['agent_trace', 'agent_config']
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(true)
+
+        // Only the well-formed gap's tool actually releases it.
+        invoked = ['agent_trace', 'agent_config', 'schema_lookup']
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(false)
+    })
 })

@@ -517,21 +517,36 @@ PaAgentLoop.prototype = {
         }
     },
 
-    /** Gaps whose tools the trail shows were NEVER invoked. */
+    /**
+     * Gaps whose tools the trail shows were NEVER invoked. A malformed
+     * element (not a plain object, or a non-array `tools`) is a gap this
+     * code cannot interpret — it is SKIPPED rather than treated as open, per
+     * R-9: an upstream contract violation must degrade this method, never
+     * throw inside `_depthGate`.
+     */
     _openGaps: function (gaps, invoked) {
         var list = this._isArray(gaps) ? gaps : []
         var open = []
         for (var i = 0; i < list.length; i++) {
-            if (!this._anyOf(list[i].tools, invoked)) open.push(list[i])
+            var gap = list[i]
+            if (!this._isPlainObject(gap) || !this._isArray(gap.tools)) continue
+            if (!this._anyOf(gap.tools, invoked)) open.push(gap)
         }
         return open
     },
 
-    /** Every tool that would close any of these gaps, de-duplicated. */
+    /**
+     * Every tool that would close any of these gaps, de-duplicated. Same
+     * per-element guard as `_openGaps` — a malformed element contributes NO
+     * tools to the recorded union rather than throwing.
+     */
     _unionTools: function (gaps) {
+        var list = this._isArray(gaps) ? gaps : []
         var out = []
-        for (var i = 0; i < gaps.length; i++) {
-            var tools = gaps[i].tools
+        for (var i = 0; i < list.length; i++) {
+            var gap = list[i]
+            if (!this._isPlainObject(gap) || !this._isArray(gap.tools)) continue
+            var tools = gap.tools
             for (var j = 0; j < tools.length; j++) {
                 var found = false
                 for (var k = 0; k < out.length; k++) {
