@@ -390,3 +390,148 @@ the only column the Task 12 gate consumes.
 
 If valid runs < 8, record **gate not met — insufficient data** and stop; do not compute a verdict
 from the survivors (§A3). *(Not triggered: 10 valid runs.)*
+
+---
+
+## v4 scored pass (Task 13, filled 2026-08-03) — native harness, 10 rows
+
+**Scope of this section: native (Agent Doctor) only.** The companion file
+`benchmark/scorecard-custom-harness.md` carries this same pass's 10 custom
+rows in its own v4 section — **the two v4 scorecards are sourced from
+different scoring rounds, on purpose; see the sourcing note immediately
+below.** Instance: gpinst01, app version `2026.08.0301` (confirmed
+byte-identical to `main`@`8c909cd` for every Script Include and the shared
+agent instructions — `benchmark/raw-evidence-v4.md`, "Deploy verification").
+Full run identities, wall clocks, terminal states, and complete Fix Report
+text for all 20 v4 rows: `benchmark/raw-evidence-v4.md`, five per-seed
+sections (Tasks 5–9). Audit-trail-derived `layers_swept` / `layers_available`
+/ tool-call counts / LLM-call counts for all 20 rows: same file, "Task 10 —
+audit-trail-derived measurements, all 20 rows".
+
+**Sourcing note — read before trusting any score below.** Three scoring
+rounds exist for this pass:
+
+| Round | Directory | Packets | Scorers |
+|---|---|---|---|
+| A | `benchmark/scoring-v4/results/` | leak present (issue #100) | 10 independent, one per row |
+| B | `benchmark/scoring-v4/results-redacted/` | redacted | ONE agent scoring 10 sequentially |
+| C | `benchmark/scoring-v4/results-independent/` | redacted | 10 independent, one per row |
+
+**The 10 native rows below are scored from Round C**
+(`results-independent/`) — the only round with both a redacted packet and
+one-independent-scorer-per-row dispatch, and therefore the only round
+comparable to the Task 12 blind re-scores in the section below it. Round A
+has the leak (used only for custom, where the leak could only have inflated
+scores and every custom row still scored 0/6 — see the companion file).
+Round B is not used for any scorecard row; it exists as evidence of a
+scorer-topology effect (`DECISION.md`).
+
+**Void check (all 10 rows): not void.** `benchmark/raw-evidence-v4.md`'s
+"Seed fixture preconditions" section re-verified all five seeds' §A3
+conditions live before any run fired, for both harnesses: "**All five
+seeds: not void.**"
+
+### v4 rows — native (Round C)
+
+| seed | run # | run_id (conversation_id) | root_cause_layer_correct | fix_target_correct | evidence_cites_trace_and_config | fix_usable_unedited | total /6 | **passes_gate** | layers_swept (n/7, which) | layers_available (n/7) | cause_of_death | continuous_tool_execution_limit | max_auto_executions (per tool) | tool_calls | assists_consumed | wall_clock | failure_behavior | notes |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 01 | 1 | `e7c7eae82b2acb14f243fed2ce91bf79` | 2 | 2 | 1 | 0 | 5 | **0** | 4/7 (L1,L3,L4,L5) | 7/7 | completed | 25 | 10 × all 7 tools | 10 | not measurable | 274s | graceful_partial — correct diagnosis, fix code omitted | RC-1 names the word→Integer mismatch (CONFIRMED, cites trace + `schema_lookup`). FIX-1's "Proposed" text defers the actual mapping code to "the run's stored message" — not present in the committed Fix Report a builder AI would receive — so `fix_usable_unedited`=0 despite a correctly-targeted fix. FIX-2 (mark inputs mandatory) is fully specified but doesn't address the seed's defect. Report's own LAYERS SWEPT table over-claims L2 (instructions); audit trail shows the `agent_config` call requested/returned `["tools"]` only — flagged, not score-affecting (RC-1's evidence never depends on L2). ~10 LLM calls. |
+| 01 | 2 | `1098e2602ba6cf14f243fed2ce91bfe1` | 2 | 2 | 1 | 0 | 5 | **0** | 4/7 (L1,L3,L4,L5) | 7/7 | completed | 25 | 10 × all 7 tools | 10 | not measurable | 179s | graceful_partial — fix hedges between right and wrong target | Same correct diagnosis as run 1. The report's own VERIFICATION section instructs "Apply Fix A or Fix B (not both)" with Fix A — change the dictionary column type — labeled "(preferred)"; Fix A is *not* the seed's accepted target (seed treats the Integer column as fixed). Fix B (word→integer map in the script) is the correct target and is present, but demoted to "alternative". A builder AI following the report's own stated preference lands on the wrong fix first → `fix_usable_unedited`=0. Same L2 over-claim as run 1 (audit: `["tools"]` only). ~7 LLM calls. |
+| 02 | 1 | `748b62e42be2871817a6ffbeee91bfcd` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | completed | 25 | 10 × all 7 tools | 5 | not measurable | 75s | confidently_wrong — mistook a fabricated group for evidence of health | Report concludes "No failure was observed" / "None identified" and explicitly marks L2 (instructions — the seed's expected layer) **NOT SWEPT**. The agent under diagnosis invented a plausible-sounding group ("IT Support — Hardware & Endpoint") with no grounding tool or vocabulary — the seed's own designed symptom — and this run treated the plausible-looking completion as proof of health rather than examining the instruction text that produced it. ~4 LLM calls. |
+| 02 | 2 | `a10caae42be6cf14f243fed2ce91bf89` | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | completed | 25 | 10 × all 7 tools | 5 | not measurable | 96s | confidently_wrong — same pattern as run 1 | Independently reaches the identical conclusion as run 1 ("The execution did not fail" / "No root cause exists"), same L2-NOT-SWEPT self-report, same failure to examine the instruction text behind the invented group assignment. Doubled-run consistency observed on the miss, not just the hit. ~5 LLM calls. |
+| 03 | 1 | `fced2ee82be6cf14f243fed2ce91bfc1` | 2 | 2 | 0 | 1 | 5 | **1** | 5/7 (L1,L3,L4,L5,L6) | 7/7 | completed | 25 | 10 × all 7 tools | 9 | not measurable | 151s | n/a — success (gate pass) | RC-1 correctly names the genuinely-empty routing table (data layer, CONFIRMED via `query_table` unfiltered count 0). Fix 1 seeds the table with a concrete example row and a repeatable pattern — scored usable. `evidence_cites_trace_and_config`=0: RC-1's own Evidence line cites only `query_table` + the tool-call trace, never the `schema_lookup` output the report's own table credits as SWEPT — received but not used in the cited evidence for this root cause. ~7 LLM calls. |
+| 03 | 2 | `2c0eaea42be6871817a6ffbeee91bff3` | 2 | 2 | 1 | 0 | 5 | **0** | 4/7 (L1,L3,L4,L5) | 7/7 | completed | 25 | 10 × all 7 tools | 9 | not measurable | 153s | graceful_partial — correct target, fix leaves an unfilled placeholder | Same correct diagnosis as run 1, and this time RC-1's evidence explicitly cites the schema (`x_snc_tsbench_routing` confirmed correct columns) alongside the trace, satisfying the evidence column. Fix 1 correctly targets data seeding but `assignment_group = <target group name>` is an unfilled placeholder and "every other category in scope" is never enumerated — a builder AI cannot produce the actual INSERT statements from this text alone. ~7 LLM calls. |
+| 04 | 1 | `ed80b6682b2acf14f243fed2ce91bff0` | 2 | 2 | 1 | 0 | 5 | **0** | 5/7 (L1,L2,L3,L6,L7) | 7/7 | completed | 25 | 10 × all 7 tools | 9 | not measurable | 144s | graceful_partial — correct target, fix value is descriptive not concrete | RC-1 correctly finds the dangling `api` nil sys_id on the capability definition (CONFIRMED, `genai_log check_config` + live tool response) and does **not** fall for the `connection` decoy (never mentioned as a cause). FIX-1's "Proposed" value is a description ("the sys_id of the intended...flow, e.g. the standard Now LLM or Amazon Bedrock spoke flow") rather than a concrete value — no `query_table` call was made to find a working reference to quote — so `fix_usable_unedited`=0 despite the correct target. ~7 LLM calls. |
+| 04 | 2 | `d1617ae82b6acf14f243fed2ce91bf76` | 2 | 2 | 1 | 0 | 5 | **0** | 2/7 (L1,L6) | 7/7 | completed | 25 | 10 × all 7 tools | 5 | not measurable | 108s | graceful_partial — same fix-completeness gap as run 1 | Same correct diagnosis and target as run 1, same decoy-avoidance, same fix-completeness gap: "the sys_id of the intended Now LLM Service flow record" is a description of what belongs in the field, not a value to write. ~5 LLM calls. |
+| 05 | 1 | `46a3b22c2be6871817a6ffbeee91bf9a` | 2 | 2 | 1 | 1 | 6 | **1** | 6/7 (L1,L2,L3,L5,L6,L7) | 7/7 | completed | 25 | 10 × all 7 tools | 9 | not measurable | 168s | n/a — success (gate pass) | Full credit: names the specific gate (`sn_aia_trigger_configuration.active`, sys_id `bfb77d6c…`), not just generic "inactive" — clears the seed-05 partial-credit bar for full marks. Fix 1 is a directly PATCH-able current→proposed value change. Report's own LAYERS SWEPT table claims 7/7 including L4; the audit trail credits 6/7 (L4 not credited) — flagged, not score-affecting (root cause and its evidence both rest on L7, which the trail does credit). ~5 LLM calls. |
+| 05 | 2 | `79743aec2b6acf14f243fed2ce91bfe3` | 2 | 2 | 1 | 1 | 6 | **1** | 6/7 (L1,L2,L3,L5,L6,L7) | 7/7 | completed | 25 | 10 × all 7 tools | 7 | not measurable | 111s | n/a — success (gate pass) | Consistent with run 1: same specific gate, same concrete fix. Report's own table marks L6 "NOT SWEPT (full)" (states a 100-row capability sample was reviewed) where the audit trail credits it SWEPT (one `genai_log` call was made) — a minor labeling difference, not score-affecting since the diagnosis and fix are both independently correct on L7. ~4 LLM calls. |
+
+**Gate tally — native, v4**
+
+| | |
+|---|---|
+| Valid runs (not void) | **10** / 10 |
+| `sum(passes_gate)` | **3** |
+| Gate result | **3 / 10 (30.0%)** — bottom band (< 50%) of the `IMPLEMENTATION_PLAN.md` Task 12 gate table |
+| Rubric points | **42 / 60** |
+| Void runs and why | **None** — all five seeds' §A3 fixture preconditions re-verified live before firing (`raw-evidence-v4.md`, "Seed fixture preconditions") |
+
+### Totals, this pass (both harnesses)
+
+**Native: 3 / 10. Custom: 0 / 10** (custom's 10 rows and their Round A
+sourcing are in `benchmark/scorecard-custom-harness.md`). The two numbers are
+not from the same scoring round — see the sourcing note above — but both are
+independently scored, and native's own 3/10 stands regardless of what round
+custom used, since custom's 0/6-on-every-row outcome could not have been
+raised any further by round choice (every custom row failed
+`root_cause_layer_correct` outright — the leak in Round A could only inflate
+a score, never manufacture a false zero).
+
+### Gate-arithmetic verification (Task 13)
+
+Recomputed `passes_gate = 1 iff root_cause_layer_correct==2 AND
+fix_usable_unedited==1` by hand against every recorded column value, for all
+**20** v4 rows (10 native above + 10 custom in the companion file) and all
+**8** blind re-scored standing rows below — **28 rows total, zero
+mismatches.** Every row's recorded `passes_gate` matches what the formula
+produces from its own four column values. The §A constraint
+(`fix_usable_unedited` may not be `1` while `fix_target_correct` is `0`) also
+holds in all 28 rows — no row has `fix_target_correct=0` paired with
+`fix_usable_unedited=1`.
+
+---
+
+## Blind re-score — Task 12 standing rows (added 2026-08-03, Task 13)
+
+Task 12's ten native rows above (dated 2026-08-02) are the **drift baseline
+and are preserved verbatim** — nothing above this section was edited. Eight
+of the ten were independently blind re-scored on 2026-08-02/03 by a fresh
+scorer given only the §A rubric, one run id, the seed spec, and the
+audit-derived tool roster — **never the operator's own score, this
+scorecard, `DECISION.md`, `README.md` or `CHANGELOG.md`**. Full packets and
+results: `benchmark/scoring-v4/rescore/` and
+`benchmark/scoring-v4/rescore-results/`.
+
+**Two of the ten standing rows were not re-scored** — seed 01 run 1 and
+seed 05 run 2 — a **structural absence** (no `rescore-*` packet/result
+exists for either identity), not a retrieval failure or an intentional
+exclusion recorded elsewhere in this pass. They are marked `not re-scored`
+below rather than left blank.
+
+**This column never overwrites the operator's original score.** A
+disagreement between the operator (Task 12) and the blind re-scorer on the
+*same, unchanged* Fix Report is itself data about the rubric's
+reproducibility, and both numbers are kept visible side by side.
+
+| seed | run # | run_id | operator (RC / FT / EV / FU → total, gate) | blind re-score (RC / FT / EV / FU → total, gate) | `passes_gate` agreement | notes |
+|---|---|---|---|---|---|---|
+| 01 | 1 | `715e41c42b6a4bd417a6ffbeee91bf29` | 2/2/1/1 → 6, **1** | **not re-scored** | — | No `rescore-*` packet exists for this run_id — structural absence. |
+| 01 | 2 | `2fdf8d0c2baa4314f243fed2ce91bfa3` | 2/2/1/1 → 6, **1** | 2/2/1/1 → 6, **1** | **agree** | Blind re-scorer notes no discrepancy between the report's own LAYERS SWEPT claims and the measured `layers_swept` for this row. |
+| 02 | 1 | `86015dc42baa4bd417a6ffbeee91bf51` | 0/1/1/0 → 2, **0** | 0/0/1/0 → 1, **0** | **agree** | Total disagreement on `fix_target_correct`: operator awarded 1 (partial — "supply a lookup tool" as half the sanctioned fix); blind scorer awarded 0, reading Fix 1 as binding a tool that writes `assignment_group` directly (not a lookup/grounding tool) with no instruction-text change at all — "right area" was itself judged not met. `passes_gate` unaffected either way (`root_cause_layer_correct`=0 in both). |
+| 02 | 2 | `cff195842b2e4314f243fed2ce91bfd1` | 0/1/1/0 → 2, **0** | 0/0/1/0 → 1, **0** | **agree** | Same `fix_target_correct` disagreement and same reasoning as run 1's re-score. |
+| 03 | 1 | `f3a2950c2baa4bd417a6ffbeee91bfb4` | 2/2/1/1 → 6, **1** | 2/2/1/0 → 5, **0** | **DISAGREE** | The one gate-level disagreement in this set. Operator scored `fix_usable_unedited`=1; blind re-scorer scored 0, reading Fix 1's `assignment_group = <target group sys_id>` as an unfilled placeholder a builder AI cannot apply without first resolving a real value. Notably the *same style* of placeholder in seed 03 run 2's fix was scored `fix_usable_unedited`=1 by both the operator **and** its own blind re-score (next row) — that blind re-score's own notes flag it as "the closest call in the row" and reason that `assignment_group` is a plain `StringColumn`, not a reference field, so no real lookup is strictly required. The two blind re-scores of structurally similar fixes did not converge on the same rule for placeholder values — see notes below the table. |
+| 03 | 2 | `e1c319c02b6e4314f243fed2ce91bf68` | 2/2/1/1 → 6, **1** | 2/2/1/1 → 6, **1** | **agree** | Blind re-scorer explicitly flags the same placeholder pattern as run 1's fix and scores it usable anyway (see cross-reference above) — full agreement with the operator here. |
+| 04 | 1 | `228411882b6e4314f243fed2ce91bf24` | 2/2/1/1 → 6, **1** | 2/2/1/1 → 6, **1** | **agree** | Blind re-scorer separately flags decoy-narrative contamination (the report also describes empty `connection` as jointly causal) but does not zero the row for it, reasoning the rubric's decoy penalty is keyed to a fix that is "bind a connection alias — and nothing else," which this fix is not (it correctly repoints `api`). Same outcome as the operator. |
+| 04 | 2 | `ecc5dd482bea4bd417a6ffbeee91bf2d` | 2/0/1/0 → 3, **0** | 2/0/1/0 → 3, **0** | **agree** | Canonical decoy row — both scorers reach the identical 2/0/1/0 pattern the rubric's own §A2 worked example describes. |
+| 05 | 1 | `1b37994c2b2e4bd417a6ffbeee91bf5a` | 2/2/1/1 → 6, **1** | 2/2/1/1 → 6, **1** | **agree** | Full agreement, including the specific-gate full-credit reasoning. |
+| 05 | 2 | `d818dd4c2bae4314f243fed2ce91bf7c` | 2/2/1/1 → 6, **1** | **not re-scored** | — | No `rescore-*` packet exists for this run_id — structural absence. |
+
+**Agreement summary.** Of the **8** rows actually re-scored, **7 agree** and
+**1 disagrees** on `passes_gate` (seed 03 run 1). Three of the eight also
+show a *non-gate-level* total-score disagreement (seed 02 runs 1–2, on
+`fix_target_correct`'s partial-credit band; seed 03 run 1, which is also the
+gate-level disagreement) — meaning three of the eight re-scored rows
+produced a different `total /6` than the operator even though only one
+changed the verdict that reaches `DECISION.md`.
+
+**What the disagreement is evidence of, not a ruling on which score is
+"right."** All three total-score splits and the one gate-level split trace
+to the same rubric surface: judgment calls the columns' own text does not
+fully close — whether "the right area, wrong specifics" partial credit
+extends to a fix that targets a *different mechanism* in the same layer
+family (seed 02), and whether an unfilled placeholder in an otherwise
+correctly-targeted fix defeats "applied as written, no manual editing first"
+(seed 03) — and the two seed-03 rows show that even this same rescoring pass
+did not apply one consistent rule to that second question across its own two
+rows. This is left as a finding for whoever revises the rubric, not resolved
+here by picking a side.
