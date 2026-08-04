@@ -1065,4 +1065,43 @@ describe('depth gate (#103) — _holdBlock', () => {
         expect(block).toContain('HOLD')
         expect(block).toMatch(/layer report|layers_swept/i)
     })
+
+    test('degrades gracefully (R-9): a null element in gaps is skipped, not dereferenced', () => {
+        const block = load()._holdBlock(
+            [
+                { layer: 2, name: 'Instructions', reason: 'r2', tools: ['agent_config'] },
+                null,
+                { layer: 4, name: 'Data schemas', reason: 'r4', tools: ['schema_lookup'] },
+            ],
+            'gaps'
+        )
+
+        expect(() => {
+            // The mere act of building the block must not throw.
+        }).not.toThrow()
+
+        // Well-formed entries still appear.
+        expect(block).toContain('layer 2 (Instructions)')
+        expect(block).toContain('layer 4 (Data schemas)')
+    })
+
+    test('degrades gracefully (R-9): a non-object entry in gaps is skipped', () => {
+        const block = load()._holdBlock(
+            [
+                { layer: 2, name: 'Instructions', reason: 'r2', tools: ['agent_config'] },
+                'not an object',
+                42,
+                { layer: 4, name: 'Data schemas', reason: 'r4', tools: ['schema_lookup'] },
+            ],
+            'gaps'
+        )
+
+        expect(() => {
+            // The mere act of building the block must not throw.
+        }).not.toThrow()
+
+        // Well-formed entries still appear.
+        expect(block).toContain('layer 2 (Instructions)')
+        expect(block).toContain('layer 4 (Data schemas)')
+    })
 })

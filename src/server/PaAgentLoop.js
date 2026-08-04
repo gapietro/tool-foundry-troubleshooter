@@ -612,6 +612,7 @@ PaAgentLoop.prototype = {
         var list = this._isArray(gaps) ? gaps : []
         for (var i = 0; i < list.length; i++) {
             var g = list[i]
+            if (!this._isPlainObject(g)) continue
             lines.push('  layer ' + g.layer + ' (' + g.name + ') — "' + this._str(g.reason) + '"')
         }
         lines.push('The trail shows no tool call has reached any of them.')
