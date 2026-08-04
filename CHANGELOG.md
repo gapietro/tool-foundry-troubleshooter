@@ -72,7 +72,7 @@ verified after `now-sdk build` + `now-sdk install --alias gpinst01` both reporte
   {"execution":"d29e64bc2ba68354f243fed2ce91bf49","mode":"collect"}` and
   `request_truncated: false`.
 - **Truncation state observed live (fix wave, `_requestFields` now writes the STRING
-  `'true'`/`'false'` rather than a JS boolean, matching `PaAuditLogger`'s idiom).** A 61,010-char
+  `'true'`/`'false'` rather than a JS boolean, matching `PaAuditLogger`'s idiom).** A 61,011-char
   serialized body (`JSON.stringify({logs: <61,000 'x' chars>})`) was built **server-side** inside a
   one-shot `sysauto_script` background job (never as a literal in an MCP tool call) that called
   `new x_snc_troubleshoot.PaRunManager().createRun({mode: 'diagnose', request: {logs: big}})`
