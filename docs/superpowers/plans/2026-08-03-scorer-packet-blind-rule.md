@@ -1001,7 +1001,8 @@ measures the cost at roughly one row on a 10-row pass).
   partial — fix-target credit"* spans two lines), and every leak sat inside a
   `>` callout. `test/_normalizeProse.js` strips blockquote markers and joins
   wrapped lines while preserving a line map. Measured red state before the
-  rewrites: 11 hits across seeds 02–05, zero false positives.
+  rewrites: 14 pattern-hits across 13 leak locations in seeds 02–05, zero false
+  positives.
 - **Guidance survives, and it is pinned** — two real-file controls assert seed
   04's decoy rule and seed 01's `priority_stored` ground truth are still present
   *and* scan clean. That is what separates redacting the leak from lobotomising
@@ -1035,7 +1036,7 @@ git push -u origin fix/scorer-packet-blind-rule
 Then open the PR against `main` with `gh pr create`, titled `Extend the blind rule to scorer packets (#100)`. The body must include:
 
 - `Closes #100`.
-- The **measured red state** from Task 1 Step 3 — the 11 hits, quoted from the guard's own failure output. The design filed that number in advance; the PR is where it is shown to have been met.
+- The **measured red state** from Task 1 Step 3 — the 14 pattern-hits, quoted from the guard's own failure output. The design filed that number in advance; the PR is where it is shown to have been met.
 - The final green `npm test` summary.
 - The two mechanics findings (line-straddling phrases, blockquote markers), since either one alone would have produced a green guard over a live leak.
 - The note that no score moved and that §O7's Round A caveat is untouched.
