@@ -301,6 +301,94 @@ sitting in the table, discarded and retrievable.
 
 ---
 
+## Custom harness scorecard — v4 (10 rows, Task 13, scored via Round A — 2026-08-03)
+
+**Scope: custom harness only, this pass.** The companion native rows for
+this same pass (v4, Round C) are in `benchmark/scorecard-agent-doctor.md`'s
+own v4 section — **the two v4 scorecards are sourced from different scoring
+rounds, deliberately; see the note immediately below.** Instance: gpinst01,
+app version `2026.08.0301`. Full run identities, wall clocks, terminal
+states, and complete `fix_report` JSON for all 20 v4 rows:
+`benchmark/raw-evidence-v4.md`, five per-seed sections (Tasks 5–9).
+Audit-trail-derived measurements for all 20 rows: same file, "Task 10 —
+audit-trail-derived measurements, all 20 rows".
+
+**Sourcing note.** Three scoring rounds exist for this pass — Round A
+(`benchmark/scoring-v4/results/`, leaked packets per issue #100, 10
+independent scorers), Round B (`results-redacted/`, redacted, one scorer
+sequentially across 10), Round C (`results-independent/`, redacted, 10
+independent scorers). **The 10 custom rows below are scored from Round A** —
+custom was not re-scored in the clean/independent Round C, so Round A is the
+only measurement that exists for these ten runs. This does not compromise
+the result: every one of the ten scored **0/6** with
+`root_cause_layer_correct=0`, and any leaked information in the packet could
+only have *inflated* a score, never produced a false 0 — so the zeros are
+robust regardless of the packet issue. **The native rows for this pass use
+Round C instead** (`scorecard-agent-doctor.md`) — the two v4 scorecards are
+therefore not drawn from the same round, and a reader must not assume they
+are.
+
+**Void check (all 10 rows): not void.** Same pre-verified §A3 conditions as
+the native v4 rows — see `raw-evidence-v4.md`'s "Seed fixture preconditions"
+section, "All five seeds: not void," confirmed for both harnesses before any
+run fired.
+
+### v4 rows — custom (Round A)
+
+`continuous_tool_execution_limit` / `max_auto_executions` are native-only
+budget knobs (`sn_aia.*`); the custom harness has no equivalent binding — its
+own loop is governed by `PaAgentLoop.MAX_ITERATIONS=15` /
+`BUDGET_MS=300000`, neither of which any row below approaches (deepest run:
+2 tool calls, ~30s). Both columns are recorded `n/a` for every custom row,
+per the same convention this file used for the v2/v3 custom passes.
+
+| seed | run # | run_id | root_cause_layer_correct | fix_target_correct | evidence_cites_trace_and_config | fix_usable_unedited | total /6 | **passes_gate** | layers_swept (n/7, which) | layers_available (n/7) | cause_of_death | continuous_tool_execution_limit | max_auto_executions | tool_calls | assists_consumed | wall_clock | failure_behavior | notes |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 01 | 1 | `db78ae602ba6cf14f243fed2ce91bfe2` (TR1000119) | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | completed (premature — `inconclusive`-keyed shape, `root_causes: []`) | n/a | n/a | 1 | not measurable | ~8s | graceful_partial (declares no fault, but see notes) | The single `agent_trace` call this run made returned `priority_stored:null` verbatim — the exact discrepancy both native runs used as primary evidence — and the report still concluded "no errors were reported" with empty `root_causes`. Not an evidence-access gap: the defect was in the one tool output read. ~2 LLM calls. |
+| 01 | 2 | `8c19ea682b66871817a6ffbeee91bf4c` (TR1000121) | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | completed (premature — same `inconclusive` shape) | n/a | n/a | 1 | not measurable | ~10s | graceful_partial (same pattern as run 1) | Independently reaches the identical miss as run 1 — same shallow sweep, same unused evidence. ~2 LLM calls. |
+| 02 | 1 | `e2db6ae42be6cf14f243fed2ce91bfee` (TR1000123) | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | completed (premature — `inconclusive`-keyed shape) | n/a | n/a | 1 | not measurable | ~8s | graceful_partial (declares no fault) | "No configuration issues observed in trace; agent_config not called" — the run's own L2 reasoning is circular for an ambiguous-instruction seed, where the defect (an ungrounded "assign to the right group" instruction) is invisible to a trace-success check by construction. `agent_config` was available (7/7) and never called. ~2 LLM calls. |
+| 02 | 2 | `e26c2eac2ba6871817a6ffbeee91bffa` (TR1000125) | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | completed (premature — same shape) | n/a | n/a | 1 | not measurable | ~8s | graceful_partial (same pattern as run 1) | Independently reaches the identical miss. ~2 LLM calls. |
+| 03 | 1 | `56ed26242b2acf14f243fed2ce91bf16` (TR1000126) | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | completed — populated `root_causes` shape (`confidence: UNCONFIRMED`) | n/a | n/a | 1 | not measurable | ~19s | confidently_wrong (names a layer, but the wrong one) | Root cause filed at layer 1 ("`lookup_routing_rule` tool call"), not the expected layer 5 (data). Fix targets "`lookup_routing_rule` tool configuration" — the seed spec is explicit that "a diagnosis naming the tool or the query is a miss." `query_table`/`schema_lookup` never called (1/7 measured). ~3 LLM calls. |
+| 03 | 2 | `5d0eae242b2acf14f243fed2ce91bfd9` (TR1000128) | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | completed — same populated shape | n/a | n/a | 1 | not measurable | ~12s | confidently_wrong (same layer-1/tool miss as run 1) | Same substantive miss as run 1, independently — `root_causes[0]` again names layer 1 and the tool, not layer 5/data. ~3 LLM calls. |
+| 04 | 1 | `2331b6a82b6acf14f243fed2ce91bf47` (TR1000131) | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | n/a — status=`failed` (`fix_report` validation: unsupported sweep claim — L6 marked SWEPT with no `genai_log`/`log_analysis` call; `would_confirm` names an already-"swept" layer) | n/a | n/a | 2 | not measurable | ~30s | n/a — rejected draft scored on its own merits per task instructions | The rejected draft's structured root cause lands at layer 1, `confidence: UNCONFIRMED`, with layer 6 (the expected layer) named only as `would_confirm` — a hypothesis it flags needing to check, never a stated conclusion. Fix lists `api`/`api_type`/`connection` undifferentiated ("verify... are correctly configured") without isolating the seeded defect from the decoy. ~4 LLM calls. |
+| 04 | 2 | `57617ae82b6acf14f243fed2ce91bf70` (TR1000132) | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1) | 7/7 | completed — populated shape, honestly marks L6 `UNAVAILABLE` | n/a | n/a | 2 | not measurable | ~20s | confidently_wrong, but honest about its own gap | Root cause again at layer 1 ("tool_call response"), not layer 6. Unlike run 1's rejected draft, this run correctly discloses L6 `UNAVAILABLE` ("no genai_log or log_analysis tool was invoked") rather than falsely claiming it swept — the honesty that got run 1 rejected by validation is present here, but the diagnosis is still a miss. Fix targets "`summarise_ticket` tool definition," not the capability's `api` field. ~4 LLM calls. |
+| 05 | 1 | `d3a372282b6a871817a6ffbeee91bf8d` (TR1000134) | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1)† | 7/7 | n/a — status=`failed` (`fix_report` validation: evidence rule, cite ≥2 distinct config/schema/data sources — found 0) | n/a | n/a | 1 | not measurable | ~19s | n/a — rejected draft scored on its own merits | The model's one tool call mis-extracted the bench-ticket sys_id out of the request's `description` field and passed it to `agent_trace` as an execution-plan sys_id (same mis-extraction Task 4 documents against this identical request body); the tool correctly reported a genuine absence. The draft names layer 1 with `would_confirm:"7"` — never commits to wiring/layer 7 — and `agent_config` (which `PaToolRegistry` itself documents as covering layers 2/3/7, including trigger wiring) was never called despite being available. †Per Task 10's flagged audit/report disagreement: the mechanical rule credits L1 SWEPT (the tool executed and returned a result), but the run's own report calls it `UNAVAILABLE`; recorded here per the mechanical rule, with the caveat carried forward. ~3 LLM calls. |
+| 05 | 2 | `8b74ba282baacf14f243fed2ce91bfb3` (TR1000136) | 0 | 0 | 0 | 0 | 0 | **0** | 1/7 (L1)† | 7/7 | n/a — status=`failed` (same validation rule as run 1) | n/a | n/a | 1 | not measurable | ~16s | n/a — rejected draft scored on its own merits | Same mis-extraction and same single tool call as run 1. Fix proposal talks about "trigger conditions and applicability criteria" — the seed spec explicitly flags condition-matching as a corrected historical red herring, not the seeded defect — and never asserts the trigger is inactive, so it does not even clear the seed-05 partial-credit floor. †Same audit/report disagreement as run 1. ~3 LLM calls. |
+
+**Gate tally — custom, v4**
+
+| | |
+|---|---|
+| Valid runs (not void) | **10** / 10 |
+| `sum(passes_gate)` | **0** |
+| Gate result | **0 / 10 (0.0%)** |
+| Rubric points | **0 / 60** |
+| Void runs and why | **None** — all five seeds' §A3 fixture preconditions re-verified live before firing |
+
+### Totals, this pass (both harnesses)
+
+**Native: 3 / 10. Custom: 0 / 10** (native's 10 rows and their Round C
+sourcing are in `benchmark/scorecard-agent-doctor.md`'s own v4 section — see
+that file for the sourcing note explaining why the two scorecards use
+different rounds, and for the 8-row blind re-score column against the
+Task 12 standing native rows).
+
+### Gate-arithmetic verification (Task 13)
+
+Same verification as recorded in `scorecard-agent-doctor.md`'s v4 section:
+`passes_gate` was recomputed by hand from
+`root_cause_layer_correct==2 AND fix_usable_unedited==1` for all 20 v4 rows
+(10 native + these 10 custom) plus the 8 blind re-scored Task 12 standing
+rows — 28 rows, zero mismatches, and the §A constraint
+(`fix_usable_unedited` may not be `1` while `fix_target_correct` is `0`)
+holds in every row. For the custom rows specifically this is immediate:
+every row has `root_cause_layer_correct=0`, so `passes_gate=0` in all ten
+regardless of the other three columns, and `fix_target_correct=0` is always
+paired with `fix_usable_unedited=0` (never 1) — the constraint is satisfied
+trivially but was still checked row by row.
+
+---
+
 ## Native harness — comparison rows (10 rows: 2 new + 8 standing)
 
 > **Not re-measured for the v2 custom pass** (2026-08-02, version 2026.08.0218). Nothing on the

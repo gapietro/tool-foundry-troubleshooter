@@ -1495,3 +1495,362 @@ run, in creation order, with `input` on intent rows and `output` on result and e
   remains the milestone blocker, untouched by anything here.
 - **The v4 pass is still the next thing.** §M7's queue is unchanged; this pass removes an
   inference from the record it will be read against, and hands it a measurable `layers_swept`.
+
+---
+
+## O. The v4 scored pass (`2026.08.0301`, #98) — a baseline, and the first drift measurement
+
+§M7's queued pass, run 2026-08-03. **Native 3/10, custom 0/10.** The pass was designed to buy a
+readable single-variable baseline plus a native control; it also produced the project's first
+measurement of model drift, and — unplanned — its first measurements of the benchmark's own
+scoring instrument.
+
+Rows and per-row notes: `benchmark/scorecard-agent-doctor.md` (native, v4 section) and
+`benchmark/scorecard-custom-harness.md` (custom, v4 section). Raw artifacts for all 20 runs,
+including complete Fix Report text: `benchmark/raw-evidence-v4.md`. Design and the predictions
+filed before running: `docs/superpowers/specs/2026-08-03-v4-scored-pass-design.md`.
+
+### O1. What was run, and what was deliberately not touched
+
+**20 runs — 5 seeds × 2 runs × 2 harnesses, one day, one deployed version.** Both harnesses ran at
+app version `2026.08.0301` on gpinst01. That version is a measurement, not an assumption: the
+instance was found at `2026.08.0226` and deployed from `main`@`8c909cd` **before any evidence was
+recorded**, then live `sys_script_include` bodies for `PaFixReport`, `PaArtifactStore`,
+`PaToolRegistry` and `PaScriptToolAdapter`, and live `sn_aia_agent.instructions` for Agent Doctor,
+were byte-compared against `src/server/` and `docs/agent/agent-doctor-instructions.md`
+(`raw-evidence-v4.md`, "Deploy verification").
+
+**Sequencing: interleaved by seed** — native run 1, custom run 1, native run 2, custom run 2, per
+seed. Intra-day model drift then spreads across both harnesses rather than aligning with the
+harness boundary, which is the short-timescale form of the different-day gap §I4 confound 3 names.
+Run identities were verified **distinct** by direct `conversation_ref` query per row, not inferred
+from timing — `PaRunAnchor`'s one-anchor-per-user-per-30-min fallback makes interleaving a hazard
+rather than a safeguard here.
+
+**Pre-flight, all measured fresh and all recorded:** five seeds' §A3 fixture conditions re-verified
+live — **all five not void**; budget knobs read from the instance —
+`sn_aia.continuous_tool_execution_limit = 25`, `max_auto_executions = 10` on all seven tools;
+`layers_available` **7/7**, reached by two independent query paths (`sn_aia_agent_tool_m2m` for
+native, `PaToolRegistry`'s own registry read for custom) rather than one value asserted for both;
+smoke gate fired on both harnesses and passed before any scored row was spent.
+
+**Nothing that native reads was allowed to move.** Held byte-identical, on purpose:
+`docs/agent/agent-doctor-instructions.md` (native-shared), `src/server/PaScriptToolAdapter.js`, and
+everything else under `src/server/`. **No product code changed in this pass.** The reason is the
+whole point of §O3: native's ten rows are only a drift control if native's inputs are identical to
+what produced the standing Task 12 rows. Every available edit — `:48`, `:67`, §K5's `excerptPriority`
+propagation — would have converted the native delta from *drift* into *drift + edit*, unattributable,
+spending ten runs to buy a measurement and spoiling it in the same pass.
+
+**§M7's instruction to resolve §I4 confound 2 inside this pass is discharged without an edit,
+because #93 already discharged it.** Confound 2's claim was that `agent-doctor-instructions.md:48`
+states a categorical trace-plus-one rule the contract does not offer an exemption to.
+`PaFixReport.schemaText()` now reads *"EVERY root cause needs at least one `trace` evidence entry
+PLUS at least one of … UNLESS nothing ever ran … OR you mark the cause UNCONFIRMED"*, with
+`would_confirm` required in that case. `:48`'s sentence and `:50`'s escape now **match** the
+contract they were said to contradict; the confound closed when the contract moved (§L1), not when
+a document was rewritten. Recorded here with the `schemaText()` evidence rather than performed as a
+no-op edit. `:67` (§M5's parked *"where defects live"* line) stays in place, now for a second and
+better reason: §M5 already ruled it domain guidance derived from R-22 rather than an answer, and
+moving it would cost this pass its baseline for no correctness gain.
+
+### O2. The gate tally, against predictions filed before the pass ran
+
+| Harness | Rows | `sum(passes_gate)` | Rubric points | Scoring round |
+|---|---|---|---|---|
+| native (Agent Doctor) | 10 valid, 0 void | **3 / 10 (30.0%)** | 42 / 60 | C — redacted packets, 10 independent scorers |
+| custom (`x_snc_troubleshoot`) | 10 valid, 0 void | **0 / 10 (0.0%)** | 0 / 60 | A — leaked packets, 10 independent scorers |
+
+The two scorecards are drawn from **different scoring rounds**, deliberately and with the argument
+stated in both files; §O5 and §O7 carry it. Gate arithmetic was recomputed independently by script from each row's
+four column values across all 28 rows in the pass (20 v4 + 8 re-scored standing) — **zero
+mismatches**, and §A's constraint holds in all 28.
+
+§9 of the design filed three predictions in advance, so the result could not be read post-hoc:
+
+- **Custom gate 0–2/10 → 0/10. HELD.**
+- **Custom depth 1–2 tool calls per run, §H8's acceptance test likely still unmet → HELD exactly**
+  (§O4).
+- **Native near 8/10 → 3/10. FAILED.** §9 also said, in advance, that *"a large native deviation
+  **is the finding**, not noise, and would retroactively qualify every cross-day comparison in
+  §G–§N."* That sentence is now load-bearing, and §O3 is what it obliges.
+
+**The shape of native's failure is specific.** Recomputed from the Round C table: native named the
+**correct root-cause layer on 8 of 10 rows** and the **correct fix target on those same 8** — every
+row except seed 02's two, which scored 0/6 on the "no failure observed" convergence (§O6). Of the
+seven native rows that failed the gate, **five scored 5/6 and lost only `fix_usable_unedited`**.
+Native is diagnosing well and emitting fixes blind scorers judge not applicable as written:
+descriptive values where a concrete one was needed (seed 04, both rows), an unfilled
+`<target group name>` placeholder (seed 03 run 2), a fix whose own text defers the mapping code to
+a message the report does not contain (seed 01 run 1), and a report that labels the *wrong* target
+"(preferred)" and the right one "alternative" (seed 01 run 2). The gate expression
+(`root_cause_layer_correct == 2 AND fix_usable_unedited == 1`) turns that one column into the whole
+result.
+
+### O3. Drift — the central deliverable, and the most delicate claim in this file
+
+This is the first drift measurement the project has. It is also the one number in §O most easily
+overstated, so the arithmetic is given before the reading.
+
+**The confound the measurement had to clear first.** The standing native rows (Task 12, 2026-08-02)
+were **operator-scored**; v4's rows are **blind-subagent-scored**. Comparing them directly would mix
+model drift with scorer drift. The remedy, at no instance cost, was to blind re-score the standing
+rows from their preserved artifacts using the same scorer population and the same rubric
+(§7.1 of the design). **Eight of the ten standing rows were re-scored.** The other two — seed 01
+run 1 and seed 05 run 2 — produced no full report to re-score: a probe read every message row in
+both conversations and confirmed neither execution plan carries a `communicator` task, where all
+eight recoverable plans have exactly one. **A structural absence, verified, not a retrieval
+failure.** Both were operator gate *passes*.
+
+**The like-for-like number, both sides blind, both sides on redacted packets:**
+
+| | Rows | Gate passes | Rate |
+|---|---|---|---|
+| standing native (2026-08-02 artifacts, blind re-score) | 8 | 4 | **50%** |
+| v4 native (2026-08-03, Round C) | 10 | 3 | **30%** |
+
+**The naive comparison overstates it.** Operator 8/10 → blind 3/10 is not the measurement: two of
+those eight operator passes are the rows that cannot be re-scored at all, and a third is the single
+row where operator and blind scorer disagree. Quoting 8/10 → 3/10 as a decline compares an
+operator's ten against blind agents' ten and charges the difference to the model.
+
+**The scorer population is not systematically harsher, and this was measured rather than assumed.**
+On the 8 re-scored rows, operator and blind scorer **agree on `passes_gate` in 7 of 8** — operator
+5/8, blind 4/8, one disagreement (seed 03 run 1, on `fix_usable_unedited`). Two of the eight also
+differ on `total /6` without changing the gate; a third (seed 03 run 1) is the gate-level split above. A scorer population reading ~1 gate row lower on 8
+cannot account for a 20-point gap on its own.
+
+**What is established, and what is only suggested.** A ~20-point difference at n=8 and n=10 is
+**not** an established regression, and this file will not call it one. Three claims are defensible,
+and all three should be carried together:
+
+1. **ESTABLISHED — native no longer reproduces its 8/10.** Whatever the cause, the standing number
+   is not currently reproducible on this instance and should not be quoted as native's live
+   capability.
+2. **ESTABLISHED — part of the apparent gap is not model behaviour.** Part is the scorer population
+   (~1 row across 8), and part is the two unrecoverable rows, both of which the operator had passed.
+3. **SUGGESTED, NOT ESTABLISHED — a residual behavioural decline of roughly 20 points.** Real in the
+   direction it points, measured with the scorer confound controlled, and at n=8 versus n=10 well
+   inside the range a handful of rows could produce. It qualifies every cross-day comparison in
+   §G–§N as §9 said it would; it does not overturn any of them.
+
+**The seed-05 invocation caveat, which bounds how clean "like-for-like" is.** Native's seed-05 prompt
+was **composed fresh** by the controller, not recovered: Task 4 recovered only the custom harness's
+JSON request body, no native-language form of it existed anywhere to recover, and the plan
+explicitly permitted the recovered body's equivalent natural-language form. Seed 05's two native
+rows may therefore not be invocation-identical to whatever Task 12 typed. Seeds 01–04's eight native
+rows are unaffected — same execution-plan sys_ids, identical targets. **The drift comparison is
+clean for 8 of 10 native rows and carries an invocation caveat on 2** — and those 2 are both v4 gate
+passes, so the caveat sits on the favourable side of the v4 number.
+
+**A controller correction, recorded rather than quietly absorbed.** Mid-pass, after a *single*
+re-scored row had come back, the controller told the operator the drop looked like scorer drift.
+The full eight reversed that. Generalising from one row is precisely the error this project keeps
+filing issues about — §N1's premise, §M3's inferred exposure grades, §H3's correction all have the
+same shape — and §O should not inherit it silently just because the final number came out right.
+
+### O4. Depth — unchanged, and now measured 45 runs deep
+
+Depth was measured from the audit trail (`PaAuditLogger.toolCalls(runId)`), independently of and
+before the reports, per §N7's asymmetry: the trail can **refute** a layer credit but never **confer**
+one.
+
+**Custom swept `1/7 (L1)` on all 20 rows of this pass — every seed, every repetition.** Native ranged
+**1/7 to 6/7**:
+
+| Seed | Native r1 | Native r2 | Custom r1 | Custom r2 |
+|---|---|---|---|---|
+| 01 | 4/7 (L1,L3,L4,L5) · 10 calls | 4/7 · 10 calls | 1/7 (L1) · 1 call | 1/7 · 1 call |
+| 02 | 1/7 (L1) · 5 calls | 1/7 · 5 calls | 1/7 · 1 call | 1/7 · 1 call |
+| 03 | 5/7 (L1,L3,L4,L5,L6) · 9 calls | 4/7 · 9 calls | 1/7 · 1 call | 1/7 · 1 call |
+| 04 | 5/7 (L1,L2,L3,L6,L7) · 9 calls | 2/7 (L1,L6) · 5 calls | 1/7 · 2 calls | 1/7 · 2 calls |
+| 05 | 6/7 (L1,L2,L3,L5,L6,L7) · 9 calls | 6/7 · 7 calls | 1/7 · 1 call | 1/7 · 1 call |
+
+`layers_available` measured 7/7 on every row, so no row was depth-limited by what was attached.
+Seed 05 native's 6/7 is the deepest sweep in the project record.
+
+**§H8's acceptance test — one custom run reaching `schema_lookup`, `query_table` or `genai_log` on
+the seed that needs it — is UNMET across all 20 rows.** With §L7's prior count that is **45 runs**
+with the test unmet, and **four of the seven tools have still never been invoked by the custom
+harness in any run**. The two seed-04 custom rows did make **2** tool calls — the first time above 1
+in this pass — but the second call was `read_artifact`, which pages an artifact already fetched and
+**is not a layer**. Depth did not move; paging did.
+
+### O5. What the pass learned about its own instrument
+
+The pass measured its measuring apparatus, and four of those measurements are worth more to the next
+revision of §A than the scores are.
+
+**Scorer packets leaked the answer and the expected grade — issue #100.** Four seed specs narrate
+*prior passes' scored outcomes*, including literal grades: seed-03 *"Both scored runs diagnosed layer
+5 … and scored 6/6"*; seed-04 *"scored the canonical 2/0/1/0 decoy row"*; seed-05 *"OBSERVED AT
+TASK 12 … the prediction held"*; seed-02 *"scored strictly against the expected layer-2 answer (2/6,
+fail, not void)"*. Specs are copied verbatim into scorer packets, so the first scoring round's
+agents could see what a comparable run had previously scored. **The existing blind rule does not
+cover this by design:** it binds what reaches the **harness**, and seed specs deliberately never
+reach the harness — they *are* the answer key. Scorer-packet blindness only became a concern when
+v3 moved scoring from the operator to blind agents, and the rule was never extended. Found at
+Task 12, when the re-score packet builder redacted the narratives and the mismatch surfaced.
+
+**SUGGESTED — The leak moved the result by about one row, on the `fix_usable_unedited` column.** Holding scorer topology fixed (10 independent agents, one per row) and changing only the packets: **Round A, leaked → 2/10; Round C, redacted → 3/10.** The effect is small (n=1) and lands on the same indeterminate column (§O5's rubric-reproducibility finding). The leak's *direction* does not match an anchoring mechanism: the leaked packets carried narratives describing native scoring *well*, so anchoring toward those narratives should have pushed scores **up**; instead, the leaked round scored **lower** (2/10 vs 3/10 redacted), opposite to anchoring. Custom scored `root_cause_layer_correct = 0` on all ten rows in the leaked round, which no anchoring toward a prior correct answer could produce. Validation that the redaction worked as intended rather than lobotomising the packet: one re-score independently reproduced seed 04's canonical `2/0/1/0` decoy row **from a redacted packet**, deriving it from the decoy scoring *rule* (kept) rather than the removed narrative. Guidance survived; the answer did not.
+
+**SUGGESTED — Scorer topology moves the result by about two rows, on the `fix_usable_unedited` column, and this had never been measured.** Holding packets fixed (all redacted) and changing only how scorers were dispatched: **one agent scoring ten rows sequentially → 5/10; ten independent agents on the identical packets → 3/10.** The effect is moderate (n=2) and lands on the same indeterminate column. A single agent scoring a set in sequence is materially **more generous** than independent agents on the same material. This is a property of the benchmark's own instrument, not of either harness, and it is larger than the leak effect. It is why native's rows are sourced from Round C: Round C is the only round matching the standing-row re-scores' topology (independent agents, redacted packets), and §O3's comparison would be meaningless against any other.
+
+**A controller error, recorded plainly, because it is the same error the pass exists to avoid.**
+Round B changed **two** variables at once — the redaction *and* the scorer topology — so its
+2/10 → 5/10 movement could not be attributed to either. That is the exact confound §H7-4, §I4 and
+§K5 keep naming, committed by the controller in the middle of the pass built to avoid it. Round C
+re-ran with independent scorers on the same redacted packets, isolating the variable. Round B is
+kept rather than discarded, because B-vs-C is what measures the topology effect above.
+
+**A rubric-reproducibility finding: the blind pass did not apply one consistent rule to itself.**
+Across the two seed-03 standing rows, both containing unfilled-placeholder fixes for `assignment_group` (run 1 with a literal placeholder, run 2 with prose), the *same style* was scored `fix_usable_unedited = 0` on run 1 and `= 1` on run 2 — by the same blind re-scoring pass, whose own notes flag run 2 as "the closest call in the row" and reason that `assignment_group` is a plain `StringColumn` rather than a reference field. **This same inconsistency recurs within v4's native round: rows 09 and 11, both seed 03, carry identical fix text `assignment_group = <target group name>`; row 09 is scored as "normal implementation discovery work" yielding `fix_usable_unedited = 1`, while row 11 is scored as "an unfilled placeholder" yielding 0.** Not resolved here by picking a side; filed as a finding for whoever next revises §A, since it is a gap in the rubric's text, not a lapse by a scorer.
+
+**The audit-derived layer rule refuted a NATIVE claim for the first time.** Both seed-01 native runs
+report layer 2 swept via `agent_config`; the recorded call requested `section:"tools"` and its
+`sections_returned` is `["tools"]`, so the instructions section never rendered and L2 cannot be
+credited. Credit corrected **5/7 → 4/7** on both rows, re-derived against the live instance by the
+reviewer. Until now §N7's refute-but-never-confer rule had only ever corrected the custom harness's
+self-reports; it is not a rule aimed at one harness. **No score movement** — `passes_gate` consumes
+`root_cause_layer_correct` and `fix_usable_unedited` only.
+
+### O6. Findings about the harnesses worth more than the scores
+
+**Seed 01 — custom missed a defect whose discriminating value it was holding.** Both custom runs
+made one `agent_trace` call, and that call returned `priority_stored: null` **verbatim** — the exact
+discrepancy both native runs used as their primary evidence. Both reports concluded "no errors were
+reported" with empty `root_causes`. **Evidence in hand and unused is a different failure from
+evidence not fetched**, and only the second is a depth problem. #91 fixed visibility (§K); this sits
+downstream of it, and it is the strongest single reason §O8 treats depth as the remaining lever
+rather than one of several.
+
+**Seed 02 — all four runs, both harnesses, both repetitions, independently concluded "no failure
+observed."** Seed 02's defect is an ambiguous instruction causing misrouting, so the execution
+completes successfully while doing the wrong thing, and every run treated a plausible-looking
+completion as evidence of health. Native's rows say so explicitly, marking L2 — the seed's expected
+layer — NOT SWEPT. **This is either a true negative about the fixture or a shared blind spot in a
+trace-first method, and the record deliberately does not rule.** No prior pass has recorded a
+cross-harness agreement of this shape; ruling on it from four runs would be the §O3 error again.
+
+**Seed 04 — #93's path-C fabrication cross-check fired live.** Custom run 1 was rejected by
+`PaFixReport.validate` for naming layer 6 as both already SWEPT *and* the layer `would_confirm`
+still needed — a self-contradiction, with no `genai_log` or `log_analysis` call behind the sweep
+claim. Its sibling run 2 marked layer 6 `UNAVAILABLE` honestly and validated. §L1's pricing rule
+working as specified, **caught live on a fresh run rather than by construction on a chosen
+specimen** — and, as §L5 predicted, paid by the inflated claim and free to the honest one. Neither
+run diagnosed the seed; the check governs honesty, not correctness.
+
+**Seed 05 — both custom runs failed validation on an absence claim, and the rejection appears
+correct.** Seed 05 is *the* absence seed (nothing ever ran) and #78 was specifically the fix for
+"the evidence rule structurally rejects a correct absence diagnosis," so the adjacency demanded a
+reading rather than an assumption. Read against the code and the recorded rejection text: #78's fix
+is path **B** of `PaFixReport._checkEvidenceRule`, which fires exactly when the report declares
+layer 1 `UNAVAILABLE` — which both runs did — and which **relaxes the privileged status of the
+trace label without waiving corroboration**, requiring two *distinct* non-trace sources instead. The
+recorded rejection is B's own message: *"cite at least TWO DISTINCT sources … found 0."* Both runs
+made a single `agent_trace` call and never called `agent_config`, which `PaToolRegistry` itself
+documents as covering layers 2/3/7 including trigger wiring, and which was available (7/7). **This
+is not a regression of #78; #78's path was entered and its condition genuinely unmet.** It is the
+depth failure surfacing at the validator instead of at the rubric. One structural note worth
+carrying: because path B returns, a run in the absence case **cannot fall through to path C**, so
+#93's UNCONFIRMED exemption is unreachable for any report that declares layer 1 UNAVAILABLE — both drafts carried
+`would_confirm` and neither could be judged by C. Whether that ordering is right is a design
+question, filed here rather than answered.
+
+**The harness never persists the inbound request payload — issue #99.** Task 4 needed seed 05's
+original request body and could not read it from any run record: `prompt_digest` attaches only to
+`actor:'tool'` transcript entries, so the request that *defines what a run was asked to diagnose* is
+absent **by construction** for every seed, both harnesses. The body was eventually recovered from a
+copy in another plan's gitignored evidence file and corroborated twice, but that is provenance, not
+a system of record. A diagnostic tool that cannot say afterwards what it was asked to diagnose
+cannot fully audit its own runs — and this is exactly the class of defect §N1 caught one level up.
+
+### O7. What this does not establish
+
+- **The stop rule is unchanged, so custom's 0/10 is a confirmed prediction, not new information
+  about depth.** §J5 wrote that *"running ten more rows against an unchanged termination rule would
+  buy another 0/10 and no new information"*; #88 was built to change it and was refuted, so the
+  rule is in fact still unchanged. What this pass bought is a clean baseline for the depth work and
+  a score check on #91/#93 — not evidence that depth is or is not fixable.
+- **The drift result is suggestive at small n.** n=8 against n=10, one instance, one day per point.
+  §O3's three claims are stated at the strength each supports and no further.
+- **Model drift is now measured at exactly two points** — 2026-08-02 and 2026-08-03. Two points
+  bound nothing about the shape or the rate of drift; they establish only that the two differ.
+- **The seed-05 invocation caveat stands** — 8 of 10 native rows are invocation-clean, 2 are not,
+  and both of the caveated rows are v4 gate passes.
+- **The two v4 scorecards are sourced from different scoring rounds** — native Round C, custom
+  Round A. The argument for accepting that asymmetry is stated in both files and is narrow: every
+  custom row scored `root_cause_layer_correct = 0`, and a leaked packet could only ever *inflate* a
+  score, never manufacture a false zero. The argument is sound for a floor of zero and would not be
+  sound for any other number. **Custom's 0/10 was never re-scored on clean packets**, and a future
+  custom pass should not inherit Round A's packets.
+- **§K5's `excerptPriority` propagation to native is still pending, deliberately.**
+  `PaScriptToolAdapter` still passes no priority. This pass was the reason to hold it; the reason
+  expires with the pass.
+- **No score in §G–§N moves.** Every row filed there stands as filed. What §O3 changes is how much
+  weight a cross-day comparison between them can carry — §9 predicted exactly that, and this is the
+  prediction being honoured rather than a retroactive rewrite.
+- **The 3/10 and the 0/10 are not comparable to each other as capability numbers without §O4.** A
+  harness that sweeps 1/7 on every row and one that sweeps up to 6/7 are failing different tests;
+  the gate does not distinguish them and §O4 does.
+- **One of native's three gate passes (row 09, seed 03 run 1) turns on the unresolved rubric call.** §O5's rubric-reproducibility finding flags the `assignment_group` placeholder inconsistency within the v4 native round itself: identical text scored differently in rows 09 (pass) and 11 (fail) by the same blind pass. Row 09 is one of the three native rows that passed the gate, so the 3/10 result carries ±1 row of indeterminacy on this column.
+
+### O8. The queue
+
+**Depth is the milestone blocker and is now the only untested lever.** §K4 remedy 2 / §L7 — the
+`PaAgentLoop` stop/continue condition, making the model take the second step — is untouched by
+everything since v3. Three things this pass changes about how that work should be specified:
+
+1. **Visibility is not the constraint, and neither is evidence access.** Seed 01 (§O6) is the clean
+   demonstration: the discriminating value was in the one tool output the model read, and the model
+   did not use it. Any depth change premised on *giving the model more* has to explain seed 01
+   first.
+2. **The acceptance test is unchanged and now 45 runs unmet** — one custom run reaching
+   `schema_lookup`, `query_table` or `genai_log` on the seed that needs it. Four of seven tools have
+   never been invoked.
+3. **The baseline it will be measured against exists now**, with audit-derived per-row tool counts,
+   layer sweeps and LLM-call counts for 20 rows — which is what §10 of the design said would turn
+   remedy 2 from a direction into a specification.
+
+Also open, and each filed rather than folded into the depth work:
+
+- **#100** — extend the blind rule to scorer packets. The rule as written binds the harness only,
+  and the leak cost ~1 row on a 10-row pass (§O5). Any future pass scoring blind agents inherits
+  this until it is fixed.
+- **#99** — persist the inbound request payload. A run's own diagnostic subject is currently
+  unrecoverable after the fact, for every seed and both harnesses.
+- **#81** — the repair turn cannot gather evidence. §L6 narrowed this: path-C rejections are
+  repairable without tools, so the dominant rejection reason has changed shape and #81's four
+  options should be re-read against that. Seed 05's path-B rejections (§O6) are *not* tool-free
+  repairable, which is #81's live instance in this pass.
+- **#73 / #74 / #75** — the Phase 1b REST-surface items (vacuous stuck-run check, hardening bundle,
+  unaudited refusals), unchanged by this pass.
+
+**Unchanged: native remains the recommended path on this instance, and the Phase 1b milestone is
+not met.** The recommendation is now made on a smaller margin than §H8's — 3/10 against 0/10, both
+measured the same day on the same version, rather than 8/10 against 1/10 measured a day apart — and
+§O3 is the reason to read that margin as a qualification of the old number rather than a
+deterioration of the gap.
+
+---
+
+## Fix Round 1 (2026-08-03, Code Review Corrections)
+
+**Issues addressed:** I1, I2, I3, M1, M2, M3 from §O code review.
+
+**Changes:**
+
+- **I1:** Extended §O5's rubric-reproducibility finding to note the same inconsistency recurs in v4's native round (rows 09 and 11, seed 03, identical text scored differently). Added §O7 bullet stating one of native's three gate passes (row 09) turns on this unresolved rubric call.
+
+- **I2:** Relabeled leak and topology effects in §O5 as SUGGESTED rather than established. Added effect sizes (n=1 for leak, n=2 for topology) and noted both land on the indeterminate `fix_usable_unedited` column. Clarified leak direction (lower score when packet leaked) contradicts anchoring mechanism (would expect higher score if anchoring toward described good outcomes).
+
+- **I3:** Corrected factual error in §O3: "Three of the eight" → "Two of the eight"; clarified the third case (seed 03 run 1) is the gate-level disagreement already noted above.
+
+- **M1:** Changed provenance label from "recomputed by hand" to "recomputed independently by script" (line 1565).
+
+- **M2:** Tightened §O6 scope on #93's UNCONFIRMED exemption: from "unreachable on the absence seed" to "unreachable for any report that declares layer 1 UNAVAILABLE" (line 1771).
+
+- **M3:** Adjusted §O5 placeholder description to not imply both standing rows carried literal placeholders: "run 1 with a literal placeholder, run 2 with prose" (line 1707).
+
+All changes are append-only in DECISION.md. No other files touched. No verified numbers moved.
+

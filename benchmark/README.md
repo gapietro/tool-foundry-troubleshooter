@@ -319,6 +319,45 @@ scope decision, not an oversight:
   fixture-app reinstall touched only seed 2, but a full app reinstall is a broader action than a
   scoped one, and seed 5's gate is a manual post-install PATCH that Fluent does not re-apply.
 
+> **⚠ Superseded (2026-08-03, Task 14, #98) — the asymmetry above was not what shipped.** The v4
+> scored pass overrode it and re-ran all 10 native rows, not just seed 2's 2. The rationale above
+> is left in place because it was the correct call *at the time it was written* and the reasoning
+> that overturned it needs the original to argue against. See "The addendum, amended" immediately
+> below for why, and for what re-running the other eight rows actually cost and yielded.
+
+### The addendum, amended — native re-runs all 10 rows (2026-08-03, Task 14, #98)
+
+Two grounds, both against the addendum above, not new information that arrived after it:
+
+1. **The addendum does not deliver what was asked of it.** The Phase 1b re-run exists to
+   re-measure native *the same day* as custom, closing the cross-day confound between Task 12's
+   2026-08-02 scores and the rest of this pass's 2026-08-03 scores. Eight native rows still dated
+   2026-08-02, scored against ten custom rows dated 2026-08-03, closes that confound for **one seed
+   of five**. An addendum that leaves four-fifths of the comparison cross-day is not a scoped
+   exception to the re-run's purpose — it is most of the purpose left undone.
+2. **Its own stated reason for declining is the measurement this project now needs.** The bullet
+   above declines to re-run seeds 1/3/4/5 because doing so "measures model response drift on
+   identical inputs, not the harness" — true, and at the time this was written, drift was assumed
+   away, not evaluated and set aside. It has since been named directly: unmeasured, unbounded model
+   response drift across all three prior passes. What the addendum calls a wasted measurement is
+   the first opportunity this project has had to take it. Declining to re-run the four unchanged
+   seeds would have preserved the addendum's asymmetry at the cost of leaving that confound
+   unmeasured for another pass.
+
+**What re-running the standing eight actually cost.** The eight standing native rows could not
+simply be diffed against their v4 counterparts — the originals were operator-scored and the new
+rows are scored by blind agents, so a direct comparison would mix behavioral drift with scorer
+drift and answer neither question cleanly. Recovering a comparable baseline required the eight
+standing rows to be **blind re-scored** on the same redacted-packet method as the new rows, and
+that recovery was only partial: **2 of the 10 standing native rows never produced a full Fix Report
+in the first place** (seed 01 run 1, seed 05 run 2) — a structural absence found by reading every
+`sn_aia_message` row for both conversations end to end, not a retrieval failure, so only **8 of 10**
+could be blind re-scored at all. Of those eight, the operator's original `passes_gate` and the
+blind re-scorer's `passes_gate` **agreed on 7**. See `scorecard-agent-doctor.md`'s "Blind re-score —
+Task 12 standing rows" section for the row-by-row detail, and `DECISION.md` §O for the pass's full
+verdict, including what the drift and agreement numbers are read to mean — both will keep changing
+shape as later passes add data points, so they are not restated here.
+
 Each run — native and custom alike — is a **fresh conversation / fresh `POST /analyze`**, blind
 (no seed knowledge in either harness's instructions or tools), scored independently. Layer sweeps
 are derived from the audit trail per §E1–E3 for both harnesses; for the custom harness, `run_id` in

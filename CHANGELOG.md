@@ -17,6 +17,73 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0302 — 2026-08-03
+
+### Added
+- **The v4 scored pass — 20 runs, both harnesses, one day, one deployed version; the project's
+  first drift measurement (#98).** Five seeds × 2 runs × 2 harnesses, all at app version
+  `2026.08.0301` on gpinst01, deploy-verified byte-identical to `main`@`8c909cd` before any evidence
+  was recorded. Gate tally: **native (Agent Doctor) 3/10 (42/60 rubric points)**, **custom
+  (`x_snc_troubleshoot`) 0/10 (0/60)** — both scored by 10 independent blind agents on redacted
+  packets. Native named the correct root-cause layer on 8 of 10 rows; of the 7 that failed the gate,
+  5 lost only `fix_usable_unedited` on fixes a human would likely accept as written. Full rows and
+  notes: `benchmark/scorecard-agent-doctor.md` and `benchmark/scorecard-custom-harness.md` (v4
+  sections); raw artifacts: `benchmark/raw-evidence-v4.md`; design and pre-filed predictions:
+  `docs/superpowers/specs/2026-08-03-v4-scored-pass-design.md`; full verdict:
+  `benchmark/DECISION.md` §O.
+
+  **Drift, measured with the scorer-vs-model confound controlled — suggestive, not an established
+  regression.** The eight of ten standing 2026-08-02 native rows that could still produce a full Fix
+  Report (two have no report to re-score — a structural absence, verified) were blind re-scored on
+  the same redacted-packet method as v4, to avoid mixing operator-vs-blind scorer drift with
+  model drift: **standing rows, blind re-scored: 4/8 (50%)** vs. **v4 native, same method: 3/10
+  (30%)**. Operator and blind scorer agreed on `passes_gate` for 7 of the 8 re-scored rows, so the
+  scorer population is not systematically harsher. Three claims, each stated at the strength it
+  supports: (1) **established** — native no longer reproduces its standing 8/10 on this instance;
+  (2) **established** — part of the apparent gap is not model behavior (scorer population, ~1 row of
+  8; two unrecoverable rows the operator had passed); (3) **suggested, not established** — a residual
+  behavioral decline of roughly 20 points, real in direction, at n=8 vs. n=10, well inside the range
+  a handful of rows could produce. It qualifies every cross-day comparison in `DECISION.md` §G–§N as
+  a caveat; it overturns none of them, and model drift is now measured at exactly two points, which
+  bounds nothing about shape or rate.
+
+  **Depth is unchanged and now measured 45 runs deep.** Custom swept `1/7 (L1)` on all 20 rows of
+  this pass — every seed, every repetition; native ranged `1/7` to `6/7`. §H8's acceptance test (one
+  custom run reaching `schema_lookup`, `query_table`, or `genai_log` on the seed that needs it) is
+  still UNMET, now across 45 runs, with four of seven tools never invoked by the custom harness in
+  any run.
+
+  **Instrument findings, worth more to the next revision of the benchmark's own scoring method than
+  the scores themselves.** Scorer packets leaked prior passes' scored outcomes, including literal
+  grades, into four seed specs — filed as **#100**; holding scorer topology fixed, redacting the leak
+  moved the result by about one row (suggestive, n=1) on the same indeterminate
+  `fix_usable_unedited` column, in a direction that argues against an anchoring explanation. Holding
+  packets fixed and changing only scorer topology (one agent scoring ten rows sequentially vs. ten
+  independent agents on identical packets) moved the result by about two rows (suggestive, n=2) on
+  the same column — a property of the scoring instrument, not of either harness, larger than the
+  leak effect. A rubric-reproducibility gap was also found: identical unfilled-placeholder fix text
+  was scored `fix_usable_unedited = 1` on one row and `= 0` on another by the same blind pass, both
+  within the standing re-score and within v4's native round.
+
+  **No product code changed in this pass.** `src/server/` and
+  `docs/agent/agent-doctor-instructions.md` were held byte-identical throughout, by design: native's
+  ten rows are only a valid drift control if native's inputs are identical to what produced the
+  standing baseline. Every available code edit was deliberately deferred so the native delta could
+  not become drift-plus-edit, unattributable.
+
+  Also filed: **#99** — the harness never persists the inbound request payload, so a run's own
+  diagnostic subject is unrecoverable after the fact for every seed and both harnesses.
+
+### Changed
+- **`benchmark/README.md`'s Phase 1b native re-run addendum superseded — all 10 native rows re-run,
+  not just seed 2's 2 (Task 14, #98).** The prior addendum re-ran only seed 2, reasoning that
+  re-running the other four seeds would measure model drift rather than the harness. That left
+  four-fifths of the native/custom comparison cross-day, and the drift it declined to measure is
+  exactly what this pass needed to name directly. `benchmark/README.md` keeps the original addendum
+  in place with a superseded banner — it was correct when written — followed by "The addendum,
+  amended," recording both grounds for the reversal and what re-running the standing eight actually
+  cost (blind re-scoring, two unrecoverable rows, the agreement check above).
+
 ## 2026.08.0301 — 2026-08-03
 
 ### Fixed
