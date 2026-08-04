@@ -213,13 +213,18 @@ Run against the five specs as they stand today, with the mechanics above:
 
 | Spec | Hits |
 |---|---|
-| seed 01 | 0 |
-| seed 02 | `scored runs`, `2/6,`, `DECISION.md` |
-| seed 03 | `scored runs`, `scored 6/6.` |
-| seed 04 | `scored runs`, `run 1 found`, `run 2 named`, `scored the canonical 2/0/1/0`, `DECISION.md` |
-| seed 05 | `scored runs`, `earning full — not partial — fix-target credit`, `scored rows` |
+| Spec | Leak locations | Pattern-hits |
+|---|---|---|
+| seed 01 | 0 | 0 |
+| seed 02 | `scored runs`, `2/6`, `DECISION.md` | 3 |
+| seed 03 | `scored runs`, `scored 6/6` | 3 — `scored 6/6` trips **two** patterns |
+| seed 04 | `scored runs`, `run 1 found`, `run 2 named`, `scored the canonical 2/0/1/0`, `DECISION.md` | 5 |
+| seed 05 | `scored runs`, `earning full — not partial — fix-target credit`, `scored rows` | 3 |
 
-**Eleven hits, every one a genuine leak, zero false positives.** The guidance that must survive —
+**13 distinct leak locations, 14 pattern-hits, zero false positives.** The two counts differ because
+each pattern is scanned independently: seed 03's `scored 6/6` is one sentence that trips both
+`scored-a-number` (on `scored 6`) and `rubric-fraction` (on `6/6`). The guard reports pattern-hits,
+so **14 is the number a red run prints**. The guidance that must survive —
 seed 04's *"must not be scored as a hit"* and *"would have been scored a **miss**"* — and seed 01's
 `priority_stored` ground truth are all untouched by the set. Seed 01 scoring zero is the expected
 result, not a gap: its defect is the stale callout in §5, which is not a scored-outcome leak.
@@ -255,16 +260,19 @@ pass's artifact and is left frozen.
 
 ## Expected outcome, stated in advance
 
-- The guard goes **red against today's five specs** before any rewrite — **11 hits across seeds
-  02–05, 0 on seed 01**, per the measured table above — and the failing output is captured in the
-  PR. A guard that was never seen failing is not known to work. A first run producing anything other
-  than those 11 means the implementation drifted from this design, and is a reason to stop rather
-  than to adjust the expectation.
+- The guard goes **red against today's five specs** before any rewrite — **14 pattern-hits across
+  seeds 02–05, 0 on seed 01**, per the measured table above — and the failing output is captured in
+  the PR. A guard that was never seen failing is not known to work. A first run producing anything
+  other than those 14 means the implementation drifted from this design, and is a reason to stop
+  rather than to adjust the expectation.
 
-  *(Filed at 9 before planning; raised to 11 when the `DECISION.md` pattern was added, with the
-  reason recorded in §4. Adjusting a filed expectation is exactly what the sentence above tells an
-  implementer not to do, so it is done here in the design, in advance, rather than at the moment the
-  guard disagrees with it.)*
+  *(Number history, kept because the tripwire above is only worth anything if its own corrections
+  are visible. Filed at "9" and then "11" in this paragraph while the measured tables beside it
+  listed 11 and then 13 entries — the prose was simply miscounted at authoring, twice. The
+  implementer that hit the tripwire measured 14 and stopped, which is the specified behaviour, and
+  an independent re-count confirmed it: 13 leak locations, one of which trips two patterns. What
+  never moved is the **inventory** — the same 13 pieces of text were identified from the first
+  measurement onward. Only the arithmetic over them was wrong.)*
 - After the rewrites: green, with the two real-file negative controls proving the guidance survived.
 - **No score anywhere in the repo moves.** No row is re-scored, no packet is re-issued.
 

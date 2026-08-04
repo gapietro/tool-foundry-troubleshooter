@@ -312,17 +312,21 @@ Run: `npx jest test/scorerPacketBlindRule.test.js 2>&1 | tee /tmp/scorer-guard-r
 
 Expected: **FAIL**. Four of the five per-spec tests fail (seed 01 passes), plus the two real-file negative controls fail for seeds 01 and 04 — seed 04 because the file still has hits, seed 01 because `scanProse` finds nothing but the *other* specs' failures do not affect it (seed 01's control should PASS at this point; if it fails, the normalizer is wrong, not the specs).
 
-The design filed the red state in advance. Confirm the reported hits are exactly these **11**:
+The design filed the red state in advance. Confirm the reported hits are exactly these **14**:
 
-| Spec | Hits |
-|---|---|
-| seed 01 | none |
-| seed 02 | `scored runs`, `2/6`, `DECISION.md` |
-| seed 03 | `scored runs`, `scored 6/6` |
-| seed 04 | `scored runs`, `run 1 found`, `run 2 named`, `scored the canonical 2/0/1/0`, `DECISION.md` |
-| seed 05 | `scored runs`, `earning full - not partial - fix-target credit`, `scored rows` |
+| Spec | Pattern-hits | Reported as |
+|---|---|---|
+| seed 01 | 0 | — |
+| seed 02 | 3 | `scored runs` (:41), `2/6` (:42), `DECISION.md` (:43) |
+| seed 03 | 3 | `scored runs` (:16), `scored 6` (:18), `6/6` (:18) |
+| seed 04 | 5 | `scored runs` (:20), `run 1 found` (:20), `run 2 named` (:22), `scored the canonical 2` (:23), `DECISION.md` (:24) |
+| seed 05 | 3 | `scored runs` (:20), `earning full — not partial — fix-target credit` (:22), `scored rows` (:79) |
 
-**Anything other than these 11 means the implementation drifted from the design. Stop and report it rather than adjusting the expectation.**
+**13 distinct leak locations, 14 pattern-hits.** The counts differ because every pattern is scanned independently: seed 03's `scored 6/6` is one sentence tripping both `scored-a-number` and `rubric-fraction`. The guard prints pattern-hits, so 14 is what a red run reports.
+
+**Anything other than these 14 means the implementation drifted from the design. Stop and report it rather than adjusting the expectation.**
+
+*(This number was 9, then 11, in earlier drafts — miscounted prose beside correct tables, corrected after an implementer hit the tripwire and stopped, exactly as instructed. The set of leaking text never changed.)*
 
 - [ ] **Step 4: Commit the red guard**
 
