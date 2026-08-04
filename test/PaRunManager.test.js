@@ -207,7 +207,7 @@ describe('createRun', () => {
     })
 
     test('a run_id is still returned when forcing status:queued fails, with a note rather than a silent claim', () => {
-        // Review minor: createRun used to ignore _forceStatus's result
+        // Review minor: createRun used to ignore the creation write's result
         // entirely — a failed status write was indistinguishable from a
         // successful one from the caller's side, which is the same
         // "status contradicts what actually happened" shape R-19b forbids
@@ -228,6 +228,129 @@ describe('createRun', () => {
         expect(res.run_id).toBe('run1')
         expect(res.number).toBe('TR0001042')
         expect(res.note).toEqual(expect.stringContaining('could not be forced to queued'))
+    })
+})
+
+// ===========================================================================
+// createRun — request persistence (#99)
+// ===========================================================================
+
+describe('createRun — request persistence', () => {
+    function createWith(request) {
+        const anchor = fakeAnchor({ run_id: 'run1', number: 'TR0001042' })
+        const { mgr, world } = load({
+            runAnchor: anchor,
+            world: { rows: { [RUN_TABLE]: [seedRun({ status: 'running' })] } },
+        })
+        const res = mgr.createRun({ request: request })
+        return { res: res, row: world.tables[RUN_TABLE][0], mgr: mgr }
+    }
+
+    test('an object body is stored as JSON, verbatim, and not marked truncated', () => {
+        const body = { execution: 'plan1', mode: 'diagnose' }
+        const { row } = createWith(body)
+
+        expect(JSON.parse(row.request)).toEqual(body)
+        // A ServiceNow boolean column reads back as the string 'true'/'false',
+        // not a JS boolean — this asserts against the platform's real contract
+        // rather than the value that was passed in. Task 4 adds a `_toBool`
+        // helper on the read side for exactly this reason.
+        expect(row.request_truncated).toBe('false')
+    })
+
+    test('a string body is stored as-is, without a second round of JSON quoting', () => {
+        const { row } = createWith('why did the agent stop')
+
+        expect(row.request).toBe('why did the agent stop')
+        expect(row.request_truncated).toBe('false')
+    })
+
+    test('the request lands in the SAME update that forces status:queued — one write, not two', () => {
+        const { row } = createWith({ execution: 'plan1' })
+
+        expect(row.status).toBe('queued')
+        expect(row.request).toBeTruthy()
+    })
+
+    test('an oversize body is clipped at REQUEST_CHARS AND flagged — never silently', () => {
+        const { row, mgr } = createWith({ logs: new Array(80000).join('x') })
+
+        expect(row.request.length).toBe(mgr.REQUEST_CHARS)
+        expect(row.request_truncated).toBe('true')
+    })
+
+    test('a body of exactly REQUEST_CHARS is not marked truncated (boundary)', () => {
+        const anchor = fakeAnchor({ run_id: 'run1', number: 'TR0001042' })
+        const { mgr, world } = load({
+            runAnchor: anchor,
+            world: { rows: { [RUN_TABLE]: [seedRun({ status: 'running' })] } },
+        })
+        const exact = new Array(mgr.REQUEST_CHARS + 1).join('y')
+
+        mgr.createRun({ request: exact })
+
+        expect(world.tables[RUN_TABLE][0].request.length).toBe(mgr.REQUEST_CHARS)
+        expect(world.tables[RUN_TABLE][0].request_truncated).toBe('false')
+    })
+
+    test('a body that will not serialize is recorded ABSENT, not partial — the two states stay distinct', () => {
+        const circular = { execution: 'plan1' }
+        circular.self = circular
+
+        const { row } = createWith(circular)
+
+        // Unwritten-in-the-stub and empty-on-the-platform are the same state:
+        // a fresh ServiceNow column reads as '' (string) / false (boolean,
+        // read back as 'false') whether or not anything ever wrote to it, so
+        // `_requestFields` treats an unserializable body the same as no
+        // request at all — neither column gets written here. "the two states
+        // stay distinct" (this test's name) refers to absent vs truncated,
+        // not absent vs untouched.
+        expect(row.request).toBeFalsy()
+        expect(row.request_truncated).toBeFalsy()
+    })
+
+    test('no request param leaves both fields untouched (R-9)', () => {
+        const anchor = fakeAnchor({ run_id: 'run1', number: 'TR0001042' })
+        const { mgr, world } = load({
+            runAnchor: anchor,
+            world: { rows: { [RUN_TABLE]: [seedRun({ status: 'running' })] } },
+        })
+
+        const res = mgr.createRun({ executionRef: 'plan1' })
+
+        expect(res).toEqual({ run_id: 'run1', number: 'TR0001042' })
+        expect(world.tables[RUN_TABLE][0].request).toBeUndefined()
+    })
+
+    test('the anchor call is unchanged — request is never forwarded as anchor identity', () => {
+        const anchor = fakeAnchor({ run_id: 'run1', number: '' })
+        const { mgr } = load({
+            runAnchor: anchor,
+            world: { rows: { [RUN_TABLE]: [seedRun()] } },
+        })
+
+        mgr.createRun({ executionRef: 'plan1', request: { execution: 'plan1' } })
+
+        expect(anchor.calls[0].request).toBeUndefined()
+        expect(anchor.calls[0].executionRef).toBe('plan1')
+    })
+
+    test('a failed write says the request was lost too, not only the status', () => {
+        const anchor = fakeAnchor({ run_id: 'run1', number: 'TR0001042' })
+        const { mgr } = load({
+            runAnchor: anchor,
+            world: {
+                rows: { [RUN_TABLE]: [seedRun({ status: 'running' })] },
+                failUpdate: true,
+            },
+        })
+
+        const res = mgr.createRun({ request: { execution: 'plan1' } })
+
+        expect(res.run_id).toBe('run1')
+        expect(res.note).toEqual(expect.stringContaining('could not be forced to queued'))
+        expect(res.note).toEqual(expect.stringContaining('request'))
     })
 })
 

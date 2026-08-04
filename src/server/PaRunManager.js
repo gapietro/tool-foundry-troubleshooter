@@ -163,6 +163,16 @@ PaRunManager.prototype = {
      *  docs/superpowers/specs/2026-08-02-observation-channel-design.md §4.4. */
     PROMPT_WINDOW: 3,
 
+    /** Ceiling for the persisted inbound request (issue #99). Derived from
+     *  the `request` column's own maxLength of 65536 with headroom, the same
+     *  way PaRestHandlers.STUCK_RUN_BUDGET_MS is derived from PaAgentLoop's
+     *  BUDGET_MS rather than independently guessed. The column holds the JSON
+     *  text directly, so no escaping expansion sits between this constant and
+     *  the column limit; the margin is slack against a future column resize
+     *  being made without revisiting this number. Past it, the stored text is
+     *  a PREFIX and `request_truncated` says so — see _requestFields. */
+    REQUEST_CHARS: 60000,
+
     /** LLD §D5's default. Overridable per call. */
     DEFAULT_MAX_AGE_HOURS: 24,
 
@@ -207,13 +217,18 @@ PaRunManager.prototype = {
     // =======================================================================
 
     /**
-     * @param {Object} [params] {user, agent, executionRef, mode} — all
+     * @param {Object} [params] {user, agent, executionRef, mode, request} —
+     *        all
      *        optional (R-9). `user` is accepted for interface symmetry with
      *        the rest of this app's identity handling, but is NEVER forwarded
      *        as a write — `PaRunAnchor` stamps `user` from `gs.getUserID()`
      *        only, the same server-authoritative rule LLD §4.6 point 5 states
      *        for the native path, and a caller-supplied value here would be
      *        silently discarded by the anchor anyway.
+     *        `request` is the inbound POST /analyze body (issue #99),
+     *        stored verbatim on the row. It is NEVER forwarded to the
+     *        anchor — the anchor keys identity, and the request is subject
+     *        matter, not identity.
      * @returns {Object} {run_id, number} | {run_id:null, degraded:<reason>}
      *          — a run whose status could not be forced to `queued` still
      *          returns its `run_id` (the row is real and usable) but carries
@@ -241,11 +256,27 @@ PaRunManager.prototype = {
         }
 
         var out = { run_id: created.run_id, number: created.number || '' }
-        if (!this._forceStatus(created.run_id, 'queued')) {
+
+        // ONE update, not two: the request columns ride along with the
+        // status force that already happens here (issue #99).
+        var fields = { status: 'queued' }
+        var requestFields = this._requestFields(p.request)
+        if (requestFields) {
+            fields.request = requestFields.request
+            fields.request_truncated = requestFields.request_truncated
+        }
+
+        if (!this._forceFields(created.run_id, fields)) {
             out.note =
                 'The run record was created but its status could not be forced to queued — ' +
                 'it may still read as running until the next successful write. The run_id is real ' +
                 'and usable regardless.'
+            // R-19b: the same write carried the request, so a caller told
+            // only about the status would still be told something the row
+            // contradicts.
+            if (requestFields) {
+                out.note += ' The inbound request was not persisted either, for the same reason.'
+            }
         }
 
         return out
@@ -829,12 +860,14 @@ PaRunManager.prototype = {
         }
     },
 
-    /** Forces a fresh row's status right after creation — see the file
-     *  header's note on why this is a direct write, not an anchor param. */
-    _forceStatus: function (runId, status) {
+    /** Forces fields onto a fresh row right after creation — see the file
+     *  header's note on why this is a direct write, not an anchor param.
+     *  Carries the request columns alongside `status` (issue #99) so
+     *  creation stays ONE update, not two. */
+    _forceFields: function (runId, fields) {
         var gr = this._getRun(runId)
         if (!gr) return false
-        return this._writeUpdate(gr, { status: status })
+        return this._writeUpdate(gr, fields)
     },
 
     // =======================================================================
@@ -923,6 +956,49 @@ PaRunManager.prototype = {
             kept += 1
             if (kept > this.PROMPT_WINDOW) delete entry.prompt_digest
         }
+    },
+
+    /**
+     * The inbound request as text, for the `request` column.
+     *
+     * DELIBERATELY NOT `_stringifyForDigest`: that helper falls back to
+     * `String(value)` on a circular structure, which would store
+     * `[object Object]` and read as a real (if useless) request. Here an
+     * unserializable body must be ABSENT, so the empty/truncated states
+     * stay distinguishable from the row alone (issue #99).
+     *
+     * @param {*} request
+     * @returns {String} '' when absent, unserializable, or not an
+     *          object/string.
+     */
+    _serializeRequest: function (request) {
+        if (request === null || request === undefined) return ''
+        if (typeof request === 'string') return request
+        if (typeof request !== 'object') return ''
+        try {
+            var json = JSON.stringify(request)
+            return typeof json === 'string' ? json : ''
+        } catch (e) {
+            // R-1: `e` untouched. A circular body lands here and is
+            // recorded as absent rather than as a String() coercion.
+            return ''
+        }
+    },
+
+    /**
+     * @param {*} request
+     * @returns {Object|null} {request, request_truncated} to merge into the
+     *          creation write, or null when there is nothing to store — in
+     *          which case neither column is written at all, so a native run
+     *          keeps whatever the anchor left there.
+     */
+    _requestFields: function (request) {
+        var text = this._serializeRequest(request)
+        if (!text) return null
+        if (text.length <= this.REQUEST_CHARS) {
+            return { request: text, request_truncated: false }
+        }
+        return { request: text.substring(0, this.REQUEST_CHARS), request_truncated: true }
     },
 
     _stringifyForDigest: function (value) {
