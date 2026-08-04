@@ -432,6 +432,116 @@ describe('getRun fix_report_rejected', () => {
 })
 
 // ===========================================================================
+// getRun — the persisted request (#99)
+// ===========================================================================
+
+describe('getRun request', () => {
+    function runRow(overrides) {
+        return Object.assign(
+            {
+                run_id: 'run1',
+                number: 'TR0001042',
+                user: 'u1',
+                status: 'complete',
+                mode: 'diagnose',
+                transcript: [],
+                context_summary: '',
+                fix_report: '{}',
+                error: '',
+                request: '{"execution":"plan1","timeframe":"1 hour"}',
+                request_truncated: false,
+            },
+            overrides
+        )
+    }
+
+    function getRunFor(overrides) {
+        const { handlers } = load({ readRun: fakeReadRun(runRow(overrides)) })
+        return handlers.getRun({ pathParams: { run_id: 'run1' }, userId: 'u1' })
+    }
+
+    test('a whole request comes back parsed, so a consumer reads the run subject directly', () => {
+        const res = getRunFor({})
+
+        expect(res.status).toBe(200)
+        expect(res.body.request).toEqual({ execution: 'plan1', timeframe: '1 hour' })
+        expect(res.body.request_truncated).toBe(false)
+    })
+
+    test('a truncated request comes back as the RAW prefix, never as a half-parsed object', () => {
+        const res = getRunFor({ request: '{"logs":"xxxxx', request_truncated: true })
+
+        expect(res.body.request).toBe('{"logs":"xxxxx')
+        expect(res.body.request_truncated).toBe(true)
+    })
+
+    test('an absent request is null, and the flag is still a boolean', () => {
+        const res = getRunFor({ request: '', request_truncated: false })
+
+        expect(res.body.request).toBeNull()
+        expect(res.body.request_truncated).toBe(false)
+    })
+
+    test('an unparseable stored request is returned raw rather than dropped', () => {
+        const res = getRunFor({ request: 'not json at all' })
+
+        expect(res.body.request).toBe('not json at all')
+    })
+
+    test('a row from before this column existed does not produce undefined fields', () => {
+        const { handlers } = load({
+            readRun: fakeReadRun({
+                run_id: 'run1',
+                number: 'TR0001042',
+                user: 'u1',
+                status: 'complete',
+                mode: 'diagnose',
+                transcript: [],
+                context_summary: '',
+                fix_report: '{}',
+                error: '',
+            }),
+        })
+
+        const res = handlers.getRun({ pathParams: { run_id: 'run1' }, userId: 'u1' })
+
+        expect(res.body.request).toBeNull()
+        expect(res.body.request_truncated).toBe(false)
+    })
+})
+
+// ===========================================================================
+// _toBool — the platform's boolean getValue contract (#99)
+// ===========================================================================
+
+describe('_toBool', () => {
+    test("ServiceNow's '0'/'1' getValue strings map to real booleans", () => {
+        const { handlers } = load()
+
+        expect(handlers._toBool('1')).toBe(true)
+        expect(handlers._toBool('0')).toBe(false)
+    })
+
+    test("'true'/'false' strings and real booleans map too", () => {
+        const { handlers } = load()
+
+        expect(handlers._toBool('true')).toBe(true)
+        expect(handlers._toBool('false')).toBe(false)
+        expect(handlers._toBool(true)).toBe(true)
+        expect(handlers._toBool(false)).toBe(false)
+    })
+
+    test('absent, empty and junk are all false, never undefined', () => {
+        const { handlers } = load()
+
+        expect(handlers._toBool(undefined)).toBe(false)
+        expect(handlers._toBool(null)).toBe(false)
+        expect(handlers._toBool('')).toBe(false)
+        expect(handlers._toBool('yes')).toBe(false)
+    })
+})
+
+// ===========================================================================
 // /runs/{run_id}/message
 // ===========================================================================
 
