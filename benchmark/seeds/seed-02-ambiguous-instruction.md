@@ -29,7 +29,7 @@ and say to use it", so a tool that even hints at lookup either moves the defect
 to layer 3 or makes the fix appear already applied.
 `test/seed02Construction.test.js` (main repo) guards the construction.
 
-## History: the v1 construction was refuted at Task 12
+## Why v2: the v1 construction was refuted
 
 v1 bound **no tools at all**, on the theory that absence was the purest form of
 the defect. Measured 2026-08-02 on execution `11bd8d882baa4314f243fed2ce91bfb3`:
@@ -37,11 +37,9 @@ the ReAct engine **cancels a tool-less agent before the LLM is ever invoked** �
 the run lasted ~2s, the Gen AI task was cancelled with output digest `{}`, and
 the agent replied *"I am unable to complete the task since I have no
 instructions or actions."* The instruction's ambiguity was never reached, so v1
-could only ever test the zero-tool binding (layer 3); Agent Doctor diagnosed
-exactly that in both scored runs, which were scored strictly against the
-expected layer-2 answer (2/6, fail, not void — the seed was in its specified
-state). See `../DECISION.md` §D2. **No valid Task 12 run exercised layer-2
-diagnosis**; v2 exists so the comparison re-run does, on both harnesses.
+could only ever test the zero-tool binding (layer 3), never the instruction
+ambiguity this seed exists to isolate. v2 exists so that a run of this seed
+reaches layer-2 diagnosis, on both harnesses.
 
 ## Why it is built this way
 
