@@ -42,6 +42,10 @@ two-digit daily counter. Incremented on every merge to `main`.
   is whole, the raw stored prefix when truncated, and `null` when absent. `_defaultReadRun`'s
   column projection was extended to carry both columns through to the API response.
 
+- **No backfill.** Existing runs are not retroactively populated — `request` and
+  `request_truncated` stay empty/`false` on every row created before this change, and those
+  runs' requests remain unrecoverable, same as the design spec's own §7 non-goal.
+
 ### Measured
 
 **Live round-trip on gpinst01 (SDK 4.9.2, Zurich Patch 10 Hotfix 3), both `analyze` modes,
@@ -61,12 +65,30 @@ verified after `now-sdk build` + `now-sdk install --alias gpinst01` both reporte
 - **`mode: 'collect'` verified separately, as its own run, on its own row** (the path a worker-side
   write would have missed since it returns 200 inline and never queues). `POST .../analyze` with
   `{"execution":"d29e64bc2ba68354f243fed2ce91bf49","mode":"collect"}` returned run
-  `33f652382b6e0754f243fed2ce91bf81` (`status: complete`). A direct `servicenow_query` on
-  `x_snc_troubleshoot_run` for that `sys_id` shows `request:
+  `33f652382b6e0754f243fed2ce91bf81`; the row read below shows `status: complete` — the 200 body
+  itself carries no `status` field (`_runCollect` returns `{run_id, mode, data}` only, unlike the
+  202 diagnose path, whose body genuinely does carry `status: 'queued'`). A direct `servicenow_query`
+  on `x_snc_troubleshoot_run` for that `sys_id` shows `request:
   {"execution":"d29e64bc2ba68354f243fed2ce91bf49","mode":"collect"}` and
   `request_truncated: false`.
-- **No truncation was exercised** — both bodies sent were well under `REQUEST_CHARS` (60000), so
-  the `request_truncated: true` state was not observed live; it rests on Task 2's unit tests.
+- **Truncation state observed live (fix wave, `_requestFields` now writes the STRING
+  `'true'`/`'false'` rather than a JS boolean, matching `PaAuditLogger`'s idiom).** A 61,010-char
+  serialized body (`JSON.stringify({logs: <61,000 'x' chars>})`) was built **server-side** inside a
+  one-shot `sysauto_script` background job (never as a literal in an MCP tool call) that called
+  `new x_snc_troubleshoot.PaRunManager().createRun({mode: 'diagnose', request: {logs: big}})`
+  directly, then read the row back with a plain `GlideRecord`. Run `TR1000147`
+  (`70232abc2b6acb1817a6ffbeee91bf04`): stored `request` is exactly **60000** characters (`REQUEST_CHARS`,
+  not clipped at the column's 65536), and `gr.getValue('request_truncated')` read back the literal
+  string **`'1'`** — confirming a ServiceNow boolean column normalizes a `setValue('true')` write to
+  the platform's own `'0'`/`'1'` internal form on read, a third shape distinct from both the JS
+  boolean and the string literal that was written, exactly as `PaRestHandlers._toBool` (accepting
+  boolean `true`, `'1'`, and `'true'` alike) was written to expect.
+  `GET /api/x_snc_troubleshoot/v1/troubleshooter/runs/70232abc2b6acb1817a6ffbeee91bf04` then
+  returned the SAME row over the real REST route: `"request_truncated": true` (JSON boolean, via
+  `_toBool`) and `"request"` as the raw, UNPARSED prefix string — first 60 chars
+  `{"logs":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`, decoded length **60000**,
+  matching the row exactly. The full 60,000-char value was never printed to this changelog or to
+  any tool-call argument — only its length and prefix were asserted.
 
 ## 2026.08.0401 — 2026-08-04
 

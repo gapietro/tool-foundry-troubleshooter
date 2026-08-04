@@ -251,10 +251,18 @@ describe('createRun — request persistence', () => {
         const { row } = createWith(body)
 
         expect(JSON.parse(row.request)).toEqual(body)
-        // A ServiceNow boolean column reads back as the string 'true'/'false',
-        // not a JS boolean — this asserts against the platform's real contract
-        // rather than the value that was passed in. Task 4 adds a `_toBool`
-        // helper on the read side for exactly this reason.
+        // This asserts the STUB's coercion, not the platform's: `_glideStub`'s
+        // `setValue` renders whatever it is handed through `String(value)`, so
+        // it would read 'false' here even if `_requestFields` still returned a
+        // JS boolean — this test alone cannot distinguish the two. The
+        // platform's own `getValue` on a real boolean column returns '0'/'1',
+        // a THIRD shape distinct from both the JS boolean and this stub's
+        // string. `_requestFields` writes the string form 'true'/'false' on
+        // purpose (matching `PaAuditLogger`'s precedent, not this stub's
+        // behaviour — see that method's own doc comment), and
+        // `PaRestHandlers._toBool` on the read side accepts boolean `true`,
+        // `'1'`, and `'true'` alike, so it covers the real platform shape and
+        // the string-literal shape both without needing to special-case '0'.
         expect(row.request_truncated).toBe('false')
     })
 
@@ -262,6 +270,7 @@ describe('createRun — request persistence', () => {
         const { row } = createWith('why did the agent stop')
 
         expect(row.request).toBe('why did the agent stop')
+        // String-form assertion — see the coercion note in the test above.
         expect(row.request_truncated).toBe('false')
     })
 
@@ -276,6 +285,7 @@ describe('createRun — request persistence', () => {
         const { row, mgr } = createWith({ logs: new Array(80000).join('x') })
 
         expect(row.request.length).toBe(mgr.REQUEST_CHARS)
+        // String-form assertion — see the coercion note earlier in this block.
         expect(row.request_truncated).toBe('true')
     })
 
@@ -290,6 +300,7 @@ describe('createRun — request persistence', () => {
         mgr.createRun({ request: exact })
 
         expect(world.tables[RUN_TABLE][0].request.length).toBe(mgr.REQUEST_CHARS)
+        // String-form assertion — see the coercion note earlier in this block.
         expect(world.tables[RUN_TABLE][0].request_truncated).toBe('false')
     })
 

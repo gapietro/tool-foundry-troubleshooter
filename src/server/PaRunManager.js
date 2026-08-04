@@ -991,14 +991,22 @@ PaRunManager.prototype = {
      *          creation write, or null when there is nothing to store — in
      *          which case neither column is written at all, so a native run
      *          keeps whatever the anchor left there.
+     *
+     * `request_truncated` is the STRING `'true'`/`'false'`, not a JS boolean —
+     * matching this codebase's only other boolean-column write,
+     * `PaAuditLogger.js` (`gr.setValue('confirmed_by_user', 'false')`). The
+     * two writers should not disagree about what `gr.setValue` is handed for
+     * the same column type; `PaAuditLogger`'s form is the established idiom
+     * here, so this one follows it rather than introduce a second, untested
+     * convention for the same platform contract.
      */
     _requestFields: function (request) {
         var text = this._serializeRequest(request)
         if (!text) return null
         if (text.length <= this.REQUEST_CHARS) {
-            return { request: text, request_truncated: false }
+            return { request: text, request_truncated: 'false' }
         }
-        return { request: text.substring(0, this.REQUEST_CHARS), request_truncated: true }
+        return { request: text.substring(0, this.REQUEST_CHARS), request_truncated: 'true' }
     },
 
     _stringifyForDigest: function (value) {
