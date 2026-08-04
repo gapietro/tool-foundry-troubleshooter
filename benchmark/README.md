@@ -68,15 +68,70 @@ Two guards enforce the mechanical half:
 `blindRule` reads the ` ```blind-rule-tokens ` block each specimen declares, so a new seed is
 covered the moment its spec lands and fails the build until its tokens are declared.
 
-**A passing suite is not evidence of blindness.** Neither guard can catch what it was not told to
-look for, and a token that names platform vocabulary a tool legitimately reads is a bad token
-rather than a finding. The #89 sweep bears this out: the automated guard's first full run reported
-every scan target clean, and both real leaks were found by humans reading — a hand sweep caught a
-framing leak in `PaToolGenAiLog` that no token could have matched (the leak was in what a finding
-implied by elimination, not in a value), and an independent adversarial review caught a second leak
-in `PaToolAgentConfig` that the hand sweep had already walked past. The guard's value here is
-prospective, not diagnostic: it pins both leaks closed permanently and covers all 16 targets
-automatically from here on, so the next leak fails a build instead of waiting for someone to notice.
+## The scorer blind rule
+
+The rule above binds what reaches the **harness**. Seed specs deliberately never
+reach the harness — they *are* the answer key — so nothing bound what they
+carried until scoring itself became a model.
+
+> **The scorer blind rule.** No text placed in front of a scorer may state what
+> a prior diagnostic run did or what it scored.
+
+This was sufficient while a human operator scored the rows. It stopped being
+sufficient at v3, when scoring moved to independent blind agents whose packets
+embed the seed spec verbatim — at which point four of five specs were narrating
+what earlier runs had scored, grades included (`DECISION.md` §O5, issue #100).
+The first rule protects the measurement **subject**; this one protects the
+measurement **instrument**. Both are needed once the instrument is itself a
+model.
+
+| Channel | Source | Reaches |
+|---|---|---|
+| Seed specification | `seeds/seed-0N-*.md` | every packet for that seed |
+| Rubric | `scorecard-template.md` §A / §A2 / §A3 | every packet |
+| Run report + audit measurements | per-row, from `raw-evidence-*.md` | one packet each |
+
+**What it permits, and the distinction is the whole point** — a redaction sweep
+that takes the wrong half is as damaging as the leak. Permitted: the fixture's
+own state, however it was learned (seed 01's `priority_stored` = `null` was
+measured during a prior pass and a scorer cannot judge that seed without it);
+the expected layer and fix target; scoring guidance including decoy rules, void
+rules and partial-credit cases; hypothetical grading statements such as *"a
+diagnosis naming the bogus condition would have scored a miss"*. Forbidden: what
+a prior run diagnosed, proposed, or was awarded — and links to `DECISION.md`,
+which a model scorer can follow into every prior pass's rows and grades.
+
+**Where the removed text went.** Four of the five seeds had prior-pass narrative
+extracted into a sibling `seeds/history/seed-0N-*.history.md`; seed 01 never
+carried any such narrative and has no history file. The history files live in
+their own subdirectory precisely so the bare glob `seed-0N-*.md` used to name
+the scorer-facing specs elsewhere in this project cannot also pick them up.
+**Where one exists, the history file links to the spec; the spec does not link
+back**, because a pointer from the spec is an invitation to read what was just
+removed. A packet embeds the spec and never the history file.
+
+| Guard | Catches | Origin |
+|---|---|---|
+| `test/scorerPacketBlindRule.test.js` | **prior-run outcomes** reaching a scorer | #100 |
+
+The guard scans the seed specs — one of the three channels. The rubric and the
+run reports are bound by the rule and not by the guard: only §A/§A2/§A3 of
+`scorecard-template.md` reach a packet and the file legitimately explains
+grading with score-shaped text (*"a run can score 3/6 and pass"*), so a
+whole-file scan would be a false-positive machine. As with the harness rule, the
+roster tracks the principle rather than defining it.
+
+**A passing suite is not evidence of blindness.** None of the three guards above can catch what it
+was not told to look for, and a token that names platform vocabulary a tool legitimately reads is a
+bad token rather than a finding. The #89 sweep bears this out for `blindRule.test.js` specifically:
+its first full run reported every scan target clean, and both real leaks were found by humans
+reading — a hand sweep caught a framing leak in `PaToolGenAiLog` that no token could have matched
+(the leak was in what a finding implied by elimination, not in a value), and an independent
+adversarial review caught a second leak in `PaToolAgentConfig` that the hand sweep had already
+walked past. Every guard's value here is prospective, not diagnostic: `blindRule.test.js` pins both
+#89 leaks closed permanently and covers all 16 harness sources automatically from here on, and
+`scorerPacketBlindRule.test.js` does the same for the 5 seed specs — so the next leak in either
+channel fails a build instead of waiting for someone to notice.
 
 ## The protocol
 

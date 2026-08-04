@@ -10,12 +10,11 @@
 
 ## The defect
 
-> **PREDICTED, NOT OBSERVED.** No seed has been installed or executed. What
-> follows is derived from the Fluent source and from the records emitted into
-> `seed-app/dist/`, which is build-time evidence, not runtime evidence.
-> **Confirm at Task 12** before scoring, and correct this section if the run
-> disagrees. Four predictions in this seed set were already wrong once and were
-> only caught by reading `dist/`.
+> **Fixture state, verified 2026-08-02.** The seed is installed and has been
+> executed. What follows was derived from the Fluent source and from the
+> records emitted into `seed-app/dist/`, then confirmed against a real run —
+> the measurement is recorded under "Expected diagnosis". Where this section
+> states a value, it is observed rather than predicted.
 
 The instructions require the agent to express priority as a **word**
 ("critical", "high", …), and `set_ticket_priority` passes that word straight
@@ -57,9 +56,8 @@ regardless; treat "plain Integer column" as the ground truth for scoring.
 ## Why it is built this way
 
 The instructions are deliberately verbose and multi-step. Seed 1 is the
-benchmark's artifact-paging stressor: the native harness's weakest documented
-area is large evidence, and a benchmark of five small traces would never
-exercise it.
+benchmark's artifact-paging stressor: it is built to produce a large trace
+because a benchmark of five small traces would never exercise paging at all.
 
 **Deviation from LLD §7, recorded not hidden.** §7 specifies writing to
 `incident.priority`. This seed writes to `x_snc_tsbench_ticket`, a table the

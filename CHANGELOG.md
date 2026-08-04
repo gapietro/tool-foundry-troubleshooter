@@ -17,6 +17,40 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0303 — the scorer blind rule (#100)
+
+The blind rule now binds the channels that reach a **scorer**, not only those
+that reach the harness. Four of five seed specs narrated prior passes' outcomes
+and grades, and scorer packets embed the spec verbatim, so a blind scorer could
+see what a comparable run had scored before grading this one (`DECISION.md` §O5
+measures the cost at roughly one row on a 10-row pass).
+
+- **Split** — each `benchmark/seeds/seed-0N-*.md` is now wholly scorer-facing;
+  four of the five (seed 01 has no prior-pass narrative) have the prior-pass
+  narrative in a sibling `benchmark/seeds/history/seed-0N-*.history.md`. The
+  history file links to the spec and not the reverse, so copying the spec is
+  correct by construction — the v4 pass had to hand-redact 29 files to work
+  around the old shape. History files live in their own subdirectory so the
+  bare `seed-0N-*.md` glob used elsewhere to name the scorer-facing specs can
+  never pick one up.
+- **Guard** — `test/scorerPacketBlindRule.test.js`, a sibling to
+  `blindRule.test.js`. It cannot reuse that file's per-line matcher: the specs
+  hard-wrap, so phrases straddle line breaks (seed 05's *"earning full — not
+  partial — fix-target credit"* spans two lines), and every leak sat inside a
+  `>` callout. `test/_normalizeProse.js` strips blockquote markers and joins
+  wrapped lines while preserving a line map. Measured red state before the
+  rewrites: 14 pattern-hits across 13 leak locations in seeds 02–05, zero false
+  positives.
+- **Guidance survives, and it is pinned** — two real-file controls assert seed
+  04's decoy rule and seed 01's `priority_stored` ground truth are still present
+  *and* scan clean. That is what separates redacting the leak from lobotomising
+  the packet.
+- **Seed 01** no longer opens by telling a scorer the seed was never executed
+  three lines above a measurement taken from executing it.
+
+No score moves. Custom's Round A rows were never re-scored on clean packets and
+still have not been — `DECISION.md` §O7's caveat stands.
+
 ## 2026.08.0302 — 2026-08-03
 
 ### Added

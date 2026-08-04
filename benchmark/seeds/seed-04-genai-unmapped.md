@@ -10,19 +10,13 @@
 
 ## The defect
 
-> **OBSERVED AT TASK 12 (2026-08-02) — the prediction held.** The primary
-> construction installed without refusal (no fallback needed), the placeholder
-> was substituted with capability sys_id `92ff62af516741769c437feb88c80ef3` and
-> verified in the installed script, and the seed execution
+> **Fixture state, verified 2026-08-02.** The primary construction installed
+> without refusal (no fallback needed), the placeholder was substituted with
+> capability sys_id `92ff62af516741769c437feb88c80ef3` and verified in the
+> installed script, and the seed execution
 > `16ddc10c2baa4314f243fed2ce91bf15` produced the predicted signature:
 > `OneExtendUtil.execute` returned `status: "error"`, message "Plan invalid…",
-> `capabilities: {}`, and the tool returned `ok: false`. The decoy also
-> performed its function: the doubled scored runs SPLIT — run 1 found the
-> dangling `api` and proposed the exact healthy repoint
-> (`936e514a53b3b110f028ddeeff7b128c`); run 2 named the empty `connection` as
-> primary cause and scored the canonical 2/0/1/0 decoy row. See
-> `../DECISION.md` §D3, including the `genai_log check_config` sampling gap
-> this exposed (first-100-by-name cannot reach an `x_*` capability).
+> `capabilities: {}`, and the tool returned `ok: false`.
 
 The capability definition `x_snc_tsbench_unmapped_capability` exists and is
 reachable, but its `api` — the **mandatory** pointer at the `sys_hub_flow`
