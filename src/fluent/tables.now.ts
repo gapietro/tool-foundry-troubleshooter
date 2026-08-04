@@ -152,6 +152,40 @@ export const x_snc_troubleshoot_run = Table({
             maxLength: 32,
         }),
 
+        // THE RUN'S SUBJECT (issue #99).
+        //
+        // The inbound POST /analyze body, verbatim, written by
+        // PaRunManager.createRun. Before this existed, a run recorded only
+        // what the model DERIVED from the request (tool arguments in the
+        // audit table) and never the request itself — so a later benchmark
+        // pass could not prove it had asked the same question as an earlier
+        // one, and no run was reproducible from its own record.
+        //
+        // Empty on every native run by construction: PaRunAnchor keys on
+        // `_agentic_context_` and there is no inbound body on that path.
+        // Empty is the honest value there, not a gap to fill later.
+        request: MultiLineTextColumn({
+            label: 'Request',
+            maxLength: 65536,
+        }),
+
+        // Set when the body exceeded PaRunManager.REQUEST_CHARS and the
+        // stored text is a PREFIX. A separate flag rather than a JSON
+        // envelope: a clipped body is not parseable JSON, so an envelope
+        // would have to hold it as an escaped string, and escaping a log
+        // paste can nearly double its length against a fixed ceiling.
+        //
+        // Three states, all distinguishable from the row alone:
+        //   request non-empty + false -> whole body, JSON.parse is valid
+        //   request non-empty + true  -> a prefix; documentation, not data
+        //   request empty     + false -> absent (native run, or a body that
+        //                                would not serialize)
+        // Absent and truncated must never collapse into one state.
+        request_truncated: BooleanColumn({
+            label: 'Request Truncated',
+            default: false,
+        }),
+
         // THE ANCHOR KEY (added at Task 5, issue #20).
         //
         // LLD §4.6 has PaRunAnchor key on `_agentic_context_.conversation_id`,

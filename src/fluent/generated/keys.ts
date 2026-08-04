@@ -403,11 +403,28 @@ declare global {
                     },
                     {
                         table: 'sys_documentation'
+                        id: '08097e1e79a54cc0b7693854615fb7ce'
+                        key: {
+                            name: 'x_snc_troubleshoot_run'
+                            element: 'request'
+                            language: 'en'
+                        }
+                    },
+                    {
+                        table: 'sys_documentation'
                         id: '08ed366a6f0d4faf9a3f3299c582de24'
                         key: {
                             name: 'x_snc_troubleshoot_audit'
                             element: 'run'
                             language: 'en'
+                        }
+                    },
+                    {
+                        table: 'sys_dictionary'
+                        id: '093908a08a674049a9cc52860d6080d5'
+                        key: {
+                            name: 'x_snc_troubleshoot_run'
+                            element: 'request'
                         }
                     },
                     {
@@ -722,6 +739,14 @@ declare global {
                         key: {
                             name: 'x_snc_troubleshoot_run'
                             element: 'status'
+                        }
+                    },
+                    {
+                        table: 'sys_dictionary'
+                        id: '4f64c1bfb7e443a3a0069663a02f7f49'
+                        key: {
+                            name: 'x_snc_troubleshoot_run'
+                            element: 'request_truncated'
                         }
                     },
                     {
@@ -1250,6 +1275,15 @@ declare global {
                         id: 'd76dd00253b64abda09c0ffed4116663'
                         key: {
                             agent: '21c00b55a323477082b23a25049a11ba'
+                        }
+                    },
+                    {
+                        table: 'sys_documentation'
+                        id: 'd870af69b76d4c42a6bd48416d134652'
+                        key: {
+                            name: 'x_snc_troubleshoot_run'
+                            element: 'request_truncated'
+                            language: 'en'
                         }
                     },
                     {
