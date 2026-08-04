@@ -105,6 +105,16 @@ describe('analyze — validation', () => {
         expect(res.body.error).toMatch(/execution.*agent.*timeframe.*logs/i)
     })
 
+    test('a rejected body creates no run, so nothing is persisted', () => {
+        const runManager = fakeRunManager()
+        const { handlers } = load({ runManager: runManager, eventQueue: () => true })
+
+        const res = handlers.analyze({ body: { agent: 'Agent Doctor' }, pathParams: {}, userId: 'u1' })
+
+        expect(res.status).toBe(400)
+        expect(runManager.calls.createRun.length).toBe(0)
+    })
+
     test('agent without timeframe — names timeframe', () => {
         const { handlers } = load({ runManager: fakeRunManager() })
         const res = handlers.analyze({ body: { agent: 'Agent Doctor' }, pathParams: {}, userId: 'u1' })
@@ -179,9 +189,41 @@ describe('analyze — collect mode', () => {
         expect(runManager.calls.close[0]).toEqual({ runId: 'run1', status: 'complete', options: {} })
         expect(eventQueueCalled).toBe(false)
     })
+
+    test('collect mode records its request too — it never queues, so nothing downstream would (#99)', () => {
+        const runManager = fakeRunManager()
+        const { handlers } = load({ runManager: runManager, eventQueue: () => true })
+
+        handlers.analyze({
+            body: { execution: 'plan1', mode: 'collect' },
+            pathParams: {},
+            userId: 'u1',
+        })
+
+        expect(runManager.calls.createRun[0].request).toEqual({
+            execution: 'plan1',
+            mode: 'collect',
+        })
+    })
 })
 
 describe('analyze — diagnose mode (default)', () => {
+    test('the validated body reaches createRun so the run records its own subject (#99)', () => {
+        const runManager = fakeRunManager()
+        const { handlers } = load({ runManager: runManager, eventQueue: () => true })
+
+        handlers.analyze({
+            body: { execution: 'plan1', timeframe: '1 hour' },
+            pathParams: {},
+            userId: 'u1',
+        })
+
+        expect(runManager.calls.createRun[0].request).toEqual({
+            execution: 'plan1',
+            timeframe: '1 hour',
+        })
+    })
+
     test('creates the run, queues the async worker, and returns 202 + queued', () => {
         const runManager = fakeRunManager()
         const queued = []

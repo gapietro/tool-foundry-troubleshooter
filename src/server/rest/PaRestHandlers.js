@@ -152,6 +152,13 @@ PaRestHandlers.prototype = {
             agent: body.agent,
             executionRef: body.execution,
             mode: validation.mode,
+            // The whole validated body, so the run records its own subject
+            // (issue #99). Passed as an object, not a string: PaRunManager
+            // owns the run table's write contract and with it the column's
+            // ceiling and truncation flag. Deliberately NOT reusing
+            // `_queueDiagnose`'s `_safeStringify` result — that one exists
+            // for the event payload and has no ceiling.
+            request: body,
         })
 
         if (!created || !created.run_id) {
