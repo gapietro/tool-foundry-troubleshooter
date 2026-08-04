@@ -1154,6 +1154,39 @@ describe('depth gate (#103) — _holdBlock', () => {
         )
     })
 
+    test('I3: scrubs tool names case-insensitively — sentence-initial capitalization', () => {
+        const block = load()._holdBlock(
+            [
+                { layer: 2, name: 'Instructions', reason: 'Schema_lookup was not helpful here', tools: ['schema_lookup'] },
+                { layer: 3, name: 'Agent', reason: 'Query_table provided the answer', tools: ['query_table'] },
+                { layer: 5, name: 'Data', reason: 'Genai_log showed the trace', tools: ['genai_log'] },
+                { layer: 6, name: 'GenAI stack', reason: 'Agent_trace led here', tools: ['agent_trace'] },
+            ],
+            'gaps'
+        )
+        ;['Schema_lookup', 'Query_table', 'Genai_log', 'Agent_trace'].forEach((name) => {
+            expect(block).not.toContain(name)
+        })
+        expect(block).toContain('[tool]')
+    })
+
+    test('I3: scrubs tool names case-insensitively — all uppercase', () => {
+        const block = load()._holdBlock(
+            [
+                { layer: 2, name: 'Instructions', reason: 'SCHEMA_LOOKUP did not apply', tools: ['schema_lookup'] },
+                { layer: 3, name: 'Agent', reason: 'QUERY_TABLE returned results', tools: ['query_table'] },
+                { layer: 4, name: 'Data schemas', reason: 'LOG_ANALYSIS completed', tools: ['log_analysis'] },
+                { layer: 5, name: 'Data', reason: 'READ_ARTIFACT verified content', tools: ['read_artifact'] },
+                { layer: 6, name: 'GenAI stack', reason: 'AGENT_CONFIG set the base', tools: ['agent_config'] },
+            ],
+            'gaps'
+        )
+        ;['SCHEMA_LOOKUP', 'QUERY_TABLE', 'LOG_ANALYSIS', 'READ_ARTIFACT', 'AGENT_CONFIG'].forEach((name) => {
+            expect(block).not.toContain(name)
+        })
+        expect(block).toContain('[tool]')
+    })
+
     test('the no_layer_report variant asks for a layer report', () => {
         const block = load()._holdBlock([], 'no_layer_report')
         expect(block).toContain('HOLD')

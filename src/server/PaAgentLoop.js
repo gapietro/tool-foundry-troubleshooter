@@ -1277,15 +1277,16 @@ PaAgentLoop.prototype = {
 
     /**
      * Replaces every occurrence of every `_ALL_TOOL_NAMES` entry in `text`
-     * with a neutral placeholder. ES5 only: a plain indexed loop with
-     * `split`/`join` per name — no regex (a global-flag literal is the
-     * obvious alternative but is one more thing to get right per name), no
-     * `String.prototype.replaceAll` (not available in Rhino).
+     * with a neutral placeholder, case-insensitive. Built with RegExp(name, 'gi')
+     * for each name — ES5 only. Tool names are safe regex identifiers (no metacharacters),
+     * so no escaping required; if a name ever contains regex metacharacters, add
+     * escaping before building the RegExp.
      */
     _scrubToolNames: function (text) {
         var out = this._str(text)
         for (var i = 0; i < this._ALL_TOOL_NAMES.length; i++) {
-            out = out.split(this._ALL_TOOL_NAMES[i]).join('[tool]')
+            var re = new RegExp(this._ALL_TOOL_NAMES[i], 'gi')
+            out = out.replace(re, '[tool]')
         }
         return out
     },
