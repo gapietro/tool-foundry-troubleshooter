@@ -52,6 +52,13 @@ const SEEDS = path.join(ROOT, 'benchmark', 'seeds')
 /** The 5 seed specs plus the README smoke gate — every specimen a run is scored against. */
 const SPECIMENS = fs
     .readdirSync(SEEDS)
+    // `.history.md` siblings hold the prior-pass narrative removed from the
+    // specs by issue #100. They now live in benchmark/seeds/history/, a
+    // subdirectory readdirSync (non-recursive) never sees, so no exclusion
+    // filter is needed here any more -- the directory layout keeps them out
+    // by construction rather than by a second, SILENT exemption this file's
+    // header argues against. The roster is still pinned by name below so a
+    // future layout change can't quietly swallow a real spec.
     .filter((f) => /^seed-\d+-.*\.md$/.test(f))
     .sort()
     .map((f) => ({ label: f, file: path.join(SEEDS, f) }))
@@ -276,5 +283,18 @@ describe('every specimen declares its answer tokens (issue #89)', () => {
         // two assertions above until its tokens are declared. That is the
         // point: a seed cannot arrive unguarded.
         expect(SPECIMENS).toHaveLength(6)
+
+        // The count alone does not close its own failure mode: a too-greedy
+        // glob change could drop a real spec while a newly added file kept
+        // the count at six. Pin the names, so any roster change has to be
+        // made here.
+        expect(SPECIMENS.map((s) => s.label)).toEqual([
+            'seed-01-schema-mismatch.md',
+            'seed-02-ambiguous-instruction.md',
+            'seed-03-missing-data.md',
+            'seed-04-genai-unmapped.md',
+            'seed-05-inactive-usecase.md',
+            'README.md smoke gate',
+        ])
     })
 })
