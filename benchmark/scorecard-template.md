@@ -32,7 +32,7 @@ The rubric scores each run **out of 6**. The gate in `docs/IMPLEMENTATION_PLAN.m
 Task 12 counts **runs**: *"≥ 8/10 runs with correct root cause + usable fixes."*
 Nothing connected the two, so two different 4/6 runs could be opposite verdicts —
 correct cause with an unusable fix, versus wrong cause with a usable fix and
-cited evidence — and whoever writes `benchmark/DECISION.md` would have invented
+cited evidence — and whoever writes the decision record would have invented
 the aggregation rule on the spot, on the most expensive decision in the project.
 
 **The rule, derived from the gate's own wording.** "Correct root cause + usable
@@ -49,7 +49,7 @@ Nothing else feeds it. `evidence_cites_trace_and_config` and
 detail that explains *why* a run passed or failed and must still be filled in,
 but a run does not pass by accumulating them. A run can score 3/6 and pass; a run
 can score 4/6 and fail. That is not an inconsistency to be smoothed over in
-`DECISION.md` — it is the gate asking a narrower question than the rubric.
+the scored-pass write-up — it is the gate asking a narrower question than the rubric.
 
 **Why `fix_target_correct` still constrains the gate indirectly, and why that is
 not a third term** (added 2026-08-01, PR #33 review round 2). Excluding
@@ -71,7 +71,7 @@ means what the word means. **A scorer who marks a decoy run 2 / 0 / 1 has
 mis-scored it**; the correct row is 2 / 0 / 0, `passes_gate` = 0.
 
 **The gate verdict** is `sum(passes_gate) / <number of valid runs>`, read against
-the Task 12 gate table. Record the sum explicitly in `DECISION.md`; do not
+the Task 12 gate table. Record the sum explicitly in the decision record; do not
 re-derive it from the /6 totals.
 
 ## A3. Void runs — a run that measured nothing
@@ -124,9 +124,9 @@ reason is honest; a `0` is a measurement that did not happen.
    first. Worked example, because this is the case that had no stated answer:
    **8 valid runs, 4 passes = 50.0% → middle band.** At 8 valid runs the bands
    are 7–8 passes (top), 4–6 (middle), 0–3 (bottom); at 9 valid runs, 8–9 (top),
-   5–7 (middle), 0–4 (bottom). `DECISION.md` must show the percentage it read,
+   5–7 (middle), 0–4 (bottom). The decision record must show the percentage it read,
    not only the fraction.
-4. **Floor: below 8 valid runs the gate is not evaluable.** `DECISION.md` must
+4. **Floor: below 8 valid runs the gate is not evaluable.** The decision record must
    record the outcome as *gate not met — insufficient data*, state how many runs
    were void and why, and must **not** compute a verdict from the survivors. Two
    void rows already take this to exactly 8; a third puts the benchmark under its
@@ -303,10 +303,11 @@ else. It contains the rubric (§A / §A2 / §A3 above), **the scorer-facing seed
 spec** (`seeds/seed-0N-*.md`), that run's report verbatim, and that run's
 audit-trail measurements.
 
-**Never copy `seeds/seed-0N-*.history.md` into a packet.** It holds what earlier
-runs did and what they scored — the scorer blind rule (`README.md`) is the
-reason it is a separate file. Copying the spec is safe; the split exists so that
-the obvious action is the correct one.
+**Never copy `seeds/history/seed-0N-*.history.md` into a packet.** It holds what
+earlier runs did and what they scored — the scorer blind rule (`README.md`) is
+the reason it is a separate file, kept in its own subdirectory so the bare
+`seed-0N-*.md` glob above can never pick it up by accident. Copying the spec is
+safe; the split exists so that the obvious action is the correct one.
 
 Before scoring, run `npx jest test/scorerPacketBlindRule.test.js`. A green run
 means the declared patterns did not fire on any spec — not that the packets are

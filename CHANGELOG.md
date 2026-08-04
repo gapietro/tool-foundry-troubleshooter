@@ -25,11 +25,14 @@ and grades, and scorer packets embed the spec verbatim, so a blind scorer could
 see what a comparable run had scored before grading this one (`DECISION.md` §O5
 measures the cost at roughly one row on a 10-row pass).
 
-- **Split** — each `benchmark/seeds/seed-0N-*.md` is now wholly scorer-facing,
-  with the prior-pass narrative in a sibling `seed-0N-*.history.md`. The history
-  file links to the spec and not the reverse, so copying the spec is correct by
-  construction — the v4 pass had to hand-redact 29 files to work around the old
-  shape.
+- **Split** — each `benchmark/seeds/seed-0N-*.md` is now wholly scorer-facing;
+  four of the five (seed 01 has no prior-pass narrative) have the prior-pass
+  narrative in a sibling `benchmark/seeds/history/seed-0N-*.history.md`. The
+  history file links to the spec and not the reverse, so copying the spec is
+  correct by construction — the v4 pass had to hand-redact 29 files to work
+  around the old shape. History files live in their own subdirectory so the
+  bare `seed-0N-*.md` glob used elsewhere to name the scorer-facing specs can
+  never pick one up.
 - **Guard** — `test/scorerPacketBlindRule.test.js`, a sibling to
   `blindRule.test.js`. It cannot reuse that file's per-line matcher: the specs
   hard-wrap, so phrases straddle line breaks (seed 05's *"earning full — not

@@ -58,12 +58,14 @@ const SEEDS = path.join(ROOT, 'benchmark', 'seeds')
 
 /**
  * The scorer-facing seed specs. `.history.md` siblings hold what was removed
- * from them and are deliberately NOT scanned -- they are never copied into a
- * packet, which is the whole point of the split.
+ * from them and live in benchmark/seeds/history/ -- a subdirectory this
+ * non-recursive readdirSync never sees, so no exclusion filter is needed
+ * here. They are never copied into a packet, which is the whole point of
+ * the split.
  */
 const SPECS = fs
     .readdirSync(SEEDS)
-    .filter((f) => /^seed-\d+-.*\.md$/.test(f) && !/\.history\.md$/.test(f))
+    .filter((f) => /^seed-\d+-.*\.md$/.test(f))
     .sort()
 
 const PATTERNS = [
@@ -79,18 +81,18 @@ const PATTERNS = [
     },
     {
         name: 'run-N-did',
-        re: /\b(?:run|rows?)\s+[12]\s+(?:found|named|diagnosed|proposed)\b/i,
+        re: /\b(?:runs?|rows?)\s+[12]\s+(?:found|named|diagnosed|proposed|concluded|identified|reported|flagged|missed)\b/i,
         why: 'what an individual prior run concluded -- "run 2 named the empty connection"',
     },
     {
         name: 'credit-awarded',
-        re: /earning\s+(?:full|partial)[^.]{0,60}credit/i,
+        re: /(?:earning|earned|awarded|received)\s+(?:full|partial)[^.]{0,60}credit/i,
         why: 'the exact credit level a prior run was awarded, which is the grade the scorer is about to assign',
     },
     {
         name: 'rubric-fraction',
-        re: /\d\s*\/\s*6\b/,
-        why: 'a score out of the rubric total -- "2/6, fail"',
+        re: /\d\s*\/\s*(?:6|10)\b/,
+        why: 'a score out of the rubric total or the pass denominator -- "2/6, fail", "8/10"',
     },
     {
         name: 'answer-key-pointer',
@@ -110,10 +112,13 @@ function scanProse(text, lineStarts) {
     const hits = []
 
     PATTERNS.forEach((p) => {
-        const re = new RegExp(p.re.source, p.re.flags + 'g')
+        // p.re.flags + 'g' would duplicate 'g' (and throw) if a future pattern
+        // is ever declared with it already set -- strip it first so the 'g'
+        // this scan needs is always the only one.
+        const re = new RegExp(p.re.source, p.re.flags.replace('g', '') + 'g')
         let m
         while ((m = re.exec(text)) !== null) {
-            hits.push({ pattern: p.name, line: lineAt(lineStarts, m.index), text: m[0] })
+            hits.push({ pattern: p.name, why: p.why, line: lineAt(lineStarts, m.index), text: m[0] })
             if (m.index === re.lastIndex) re.lastIndex++
         }
     })
@@ -129,10 +134,8 @@ function load(filename) {
 describe('no prior run outcome reaches a scorer-facing seed spec (issue #100)', () => {
     it('scans every scorer-facing spec -- five of them', () => {
         // Pinned by name as well as by count: a substitution (one spec renamed,
-        // another added) would keep the count at five while coverage moved, and
-        // a `.history.md` glob that grew too greedy would silently drop a real
-        // spec from the roster. Both are the silent-under-coverage failure this
-        // guard exists to prevent.
+        // another added) would keep the count at five while coverage moved. That
+        // is the silent-under-coverage failure this guard exists to prevent.
         expect(SPECS).toEqual([
             'seed-01-schema-mismatch.md',
             'seed-02-ambiguous-instruction.md',
@@ -148,7 +151,10 @@ describe('no prior run outcome reaches a scorer-facing seed spec (issue #100)', 
             const hits = scanProse(text, lineStarts)
 
             expect(
-                hits.map((h) => filename + ':' + h.line + '  [' + h.pattern + ']  ' + h.text)
+                hits.map(
+                    (h) =>
+                        filename + ':' + h.line + '  [' + h.pattern + ']  ' + h.text + '  -- ' + h.why
+                )
             ).toEqual([])
         })
     })
@@ -163,8 +169,17 @@ describe('the scanner itself works (controls)', () => {
             '> named the specific gate with the m2m link verified intact, earning\n' +
                 '> full - not partial - fix-target credit, and both flagged the empty\n'
         )
+        const hits = scanProse(text, lineStarts)
 
-        expect(scanProse(text, lineStarts).map((h) => h.pattern)).toContain('credit-awarded')
+        expect(hits.map((h) => h.pattern)).toContain('credit-awarded')
+
+        // The match starts on "earning" -- line 1 of the planted text -- even
+        // though the phrase it completes is on line 2. Pinning the reported
+        // line number is the point of keeping the line map at all: if this
+        // ever silently drifted to line 2 (or 0), the map that lets a failure
+        // point at real source has quietly broken.
+        const creditHit = hits.find((h) => h.pattern === 'credit-awarded')
+        expect(creditHit.line).toBe(1)
     })
 
     it('POSITIVE: catches a literal grade', () => {

@@ -9,9 +9,10 @@
  * x_snc_tsbench_routing -- so scanning line by line is safe: an identifier
  * never straddles a line break. This guard matches PHRASES, and the seed specs
  * are hard-wrapped at ~76 characters, so phrases straddle constantly. Seed 05's
- * "earning full - not partial - fix-target credit" is split across lines 21-22;
- * a per-line scanner misses it entirely and reports GREEN over a live leak,
- * which is the silent under-coverage this class of guard exists to prevent.
+ * "earning full - not partial - fix-target credit" is split across lines 22-23
+ * (measured against the pre-branch file); a per-line scanner misses it entirely
+ * and reports GREEN over a live leak, which is the silent under-coverage this
+ * class of guard exists to prevent.
  *
  * Second reason, independent of the first: every leak issue #100 found sits
  * inside a `>` blockquote callout. Joining lines naively yields
@@ -23,15 +24,17 @@
  */
 
 /**
- * Strip one leading blockquote marker per line, join with a single space, and
- * record where each line starts in the joined string.
+ * Strip all leading blockquote markers per line (nested callouts use `>>`,
+ * `> >`, etc. -- stripping only one leaves a stray `>` mid-phrase, which is
+ * the exact failure this function exists to prevent), join with a single
+ * space, and record where each line starts in the joined string.
  */
 function normalizeProse(source) {
     const lineStarts = []
     let cursor = 0
 
     const lines = source.split('\n').map((line) => {
-        const stripped = line.replace(/^\s*>\s?/, '')
+        const stripped = line.replace(/^\s*(?:>\s?)+/, '')
         lineStarts.push(cursor)
         cursor += stripped.length + 1 // +1 for the single space the join adds
         return stripped

@@ -53,13 +53,13 @@ const SEEDS = path.join(ROOT, 'benchmark', 'seeds')
 const SPECIMENS = fs
     .readdirSync(SEEDS)
     // `.history.md` siblings hold the prior-pass narrative removed from the
-    // specs by issue #100. They are not model-facing -- same category as the
-    // rest of benchmark/**, which this file's header already excludes by
-    // design -- so they declare no token block. The exclusion is pinned by
-    // name in the roster test below, so it can never quietly swallow a real
-    // spec: an unpinned exemption would be the second, SILENT way to be
-    // unguarded that this file's header argues against.
-    .filter((f) => /^seed-\d+-.*\.md$/.test(f) && !/\.history\.md$/.test(f))
+    // specs by issue #100. They now live in benchmark/seeds/history/, a
+    // subdirectory readdirSync (non-recursive) never sees, so no exclusion
+    // filter is needed here any more -- the directory layout keeps them out
+    // by construction rather than by a second, SILENT exemption this file's
+    // header argues against. The roster is still pinned by name below so a
+    // future layout change can't quietly swallow a real spec.
+    .filter((f) => /^seed-\d+-.*\.md$/.test(f))
     .sort()
     .map((f) => ({ label: f, file: path.join(SEEDS, f) }))
     .concat([{ label: 'README.md smoke gate', file: path.join(ROOT, 'benchmark', 'README.md') }])
@@ -284,10 +284,10 @@ describe('every specimen declares its answer tokens (issue #89)', () => {
         // point: a seed cannot arrive unguarded.
         expect(SPECIMENS).toHaveLength(6)
 
-        // The count alone does not close its own failure mode once the glob
-        // carries a `.history.md` exclusion (#100): a too-greedy exclusion
-        // could drop a real spec while a newly added file kept the count at
-        // six. Pin the names, so any roster change has to be made here.
+        // The count alone does not close its own failure mode: a too-greedy
+        // glob change could drop a real spec while a newly added file kept
+        // the count at six. Pin the names, so any roster change has to be
+        // made here.
         expect(SPECIMENS.map((s) => s.label)).toEqual([
             'seed-01-schema-mismatch.md',
             'seed-02-ambiguous-instruction.md',

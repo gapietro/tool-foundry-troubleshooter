@@ -19,7 +19,7 @@
 - **No score anywhere in the repo moves.** No row is re-scored, no packet re-issued, no file under `benchmark/scoring-v4/` edited.
 - **`benchmark/DECISION.md` is not edited.** §O8's queue bullet is a dated record.
 - **Version after merge:** `2026.08.0303` (current `2026.08.0302`), in `package.json` and the `README.md` badge.
-- **The full suite must be green at the end of every task except Task 1**, which commits a deliberately red guard so the red state is in the branch history.
+- **The full suite must be green at the end of Task 6 and thereafter.** Task 1 commits a deliberately red guard so the red state is in the branch history, and Tasks 3–5 each expect the guard to still show remaining hits as specs are rewritten one at a time — green is the Task 6 exit condition, not a per-task one.
 
 ---
 

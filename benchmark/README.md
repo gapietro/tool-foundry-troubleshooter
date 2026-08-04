@@ -102,11 +102,13 @@ a prior run diagnosed, proposed, or was awarded — and links to `DECISION.md`,
 which a model scorer can follow into every prior pass's rows and grades.
 
 **Where the removed text went.** Four of the five seeds had prior-pass narrative
-extracted into a sibling `seeds/seed-0N-*.history.md`; seed 01 never carried any
-such narrative and has no history file. **Where one exists, the history file
-links to the spec; the spec does not link back**, because a pointer from the
-spec is an invitation to read what was just removed. A packet embeds the spec
-and never the history file.
+extracted into a sibling `seeds/history/seed-0N-*.history.md`; seed 01 never
+carried any such narrative and has no history file. The history files live in
+their own subdirectory precisely so the bare glob `seed-0N-*.md` used to name
+the scorer-facing specs elsewhere in this project cannot also pick them up.
+**Where one exists, the history file links to the spec; the spec does not link
+back**, because a pointer from the spec is an invitation to read what was just
+removed. A packet embeds the spec and never the history file.
 
 | Guard | Catches | Origin |
 |---|---|---|

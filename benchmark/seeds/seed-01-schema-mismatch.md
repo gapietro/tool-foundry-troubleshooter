@@ -56,9 +56,8 @@ regardless; treat "plain Integer column" as the ground truth for scoring.
 ## Why it is built this way
 
 The instructions are deliberately verbose and multi-step. Seed 1 is the
-benchmark's artifact-paging stressor: the native harness's weakest documented
-area is large evidence, and a benchmark of five small traces would never
-exercise it.
+benchmark's artifact-paging stressor: it is built to produce a large trace
+because a benchmark of five small traces would never exercise paging at all.
 
 **Deviation from LLD §7, recorded not hidden.** §7 specifies writing to
 `incident.priority`. This seed writes to `x_snc_tsbench_ticket`, a table the
