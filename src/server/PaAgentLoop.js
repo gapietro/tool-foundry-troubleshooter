@@ -27,14 +27,12 @@
  *                               tool's dispatch error is fed back exactly
  *                               like any other observation, so the model
  *                               gets to re-plan), loop again
- *         action:answer     -> close complete, outcome:'answer'
- *         action:fix_report -> validate; invalid -> ONE repair through the
- *                               proxy; still invalid -> close failed with
- *                               the problems AND the last draft preserved;
- *                               valid -> RENDERED both ways
- *                               (PaFixReport.renderJson/renderMarkdown —
- *                               see `_completeFixReport`), stored, close
- *                               complete
+ *         action:answer     -> DEPTH GATE (#103); if held, append a hold
+ *                               note and loop again — otherwise close
+ *                               complete, outcome:'answer'
+ *         action:fix_report -> DEPTH GATE (#103); if held, append a hold
+ *                               note and loop again — otherwise validate;
+ *                               invalid -> ONE repair through the proxy; ...
  *
  * BOUNDS ARE A FLOOR, NEVER A SILENT STOP (the R-3 lesson)
  * DESIGN.md's R-3 finding was that a premature "the diagnosis is done"
@@ -50,6 +48,26 @@
  * DIAGNOSIS that is incomplete; R-19b requires the two claims not to be
  * confused with each other, which is exactly why they are reported through
  * two different fields: `close()`'s status vs. `run()`'s `outcome`).
+ *
+ * THE DEPTH GATE IS THE FLOOR THE BOUNDS ARE NOT (issue #103)
+ * BOUNDS ARE A FLOOR above is about not stopping SILENTLY. It says nothing
+ * about stopping too SOON, and MAX_ITERATIONS is a ceiling. DECISION.md §O4
+ * measured the consequence: the custom harness swept 1/7 on all 20 rows of
+ * the v4 pass while native ranged 1/7 to 6/7 on the same seeds the same day,
+ * and §H8's acceptance test is unmet across 45 runs. The v4 master table's
+ * reframing number is "2 LLM calls", not "1 tool call" — turn 1 fetches,
+ * turn 2 concludes — so the only decision point after evidence exists is
+ * taken in the same generation that first reads it. The model does not cut
+ * an investigation short; it never begins one.
+ *
+ * `_depthGate` holds a terminal action while the model's OWN draft marks a
+ * layer NOT_SWEPT that the audit trail shows no tool call ever reached, and
+ * releases stickily once the trail shows it closed one it named itself. The
+ * gate is discharged ONLY by a trail row, never by text — that is what
+ * separates it from #88, where raising the price of stopping produced
+ * fabrication because a stop priced in text is paid in text. See
+ * `_depthGate` and `_holdBlock` for the full rationale, and issue #103 for
+ * the predictions this was built against.
  *
  * `_buildPrompt(playbook, promptBlock, context, request)` TAKES PLAYBOOK AS
  * AN ARGUMENT, NOT A HARDCODED STRING
