@@ -803,3 +803,37 @@ describe('audit context plumbing', () => {
         expect(fixReport.contextCalls[0].invokedTools).toEqual([])
     })
 })
+
+// ===========================================================================
+// depth gate (#103) — _trailTools
+// ===========================================================================
+
+describe('depth gate (#103) — _trailTools', () => {
+    test('an available trail is readable and carries its tools', () => {
+        const loop = load({ auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }) })
+        expect(loop._trailTools('RUN1')).toEqual({ readable: true, tools: ['agent_trace'], degraded: '' })
+    })
+
+    test('no_audit_rows is READABLE with zero tools — the trail answered', () => {
+        const loop = load({ auditLogger: fakeAuditLogger({ available: false, degraded: 'no_audit_rows', tools: [] }) })
+        expect(loop._trailTools('RUN1')).toEqual({ readable: true, tools: [], degraded: 'no_audit_rows' })
+    })
+
+    test.each(['glide_unavailable', 'query_failed', 'no_run_id'])(
+        'a genuine degradation (%s) is NOT readable',
+        (reason) => {
+            const loop = load({ auditLogger: fakeAuditLogger({ available: false, degraded: reason, tools: [] }) })
+            expect(loop._trailTools('RUN1')).toEqual({ readable: false, tools: [], degraded: reason })
+        }
+    )
+
+    test('a throwing audit logger degrades rather than propagating (R-1)', () => {
+        const loop = load({ auditLogger: fakeAuditLogger(new Error('boom')) })
+        expect(loop._trailTools('RUN1')).toEqual({ readable: false, tools: [], degraded: 'query_failed' })
+    })
+
+    test('a null result degrades', () => {
+        const loop = load({ auditLogger: fakeAuditLogger(null) })
+        expect(loop._trailTools('RUN1')).toEqual({ readable: false, tools: [], degraded: 'query_failed' })
+    })
+})

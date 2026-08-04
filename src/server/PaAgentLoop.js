@@ -368,6 +368,53 @@ PaAgentLoop.prototype = {
     },
 
     /**
+     * The depth gate's read of the audit trail (issue #103).
+     *
+     * WHY THIS IS NOT `_auditContext`
+     * `PaAuditLogger.invokedTools()` collapses FOUR situations into
+     * `available:false`, and one of them is not a degradation at all:
+     * `no_audit_rows` means the query ran fine and the answer is "this run
+     * has invoked nothing." For #79b's citation cross-check that distinction
+     * does not matter — an unverifiable citation and an unsupported one are
+     * both "do not convict." For the gate it is the whole ballgame: a run
+     * that has invoked nothing is the STRONGEST possible gap, and treating
+     * it as a degradation would fail open and let the zero-tool-call
+     * inconclusive exit — advertised in the first prompt, per DECISION.md
+     * §H7-2, and taken by five of ten runs in the §H5 pass — bypass the gate
+     * entirely.
+     *
+     * Genuine degradations still fail OPEN, per PaAuditLogger's own header
+     * ("fails toward NOT checking, never toward a false convict"). A Glide
+     * hiccup must never trap a run in a hold it cannot escape.
+     *
+     * @param {String} runId
+     * @returns {Object} {readable:Boolean, tools:[String], degraded:String}
+     */
+    _trailTools: function (runId) {
+        var res = null
+        try {
+            res = this._audits().invokedTools(runId)
+        } catch (e) {
+            // R-1: `e` is deliberately not inspected.
+            return { readable: false, tools: [], degraded: 'query_failed' }
+        }
+
+        if (res && res.available === true) {
+            return {
+                readable: true,
+                tools: this._isArray(res.tools) ? res.tools : [],
+                degraded: '',
+            }
+        }
+
+        var reason = this._str(res && res.degraded ? res.degraded : 'query_failed')
+        if (reason === 'no_audit_rows') {
+            return { readable: true, tools: [], degraded: reason }
+        }
+        return { readable: false, tools: [], degraded: reason }
+    },
+
+    /**
      * Renders the SAME normalized report both ways (PaFixReport header:
      * "the two renderings describe the same report") and stores each where
      * it is actually consumed, rather than a third ad-hoc re-stringify of
