@@ -17,6 +17,57 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0402 — 2026-08-04
+
+### Added
+
+- **The inbound `POST /analyze` body is now persisted on the run it creates (#99).** Before this
+  change the harness only ever wrote its own derived state to `x_snc_troubleshoot_run` — the
+  request that started a diagnostic run was never recorded anywhere, including the audit table —
+  so a run's own subject was unrecoverable after the fact and a later benchmark pass had no way to
+  prove it had asked the same question as an earlier one.
+
+- **Columns `request` (`MultiLineTextColumn`, `maxLength: 65536`) and `request_truncated`
+  (`BooleanColumn`, `default: false`) on `x_snc_troubleshoot_run`.** Three states are
+  distinguishable from the row alone: non-empty + `false` (whole body, `JSON.parse` valid),
+  non-empty + `true` (a prefix past `PaRunManager.REQUEST_CHARS` — documentation, not data), and
+  empty + `false` (absent — a native run, or a body that would not serialize). Absent and
+  truncated never collapse into one state.
+
+- **`PaRunManager.createRun` serializes the validated body and writes it in the same `update()`
+  that forces `status: 'queued'`**, for both `mode: 'diagnose'` and `mode: 'collect'` — `collect`
+  never queues and returns 200 inline, so its row would have missed a worker-side write entirely.
+
+- **`getRun` returns `request` and `request_truncated`** — `request` is parsed JSON when the row
+  is whole, the raw stored prefix when truncated, and `null` when absent. `_defaultReadRun`'s
+  column projection was extended to carry both columns through to the API response.
+
+### Measured
+
+**Live round-trip on gpinst01 (SDK 4.9.2, Zurich Patch 10 Hotfix 3), both `analyze` modes,
+verified after `now-sdk build` + `now-sdk install --alias gpinst01` both reported success.**
+
+- **`sys_dictionary` confirms both columns installed as designed**: `request` —
+  `internal_type: multi_two_lines`, `max_length: 65536`, `active: true` (a `MultiLineTextColumn`
+  reports as `multi_two_lines` on this platform, matching the Fluent source); `request_truncated`
+  — `internal_type: boolean`, `default_value: false`, `active: true`.
+- **`mode: 'diagnose'` round-trip.** `POST /api/x_snc_troubleshoot/v1/troubleshooter/analyze` with
+  `{"execution":"1a9e64bc2ba68354f243fed2ce91bf3d","timeframe":"1 hour"}` returned run
+  `8af6123c2b66cb1817a6ffbeee91bf08` (`status: queued`). The following
+  `GET .../runs/8af6123c2b66cb1817a6ffbeee91bf08` returned `"request":
+  {"execution":"1a9e64bc2ba68354f243fed2ce91bf3d","timeframe":"1 hour"}` and
+  `"request_truncated": false` — the parsed object matches the sent body exactly, and this exercised
+  the real `_defaultReadRun` projection on a live read, not the injected test seam.
+- **`mode: 'collect'` verified separately, as its own run, on its own row** (the path a worker-side
+  write would have missed since it returns 200 inline and never queues). `POST .../analyze` with
+  `{"execution":"d29e64bc2ba68354f243fed2ce91bf49","mode":"collect"}` returned run
+  `33f652382b6e0754f243fed2ce91bf81` (`status: complete`). A direct `servicenow_query` on
+  `x_snc_troubleshoot_run` for that `sys_id` shows `request:
+  {"execution":"d29e64bc2ba68354f243fed2ce91bf49","mode":"collect"}` and
+  `request_truncated: false`.
+- **No truncation was exercised** — both bodies sent were well under `REQUEST_CHARS` (60000), so
+  the `request_truncated: true` state was not observed live; it rests on Task 2's unit tests.
+
 ## 2026.08.0401 — 2026-08-04
 
 ### Added
