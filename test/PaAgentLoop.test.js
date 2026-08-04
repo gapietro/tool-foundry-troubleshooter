@@ -1055,9 +1055,67 @@ describe('depth gate (#103) — _holdBlock', () => {
         expect(block).not.toContain('genai_log')
     })
 
-    test('GUARD: never names a tool even when a gap carries one', () => {
-        const block = load()._holdBlock([{ layer: 5, name: 'Data', reason: 'r', tools: ['query_table'] }], 'gaps')
+    // T4 (final whole-branch review): the original version of this test only
+    // ever carried `query_table` in a gap's `tools[]` — the `genai_log` leg
+    // of the sibling GUARD test above was vacuous because no fixture ever
+    // contained it. Exercise all three measured tools here.
+    test('GUARD: never names a tool even when a gap carries one — all three measured tools', () => {
+        const block = load()._holdBlock(
+            [
+                { layer: 4, name: 'Data schemas', reason: 'r', tools: ['schema_lookup'] },
+                { layer: 5, name: 'Data', reason: 'r', tools: ['query_table'] },
+                { layer: 6, name: 'GenAI stack', reason: 'r', tools: ['genai_log'] },
+            ],
+            'gaps'
+        )
+        expect(block).not.toContain('schema_lookup')
         expect(block).not.toContain('query_table')
+        expect(block).not.toContain('genai_log')
+    })
+
+    // -----------------------------------------------------------------------
+    // I3 (final whole-branch review): `unsweptGaps` copies the model's own
+    // `reason` text verbatim, and this method quotes it back in the next
+    // prompt. An ordinary model-written reason like "no schema_lookup call
+    // was needed" would otherwise re-inject a measured tool name three lines
+    // above "Call a tool that reaches that layer" — the exact channel the
+    // GUARD tests above exist to close, just via a different field.
+    // -----------------------------------------------------------------------
+
+    test('I3: scrubs a measured tool name embedded in the reason text before quoting it back', () => {
+        const block = load()._holdBlock(
+            [
+                { layer: 4, name: 'Data schemas', reason: 'no schema_lookup call was needed', tools: ['schema_lookup'] },
+                { layer: 5, name: 'Data', reason: 'query_table already covered this', tools: ['query_table'] },
+                { layer: 6, name: 'GenAI stack', reason: 'genai_log showed nothing new', tools: ['genai_log'] },
+            ],
+            'gaps'
+        )
+        expect(block).not.toContain('schema_lookup')
+        expect(block).not.toContain('query_table')
+        expect(block).not.toContain('genai_log')
+        expect(block).toContain('[tool]')
+    })
+
+    test('I3: scrubs all seven registered tool names uniformly, not just the three the acceptance test measures', () => {
+        const block = load()._holdBlock(
+            [
+                {
+                    layer: 2,
+                    name: 'Instructions',
+                    reason:
+                        'agent_trace, agent_config, schema_lookup, query_table, genai_log, log_analysis and ' +
+                        'read_artifact were all considered before writing this reason',
+                    tools: ['agent_config'],
+                },
+            ],
+            'gaps'
+        )
+        ;['agent_trace', 'agent_config', 'schema_lookup', 'query_table', 'genai_log', 'log_analysis', 'read_artifact'].forEach(
+            (name) => {
+                expect(block).not.toContain(name)
+            }
+        )
     })
 
     test('the no_layer_report variant asks for a layer report', () => {

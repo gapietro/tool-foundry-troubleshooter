@@ -675,7 +675,11 @@ PaAgentLoop.prototype = {
         for (var i = 0; i < list.length; i++) {
             var g = list[i]
             if (!this._isPlainObject(g)) continue
-            lines.push('  layer ' + g.layer + ' (' + g.name + ') — "' + this._str(g.reason) + '"')
+            // I3 — the reason is the MODEL'S OWN text, verbatim, and an
+            // ordinary reason like "no schema_lookup call was needed" would
+            // otherwise re-inject a measured tool name three lines above
+            // "Call a tool that reaches that layer" — see `_scrubToolNames`.
+            lines.push('  layer ' + g.layer + ' (' + g.name + ') — "' + this._scrubToolNames(this._str(g.reason)) + '"')
         }
         lines.push('The trail shows no tool call has reached any of them.')
         lines.push('')
@@ -1215,6 +1219,40 @@ PaAgentLoop.prototype = {
     // =======================================================================
     // Small helpers (ES5 / Rhino only)
     // =======================================================================
+
+    /**
+     * I3 — the seven names `PaToolRegistry`'s registry carries. Kept HERE,
+     * as a literal list, rather than imported: `PaToolRegistry` is not
+     * available in this file's test sandbox. This is the ONE place the list
+     * lives — `_scrubToolNames` is its only consumer — so if a tool is ever
+     * renamed or added, this is the one line to update.
+     *
+     * WHY THIS EXISTS: `unsweptGaps` copies a fix_report draft's `reason`
+     * text verbatim, and `_holdBlock` quotes it back in the next prompt. An
+     * ordinary model-written reason — `"no schema_lookup call was needed"`
+     * — would otherwise re-inject a measured tool name three lines above
+     * "Call a tool that reaches that layer," which would make the
+     * acceptance test's own headline (does the model independently reach
+     * the right tool) unreadable. Scrubbing all seven, not just the three
+     * the acceptance test measures, keeps the rule uniform rather than a
+     * judgement call about which names matter.
+     */
+    _ALL_TOOL_NAMES: ['agent_trace', 'agent_config', 'schema_lookup', 'query_table', 'genai_log', 'log_analysis', 'read_artifact'],
+
+    /**
+     * Replaces every occurrence of every `_ALL_TOOL_NAMES` entry in `text`
+     * with a neutral placeholder. ES5 only: a plain indexed loop with
+     * `split`/`join` per name — no regex (a global-flag literal is the
+     * obvious alternative but is one more thing to get right per name), no
+     * `String.prototype.replaceAll` (not available in Rhino).
+     */
+    _scrubToolNames: function (text) {
+        var out = this._str(text)
+        for (var i = 0; i < this._ALL_TOOL_NAMES.length; i++) {
+            out = out.split(this._ALL_TOOL_NAMES[i]).join('[tool]')
+        }
+        return out
+    },
 
     _joinProblems: function (problems) {
         var list = this._isArray(problems) ? problems : []
