@@ -1854,3 +1854,146 @@ deterioration of the gap.
 
 All changes are append-only in DECISION.md. No other files touched. No verified numbers moved.
 
+
+---
+
+## P. The depth gate (`2026.08.0401`, #103) — the floor works, the acceptance test does not
+
+§O8's queued next item, run 2026-08-04. The change is one interception in `PaAgentLoop._step()`:
+before a terminal action (`answer` / `fix_report`) is honored, the loop reads the draft's own
+`NOT_SWEPT` layers, maps them to the tools that would close them, and — if the audit trail shows no
+call has reached any of them — refuses the terminal action once, appends an interrogation to the
+next prompt, and loops again. Release is **sticky**: the gap set recorded at the first hold is the
+only one that can release it, so the gate buys exactly one forced beat.
+
+Design: `docs/superpowers/specs/2026-08-03-depth-gate-design.md`. Plan:
+`docs/superpowers/plans/2026-08-04-depth-gate-agent-loop.md`. Measurements, verbatim reports and
+the captured hold prompt: `benchmark/raw-evidence-v5-depth-smoke.md`. Predictions P1–P7 were filed
+on issue #103 **before the code was written**; P8 was added during the final whole-branch review,
+before the runs.
+
+### P1. What was run
+
+**Six runs, custom harness only, seeds 01 / 03 / 04, two each**, fired sequentially with each
+polled to terminal before the next was POSTed. Seed 02 excluded per spec §11; seed 05 not in scope.
+These three seeds were chosen because their answers sit behind the layer-4, layer-5 and layer-6
+tools respectively — the tools with zero invocations across 45 prior runs.
+
+**Native did not move on this branch** (§K5 / §I4 confound 3 stays closed), so there is no native
+arm and no cross-harness comparison from this smoke.
+
+Deploy was verified by reading the installed `PaAgentLoop` body back through the MCP broker and
+literally comparing `_scrubToolNames` against `src/server/PaAgentLoop.js` — including the `'gi'`
+flag added in the branch's last commit. **Recorded oddity:** `sys_script_include.sys_updated_on`
+still read `2026-08-02` immediately after a successful install. Content was branch HEAD; the
+timestamp is stale metadata. A future pass that checks only the timestamp will wrongly conclude the
+install did not land.
+
+### P2. The scored predictions
+
+| | Prediction, as filed | Outcome | Measured |
+|---|---|---|---|
+| P1 | The hold fires on ≥ 5 of 6 runs | **HELD** | 6 of 6 |
+| P2 | **≥ 1 run reaches `schema_lookup`, `query_table` or `genai_log` on the seed that needs it — §H8's test MET** | **REFUTED** | 0 of 6. None of the three was invoked in any run |
+| P3 | Median tool calls rises from 1 to ≥ 2 | **HELD** | median 1 → 2 (counts: 2,2,3,2,3,2) |
+| P4 | 1–2 runs ride to `partial` (the refusal tail) | **REFUTED** | 0 of 6. All six `complete` |
+| P5 | Seed 01 still misses `priority_stored: null` on ≥ 1 of its 2 runs | **HELD** | missed on 2 of 2 |
+| P6 | Unsupported-sweep-claim rate does NOT rise above v4's ~1/10 | **HELD** | 0 of 6 (v4: 1 of 6 on these seeds) |
+| P7 | Compliance concentrates on `agent_config` | **HELD** | 6 of 6 releases were `agent_config`, exclusively |
+| P8 | The model does not route around the gate by relabelling `NOT_SWEPT` → `UNAVAILABLE` | **HELD** | `UNAVAILABLE` 1/42 → 2/42; holds still fired 6/6 |
+
+**Six held, two refuted.** P4 is refuted in the favorable direction — the gate is not a
+denial-of-service — and is recorded as refuted anyway, because a prediction that was wrong is
+recorded as wrong regardless of which way it was wrong.
+
+P8 needs its qualification stated rather than buried: `UNAVAILABLE` did rise, 1 occurrence to 2,
+both on layer 6, both with the honest reason "no `genai_log` or `log_analysis` tool invoked". It is
+scored HELD because the relabel escape is defined by its *mechanism* — terminating in 2 LLM calls
+with zero holds — and every run took a hold. The `NOT_SWEPT` drop is accounted for by `SWEPT`
+rising 4 (layer 3, legitimately earned) plus that one label. At 42 labels this is one occurrence of
+difference; do not harden it either way.
+
+### P3. What the smoke establishes
+
+**The mechanism works exactly as designed, and the design does not reach the acceptance test.**
+
+- A hold fired on **6 of 6** runs, released in every case by a real `agent_config` call verified
+  `"success":true` against its own audit row (the M4 check — a released hold is a *dispatch*, so
+  this was checked separately rather than assumed).
+- **Audit-derived sweep moved 1/7 → 4/7 on every run** (L1 via `agent_trace`; L2, L3, L7 via
+  `agent_config`). That is the first movement in this number in the project's history — it was 1/7
+  on all 20 v4 rows and on all 45 runs before it.
+- **The interrogation reached the model intact.** Captured verbatim from
+  `sys_generative_ai_log` `1a70063c2b260754f243fed2ce91bf87`: the block renders whole into the
+  prompt with no digest truncation (the plan's correction #1, the #72 / §G3a observation-channel
+  defect, confirmed avoided in the live artifact), and `_scrubToolNames` replaced the tool names in
+  the model's own quoted-back reasons with `[tool]` — so the harness never named a tool and §H8's
+  test stayed non-vacuous.
+- **§H8's acceptance test is still unmet.** `schema_lookup`, `query_table`, `genai_log` and
+  `log_analysis` have now never been invoked by the custom harness in **51 runs**.
+
+**Per the falsification rules filed in advance, this is the third case: "holds fire, gaps close,
+measured tools never reached → the mechanism is refuted *as specified*; the next iteration works on
+direction, not force."** Neither revert trigger fired: the gate is not a denial-of-service (P4) and
+it did not reproduce #88's fabrication (P6).
+
+**P7 is the mechanism of P2's failure, and it was pre-registered as a known tilt.**
+`_layerToolMap()` gives `agent_config` three layers (2, 3, 7) in one call, while layer 4 is
+reachable only by `schema_lookup` and layer 5 only by `query_table`/`log_analysis`. The cheapest
+way to discharge a hold is therefore one `agent_config` call, and all six runs took it. The tilt
+comes from the map, not from the gate. The finding is clean and directive: **force was sufficient
+to make the model act and insufficient to make it act on the right layer.**
+
+**Constraint 1 is unmoved.** Both seed-01 runs bought a second tool call and neither spent it on
+the evidence already in hand: `priority_stored: null` sits verbatim in the turn-2 prompt of both
+runs, and the string appears nowhere in either delivered report, both of which conclude "no
+observable failure" with empty `root_causes`. §O6 said evidence-in-hand-and-unused is a different
+failure from evidence-not-fetched. This smoke moved the second and left the first exactly where it
+was.
+
+### P4. The countervailing observation, recorded because it cuts against the headline
+
+Four of the six runs produced a **non-empty `root_causes` and a fix** — three CONFIRMED, one
+UNCONFIRMED with a correctly-named `would_confirm`. v4's custom rows on these same seeds produced
+empty `root_causes` or a draft that failed validation. Whether any of these four findings is
+*correct* is a scored pass's question and this smoke does not answer it.
+
+This matters because §H8's acceptance test is a **proxy** for "does the harness investigate", and
+the proxy and the artifact moved in different directions: the tools the test measures were not
+reached, and the reports changed shape anyway. Two flags for whoever scores next, both in the raw
+evidence: run 6 places its root cause on layer 6 while its own `layers_swept` marks layer 6
+`UNAVAILABLE` (validation had no `SWEPT` claim to bite on), and run 3's `would_confirm` correctly
+names layer 4 — the model identified the missing evidence and still did not call the tool that
+closes it.
+
+### P5. What this does not establish
+
+- **Six unscored runs, three seeds, one instance, one day.** No score was assigned to any of them.
+- **No claim about gate passes and no claim about a rate.** §H8 asks for one run reaching one tool;
+  one hit would have been a hit, and zero hits across six runs is not a frequency either.
+- **Nothing about whether depth converts to score.** That is a v5 scored pass; this smoke's only
+  job was to decide whether firing one is worth it.
+- **Nothing about the other two seeds.** Seed 02 was excluded by design and seed 05 was not run, so
+  the gate's behaviour on the absence seed — where `UNAVAILABLE` on layer 1 is the honest answer and
+  #78's exit must stay open — is **untested live**. It is covered by unit tests only.
+- **Nothing about native**, which did not move on this branch.
+- **P8 rests on one label of difference** (1 → 2 occurrences across 42), which is an observation,
+  not a rate.
+
+### P6. Recommendation
+
+**Do not fire a full v5 scored pass on this change alone.** The pre-filed rule for this outcome
+says the next iteration works on **direction, not force**, and the tilt that defeated P2 is
+identified precisely: the cheapest release closes three layers at once. Candidate directions, in
+the order the evidence supports them: weight or order the gap set so the layer the model itself
+names in interrogation item 2 is the one that must be reached; or make the map's cheap multi-layer
+release not discharge a gap on a layer it did not touch.
+
+The counter-argument is real and is recorded rather than dismissed: four of six runs produced
+fixes where v4 produced none, and that is the kind of change scoring measures and sweep depth does
+not. If a pass is fired anyway, the informative one is **seeds 03 and 04 only** — the two where
+root causes appeared — scored with independent per-row scorers (§O5) and with #100's packet leak
+fixed first, not a full five-seed repeat.
+
+**Unchanged: native remains the recommended path on this instance, and the Phase 1b milestone is
+not met.**

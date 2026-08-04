@@ -269,3 +269,32 @@ not catch; it is not an unsupported `SWEPT` claim, so the §79b check had nothin
 identified the missing evidence correctly and still did not call the tool that closes it. These
 are unscored observations; whether any of these four findings is *correct* is a scored pass's
 question, not this smoke's.
+
+---
+
+## Prediction verdicts (Task 9)
+
+Scored against issue #103's filed table, unedited, plus P8 (added during the final whole-branch
+review, before the runs, and recorded as a later addition rather than folded in silently).
+
+| | Prediction, as filed | Outcome | Measured |
+|---|---|---|---|
+| P1 | The hold fires on ≥ 5 of 6 runs | **HELD** | 6 of 6 |
+| P2 | **≥ 1 run reaches `schema_lookup`, `query_table` or `genai_log` on the seed that needs it — §H8's test MET** | **REFUTED** | 0 of 6 |
+| P3 | Median tool calls rises from 1 to ≥ 2 | **HELD** | 1 → 2 |
+| P4 | 1–2 runs ride to `partial` | **REFUTED** | 0 of 6; all `complete` |
+| P5 | Seed 01 still misses `priority_stored: null` on ≥ 1 of 2 | **HELD** | 2 of 2 |
+| P6 | Unsupported-sweep-claim rate does NOT rise above v4's ~1/10 | **HELD** | 0 of 6 (v4: 1 of 6) |
+| P7 | Compliance concentrates on `agent_config` | **HELD** | 6 of 6, exclusively |
+| P8 | No relabel escape (`NOT_SWEPT` → `UNAVAILABLE`) | **HELD** | `UNAVAILABLE` 1/42 → 2/42, holds still 6/6 |
+
+**Six held, two refuted.** P4 is refuted in the favorable direction and is recorded as refuted
+anyway.
+
+**Falsification rules, applied.** Of the three filed in advance, the third one fires: holds fired,
+gaps closed, and the measured tools were never reached — so **the mechanism is refuted as
+specified, and the next iteration works on direction, not force.** Neither revert trigger fired:
+not all six rode to `partial` (P4), and fabrication did not rise (P6).
+
+Verdict narrative, what it establishes, what it does not, and the recommendation:
+`benchmark/DECISION.md` **§P**.
