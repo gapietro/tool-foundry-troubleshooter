@@ -780,10 +780,10 @@ describe('audit context plumbing', () => {
         expect(fixReport.contextCalls[1]).toBe(fixReport.contextCalls[0])
     })
 
-    test('a degraded trail disables the checks AND is recorded in the transcript', () => {
+    test('a genuinely degraded trail disables the checks AND records "unavailable" in the transcript', () => {
         const runs = fakeRunManager()
         const fixReport = fakeFixReport([{ valid: true, normalized: { ok: 1 } }])
-        const audit = fakeAuditLogger({ available: false, degraded: 'no_audit_rows', tools: [] })
+        const audit = fakeAuditLogger({ available: false, degraded: 'glide_unavailable', tools: [] })
 
         const loop = load({ runManager: runs, fixReport: fixReport, auditLogger: audit })
         loop._handleFixReport('run1', { failure_summary: 'x' })
@@ -794,7 +794,29 @@ describe('audit context plumbing', () => {
             (e) => String(e.result_digest).indexOf('audit trail unavailable') !== -1
         )
         expect(notes.length).toBe(1)
-        expect(notes[0].result_digest.indexOf('no_audit_rows')).not.toBe(-1)
+        expect(notes[0].result_digest.indexOf('glide_unavailable')).not.toBe(-1)
+    })
+
+    // M1 (final whole-branch review): `no_audit_rows` means the trail WAS
+    // readable — it answered "zero tools invoked" — so the old wording
+    // ("audit trail unavailable") misrepresented a successful query as a
+    // failed one. Only the citation/sweep cross-checks were skipped, and
+    // only because there is nothing yet to cite.
+    test('M1: no_audit_rows records the trail as READABLE with zero invoked tools, not "unavailable"', () => {
+        const runs = fakeRunManager()
+        const fixReport = fakeFixReport([{ valid: true, normalized: { ok: 1 } }])
+        const audit = fakeAuditLogger({ available: false, degraded: 'no_audit_rows', tools: [] })
+
+        const loop = load({ runManager: runs, fixReport: fixReport, auditLogger: audit })
+        loop._handleFixReport('run1', { failure_summary: 'x' })
+
+        expect(fixReport.contextCalls[0].auditAvailable).toBe(false)
+
+        const notes = runs.transcript.filter((e) => String(e.result_digest).indexOf('no_audit_rows') !== -1)
+        expect(notes.length).toBe(1)
+        expect(notes[0].result_digest).toContain('readable')
+        expect(notes[0].result_digest).toContain('zero tools')
+        expect(notes[0].result_digest).not.toContain('unavailable')
     })
 
     test('an audit logger that throws degrades the CHECK, never the diagnosis', () => {
@@ -841,6 +863,20 @@ describe('depth gate (#103) — _trailTools', () => {
     test('a null result degrades', () => {
         const loop = load({ auditLogger: fakeAuditLogger(null) })
         expect(loop._trailTools('RUN1')).toEqual({ readable: false, tools: [], degraded: 'query_failed' })
+    })
+
+    // -----------------------------------------------------------------------
+    // T2 — two cheap contract-boundary cases
+    // -----------------------------------------------------------------------
+
+    test('T2: available:false with degraded absent entirely degrades to not-readable', () => {
+        const loop = load({ auditLogger: fakeAuditLogger({ available: false }) })
+        expect(loop._trailTools('RUN1')).toEqual({ readable: false, tools: [], degraded: 'query_failed' })
+    })
+
+    test('T2: a non-array tools on an available:true result degrades tools to [] (the _isArray guard)', () => {
+        const loop = load({ auditLogger: fakeAuditLogger({ available: true, tools: 'not-an-array' }) })
+        expect(loop._trailTools('RUN1')).toEqual({ readable: true, tools: [], degraded: '' })
     })
 })
 
@@ -1161,6 +1197,71 @@ describe('depth gate (#103) — _holdBlock', () => {
         // Well-formed entries still appear.
         expect(block).toContain('layer 2 (Instructions)')
         expect(block).toContain('layer 4 (Data schemas)')
+    })
+})
+
+// ===========================================================================
+// depth gate (#103) — _holdNote (M2, final whole-branch review)
+//
+// `_openGaps`/`_unionTools`/`_holdBlock` all guard against a non-plain-object
+// gap element. `_holdNote` did not, even though it is the one consumer whose
+// omission would take the run down: `list[i].layer` on a null/undefined
+// entry throws.
+// ===========================================================================
+
+describe('depth gate (#103) — _holdNote', () => {
+    test('M2: a malformed element in gate.gaps is skipped, not dereferenced', () => {
+        let note
+        expect(() => {
+            note = load()._holdNote({
+                kind: 'gaps',
+                gaps: [
+                    { layer: 2, name: 'Instructions', reason: 'r', tools: ['agent_config'] },
+                    null,
+                    'not an object',
+                    { layer: 4, name: 'Data schemas', reason: 'r', tools: ['schema_lookup'] },
+                ],
+            })
+        }).not.toThrow()
+
+        expect(note).toContain('2')
+        expect(note).toContain('4')
+    })
+})
+
+// ===========================================================================
+// depth gate (#103) — hold block position in the prompt (M3, final
+// whole-branch review)
+//
+// `_fixReportContract()` is the largest, most specific block in the prompt.
+// With the hold BEFORE both contracts, the last thing the model read after
+// being told a terminal action was unavailable was a detailed spec for
+// producing one. The hold now goes LAST — after both contracts — so the
+// final instruction the model reads is to go call a tool.
+// ===========================================================================
+
+describe('depth gate (#103) — hold block position in _buildPrompt (M3)', () => {
+    test('the hold block appears AFTER both the response contract and the fix_report contract', () => {
+        const loop = load({ fixReport: fakeFixReport([]) })
+        loop._holdActive = 'HOLD BLOCK MARKER TEXT'
+
+        const prompt = loop._buildPrompt('PLAYBOOK', 'TOOLBLOCK', { transcript: [] }, {})
+
+        const holdIdx = prompt.indexOf('HOLD BLOCK MARKER TEXT')
+        const responseIdx = prompt.indexOf('## Response format')
+        const fixReportIdx = prompt.indexOf('## fix_report JSON contract')
+
+        expect(holdIdx).toBeGreaterThan(-1)
+        expect(responseIdx).toBeGreaterThan(-1)
+        expect(fixReportIdx).toBeGreaterThan(-1)
+        expect(holdIdx).toBeGreaterThan(responseIdx)
+        expect(holdIdx).toBeGreaterThan(fixReportIdx)
+    })
+
+    test('with no active hold, the prompt carries neither the marker nor an empty trailing block', () => {
+        const loop = load({ fixReport: fakeFixReport([]) })
+        const prompt = loop._buildPrompt('PLAYBOOK', 'TOOLBLOCK', { transcript: [] }, {})
+        expect(prompt).not.toContain('HOLD BLOCK MARKER TEXT')
     })
 })
 

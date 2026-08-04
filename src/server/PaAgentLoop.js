@@ -385,9 +385,13 @@ PaAgentLoop.prototype = {
     },
 
     /**
-     * Resolve the run's audit trail ONCE per fix-report handling and reuse the
-     * SAME object across the repair turn — a repair turn makes no tool calls,
-     * so a second query would return the same set at twice the cost.
+     * Resolve the run's audit trail ONCE per fix-report handling CALL (M1,
+     * final whole-branch review: NOT once per run — `_trailTools`/
+     * `_depthGate` below run their OWN separate trail query for the depth
+     * gate, issue #103, and sharing a single read between the two is
+     * deliberately out of scope for that change) and reuse the SAME object
+     * across the repair turn — a repair turn makes no tool calls, so a
+     * second query here would return the same set at twice the cost.
      *
      * A degraded trail is RECORDED, not swallowed. #79's whole point is that a
      * passing Fix Report should carry an evidential guarantee; a cross-check
@@ -411,13 +415,24 @@ PaAgentLoop.prototype = {
 
         var available = !!(res && res.available === true)
         if (!available) {
-            this._runs().appendTranscript(runId, {
-                actor: 'system',
-                result_digest:
-                    'audit trail unavailable (' +
-                    this._str(res && res.degraded ? res.degraded : 'query_failed') +
-                    ') — citation and sweep cross-checks SKIPPED for this report',
-            })
+            var reason = this._str(res && res.degraded ? res.degraded : 'query_failed')
+            var note
+            if (reason === 'no_audit_rows') {
+                // M1 (final whole-branch review): the trail WAS readable
+                // here — the query ran fine and answered "this run invoked
+                // nothing." The old wording ("audit trail unavailable")
+                // read, to an analyst scanning the transcript, as the gate
+                // having failed open when it had not; only the
+                // citation/sweep cross-checks were skipped, and only
+                // because there is nothing yet to cite.
+                note =
+                    'audit trail readable (no_audit_rows) — this run invoked zero tools; citation and sweep ' +
+                    'cross-checks SKIPPED for this report'
+            } else {
+                note =
+                    'audit trail unavailable (' + reason + ') — citation and sweep cross-checks SKIPPED for this report'
+            }
+            this._runs().appendTranscript(runId, { actor: 'system', result_digest: note })
         }
 
         return {
@@ -515,7 +530,11 @@ PaAgentLoop.prototype = {
      *
      * @param {String} runId
      * @param {Object} action the terminal action the model just emitted
-     * @returns {Object} {hold:Boolean, gaps:Array, kind:'gaps'|'no_layer_report'}
+     * @returns {Object} {hold:Boolean, gaps:Array, kind:'gaps'|'no_layer_report'|''}
+     *          — `kind` is `''` on every ALLOW path (already released, an
+     *          unreadable trail, every declared gap closed, or no gap
+     *          declared at all); only the two HOLD paths use the other two
+     *          values.
      */
     _depthGate: function (runId, action) {
         if (this._gateReleased) return { hold: false, gaps: [], kind: '' }
@@ -715,7 +734,16 @@ PaAgentLoop.prototype = {
         }
         var nums = []
         var list = this._isArray(gate.gaps) ? gate.gaps : []
-        for (var i = 0; i < list.length; i++) nums.push(list[i].layer)
+        for (var i = 0; i < list.length; i++) {
+            var g = list[i]
+            // M2 — the same per-element guard `_openGaps`/`_unionTools`/
+            // `_holdBlock` already apply. A malformed element here is the
+            // one consumer whose omission would take the run down
+            // (`list[i].layer` on a null/undefined entry throws), so it
+            // gets skipped rather than dereferenced, same as everywhere else.
+            if (!this._isPlainObject(g)) continue
+            nums.push(g.layer)
+        }
         return 'HOLD: terminal action refused — layer(s) ' + nums.join(', ') + ' declared NOT_SWEPT with no tool call behind them.'
     },
 
@@ -855,16 +883,24 @@ PaAgentLoop.prototype = {
         lines.push('')
         lines.push(this._renderTranscript(ctx.transcript))
 
-        if (this._nonEmptyString(this._holdActive)) {
-            lines.push('')
-            lines.push(this._holdActive)
-        }
-
         lines.push('')
         lines.push(this._responseContract())
 
         lines.push('')
         lines.push(this._fixReportContract())
+
+        // M3 (final whole-branch review): the hold block goes LAST, after
+        // both contracts, not before them. `_fixReportContract()` is the
+        // largest, most specific block in the prompt — the spec's own §2
+        // diagnosis is that it dominates the model's framing — so with the
+        // hold before it, the last thing the model read after being told a
+        // terminal action is unavailable was a detailed spec for producing
+        // one. Ending on the hold instead means the final instruction the
+        // model reads is to go call a tool.
+        if (this._nonEmptyString(this._holdActive)) {
+            lines.push('')
+            lines.push(this._holdActive)
+        }
 
         return lines.join('\n')
     },
