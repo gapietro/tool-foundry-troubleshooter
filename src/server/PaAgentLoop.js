@@ -156,6 +156,7 @@ PaAgentLoop.prototype = {
         this._gateReleased = false
         this._heldGaps = null
         this._heldTools = null
+        this._holdActive = null
 
         if (o.maxIterations > 0) this.MAX_ITERATIONS = o.maxIterations
         if (o.budgetMs > 0) this.BUDGET_MS = o.budgetMs
@@ -244,6 +245,22 @@ PaAgentLoop.prototype = {
             // ---------------------------------------------------------------
             this._dispatchTool(runId, action)
             return { terminal: false }
+        }
+
+        if (action.action === 'answer' || action.action === 'fix_report') {
+            // THE DEPTH GATE (issue #103). Checked before either terminal
+            // action is honored — see `_depthGate` for why it lives here and
+            // not in `PaFixReport.validate`.
+            var gate = this._depthGate(runId, action)
+            if (gate.hold) {
+                this._holdActive = this._holdBlock(gate.gaps, gate.kind)
+                this._runs().appendTranscript(runId, {
+                    actor: 'system',
+                    result_digest: this._holdNote(gate),
+                })
+                return { terminal: false }
+            }
+            this._holdActive = null
         }
 
         if (action.action === 'answer') {
@@ -632,6 +649,28 @@ PaAgentLoop.prototype = {
     },
 
     /**
+     * The transcript's record of a hold — SHORT by necessity.
+     *
+     * `PaRunManager.appendTranscript` digests `result_digest` at
+     * DIGEST_CHARS (200) and derives the 8500-char `prompt_digest` for
+     * `actor:'tool'` entries ONLY. A `system` entry carrying the full
+     * interrogation would therefore reach the next prompt as a 200-character
+     * stub — which is the #72 / §G3a observation-channel defect, the leading
+     * identified mechanical cause of the original 0/10, in a new place. So
+     * the interrogation goes into the PROMPT via `_buildPrompt`, and the
+     * transcript keeps this short auditable note instead.
+     */
+    _holdNote: function (gate) {
+        if (gate.kind === 'no_layer_report') {
+            return 'HOLD: terminal action refused — no layer report on record; gate unreleased.'
+        }
+        var nums = []
+        var list = this._isArray(gate.gaps) ? gate.gaps : []
+        for (var i = 0; i < list.length; i++) nums.push(list[i].layer)
+        return 'HOLD: terminal action refused — layer(s) ' + nums.join(', ') + ' declared NOT_SWEPT with no tool call behind them.'
+    },
+
+    /**
      * Renders the SAME normalized report both ways (PaFixReport header:
      * "the two renderings describe the same report") and stores each where
      * it is actually consumed, rather than a third ad-hoc re-stringify of
@@ -766,6 +805,11 @@ PaAgentLoop.prototype = {
         lines.push('## Transcript so far')
         lines.push('')
         lines.push(this._renderTranscript(ctx.transcript))
+
+        if (this._nonEmptyString(this._holdActive)) {
+            lines.push('')
+            lines.push(this._holdActive)
+        }
 
         lines.push('')
         lines.push(this._responseContract())

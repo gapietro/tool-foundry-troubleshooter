@@ -1105,3 +1105,132 @@ describe('depth gate (#103) — _holdBlock', () => {
         expect(block).toContain('layer 4 (Data schemas)')
     })
 })
+
+// ===========================================================================
+// depth gate (#103) — wired into the loop
+// ===========================================================================
+
+describe('depth gate (#103) — wired into the loop', () => {
+    const GAP4 = {
+        layer: 4,
+        name: 'Data schemas',
+        reason: 'no schema read was needed',
+        tools: ['schema_lookup'],
+    }
+    const DRAFT = { action: 'fix_report', report: { layers_swept: {} } }
+    const fixWith = (validateResults, gaps) => fakeFixReport(validateResults, gaps)
+
+    test('a held fix_report loops instead of terminating, and the NEXT prompt carries the interrogation IN FULL', () => {
+        const llm = fakeLlm([
+            { success: true, action: DRAFT, raw: 'r1' },
+            { success: true, action: { action: 'tool_call', tool: 'agent_config', args: {} }, raw: 'r2' },
+        ])
+        const loop = load({
+            llmProxy: llm,
+            runManager: fakeRunManager(),
+            toolRegistry: fakeTools([]),
+            fixReport: fixWith([], [GAP4]),
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            maxIterations: 2,
+        })
+        loop.run('RUN1')
+
+        expect(llm.calls.length).toBeGreaterThanOrEqual(2)
+        const second = llm.calls[1]
+        expect(second).toContain('HOLD')
+        expect(second).toContain('layer 4 (Data schemas)')
+        expect(second).toContain('no schema read was needed')
+        expect(second).toContain('most change your conclusion')
+        // The #72 regression guard: the block must arrive WHOLE, not as a
+        // 200-char digest stub.
+        expect(second).not.toContain('more chars]')
+    })
+
+    test('the transcript keeps a SHORT audit note, under the 200-char digest ceiling', () => {
+        const runs = fakeRunManager()
+        const loop = load({
+            runManager: runs,
+            toolRegistry: fakeTools([]),
+            llmProxy: fakeLlm([
+                { success: true, action: DRAFT, raw: 'r1' },
+                { success: true, action: { action: 'tool_call', tool: 'agent_config', args: {} }, raw: 'r2' },
+            ]),
+            fixReport: fixWith([], [GAP4]),
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            maxIterations: 2,
+        })
+        loop.run('RUN1')
+
+        const notes = runs.transcript.filter((e) => e.actor === 'system' && /^HOLD:/.test(e.result_digest || ''))
+        expect(notes).toHaveLength(1)
+        expect(notes[0].result_digest.length).toBeLessThan(200)
+    })
+
+    test('an UNHELD fix_report terminates exactly as before', () => {
+        const loop = load({
+            fixReport: fixWith([{ valid: true, normalized: { ok: true } }], []),
+            llmProxy: fakeLlm([{ success: true, action: DRAFT, raw: 'r1' }]),
+            runManager: fakeRunManager(),
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+        })
+        expect(loop.run('RUN1').outcome).toBe('fix_report')
+    })
+
+    test('a degraded trail does not gate — the run terminates as before', () => {
+        const loop = load({
+            fixReport: fixWith([{ valid: true, normalized: { ok: true } }], [GAP4]),
+            llmProxy: fakeLlm([{ success: true, action: DRAFT, raw: 'r1' }]),
+            runManager: fakeRunManager(),
+            auditLogger: fakeAuditLogger({ available: false, degraded: 'glide_unavailable', tools: [] }),
+        })
+        expect(loop.run('RUN1').outcome).toBe('fix_report')
+    })
+
+    test('a run that refuses to act rides the bounds to partial (P4, the refusal tail)', () => {
+        const loop = load({
+            llmProxy: fakeLlm([
+                { success: true, action: DRAFT, raw: 'r1' },
+                { success: true, action: DRAFT, raw: 'r2' },
+                { success: true, action: DRAFT, raw: 'r3' },
+            ]),
+            runManager: fakeRunManager(),
+            fixReport: fixWith([], [GAP4]),
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            maxIterations: 3,
+        })
+        expect(loop.run('RUN1').outcome).toBe('partial')
+    })
+
+    test('bounds are still checked FIRST — a hold cannot outlive MAX_ITERATIONS', () => {
+        const runs = fakeRunManager()
+        const loop = load({
+            runManager: runs,
+            llmProxy: fakeLlm([{ success: true, action: DRAFT, raw: 'r1' }]),
+            fixReport: fixWith([], [GAP4]),
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            maxIterations: 1,
+        })
+        loop.run('RUN1')
+        const flags = runs.transcript.filter((e) => /INCOMPLETE/.test(e.result_digest || ''))
+        expect(flags).toHaveLength(1)
+    })
+
+    test('the gate never fires on a tool_call — only on terminal actions', () => {
+        const tools = fakeTools([{ success: true, data: {} }])
+        const loop = load({
+            toolRegistry: tools,
+            runManager: fakeRunManager(),
+            llmProxy: fakeLlm([
+                { success: true, action: { action: 'tool_call', tool: 'agent_trace', args: {} }, raw: 'r1' },
+                { success: true, action: { action: 'answer', text: 'x' }, raw: 'r2' },
+            ]),
+            fixReport: fixWith([], [GAP4]),
+            auditLogger: fakeAuditLogger({ available: true, tools: [] }),
+            maxIterations: 2,
+        })
+        loop.run('RUN1')
+        // One dispatch, from the tool_call turn. The gate held the `answer`
+        // and the bound then ended the run — it never gated the tool_call.
+        expect(tools.calls).toHaveLength(1)
+    })
+})
