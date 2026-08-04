@@ -9,7 +9,7 @@
 **Tech Stack:** ES5 / Rhino-safe server-side JavaScript (`src/server/*.js`, `Class.create()` prototypes), Jest 29.7.0 unit tests with hand-rolled fakes and zero Glide, `now-sdk` 4.9.2 build+install to gpinst01, foundry MCP tools for the runtime smoke.
 
 **Spec:** `docs/superpowers/specs/2026-08-03-depth-gate-design.md`
-**Issue:** #103 — predictions P1–P7 are filed there and must not be edited after runs begin.
+**Issue:** #103 — predictions P1–P7 are filed there and must not be edited after runs begin. **P8** (the `NOT_SWEPT` → `UNAVAILABLE` relabel escape) was identified in the final whole-branch review of the implementation, after P1–P7 were filed but before any run — see Task 9 Step 1 and spec §8.
 
 ## Global Constraints
 
@@ -1163,11 +1163,21 @@ For each run, query `x_snc_troubleshoot_audit` filtered to that run (`servicenow
 
 For each run, count `actor:'system'` transcript entries whose `result_digest` starts with `HOLD:`. Record the count and, for each, the layers named.
 
-- [ ] **Step 5: The seed-01 constraint-1 readout**
+**M4 (final whole-branch review):** for each hold, also record whether the tool call that released it (the dispatch whose tool name matched the recorded release set) returned `success:true` in its `x_snc_troubleshoot_audit` result. The gate counts a DISPATCH — the audit trail logs intent before execution — so a released hold is not by itself proof the call actually succeeded. Recording this separately means a claimed §H8 acceptance-test hit (P2) can be checked against whether the releasing call was a null/failed call rather than taken at face value.
+
+- [ ] **Step 5: Record the `NOT_SWEPT` vs `UNAVAILABLE` label distribution (P8)**
+
+For each run, from the delivered report (or rejected draft)'s `layers_swept`, count how many of the seven layers are labeled `NOT_SWEPT` vs `UNAVAILABLE` (vs `SWEPT`). Compare the six runs' distributions against the v4 baseline's (`benchmark/raw-evidence-v4.md`). This is P8's measurement (spec §8): a materially higher `UNAVAILABLE` rate paired with a lower `NOT_SWEPT` rate than v4, on a run that produced few or no holds, is the relabel escape — the model routing around the gate by declaring layers un-lookable rather than not-yet-looked-at, since only `NOT_SWEPT` can become a gap.
+
+- [ ] **Step 6: Capture the rendered hold prompt for at least one held run (M5)**
+
+The full interrogation text (`_holdBlock`'s output) is never persisted anywhere queryable after the fact — the transcript keeps only the short `HOLD:` note (under 200 chars), and `_buildPrompt`'s output is not itself stored by `PaRunManager`. For at least one run with ≥ 1 hold, pull the actual rendered prompt from `sys_generative_ai_log` (the record of what was actually sent to the LLM for that turn) and save it verbatim into the evidence file, so the interrogation text this smoke exercised is itself part of the record rather than only inferable from source.
+
+- [ ] **Step 7: The seed-01 constraint-1 readout**
 
 For both seed-01 runs, read the delivered report (or the rejected draft) and record a plain yes/no: **does it use `priority_stored: null`?** This is prediction P5 and it is the only readout in the smoke that is about reading rather than depth.
 
-- [ ] **Step 6: Commit the evidence**
+- [ ] **Step 8: Commit the evidence**
 
 ```bash
 git add benchmark/raw-evidence-v5-depth-smoke.md
@@ -1184,11 +1194,13 @@ git commit -m "bench: v5 depth smoke — six runs, audit-derived (#103)"
 
 **Interfaces:**
 - Consumes: Task 8's measurements.
-- Produces: a P1–P7 verdict table and a DECISION.md section.
+- Produces: a P1–P8 verdict table and a DECISION.md section.
 
 - [ ] **Step 1: Score each prediction HELD / REFUTED / INDETERMINATE**
 
-Against issue #103's filed table, unedited. P2 is the headline: did any run reach the layer-4, layer-5 or layer-6 tool on the seed that needs it? That is §H8's acceptance test, and this is the first opportunity in 45 runs to answer it.
+Against issue #103's filed table, unedited, PLUS **P8** (added post-review, final whole-branch review of the implementation, not part of the original filed set): `unsweptGaps` gaps only on `NOT_SWEPT`, never `UNAVAILABLE` (deliberate — #78's honest "nothing ever ran" exit stays protected), but the turn-1 contract text tells the model that marking a layer `NOT_SWEPT` **or** `UNAVAILABLE` "costs you nothing" — true for one label, false for the other. A model that relabels its unswept layers `UNAVAILABLE` terminates in 2 LLM calls with zero holds, the exact pre-gate shape this branch exists to break. Score P8 against the `NOT_SWEPT` vs `UNAVAILABLE` label distribution recorded in Task 8's new measurement step, compared to the v4 baseline: REFUTED if any run's `UNAVAILABLE` rate is materially higher than v4's with a correspondingly lower `NOT_SWEPT` rate, HELD otherwise.
+
+P2 is the headline: did any run reach the layer-4, layer-5 or layer-6 tool on the seed that needs it? That is §H8's acceptance test, and this is the first opportunity in 45 runs to answer it.
 
 **A prediction that was wrong is recorded as wrong.** This project treats a post-hoc reading of a result as a defect and a quietly-adjusted expectation as a worse one.
 
@@ -1204,13 +1216,13 @@ Append-only, matching §L/§M/§N's shape: what was changed, what was measured, 
 
 - [ ] **Step 4: Comment the result on issue #103**
 
-Post the P1–P7 verdict table and the recommendation on whether a v5 scored pass is warranted.
+Post the P1–P8 verdict table (P8 added post-review — see Step 1) and the recommendation on whether a v5 scored pass is warranted.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add benchmark/DECISION.md benchmark/raw-evidence-v5-depth-smoke.md
-git commit -m "bench: score P1-P7 against the depth smoke, DECISION.md section P (#103)"
+git commit -m "bench: score P1-P8 against the depth smoke, DECISION.md section P (#103)"
 ```
 
 ---
@@ -1247,7 +1259,7 @@ git push -u origin feature/depth-gate-agent-loop
 gh pr create --title "Depth gate: a floor under PaAgentLoop's terminal action (#103)" --body-file <path to a written-out body>
 ```
 
-The PR body must state the P1–P7 outcome honestly, including any refuted prediction, and must link issue #103.
+The PR body must state the P1–P8 outcome honestly (P8 added post-review — see Task 9 Step 1), including any refuted prediction, and must link issue #103.
 
 ---
 

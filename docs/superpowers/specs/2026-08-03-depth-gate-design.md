@@ -141,9 +141,17 @@ invocation.
 **`UNAVAILABLE` is never a gap.** That preserves seed 05's honest "nothing ever ran" exit, which #78
 exists to protect.
 
-**`answer`** carries no `layers_swept` and so declares no gap; it is held once with the same
-interrogation plus a request for a layer report. No custom run took that exit in v4, so this is a
-closed door rather than a hot path.
+**`answer`** carries no `layers_swept` and so declares no gap; it is held with the same
+interrogation plus a request for a layer report, and it stays held **while the gate is unreleased** —
+not "held once." A held-once design is a text-priced escape (emit `answer`, absorb the hold, emit
+`answer` again, terminate) that contradicts §3's core principle that the only exit is a row in the
+audit trail: if a single hold discharged it, the model would pay the hold in text exactly once and
+then stop on its own say-so, which is #88 again wearing the `answer` action's clothes. Consequence:
+`answer` is structurally unavailable for the rest of a run unless the gate is released — and the gate
+is released only via a `fix_report` whose declared gaps the trail can check against, since `answer`
+itself never supplies a `layers_swept` for the trail to check. An `answer`-preferring run that never
+emits a `fix_report` therefore burns all of its iterations and ends `outcome:'partial'`. No custom run
+took the `answer` exit in v4, so this is a closed door rather than a hot path.
 
 **Two facts that make this cheap.** `PaAuditLogger.invokedTools(runId)` (`:158`) already returns the
 distinct tool names for a run and already fails open. `PaFixReport._layerToolMap()` (`:315`) already
@@ -258,6 +266,7 @@ smoke, so #100 does not bind here.
 | P5 | Seed 01 still misses `priority_stored: null` on ≥ 1 of its 2 runs — depth moving further than reading | Moderate |
 | P6 | Unsupported-sweep-claim rate does **not** rise above v4's ~1/10 | High. The #88 regression check |
 | P7 | Compliance concentrates on `agent_config` (§10) | Moderate |
+| P8 | **Newly identified escape (added post-review, final whole-branch review of the implementation, not part of the original filed set):** `unsweptGaps` gaps only on `NOT_SWEPT`, never `UNAVAILABLE` (deliberately — that protects #78's honest "nothing ever ran" exit). But the turn-1 contract text tells the model that marking a layer `NOT_SWEPT` **or** `UNAVAILABLE` "costs you nothing" — true for one label, false for the other since only `NOT_SWEPT` can become a gap. A model that relabels its unswept layers `UNAVAILABLE` terminates in 2 LLM calls with zero holds — the exact pre-gate shape this branch exists to break. Prediction: this smoke shows **no** run relabeling at a materially higher `UNAVAILABLE` rate than v4's baseline | Moderate — the contract wording is a plausible enough escape to actively watch for, not merely a theoretical one |
 
 **The refusal tail is counted, not special-cased.** A run that will not take its own named next step
 rides the bounds to `MAX_ITERATIONS` and returns `outcome: 'partial'` with no fix_report, scoring 0
@@ -283,6 +292,7 @@ Three outcomes, separable because the change has two independent readouts:
 | depth up **and** seed 01's discriminant used | the mechanism works |
 | depth up, seed 01 still misread | the gate fires; the interrogation does not improve reading |
 | depth flat | the gate is not firing, or the model discharges it in text (= #88 again) |
+| depth flat, but the run's `NOT_SWEPT` count is low relative to v4 while `UNAVAILABLE` is high | the model relabeled its way past the gate (P8, §8) — a THIRD, distinct reading from the row above: the gate IS firing correctly against what the draft declares, the draft itself just stopped declaring gaps honestly. Do not read this as "the gate is not firing" |
 
 ## 10. Known tilt, accepted deliberately
 
