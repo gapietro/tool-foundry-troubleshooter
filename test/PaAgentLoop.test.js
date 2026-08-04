@@ -1233,4 +1233,105 @@ describe('depth gate (#103) — wired into the loop', () => {
         // and the bound then ended the run — it never gated the tool_call.
         expect(tools.calls).toHaveLength(1)
     })
+
+    // -----------------------------------------------------------------------
+    // I1 (final whole-branch review): the model complies with a hold by
+    // calling the named tool. The very next prompt must no longer carry the
+    // stale hold text — the harness must not keep telling a model that just
+    // did what was asked that a terminal action is still unavailable.
+    // -----------------------------------------------------------------------
+
+    test('I1: hold -> compliant tool call -> next prompt drops the hold block -> terminal action then passes', () => {
+        let invoked = ['agent_trace']
+        const tools = fakeTools((name) => {
+            invoked.push(name)
+            return { success: true, data: {} }
+        })
+        const llm = fakeLlm([
+            { success: true, action: DRAFT, raw: 'r1' },
+            { success: true, action: { action: 'tool_call', tool: 'schema_lookup', args: {} }, raw: 'r2' },
+            { success: true, action: DRAFT, raw: 'r3' },
+        ])
+        const loop = load({
+            toolRegistry: tools,
+            runManager: fakeRunManager(),
+            llmProxy: llm,
+            fixReport: fixWith([{ valid: true, normalized: { ok: true } }], [GAP4]),
+            auditLogger: { invokedTools: () => ({ available: true, tools: invoked.slice() }) },
+            maxIterations: 3,
+        })
+
+        const res = loop.run('RUN1')
+
+        expect(llm.calls.length).toBe(3)
+        // iter2's prompt (built right after iter1's hold) carries the
+        // interrogation block itself — NOT merely the short transcript note
+        // (which also contains the substring "HOLD", hence the specific
+        // heading check rather than a bare 'HOLD' substring match).
+        expect(llm.calls[1]).toContain('## HOLD — a terminal action is not available yet')
+        // iter3's prompt (built right after iter2's COMPLIANT tool_call)
+        // must NOT still carry the stale hold block.
+        expect(llm.calls[2]).not.toContain('## HOLD — a terminal action is not available yet')
+        // And the terminal action submitted in iter3 now passes, since the
+        // trail shows schema_lookup invoked.
+        expect(res.outcome).toBe('fix_report')
+    })
+
+    // -----------------------------------------------------------------------
+    // I2 (final whole-branch review): `[]` is truthy in JS. If the recorded
+    // release set were ever empty, the old code's `if (this._heldTools)`
+    // would latch onto it and hold every terminal action for the rest of the
+    // run, with no possible exit.
+    // -----------------------------------------------------------------------
+
+    test('I2: an empty recorded release set does not deadlock the run', () => {
+        let call = 0
+        const emptyToolsGap = { layer: 4, name: 'Data schemas', reason: 'r', tools: [] }
+        const loop = load({
+            llmProxy: fakeLlm([
+                { success: true, action: DRAFT, raw: 'r1' },
+                {
+                    success: true,
+                    action: { action: 'fix_report', report: { failure_summary: 'ok', layers_swept: {} } },
+                    raw: 'r2',
+                },
+            ]),
+            runManager: fakeRunManager(),
+            toolRegistry: fakeTools([]),
+            fixReport: {
+                unsweptGaps: function () {
+                    call += 1
+                    // First hold declares a gap whose `tools` is an empty
+                    // array — `_layerToolMap()` never produces this in
+                    // production (guarded by the sibling PaFixReport test),
+                    // but `_depthGate` must not trust that blindly. The
+                    // second call (a later draft) declares no gap at all.
+                    return call === 1 ? [emptyToolsGap] : []
+                },
+                validate: function () {
+                    return { valid: true, normalized: { ok: true } }
+                },
+                renderMarkdown: function () {
+                    return 'md'
+                },
+                renderJson: function () {
+                    return 'json'
+                },
+            },
+            auditLogger: fakeAuditLogger({ available: true, tools: [] }),
+            maxIterations: 3,
+        })
+
+        const res = loop.run('RUN1')
+
+        // Without the I2 fix, `_heldTools` records `[]` on the first hold
+        // and `if (this._heldTools)` — truthy on `[]` in JS — latches the
+        // sticky branch permanently: `_anyOf([], trail.tools)` can never be
+        // true, so EVERY later terminal action would hold regardless of
+        // what the model submits, with no possible exit. With the fix, an
+        // empty recorded set falls through instead of latching, and gaps
+        // are re-derived fresh from the CURRENT draft — the second draft
+        // declares no gap at all, so it passes.
+        expect(res.outcome).toBe('fix_report')
+    })
 })

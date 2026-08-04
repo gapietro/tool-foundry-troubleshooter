@@ -1878,7 +1878,7 @@ describe('unsweptGaps (#103)', () => {
         expect(gaps.map((g) => g.layer)).toEqual([2, 5])
     })
 
-    test('every gap carries at least one tool', () => {
+    test('every gap carries at least one tool — _layerToolMap must never map a layer to zero tools, or _depthGate would deadlock on an empty release set (I2)', () => {
         const fr = load()
         const gaps = fr.unsweptGaps(
             reportWith({

@@ -262,6 +262,21 @@ PaAgentLoop.prototype = {
             // tool is read-only. See the file header for the full rationale.
             // ---------------------------------------------------------------
             this._dispatchTool(runId, action)
+
+            // I1 (final whole-branch review): the model just did exactly
+            // what a HOLD asked — called a tool that reaches the layer it
+            // named. Without this, `_holdActive` (set the turn the hold was
+            // issued) survives untouched until the model next attempts a
+            // terminal action, so the VERY NEXT prompt still carries "a
+            // terminal action is not available yet" even though the model
+            // complied. Clear it the moment the dispatched tool is in the
+            // recorded release set — no audit query, just the recorded set
+            // and the dispatched tool's own name; `_depthGate` still does
+            // the real (trail-backed) release check the next time a
+            // terminal action is attempted.
+            if (this._anyOf(this._heldTools, [this._str(action.tool)])) {
+                this._holdActive = null
+            }
             return { terminal: false }
         }
 
@@ -510,7 +525,19 @@ PaAgentLoop.prototype = {
 
         // Once a hold has been issued, the recorded set is the ONLY thing
         // that can release the gate — later drafts never move it.
-        if (this._heldTools) {
+        //
+        // I2 (final whole-branch review): `[]` is truthy in JS. A bare
+        // `if (this._heldTools)` would enter this branch on an EMPTY
+        // recorded set and stay there forever — `_anyOf([], trail.tools)`
+        // is false no matter what the model does next, so every terminal
+        // action would be held for the rest of the run with no possible
+        // exit. Requiring a NON-EMPTY array means an empty recorded set
+        // (which should never happen in production — `unsweptGaps` never
+        // maps a layer to zero tools, and `_layerToolMap()` never returns
+        // an empty list — but which a malformed collaborator could still
+        // produce) falls through and re-derives gaps fresh from the
+        // CURRENT draft instead of latching onto an unrecoverable hold.
+        if (this._isArray(this._heldTools) && this._heldTools.length > 0) {
             if (this._anyOf(this._heldTools, trail.tools)) {
                 this._gateReleased = true
                 return { hold: false, gaps: [], kind: '' }
