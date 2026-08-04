@@ -101,10 +101,12 @@ diagnosis naming the bogus condition would have scored a miss"*. Forbidden: what
 a prior run diagnosed, proposed, or was awarded — and links to `DECISION.md`,
 which a model scorer can follow into every prior pass's rows and grades.
 
-**Where the removed text went.** Each seed's prior-pass narrative lives in a
-sibling `seeds/seed-0N-*.history.md`. **The history file links to the spec; the
-spec does not link back**, because a pointer from the spec is an invitation to
-read what was just removed. A packet embeds the spec and never the history file.
+**Where the removed text went.** Four of the five seeds had prior-pass narrative
+extracted into a sibling `seeds/seed-0N-*.history.md`; seed 01 never carried any
+such narrative and has no history file. **Where one exists, the history file
+links to the spec; the spec does not link back**, because a pointer from the
+spec is an invitation to read what was just removed. A packet embeds the spec
+and never the history file.
 
 | Guard | Catches | Origin |
 |---|---|---|
@@ -117,15 +119,17 @@ grading with score-shaped text (*"a run can score 3/6 and pass"*), so a
 whole-file scan would be a false-positive machine. As with the harness rule, the
 roster tracks the principle rather than defining it.
 
-**A passing suite is not evidence of blindness.** Neither guard can catch what it was not told to
-look for, and a token that names platform vocabulary a tool legitimately reads is a bad token
-rather than a finding. The #89 sweep bears this out: the automated guard's first full run reported
-every scan target clean, and both real leaks were found by humans reading — a hand sweep caught a
-framing leak in `PaToolGenAiLog` that no token could have matched (the leak was in what a finding
-implied by elimination, not in a value), and an independent adversarial review caught a second leak
-in `PaToolAgentConfig` that the hand sweep had already walked past. The guard's value here is
-prospective, not diagnostic: it pins both leaks closed permanently and covers all 16 targets
-automatically from here on, so the next leak fails a build instead of waiting for someone to notice.
+**A passing suite is not evidence of blindness.** None of the three guards above can catch what it
+was not told to look for, and a token that names platform vocabulary a tool legitimately reads is a
+bad token rather than a finding. The #89 sweep bears this out for `blindRule.test.js` specifically:
+its first full run reported every scan target clean, and both real leaks were found by humans
+reading — a hand sweep caught a framing leak in `PaToolGenAiLog` that no token could have matched
+(the leak was in what a finding implied by elimination, not in a value), and an independent
+adversarial review caught a second leak in `PaToolAgentConfig` that the hand sweep had already
+walked past. Every guard's value here is prospective, not diagnostic: `blindRule.test.js` pins both
+#89 leaks closed permanently and covers all 16 harness sources automatically from here on, and
+`scorerPacketBlindRule.test.js` does the same for the 5 seed specs — so the next leak in either
+channel fails a build instead of waiting for someone to notice.
 
 ## The protocol
 
