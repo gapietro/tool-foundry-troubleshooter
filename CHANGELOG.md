@@ -17,6 +17,78 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0401 — 2026-08-04
+
+### Added
+
+- **The depth gate — a floor under `PaAgentLoop`'s terminal action (#103).** Before this change the
+  loop had a ceiling (`MAX_ITERATIONS`) and no floor: the model ended a run by emitting `answer` or
+  `fix_report` and nothing gated that choice, so every custom run on seeds 01/02/05 was 1 tool call
+  / 2 LLM calls — turn 1 emits `agent_trace`, turn 2 sees evidence for the first time and files the
+  report in the same generation. `PaAgentLoop._step()` now intercepts a terminal action, reads the
+  draft's own `NOT_SWEPT` layers through the new `PaFixReport.unsweptGaps()`, maps them to the tools
+  that would close them, and — when the audit trail shows no call has reached any of them — refuses
+  the terminal action **once**, renders an interrogation into the next prompt, and loops again.
+
+  Three properties make this different from #88's refuted pressure experiment. **The hold is
+  discharged only by a row in the audit trail**, never by writing better, so a stop priced in text
+  cannot be paid in text. **Release is sticky** — the gap set recorded at the first hold is the only
+  one that can release it, so the gate buys exactly one forced beat rather than moving the goalposts
+  every turn. **The interrogation names layers, never tools**: the layer names are the model's own
+  `NOT_SWEPT` reasons echoed back, with any registered tool name scrubbed to `[tool]` (a unit test,
+  not a promise), which is what keeps §H8's acceptance test from becoming vacuous.
+
+  `UNAVAILABLE` is deliberately never a gap, so #78's honest "nothing ever ran" exit stays open.
+
+- **`PaFixReport.unsweptGaps(report)`** — a pure read over the same `_layerToolMap()` that #79b uses
+  to refute an unsupported `SWEPT` claim, read the other way round: a layer the model marked
+  `NOT_SWEPT` is a gap it declared itself, and the map says which tools close it. The loop shares
+  the map rather than hand-copying it.
+
+- **`benchmark/raw-evidence-v5-depth-smoke.md`** — the six-run smoke, audit-derived, plus the
+  rendered hold prompt captured verbatim from `sys_generative_ai_log` and the six request bodies
+  recorded **before** firing (#99 means they are otherwise unrecoverable).
+
+- **`benchmark/DECISION.md` §P** — the verdict.
+
+### Measured
+
+**Six runs on gpinst01, seeds 01/03/04 ×2, unscored by design. Six of eight pre-filed predictions
+held; two were refuted, and the refuted one that matters is the headline.**
+
+- **A hold fired on 6 of 6 runs**, each released by a real `agent_config` call verified
+  `"success":true` against its own audit row. All six terminated `complete` — **zero `partial`,
+  zero `failed`**, so the gate is not a denial-of-service (P4 predicted 1–2 partials and is recorded
+  refuted in the favorable direction).
+- **Audit-derived sweep moved 1/7 → 4/7 on every run** — the first movement in that number in the
+  project's history. Median tool calls 1 → 2, median LLM calls 3 → 4.5.
+- **The interrogation reached the model intact**, confirmed against the live prompt rather than
+  inferred from source: rendered whole with no digest truncation, and the model's own reasons
+  reached it with tool names scrubbed to `[tool]`.
+- **P2 — §H8's acceptance test — is REFUTED.** `schema_lookup`, `query_table`, `genai_log` and
+  `log_analysis` were invoked in none of the six runs. Those four tools have now never been invoked
+  by the custom harness across **51 runs**.
+- **The cause was pre-registered as P7 and held exactly:** `_layerToolMap()` gives `agent_config`
+  three layers (2, 3, 7) in one call, so the cheapest hold discharge is one `agent_config` call, and
+  all six runs took it. Force was sufficient to make the model act and insufficient to make it act
+  on the right layer.
+- **Constraint 1 is unmoved (P5 held).** Both seed-01 runs bought a second tool call and neither
+  spent it on the evidence already in hand: `priority_stored: null` is verbatim in the turn-2 prompt
+  of both runs and appears in neither report.
+- **No fabrication regression (P6 held):** 0 of 6 unsupported sweep claims, against 1 of 6 on the
+  same seeds in v4.
+- **Countervailing, recorded because it cuts against the headline:** four of the six runs produced a
+  non-empty `root_causes` and a fix, where v4's custom rows on these seeds produced empty
+  `root_causes` or a rejected draft. Whether those findings are *correct* is a scored pass's
+  question and this smoke does not answer it.
+
+Per the falsification rules filed before the code was written, this is the third case — holds fire,
+gaps close, measured tools never reached — so **the mechanism is refuted as specified and the next
+iteration works on direction, not force.** Neither revert trigger fired. Native remains the
+recommended path on this instance and the Phase 1b milestone is **not** met.
+
+---
+
 ## 2026.08.0303 — the scorer blind rule (#100)
 
 The blind rule now binds the channels that reach a **scorer**, not only those

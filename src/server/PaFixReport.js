@@ -140,6 +140,57 @@ PaFixReport.prototype = {
     },
 
     /**
+     * The MIRROR of `_checkSweptClaims` (#79b), exposed for PaAgentLoop's
+     * depth gate (issue #103).
+     *
+     * #79b uses `_layerToolMap()` to REFUTE a `SWEPT` claim the trail does
+     * not support. This reads the same map the other way round: a layer the
+     * model marked `NOT_SWEPT` is the model declaring, in its own words, a
+     * gap in its own investigation — and the map says which tools close it.
+     * The gate enforces that declaration against the audit trail, which is
+     * what keeps the harness from ever naming a tool itself (see that
+     * class's `_holdBlock`, and DECISION.md §H8 item 3 on why naming one
+     * would make the acceptance test vacuous).
+     *
+     * `UNAVAILABLE` is deliberately NOT a gap. It is the honest report of a
+     * layer that cannot be read at all — seed 05's "nothing ever ran" — and
+     * #78 exists to keep that diagnosis expressible.
+     *
+     * PURE: no Glide, no audit query, no validation side effects. The gate
+     * supplies the trail; this method only reads the draft.
+     *
+     * @param {*} report a fix_report draft; any shape (R-9)
+     * @returns {Array} [{layer:Number, name:String, reason:String,
+     *          tools:[String]}] ordered by layer number; `[]` for anything
+     *          malformed.
+     */
+    unsweptGaps: function (report) {
+        var rep = this._isPlainObject(report) ? report : {}
+        var ls = this._isPlainObject(rep.layers_swept) ? rep.layers_swept : {}
+        var defs = this._layerDefs()
+        var map = this._layerToolMap()
+        var gaps = []
+
+        for (var i = 0; i < defs.length; i++) {
+            var def = defs[i]
+            var entry = ls[def.number]
+            if (!this._isPlainObject(entry) || entry.status !== 'NOT_SWEPT') continue
+
+            var tools = map[def.number] || []
+            if (tools.length === 0) continue
+
+            gaps.push({
+                layer: def.number,
+                name: def.name,
+                reason: this._nonEmptyString(entry.reason) ? entry.reason : '',
+                tools: tools,
+            })
+        }
+
+        return gaps
+    },
+
+    /**
      * Everything the checks need that is not in the report itself, resolved
      * ONCE per validate() call.
      *

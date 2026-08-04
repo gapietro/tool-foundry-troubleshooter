@@ -27,14 +27,12 @@
  *                               tool's dispatch error is fed back exactly
  *                               like any other observation, so the model
  *                               gets to re-plan), loop again
- *         action:answer     -> close complete, outcome:'answer'
- *         action:fix_report -> validate; invalid -> ONE repair through the
- *                               proxy; still invalid -> close failed with
- *                               the problems AND the last draft preserved;
- *                               valid -> RENDERED both ways
- *                               (PaFixReport.renderJson/renderMarkdown —
- *                               see `_completeFixReport`), stored, close
- *                               complete
+ *         action:answer     -> DEPTH GATE (#103); if held, append a hold
+ *                               note and loop again — otherwise close
+ *                               complete, outcome:'answer'
+ *         action:fix_report -> DEPTH GATE (#103); if held, append a hold
+ *                               note and loop again — otherwise validate;
+ *                               invalid -> ONE repair through the proxy; ...
  *
  * BOUNDS ARE A FLOOR, NEVER A SILENT STOP (the R-3 lesson)
  * DESIGN.md's R-3 finding was that a premature "the diagnosis is done"
@@ -50,6 +48,26 @@
  * DIAGNOSIS that is incomplete; R-19b requires the two claims not to be
  * confused with each other, which is exactly why they are reported through
  * two different fields: `close()`'s status vs. `run()`'s `outcome`).
+ *
+ * THE DEPTH GATE IS THE FLOOR THE BOUNDS ARE NOT (issue #103)
+ * BOUNDS ARE A FLOOR above is about not stopping SILENTLY. It says nothing
+ * about stopping too SOON, and MAX_ITERATIONS is a ceiling. DECISION.md §O4
+ * measured the consequence: the custom harness swept 1/7 on all 20 rows of
+ * the v4 pass while native ranged 1/7 to 6/7 on the same seeds the same day,
+ * and §H8's acceptance test is unmet across 45 runs. The v4 master table's
+ * reframing number is "2 LLM calls", not "1 tool call" — turn 1 fetches,
+ * turn 2 concludes — so the only decision point after evidence exists is
+ * taken in the same generation that first reads it. The model does not cut
+ * an investigation short; it never begins one.
+ *
+ * `_depthGate` holds a terminal action while the model's OWN draft marks a
+ * layer NOT_SWEPT that the audit trail shows no tool call ever reached, and
+ * releases stickily once the trail shows it closed one it named itself. The
+ * gate is discharged ONLY by a trail row, never by text — that is what
+ * separates it from #88, where raising the price of stopping produced
+ * fabrication because a stop priced in text is paid in text. See
+ * `_depthGate` and `_holdBlock` for the full rationale, and issue #103 for
+ * the predictions this was built against.
  *
  * `_buildPrompt(playbook, promptBlock, context, request)` TAKES PLAYBOOK AS
  * AN ARGUMENT, NOT A HARDCODED STRING
@@ -148,6 +166,16 @@ PaAgentLoop.prototype = {
         this._nowFn = typeof o.now === 'function' ? o.now : null
         this._playbook = typeof o.playbook === 'string' ? o.playbook : null
 
+        // Depth gate state (issue #103). A run is one synchronous
+        // invocation, so instance fields are sufficient — no column, no
+        // schema change. `_heldTools` is the union of tools that close the
+        // gaps recorded at the FIRST hold; it is the only thing that can
+        // release the gate afterwards.
+        this._gateReleased = false
+        this._heldGaps = null
+        this._heldTools = null
+        this._holdActive = null
+
         if (o.maxIterations > 0) this.MAX_ITERATIONS = o.maxIterations
         if (o.budgetMs > 0) this.BUDGET_MS = o.budgetMs
     },
@@ -234,7 +262,38 @@ PaAgentLoop.prototype = {
             // tool is read-only. See the file header for the full rationale.
             // ---------------------------------------------------------------
             this._dispatchTool(runId, action)
+
+            // I1 (final whole-branch review): the model just did exactly
+            // what a HOLD asked — called a tool that reaches the layer it
+            // named. Without this, `_holdActive` (set the turn the hold was
+            // issued) survives untouched until the model next attempts a
+            // terminal action, so the VERY NEXT prompt still carries "a
+            // terminal action is not available yet" even though the model
+            // complied. Clear it the moment the dispatched tool is in the
+            // recorded release set — no audit query, just the recorded set
+            // and the dispatched tool's own name; `_depthGate` still does
+            // the real (trail-backed) release check the next time a
+            // terminal action is attempted.
+            if (this._anyOf(this._heldTools, [this._str(action.tool)])) {
+                this._holdActive = null
+            }
             return { terminal: false }
+        }
+
+        if (action.action === 'answer' || action.action === 'fix_report') {
+            // THE DEPTH GATE (issue #103). Checked before either terminal
+            // action is honored — see `_depthGate` for why it lives here and
+            // not in `PaFixReport.validate`.
+            var gate = this._depthGate(runId, action)
+            if (gate.hold) {
+                this._holdActive = this._holdBlock(gate.gaps, gate.kind)
+                this._runs().appendTranscript(runId, {
+                    actor: 'system',
+                    result_digest: this._holdNote(gate),
+                })
+                return { terminal: false }
+            }
+            this._holdActive = null
         }
 
         if (action.action === 'answer') {
@@ -326,9 +385,13 @@ PaAgentLoop.prototype = {
     },
 
     /**
-     * Resolve the run's audit trail ONCE per fix-report handling and reuse the
-     * SAME object across the repair turn — a repair turn makes no tool calls,
-     * so a second query would return the same set at twice the cost.
+     * Resolve the run's audit trail ONCE per fix-report handling CALL (M1,
+     * final whole-branch review: NOT once per run — `_trailTools`/
+     * `_depthGate` below run their OWN separate trail query for the depth
+     * gate, issue #103, and sharing a single read between the two is
+     * deliberately out of scope for that change) and reuse the SAME object
+     * across the repair turn — a repair turn makes no tool calls, so a
+     * second query here would return the same set at twice the cost.
      *
      * A degraded trail is RECORDED, not swallowed. #79's whole point is that a
      * passing Fix Report should carry an evidential guarantee; a cross-check
@@ -352,19 +415,336 @@ PaAgentLoop.prototype = {
 
         var available = !!(res && res.available === true)
         if (!available) {
-            this._runs().appendTranscript(runId, {
-                actor: 'system',
-                result_digest:
-                    'audit trail unavailable (' +
-                    this._str(res && res.degraded ? res.degraded : 'query_failed') +
-                    ') — citation and sweep cross-checks SKIPPED for this report',
-            })
+            var reason = this._str(res && res.degraded ? res.degraded : 'query_failed')
+            var note
+            if (reason === 'no_audit_rows') {
+                // M1 (final whole-branch review): the trail WAS readable
+                // here — the query ran fine and answered "this run invoked
+                // nothing." The old wording ("audit trail unavailable")
+                // read, to an analyst scanning the transcript, as the gate
+                // having failed open when it had not; only the
+                // citation/sweep cross-checks were skipped, and only
+                // because there is nothing yet to cite.
+                note =
+                    'audit trail readable (no_audit_rows) — this run invoked zero tools; citation and sweep ' +
+                    'cross-checks SKIPPED for this report'
+            } else {
+                note =
+                    'audit trail unavailable (' + reason + ') — citation and sweep cross-checks SKIPPED for this report'
+            }
+            this._runs().appendTranscript(runId, { actor: 'system', result_digest: note })
         }
 
         return {
             auditAvailable: available,
             invokedTools: res && this._isArray(res.tools) ? res.tools : [],
         }
+    },
+
+    /**
+     * The depth gate's read of the audit trail (issue #103).
+     *
+     * WHY THIS IS NOT `_auditContext`
+     * `PaAuditLogger.invokedTools()` collapses FOUR situations into
+     * `available:false`, and one of them is not a degradation at all:
+     * `no_audit_rows` means the query ran fine and the answer is "this run
+     * has invoked nothing." For #79b's citation cross-check that distinction
+     * does not matter — an unverifiable citation and an unsupported one are
+     * both "do not convict." For the gate it is the whole ballgame: a run
+     * that has invoked nothing is the STRONGEST possible gap, and treating
+     * it as a degradation would fail open and let the zero-tool-call
+     * inconclusive exit — advertised in the first prompt, per DECISION.md
+     * §H7-2, and taken by five of ten runs in the §H5 pass — bypass the gate
+     * entirely.
+     *
+     * Genuine degradations still fail OPEN, per PaAuditLogger's own header
+     * ("fails toward NOT checking, never toward a false convict"). A Glide
+     * hiccup must never trap a run in a hold it cannot escape.
+     *
+     * @param {String} runId
+     * @returns {Object} {readable:Boolean, tools:[String], degraded:String}
+     */
+    _trailTools: function (runId) {
+        var res = null
+        try {
+            res = this._audits().invokedTools(runId)
+        } catch (e) {
+            // R-1: `e` is deliberately not inspected.
+            return { readable: false, tools: [], degraded: 'query_failed' }
+        }
+
+        if (res && res.available === true) {
+            return {
+                readable: true,
+                tools: this._isArray(res.tools) ? res.tools : [],
+                degraded: '',
+            }
+        }
+
+        var reason = this._str(res && res.degraded ? res.degraded : 'query_failed')
+        if (reason === 'no_audit_rows') {
+            return { readable: true, tools: [], degraded: reason }
+        }
+        return { readable: false, tools: [], degraded: reason }
+    },
+
+    /**
+     * THE DEPTH GATE (issue #103) — the floor `run()`'s bounds are not.
+     *
+     * DECISION.md §O4: the custom harness swept 1/7 on all 20 rows of the v4
+     * pass, and §H8's acceptance test is unmet across 45 runs. The v4 master
+     * table's reframing number is not "1 tool call" but "2 LLM calls" — turn
+     * 1 fetches, turn 2 concludes — so the single decision point after
+     * evidence exists is taken inside the same generation that first reads
+     * it. The model is not cutting an investigation short; it never begins
+     * one. Nothing in this loop ever said the diagnosis was unfinished.
+     *
+     * WHAT RELEASES IT, AND WHY THAT AND NOTHING ELSE
+     * #88 raised the COST of stopping and got fabrication, because a stop
+     * priced in text is paid in text. So the gate is discharged only by
+     * something the model cannot author: a row in the audit trail. And it is
+     * enforced HERE, in the loop, where "not yet" can still mean "loop
+     * again" — not in `PaFixReport.validate`, which fires after the run is
+     * over and which #81 records the repair turn cannot act on.
+     *
+     * The target is the model's OWN: a layer it marked `NOT_SWEPT` is it
+     * declaring a gap in its own words, and `_layerToolMap()` says which
+     * tools close it. The harness never names a tool (see `_holdBlock`).
+     *
+     * STICKY, DELIBERATELY
+     * The gap set is recorded at the FIRST hold and never re-derived. Without
+     * that the goalposts move — close layer 4, declare layer 5, be held again
+     * — and every run rides to `MAX_ITERATIONS`, since even native's best
+     * sweep in the v4 pass was 6/7. The gate buys exactly ONE forced beat,
+     * which is the size of the acceptance test. A run that then declines to
+     * act rides the bounds to `outcome:'partial'`, and that tail is counted
+     * rather than special-cased (issue #103, prediction P4).
+     *
+     * KNOWN TILT, ACCEPTED: `_layerToolMap()` gives `agent_config` three
+     * layers (2, 3, 7) against one apiece for layers 4 and 5, so the cheapest
+     * compliance is a single `agent_config` call — a built-in tilt AWAY from
+     * the tools the acceptance test measures. Pre-registered as P7 on #103
+     * rather than engineered around: if it happens the trail says so plainly,
+     * and "the gate mandates depth but does not direct it" is a clean
+     * finding that directs the next iteration.
+     *
+     * @param {String} runId
+     * @param {Object} action the terminal action the model just emitted
+     * @returns {Object} {hold:Boolean, gaps:Array, kind:'gaps'|'no_layer_report'|''}
+     *          — `kind` is `''` on every ALLOW path (already released, an
+     *          unreadable trail, every declared gap closed, or no gap
+     *          declared at all); only the two HOLD paths use the other two
+     *          values.
+     */
+    _depthGate: function (runId, action) {
+        if (this._gateReleased) return { hold: false, gaps: [], kind: '' }
+
+        var trail = this._trailTools(runId)
+        if (!trail.readable) return { hold: false, gaps: [], kind: '' }
+
+        // Once a hold has been issued, the recorded set is the ONLY thing
+        // that can release the gate — later drafts never move it.
+        //
+        // I2 (final whole-branch review): `[]` is truthy in JS. A bare
+        // `if (this._heldTools)` would enter this branch on an EMPTY
+        // recorded set and stay there forever — `_anyOf([], trail.tools)`
+        // is false no matter what the model does next, so every terminal
+        // action would be held for the rest of the run with no possible
+        // exit. Requiring a NON-EMPTY array means an empty recorded set
+        // (which should never happen in production — `unsweptGaps` never
+        // maps a layer to zero tools, and `_layerToolMap()` never returns
+        // an empty list — but which a malformed collaborator could still
+        // produce) falls through and re-derives gaps fresh from the
+        // CURRENT draft instead of latching onto an unrecoverable hold.
+        if (this._isArray(this._heldTools) && this._heldTools.length > 0) {
+            if (this._anyOf(this._heldTools, trail.tools)) {
+                this._gateReleased = true
+                return { hold: false, gaps: [], kind: '' }
+            }
+            return { hold: true, gaps: this._heldGaps, kind: 'gaps' }
+        }
+
+        if (!this._isPlainObject(action) || action.action !== 'fix_report') {
+            // `answer` carries no `layers_swept`, so it declares no gap and
+            // there is nothing to enforce against. Hold and ask for a layer
+            // report; no run took this exit in the v4 pass.
+            return { hold: true, gaps: [], kind: 'no_layer_report' }
+        }
+
+        var open = this._openGaps(this._safeGaps(action.report), trail.tools)
+        if (open.length === 0) {
+            this._gateReleased = true
+            return { hold: false, gaps: [], kind: '' }
+        }
+
+        this._heldGaps = open
+        this._heldTools = this._unionTools(open)
+        return { hold: true, gaps: open, kind: 'gaps' }
+    },
+
+    /**
+     * Gap derivation, guarded. Same reasoning as `_safeSchemaText`: a broken
+     * or absent PaFixReport must degrade the GATE, never trap the run. An
+     * empty list means "no declared gap", which allows — failing open, in
+     * line with `_trailTools`' treatment of a degraded trail.
+     */
+    _safeGaps: function (report) {
+        try {
+            var gaps = this._reports().unsweptGaps(report)
+            return this._isArray(gaps) ? gaps : []
+        } catch (e) {
+            // R-1: `e` is deliberately not inspected.
+            return []
+        }
+    },
+
+    /**
+     * Gaps whose tools the trail shows were NEVER invoked. A malformed
+     * element (not a plain object, or a non-array `tools`) is a gap this
+     * code cannot interpret — it is SKIPPED rather than treated as open, per
+     * R-9: an upstream contract violation must degrade this method, never
+     * throw inside `_depthGate`.
+     */
+    _openGaps: function (gaps, invoked) {
+        var list = this._isArray(gaps) ? gaps : []
+        var open = []
+        for (var i = 0; i < list.length; i++) {
+            var gap = list[i]
+            if (!this._isPlainObject(gap) || !this._isArray(gap.tools)) continue
+            if (!this._anyOf(gap.tools, invoked)) open.push(gap)
+        }
+        return open
+    },
+
+    /**
+     * Every tool that would close any of these gaps, de-duplicated. Same
+     * per-element guard as `_openGaps` — a malformed element contributes NO
+     * tools to the recorded union rather than throwing.
+     */
+    _unionTools: function (gaps) {
+        var list = this._isArray(gaps) ? gaps : []
+        var out = []
+        for (var i = 0; i < list.length; i++) {
+            var gap = list[i]
+            if (!this._isPlainObject(gap) || !this._isArray(gap.tools)) continue
+            var tools = gap.tools
+            for (var j = 0; j < tools.length; j++) {
+                var found = false
+                for (var k = 0; k < out.length; k++) {
+                    if (out[k] === tools[j]) found = true
+                }
+                if (!found) out.push(tools[j])
+            }
+        }
+        return out
+    },
+
+    _anyOf: function (candidates, invoked) {
+        var c = this._isArray(candidates) ? candidates : []
+        var inv = this._isArray(invoked) ? invoked : []
+        for (var i = 0; i < c.length; i++) {
+            for (var j = 0; j < inv.length; j++) {
+                if (c[i] === inv[j]) return true
+            }
+        }
+        return false
+    },
+
+    /**
+     * The held turn's prompt block (issue #103) — the payload, and the whole
+     * difference between this gate and #88.
+     *
+     * IT NAMES LAYERS, NEVER TOOLS. The layer names and reasons here are the
+     * model's OWN `NOT_SWEPT` entries read back to it, and the tool roster is
+     * already in every prompt via `PaToolRegistry.promptBlock()`. DECISION.md
+     * §H8 item 3 anticipated a mandated fix and kept the acceptance test
+     * unchanged — the test survives mandation only because it requires the
+     * right tool ON THE SEED THAT NEEDS IT. A gate that named the measured
+     * tools would be teaching to the test and would make 45 runs of evidence
+     * unreadable. There is a unit test guarding this.
+     *
+     * ITEM 1 IS THE MISSING BEAT. §O6: on seed 01 the single `agent_trace`
+     * call returned `priority_stored: null` verbatim — the exact discrepancy
+     * both native runs used as primary evidence — and both custom reports
+     * concluded "no errors were reported" with empty `root_causes`. The model
+     * read a raw payload in the same generation in which it had to emit a
+     * finished artifact, so it SUMMARISED instead of INTERROGATING. Demanding
+     * a quoted field buys one generation whose job is reading.
+     *
+     * IT DEFERS, IT DOES NOT PENALISE. #88 raised the cost of stopping and
+     * the model paid in the only currency it controls. Here the draft is
+     * preserved and resubmittable unchanged; there is no way to satisfy the
+     * hold by writing better. Stopping is not expensive — it is unavailable.
+     */
+    _holdBlock: function (gaps, kind) {
+        var lines = ['## HOLD — a terminal action is not available yet', '']
+
+        if (kind === 'no_layer_report') {
+            lines.push(
+                'Your last step tried to end this run without a layer report, so there is nothing ' +
+                    'on record about which of the seven diagnostic layers you actually looked at.'
+            )
+            lines.push('')
+            lines.push('Submit a fix_report whose layers_swept accounts for all seven layers, or call a tool.')
+            return lines.join('\n')
+        }
+
+        lines.push('Your draft marks these layers NOT_SWEPT, each with a reason you wrote:')
+        var list = this._isArray(gaps) ? gaps : []
+        for (var i = 0; i < list.length; i++) {
+            var g = list[i]
+            if (!this._isPlainObject(g)) continue
+            // I3 — the reason is the MODEL'S OWN text, verbatim, and an
+            // ordinary reason like "no schema_lookup call was needed" would
+            // otherwise re-inject a measured tool name three lines above
+            // "Call a tool that reaches that layer" — see `_scrubToolNames`.
+            lines.push('  layer ' + g.layer + ' (' + g.name + ') — "' + this._scrubToolNames(this._str(g.reason)) + '"')
+        }
+        lines.push('The trail shows no tool call has reached any of them.')
+        lines.push('')
+        lines.push('Before concluding:')
+        lines.push('  1. What did the last tool result actually establish? Quote the specific field')
+        lines.push('     or value you are relying on.')
+        lines.push('  2. What did it NOT settle? Of the layers above, name the one whose answer would')
+        lines.push('     most change your conclusion.')
+        lines.push('  3. Call a tool that reaches that layer.')
+        lines.push('')
+        lines.push(
+            'Your draft is preserved. Once the trail shows you did, a terminal action is available ' +
+                'again and you may resubmit it unchanged.'
+        )
+        return lines.join('\n')
+    },
+
+    /**
+     * The transcript's record of a hold — SHORT by necessity.
+     *
+     * `PaRunManager.appendTranscript` digests `result_digest` at
+     * DIGEST_CHARS (200) and derives the 8500-char `prompt_digest` for
+     * `actor:'tool'` entries ONLY. A `system` entry carrying the full
+     * interrogation would therefore reach the next prompt as a 200-character
+     * stub — which is the #72 / §G3a observation-channel defect, the leading
+     * identified mechanical cause of the original 0/10, in a new place. So
+     * the interrogation goes into the PROMPT via `_buildPrompt`, and the
+     * transcript keeps this short auditable note instead.
+     */
+    _holdNote: function (gate) {
+        if (gate.kind === 'no_layer_report') {
+            return 'HOLD: terminal action refused — no layer report on record; gate unreleased.'
+        }
+        var nums = []
+        var list = this._isArray(gate.gaps) ? gate.gaps : []
+        for (var i = 0; i < list.length; i++) {
+            var g = list[i]
+            // M2 — the same per-element guard `_openGaps`/`_unionTools`/
+            // `_holdBlock` already apply. A malformed element here is the
+            // one consumer whose omission would take the run down
+            // (`list[i].layer` on a null/undefined entry throws), so it
+            // gets skipped rather than dereferenced, same as everywhere else.
+            if (!this._isPlainObject(g)) continue
+            nums.push(g.layer)
+        }
+        return 'HOLD: terminal action refused — layer(s) ' + nums.join(', ') + ' declared NOT_SWEPT with no tool call behind them.'
     },
 
     /**
@@ -508,6 +888,19 @@ PaAgentLoop.prototype = {
 
         lines.push('')
         lines.push(this._fixReportContract())
+
+        // M3 (final whole-branch review): the hold block goes LAST, after
+        // both contracts, not before them. `_fixReportContract()` is the
+        // largest, most specific block in the prompt — the spec's own §2
+        // diagnosis is that it dominates the model's framing — so with the
+        // hold before it, the last thing the model read after being told a
+        // terminal action is unavailable was a detailed spec for producing
+        // one. Ending on the hold instead means the final instruction the
+        // model reads is to go call a tool.
+        if (this._nonEmptyString(this._holdActive)) {
+            lines.push('')
+            lines.push(this._holdActive)
+        }
 
         return lines.join('\n')
     },
@@ -862,6 +1255,41 @@ PaAgentLoop.prototype = {
     // =======================================================================
     // Small helpers (ES5 / Rhino only)
     // =======================================================================
+
+    /**
+     * I3 — the seven names `PaToolRegistry`'s registry carries. Kept HERE,
+     * as a literal list, rather than imported: `PaToolRegistry` is not
+     * available in this file's test sandbox. This is the ONE place the list
+     * lives — `_scrubToolNames` is its only consumer — so if a tool is ever
+     * renamed or added, this is the one line to update.
+     *
+     * WHY THIS EXISTS: `unsweptGaps` copies a fix_report draft's `reason`
+     * text verbatim, and `_holdBlock` quotes it back in the next prompt. An
+     * ordinary model-written reason — `"no schema_lookup call was needed"`
+     * — would otherwise re-inject a measured tool name three lines above
+     * "Call a tool that reaches that layer," which would make the
+     * acceptance test's own headline (does the model independently reach
+     * the right tool) unreadable. Scrubbing all seven, not just the three
+     * the acceptance test measures, keeps the rule uniform rather than a
+     * judgement call about which names matter.
+     */
+    _ALL_TOOL_NAMES: ['agent_trace', 'agent_config', 'schema_lookup', 'query_table', 'genai_log', 'log_analysis', 'read_artifact'],
+
+    /**
+     * Replaces every occurrence of every `_ALL_TOOL_NAMES` entry in `text`
+     * with a neutral placeholder, case-insensitive. Built with RegExp(name, 'gi')
+     * for each name — ES5 only. Tool names are safe regex identifiers (no metacharacters),
+     * so no escaping required; if a name ever contains regex metacharacters, add
+     * escaping before building the RegExp.
+     */
+    _scrubToolNames: function (text) {
+        var out = this._str(text)
+        for (var i = 0; i < this._ALL_TOOL_NAMES.length; i++) {
+            var re = new RegExp(this._ALL_TOOL_NAMES[i], 'gi')
+            out = out.replace(re, '[tool]')
+        }
+        return out
+    },
 
     _joinProblems: function (problems) {
         var list = this._isArray(problems) ? problems : []
