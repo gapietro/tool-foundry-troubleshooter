@@ -295,3 +295,20 @@ the only column the Task 12 gate consumes.
 
 If valid runs < 8, record **gate not met — insufficient data** and stop; do not compute a verdict
 from the survivors (§A3).
+
+## Building a scorer packet
+
+A packet is handed to an independent scorer who sees that one file and nothing
+else. It contains the rubric (§A / §A2 / §A3 above), **the scorer-facing seed
+spec** (`seeds/seed-0N-*.md`), that run's report verbatim, and that run's
+audit-trail measurements.
+
+**Never copy `seeds/seed-0N-*.history.md` into a packet.** It holds what earlier
+runs did and what they scored — the scorer blind rule (`README.md`) is the
+reason it is a separate file. Copying the spec is safe; the split exists so that
+the obvious action is the correct one.
+
+Before scoring, run `npx jest test/scorerPacketBlindRule.test.js`. A green run
+means the declared patterns did not fire on any spec — not that the packets are
+blind. §O5 of `DECISION.md` records what a leaked round cost the last time this
+was checked by hand instead.
