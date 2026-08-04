@@ -49,7 +49,7 @@ Create `test/_normalizeProse.js`:
  * x_snc_tsbench_routing -- so scanning line by line is safe: an identifier
  * never straddles a line break. This guard matches PHRASES, and the seed specs
  * are hard-wrapped at ~76 characters, so phrases straddle constantly. Seed 05's
- * "earning full - not partial - fix-target credit" is split across lines 21-22;
+ * "earning full - not partial - fix-target credit" is split across lines 22-23;
  * a per-line scanner misses it entirely and reports GREEN over a live leak,
  * which is the silent under-coverage this class of guard exists to prevent.
  *
