@@ -570,6 +570,67 @@ PaAgentLoop.prototype = {
     },
 
     /**
+     * The held turn's prompt block (issue #103) — the payload, and the whole
+     * difference between this gate and #88.
+     *
+     * IT NAMES LAYERS, NEVER TOOLS. The layer names and reasons here are the
+     * model's OWN `NOT_SWEPT` entries read back to it, and the tool roster is
+     * already in every prompt via `PaToolRegistry.promptBlock()`. DECISION.md
+     * §H8 item 3 anticipated a mandated fix and kept the acceptance test
+     * unchanged — the test survives mandation only because it requires the
+     * right tool ON THE SEED THAT NEEDS IT. A gate that named the measured
+     * tools would be teaching to the test and would make 45 runs of evidence
+     * unreadable. There is a unit test guarding this.
+     *
+     * ITEM 1 IS THE MISSING BEAT. §O6: on seed 01 the single `agent_trace`
+     * call returned `priority_stored: null` verbatim — the exact discrepancy
+     * both native runs used as primary evidence — and both custom reports
+     * concluded "no errors were reported" with empty `root_causes`. The model
+     * read a raw payload in the same generation in which it had to emit a
+     * finished artifact, so it SUMMARISED instead of INTERROGATING. Demanding
+     * a quoted field buys one generation whose job is reading.
+     *
+     * IT DEFERS, IT DOES NOT PENALISE. #88 raised the cost of stopping and
+     * the model paid in the only currency it controls. Here the draft is
+     * preserved and resubmittable unchanged; there is no way to satisfy the
+     * hold by writing better. Stopping is not expensive — it is unavailable.
+     */
+    _holdBlock: function (gaps, kind) {
+        var lines = ['## HOLD — a terminal action is not available yet', '']
+
+        if (kind === 'no_layer_report') {
+            lines.push(
+                'Your last step tried to end this run without a layer report, so there is nothing ' +
+                    'on record about which of the seven diagnostic layers you actually looked at.'
+            )
+            lines.push('')
+            lines.push('Submit a fix_report whose layers_swept accounts for all seven layers, or call a tool.')
+            return lines.join('\n')
+        }
+
+        lines.push('Your draft marks these layers NOT_SWEPT, each with a reason you wrote:')
+        var list = this._isArray(gaps) ? gaps : []
+        for (var i = 0; i < list.length; i++) {
+            var g = list[i]
+            lines.push('  layer ' + g.layer + ' (' + g.name + ') — "' + this._str(g.reason) + '"')
+        }
+        lines.push('The trail shows no tool call has reached any of them.')
+        lines.push('')
+        lines.push('Before concluding:')
+        lines.push('  1. What did the last tool result actually establish? Quote the specific field')
+        lines.push('     or value you are relying on.')
+        lines.push('  2. What did it NOT settle? Of the layers above, name the one whose answer would')
+        lines.push('     most change your conclusion.')
+        lines.push('  3. Call a tool that reaches that layer.')
+        lines.push('')
+        lines.push(
+            'Your draft is preserved. Once the trail shows you did, a terminal action is available ' +
+                'again and you may resubmit it unchanged.'
+        )
+        return lines.join('\n')
+    },
+
+    /**
      * Renders the SAME normalized report both ways (PaFixReport header:
      * "the two renderings describe the same report") and stores each where
      * it is actually consumed, rather than a third ad-hoc re-stringify of

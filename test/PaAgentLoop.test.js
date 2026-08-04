@@ -1017,3 +1017,52 @@ describe('depth gate (#103) — _depthGate', () => {
         expect(loop._depthGate('RUN1', FIX).hold).toBe(false)
     })
 })
+
+// ===========================================================================
+// depth gate (#103) — _holdBlock
+// ===========================================================================
+
+describe('depth gate (#103) — _holdBlock', () => {
+    const GAPS = [
+        { layer: 2, name: 'Instructions', reason: 'the trace showed no routing problem', tools: ['agent_config'] },
+        { layer: 4, name: 'Data schemas', reason: 'no schema read was needed', tools: ['schema_lookup'] },
+    ]
+
+    test('announces the hold and quotes the model back to itself', () => {
+        const block = load()._holdBlock(GAPS, 'gaps')
+        expect(block).toContain('HOLD')
+        expect(block).toContain('layer 2 (Instructions)')
+        expect(block).toContain('the trace showed no routing problem')
+        expect(block).toContain('layer 4 (Data schemas)')
+    })
+
+    test('states the draft is preserved and resubmittable — it defers, it does not penalise', () => {
+        const block = load()._holdBlock(GAPS, 'gaps')
+        expect(block).toContain('preserved')
+        expect(block).toMatch(/resubmit/i)
+    })
+
+    test('asks what the last result established and what it left open', () => {
+        const block = load()._holdBlock(GAPS, 'gaps')
+        expect(block).toMatch(/quote/i)
+        expect(block).toMatch(/did it not settle|not settle/i)
+    })
+
+    test('GUARD: never names a tool the acceptance test measures', () => {
+        const block = load()._holdBlock(GAPS, 'gaps')
+        expect(block).not.toContain('schema_lookup')
+        expect(block).not.toContain('query_table')
+        expect(block).not.toContain('genai_log')
+    })
+
+    test('GUARD: never names a tool even when a gap carries one', () => {
+        const block = load()._holdBlock([{ layer: 5, name: 'Data', reason: 'r', tools: ['query_table'] }], 'gaps')
+        expect(block).not.toContain('query_table')
+    })
+
+    test('the no_layer_report variant asks for a layer report', () => {
+        const block = load()._holdBlock([], 'no_layer_report')
+        expect(block).toContain('HOLD')
+        expect(block).toMatch(/layer report|layers_swept/i)
+    })
+})
