@@ -119,6 +119,46 @@ describe('malformed table names (#111)', () => {
         expect(run('table=sn_aia_agent', world()).result.data.requested.table).toBe('sn_aia_agent')
     })
 
+    /**
+     * Issue #114. The A/B experiment for #111 showed the pre-fix contract
+     * eliciting `table.sn_aia_tool.u_routing_key` — the placeholder word
+     * `table` prefixed with the shorthand's OWN `.` delimiter. #111's guard
+     * only stripped `:` and `=`, so this went through as
+     * {table:'table', field:'sn_aia_tool'} and produced exactly the confident
+     * table_does_not_exist that #111 existed to prevent.
+     *
+     * `.` cannot join `:` and `=` in the character class, because
+     * `incident.priority` is the legitimate shorthand. The discriminator is
+     * segment count: `table.<x>.<y>` cannot be a two-part shorthand.
+     */
+    it('strips a DOT-delimited parameter prefix when a third segment proves it is one', () => {
+        const { result } = run('table.sn_aia_agent.channel', world())
+
+        expect(result.data.requested.table).toBe('sn_aia_agent')
+        expect(result.data.requested.field).toBe('channel')
+        expect(result.data.findings.map((f) => f.finding)).not.toContain('table_does_not_exist')
+    })
+
+    it('records the dot-delimited repair too', () => {
+        const { result } = run('table.sn_aia_agent.channel', world())
+
+        expect(result.data.notes.join(' ')).toMatch(/table\.sn_aia_agent\.channel/)
+        expect(result.data.notes.join(' ')).toMatch(/parameter name/i)
+    })
+
+    it('leaves the two-segment shorthand alone, because it is ambiguous', () => {
+        // `table.channel` could be a real table called `table` — nothing here
+        // proves otherwise, so the honest reading is the shorthand's.
+        expect(run('table.channel', world()).result.data.requested.table).toBe('table')
+    })
+
+    it('does not mistake a legitimate shorthand for a prefix', () => {
+        const { result } = run('sn_aia_agent.channel', world())
+
+        expect(result.data.requested.table).toBe('sn_aia_agent')
+        expect(result.data.notes.join(' ')).not.toMatch(/parameter name/i)
+    })
+
     it('does NOT report a still-malformed name as table_does_not_exist', () => {
         const { result } = run('not a table name!', world())
 

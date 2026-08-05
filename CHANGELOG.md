@@ -17,6 +17,41 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0502 — 2026-08-05
+
+### Fixed
+
+- **The #111 guard missed the spelling the defect actually takes (#114).** #113 stripped a `table:`
+  or `table=` parameter prefix; the A/B experiment run against the pre-fix contract elicited
+  **`table.sn_aia_tool.u_routing_key`** — the placeholder word `table` joined by the shorthand's OWN
+  `.` delimiter. That normalised to `{table:'table', field:'sn_aia_tool'}` and returned
+  `table_does_not_exist`, the exact silent wrong answer #111 existed to close, surviving in the form
+  the defect most naturally takes. `.` could not simply join `:` and `=` in the character class
+  because `incident.priority` is the legitimate shorthand; the discriminator is segment count —
+  `table.<x>.<y>` cannot be a two-part shorthand, so stripping is unambiguous, while `table.<x>`
+  stays ambiguous and is deliberately left to the shorthand path.
+
+### Measured
+
+- **The contract A/B (`benchmark/raw-evidence-v7-contract-ab.md`).** Paired trials on the one
+  sentence #113 changed, driven through the `pa llm reason` seam — no tool executed, so no audit
+  rows and no contamination of the evidence trail.
+
+  Two findings beyond the fix itself. **The model is deterministic at production temperature** —
+  identical prompt, byte-identical output, different latency — which invalidated the pre-registered
+  "N = 30 repeats per arm" design outright: 30 repeats carry the information of one. v6's variation
+  came from prompt variation, not sampling. The design changed to paired distinct scenarios.
+
+  And **the depth-gate hold block is the trigger.** Without a hold, 3 of 3 control trials produced
+  well-formed JSON — including one that guessed `incident`/`priority`, v6's exact guess. With a
+  hold, 3 of 3 degraded to bare scalars. The malformation is the ambiguous contract *under the
+  gate's hold*; neither reproduces alone in this instrument. #109's own mechanism is not neutral
+  with respect to argument quality, which is worth carrying into the declared-path work.
+
+  Predictions scored two held, two refuted. R4 predicted the `:` delimiter and was refuted by `.` —
+  and that refutation is what found #114. **No rate or bound is claimed:** 3 paired scenarios, one
+  model, one day, one reduced instrument. The pre-registered ~10% bound was not earned.
+
 ## 2026.08.0501 — 2026-08-05
 
 ### Fixed

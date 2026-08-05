@@ -307,6 +307,25 @@ PaToolSchemaLookup.prototype = {
      */
     PARAM_PREFIX_PATTERN: /^(?:table|table_name)\s*[:=]\s*/i,
 
+    /**
+     * The same prefix carried on the shorthand's OWN delimiter —
+     * `table.sn_aia_tool.u_routing_key` (issue #114).
+     *
+     * MEASURED. The #111 A/B put the pre-fix contract in front of the model
+     * under a depth-gate hold and got exactly this back: the placeholder word
+     * `table`, then `.`, then the real table and column. It is the cleanest
+     * confirmation of #111's root cause available — the model read `table` in
+     * "the shorthand table.field" as literal text — and #111's own guard let
+     * it through, because `.` could not join `:` and `=` in one class without
+     * breaking `incident.priority`.
+     *
+     * The discriminator is the THIRD segment: `table.<x>.<y>` cannot be a
+     * two-part shorthand, so stripping is unambiguous. `table.<x>` alone is
+     * genuinely ambiguous — it could name a table called `table` — and is
+     * deliberately left to the shorthand path.
+     */
+    DOTTED_PREFIX_PATTERN: /^(?:table|table_name)\.(?=[^.]+\.[^.]+$)/i,
+
     _normalizeArgs: function (args) {
         var k = this._k()
         var raw = args
@@ -325,7 +344,7 @@ PaToolSchemaLookup.prototype = {
             } else {
                 // Strip before the `.` split, so `table:incident.priority`
                 // still reaches the shorthand path intact.
-                var bare = k.trim(s.replace(this.PARAM_PREFIX_PATTERN, ''))
+                var bare = k.trim(s.replace(this.PARAM_PREFIX_PATTERN, '').replace(this.DOTTED_PREFIX_PATTERN, ''))
                 var out0 = bare === s ? {} : { _prefix_stripped: s }
                 if (!bare) return out0
 
