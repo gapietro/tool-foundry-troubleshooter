@@ -149,11 +149,36 @@ trigger for the smoke that follows, arrived at by a route §3 did not anticipate
 
 So the beat count is **bounded rather than measured**. `_depthGate` counts every hold it issues, on
 every path including `no_layer_report`, and once the count reaches `MAX_HOLDS` (2) the next terminal
-action is allowed through regardless of the trail: hold #1 → the model acts → hold #2 → release. The
-cap release is flagged (`capped:true`) and written to the transcript as its own note, because a run
-that finished only because the gate gave up is not evidence the gate worked and the smoke has to
-count the two apart. P4's not-a-denial-of-service result carries over — the cap can only make the
-tail shorter, never longer.
+action is allowed through: hold #1 → the model acts → hold #2 → release. The cap release is flagged
+(`capped:true`) and written to the transcript as its own note, because a run that finished only
+because the gate gave up is not evidence the gate worked and the smoke has to count the two apart.
+P4's not-a-denial-of-service result carries over — the cap can only make the tail shorter, never
+longer.
+
+**Where the cap sits (R1 + R2, review of the first cut).** The first implementation put the cap
+check *inside* the sticky branch and *above* that branch's trail check, and both halves were wrong:
+
+- **R1 — above the trail check.** A model that complied on the turn after hold #2 was released by
+  the cap and flagged `capped:true`. That is precisely the behaviour the gate exists to produce,
+  recorded as the gate giving up — and the flag's whole job is to let the smoke count real
+  compliance. The trail check now runs **first**: a trail row that discharges the recorded set is a
+  genuine release however many holds preceded it.
+- **R2 — inside the sticky branch.** `_heldTools` is assigned on the `fix_report` route alone, so a
+  run that never files a fix_report never enters the sticky branch: it takes the `no_layer_report`
+  hold every iteration, increments the counter against a check it cannot reach, and rides to
+  `MAX_ITERATIONS` → `partial` — the same revert trigger, by a second route. The cap now sits above
+  every remaining path (sticky-with-no-match, `no_layer_report`, first hold alike), which is what
+  makes the *cap*, and not just the counter, apply on every path.
+
+The resulting order is: already released → unreadable trail → sticky trail release → **cap** →
+sticky hold / `no_layer_report` / first hold. One consequence is accepted rather than fixed: with
+the cap above the first-hold derivation, a run whose cap was spent by `no_layer_report` holds is
+released `capped:true` even if the fix_report it finally files has no open gap. The bound is what
+matters by then, and the transcript note is worded to claim only which branch released the run.
+
+**How often the `no_layer_report` hold fires is unmeasured.** The v4 pass predates the hold
+entirely, so its distribution of model behaviour says nothing about this exit; R2's bound is what
+makes the question safe to leave open rather than a reason to assume the path is cold.
 
 The honest reading of the trade: the gate now guarantees a bound on cost and no longer guarantees
 that a release means compliance. Making the release set and the advertised tool list agree — either

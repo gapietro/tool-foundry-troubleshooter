@@ -143,10 +143,14 @@ PaAgentLoop.prototype = {
     BUDGET_MS: 300000,
 
     /** C1 (final whole-branch review) — the depth gate issues AT MOST this
-     *  many holds in a run; the next terminal action after the cap is
-     *  reached is allowed through regardless of the trail. See `_depthGate`
-     *  for why an uncapped gate is not safe now that the release set is
-     *  narrowed to a target layer's DEDICATED tools. */
+     *  many holds in a run, counting holds on EVERY path (`no_layer_report`
+     *  included); the next terminal action after the cap is reached is
+     *  allowed through unless the trail released it first. R1/R2: the cap
+     *  check sits below the sticky trail check — so compliance after the cap
+     *  is spent is still a genuine release — and above every other hold path,
+     *  so a run that never files a fix_report is bounded too. See
+     *  `_depthGate` for why an uncapped gate is not safe now that the release
+     *  set is narrowed to a target layer's DEDICATED tools. */
     MAX_HOLDS: 2,
 
     /** The installed native agent this class reads its default playbook
@@ -587,11 +591,44 @@ PaAgentLoop.prototype = {
      * benchmark this gate exists to move, so it is bounded rather than
      * measured: `_holdCount` counts every hold this run issued, on every
      * path, and once it has reached `MAX_HOLDS` the next terminal action is
-     * allowed through regardless of the trail. The sequence is hold #1 ->
-     * model acts -> hold #2 -> release. The cap release is flagged
-     * (`capped:true`) and written to the transcript by `_step`, so the smoke
-     * can count capped releases separately from trail-backed ones instead of
-     * reading them as compliance.
+     * allowed through. The sequence is hold #1 -> model acts -> hold #2 ->
+     * release. The cap release is flagged (`capped:true`) and written to the
+     * transcript by `_step`, so the smoke can count capped releases
+     * separately from trail-backed ones instead of reading them as
+     * compliance.
+     *
+     * WHERE THE CAP SITS, AND WHY IT MOVED (R1 + R2)
+     * The cap check is the FOURTH test in this method: after the
+     * already-released and unreadable-trail short-circuits, after the sticky
+     * TRAIL check, and above everything else. Both halves of that position
+     * were bugs in the first cut of C1.
+     *
+     * R1 — it used to sit ABOVE the trail check inside the sticky branch, so
+     * a model that complied on the turn after hold #2 was released by the CAP
+     * and flagged `capped:true`. That is the one behaviour the gate exists to
+     * produce, recorded as the gate giving up, in the exact quantity the
+     * `capped` flag was added to measure. The trail check therefore runs
+     * first: a trail row that discharges the recorded set is a genuine
+     * release however many holds preceded it.
+     *
+     * R2 — it used to sit INSIDE the sticky branch, which `_heldTools` only
+     * ever opens from the `fix_report` route. A run that never emitted a
+     * `fix_report` never entered that branch: it took the `no_layer_report`
+     * hold on every iteration, incrementing the counter against a check it
+     * could not reach, and rode to `MAX_ITERATIONS` -> `partial` — the very
+     * revert trigger the cap was added to prevent, reachable by a second
+     * route. So the cap now dominates every remaining path — sticky with no
+     * matching trail row, `no_layer_report`, and the first hold alike. The
+     * counter's "every path" was always true; the CAP's is true only since
+     * this move.
+     *
+     * The residue of that ordering, accepted: because the cap is above the
+     * first-hold derivation, a run whose cap is already spent by
+     * `no_layer_report` holds is released `capped:true` even if the
+     * `fix_report` it finally files has no open gap and would have been
+     * allowed on the merits. The bound is what matters at that point, and
+     * `_cappedNote()` is worded to claim only which branch released the run —
+     * never that the model failed to sweep.
      *
      * KNOWN TILT, ACCEPTED UNDER #103, CLOSED BY #109: `_layerToolMap()` gives
      * `agent_config` three layers (2, 3, 7) against one apiece for layers 4
@@ -631,34 +668,52 @@ PaAgentLoop.prototype = {
         var trail = this._trailTools(runId)
         if (!trail.readable) return { hold: false, gaps: [], kind: '', target: null, capped: false }
 
-        // Once a hold has been issued, the recorded set is the ONLY thing
-        // that can release the gate — later drafts never move it.
+        // STICKY. Once a hold has been issued, the recorded set is the ONLY
+        // thing that can release the gate — later drafts never move it. The
+        // two branches that read this flag are split by R1/R2 below: the
+        // trail-backed RELEASE sits above the cap, the sticky HOLD below it.
         //
         // I2 (final whole-branch review): `[]` is truthy in JS. A bare
-        // `if (this._heldTools)` would enter this branch on an EMPTY
-        // recorded set and stay there forever — `_anyOf([], trail.tools)`
-        // is false no matter what the model does next, so every terminal
-        // action would be held for the rest of the run with no possible
-        // exit. Requiring a NON-EMPTY array means an empty recorded set
+        // `if (this._heldTools)` would treat an EMPTY
+        // recorded set as sticky and stay there forever — `_anyOf([],
+        // trail.tools)` is false no matter what the model does next, so every
+        // terminal action would be held for the rest of the run with no
+        // possible exit. Requiring a NON-EMPTY array means an empty recorded set
         // (which should never happen in production — `unsweptGaps` never
         // maps a layer to zero tools, and `_layerToolMap()` never returns
         // an empty list — but which a malformed collaborator could still
         // produce) falls through and re-derives gaps fresh from the
         // CURRENT draft instead of latching onto an unrecoverable hold.
-        if (this._isArray(this._heldTools) && this._heldTools.length > 0) {
-            // C1: the cap is checked BEFORE the trail, so once `MAX_HOLDS`
-            // holds have been issued this branch has exactly one exit and it
-            // is an ALLOW. See the "AND CAPPED AT `MAX_HOLDS`" section of
-            // this method's header for why an uncapped gate can no longer be
-            // assumed to release on a compliant-looking call.
-            if (this._holdCount >= this.MAX_HOLDS) {
-                this._gateReleased = true
-                return { hold: false, gaps: [], kind: '', target: null, capped: true }
-            }
-            if (this._anyOf(this._heldTools, trail.tools)) {
-                this._gateReleased = true
-                return { hold: false, gaps: [], kind: '', target: null, capped: false }
-            }
+        var sticky = this._isArray(this._heldTools) && this._heldTools.length > 0
+
+        // R1: THE TRAIL CHECK RUNS BEFORE THE CAP. It used to run after, so a
+        // model that complied on the turn AFTER hold #2 — the exact behaviour
+        // this gate exists to produce — took the cap exit and was recorded
+        // `capped:true`, telling the benchmark the gate had given up on the
+        // one run where it worked. A trail row that discharges the recorded
+        // set is a genuine release whatever the counter says.
+        if (sticky && this._anyOf(this._heldTools, trail.tools)) {
+            this._gateReleased = true
+            return { hold: false, gaps: [], kind: '', target: null, capped: false }
+        }
+
+        // R2: THE CAP SITS HERE, ABOVE EVERY REMAINING PATH — sticky-with-no-
+        // match, `no_layer_report` and the first hold alike. It used to live
+        // inside the sticky branch, and `_heldTools` is assigned on the
+        // fix_report route ALONE, so a run that never emitted a fix_report
+        // never reached the sticky branch at all: it held on every iteration,
+        // incrementing the counter against a check it could not reach, and
+        // rode to `MAX_ITERATIONS` -> `partial`. That is the pre-registered
+        // revert trigger the cap exists to prevent, so the cap has to dominate
+        // the paths that can hold without recording anything.
+        if (this._holdCount >= this.MAX_HOLDS) {
+            this._gateReleased = true
+            return { hold: false, gaps: [], kind: '', target: null, capped: true }
+        }
+
+        // The sticky HOLD: a recorded set the trail has not discharged, with
+        // cap headroom left.
+        if (sticky) {
             this._holdCount += 1
             return { hold: true, gaps: this._heldGaps, kind: 'gaps', target: this._heldTarget, capped: false }
         }
@@ -666,8 +721,13 @@ PaAgentLoop.prototype = {
         if (!this._isPlainObject(action) || action.action !== 'fix_report') {
             // `answer` carries no `layers_swept`, so it declares no gap and
             // there is nothing to enforce against. Hold and ask for a layer
-            // report; no run took this exit in the v4 pass. C1: it counts
-            // against the cap like any other hold — one counter, all holds.
+            // report. How often runs take this exit is UNMEASURED: this hold
+            // did not exist in the build the v4 pass was run against, so that
+            // pass's distribution of model behaviour says nothing about it —
+            // treat the path as unmeasured, not unlikely. R2 is why it now
+            // sits below the cap: it counts against the cap like any other
+            // hold (one counter, all holds), and before the reorder it was
+            // the one hold path the cap could never bound.
             this._holdCount += 1
             return { hold: true, gaps: [], kind: 'no_layer_report', target: null, capped: false }
         }
@@ -1104,16 +1164,29 @@ PaAgentLoop.prototype = {
      * `_holdNote`, and under the same 200-character `DIGEST_CHARS` ceiling.
      *
      * It exists to be COUNTABLE. A release granted because `MAX_HOLDS` was
-     * reached and one earned by a trail row that closed the target layer are
-     * the same event as far as `run()` is concerned, and the benchmark smoke
-     * has to report them separately — a run that finished only because the
-     * gate gave up is not evidence the gate worked. So the wording says
-     * plainly that the trail did not release this one.
+     * reached and one earned by a trail row that discharged the hold are the
+     * same event as far as `run()` is concerned, and the benchmark smoke has
+     * to report them separately — a run that finished only because the gate
+     * gave up is not evidence the gate worked.
+     *
+     * R1: IT CLAIMS THE MECHANISM, NOT THE MODEL'S BEHAVIOUR. This note used
+     * to assert "the target layer was never reached", which is two kinds of
+     * wrong. On the `no_layer_report` route there is no target layer at all —
+     * nothing was ever recorded to reach — so the sentence is meaningless
+     * there. And the cap now dominates paths where the model's conduct is
+     * simply not in evidence: the counter can be spent by holds that recorded
+     * nothing, and this branch is reached without the gate having evaluated
+     * any gap against the trail. What is certain is only which branch granted
+     * the release, so that is all the note says — plus the reading the
+     * benchmark needs, that a capped release must not be counted as
+     * compliance. (A model that DOES comply after the cap is spent releases
+     * through the trail check above and writes no note at all — that is the
+     * R1 fix in `_depthGate`, and this wording is its counterpart.)
      */
     _cappedNote: function () {
         return (
-            'GATE: released by the ' + this.MAX_HOLDS + '-hold cap, NOT by the trail — the target layer ' +
-            'was never reached. Not compliance; count separately.'
+            'GATE: released because the ' + this.MAX_HOLDS + '-hold cap was reached, not by the gate\'s ' +
+            'trail check. A capped release is not compliance — count it separately.'
         )
     },
 

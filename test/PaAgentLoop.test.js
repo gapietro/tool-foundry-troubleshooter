@@ -1551,6 +1551,97 @@ describe('capped depth gate (C1) — at most two holds', () => {
         expect(note).not.toContain('query_table')
         expect(note).not.toContain('genai_log')
     })
+
+    // -----------------------------------------------------------------------
+    // R1 — the trail check must run BEFORE the cap, or the one behaviour the
+    // gate exists to produce is recorded as the gate giving up.
+    // -----------------------------------------------------------------------
+
+    test('R1: a model that complies AFTER hold #2 gets a GENUINE release, not a capped one', () => {
+        const state = movingTrail(['agent_trace'], [GAP4])
+
+        expect(state.loop._depthGate('RUN1', FIX).hold).toBe(true)
+        expect(state.loop._depthGate('RUN1', FIX).hold).toBe(true)
+        expect(state.loop._holdCount).toBe(2)
+
+        // The cap is spent, but the model has now done exactly what the hold
+        // asked. What releases this is the trail row, not the cap — and the
+        // benchmark counts capped releases against the gate, so classifying
+        // this one as capped would undercount the compliance it measures.
+        state.invoked = ['agent_trace', 'schema_lookup']
+        const released = state.loop._depthGate('RUN1', FIX)
+        expect(released.hold).toBe(false)
+        expect(released.capped).toBe(false)
+    })
+
+    test('R1: compliance after hold #2 is still a genuine release when the cap is over-spent', () => {
+        // Same shape, one hold further along: the counter is past MAX_HOLDS
+        // (the no_layer_report path can push it there), and the trail check
+        // still wins.
+        const state = movingTrail(['agent_trace'], [GAP4])
+        state.loop._depthGate('RUN1', FIX)
+        state.loop._depthGate('RUN1', FIX)
+        state.loop._holdCount = 7
+
+        state.invoked = ['agent_trace', 'schema_lookup']
+        const released = state.loop._depthGate('RUN1', FIX)
+        expect(released.hold).toBe(false)
+        expect(released.capped).toBe(false)
+    })
+
+    // -----------------------------------------------------------------------
+    // R2 — the cap has to bound the no_layer_report path too. `_heldTools` is
+    // only ever assigned on the fix_report route, so a run that never files a
+    // layer report never enters the sticky branch — and before this fix the
+    // cap lived INSIDE that branch, leaving the path unbounded.
+    // -----------------------------------------------------------------------
+
+    test('R2: the no_layer_report path is bounded — two holds, then a capped release', () => {
+        const loop = load({
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            fixReport: fakeFixReport([], [GAP4]),
+        })
+
+        expect(loop._depthGate('RUN1', ANSWER).kind).toBe('no_layer_report')
+        expect(loop._depthGate('RUN1', ANSWER).kind).toBe('no_layer_report')
+        expect(loop._holdCount).toBe(2)
+
+        const third = loop._depthGate('RUN1', ANSWER)
+        expect(third.hold).toBe(false)
+        expect(third.capped).toBe(true)
+        expect(loop._gateReleased).toBe(true)
+    })
+
+    test('R2: the cap bounds a FIRST hold too — no recorded release set is needed', () => {
+        // Two no_layer_report holds spend the cap; the first fix_report then
+        // arrives with an open gap it would otherwise be held on.
+        const loop = load({
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            fixReport: fakeFixReport([], [GAP4]),
+        })
+        loop._depthGate('RUN1', ANSWER)
+        loop._depthGate('RUN1', ANSWER)
+
+        const third = loop._depthGate('RUN1', FIX)
+        expect(third.hold).toBe(false)
+        expect(third.capped).toBe(true)
+        // Nothing was recorded — the cap, not the sticky branch, was the exit.
+        expect(loop._heldTools).toBe(null)
+    })
+
+    test('the cap note claims only the mechanism, and stays countable', () => {
+        const note = load()._cappedNote()
+        expect(note.length).toBeLessThan(200)
+        expect(note.indexOf('GATE:')).toBe(0)
+        // It must NOT assert the target layer went unreached: R1 shows a
+        // capped-looking release can follow real compliance, and the
+        // no_layer_report route has no target layer at all.
+        expect(note).not.toMatch(/never reached|was not reached|target layer/i)
+        // Still tells a capped release from an earned one, and still says
+        // plainly that it is not compliance.
+        expect(note).toMatch(/cap/i)
+        expect(note).toMatch(/not compliance/i)
+    })
 })
 
 // ===========================================================================
@@ -1963,6 +2054,81 @@ describe('depth gate (#103) — wired into the loop', () => {
         expect(loop.run('RUN1').outcome).toBe('fix_report')
         const capped = runs.transcript.filter((e) => /cap/i.test(e.result_digest || ''))
         expect(capped).toHaveLength(0)
+    })
+
+    test('R2: a run that never files a fix_report is bounded by the cap, not by MAX_ITERATIONS', () => {
+        // `_heldTools` is assigned on the fix_report route ALONE, so a run
+        // that only ever answers never enters the sticky branch. With the cap
+        // living inside that branch this run held on every iteration and rode
+        // to MAX_ITERATIONS -> `partial`. The cap now dominates the
+        // no_layer_report path too: two holds, then the answer is honoured.
+        const runs = fakeRunManager()
+        const ANSWER = { action: 'answer', text: 'done' }
+        const loop = load({
+            runManager: runs,
+            llmProxy: fakeLlm([
+                { success: true, action: ANSWER, raw: 'r1' },
+                { success: true, action: ANSWER, raw: 'r2' },
+                { success: true, action: ANSWER, raw: 'r3' },
+                { success: true, action: ANSWER, raw: 'r4' },
+                { success: true, action: ANSWER, raw: 'r5' },
+            ]),
+            fixReport: fixWith([], [GAP4]),
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            maxIterations: 5,
+        })
+
+        expect(loop.run('RUN1').outcome).toBe('answer')
+
+        const holds = runs.transcript.filter((e) => /^HOLD:/.test(e.result_digest || ''))
+        expect(holds).toHaveLength(2)
+
+        const gate = runs.transcript.filter((e) => e.actor === 'system' && /^GATE:/.test(e.result_digest || ''))
+        expect(gate).toHaveLength(1)
+        expect(gate[0].result_digest.length).toBeLessThan(200)
+    })
+
+    test('R1: a run that complies AFTER the second hold writes NO cap note', () => {
+        // The gate's whole purpose, arriving one beat later than the cap: the
+        // model is held twice, then calls the tool the hold asked for. The
+        // release is the trail's, so the transcript must carry no GATE: note
+        // for the benchmark to count against the gate.
+        const runs = fakeRunManager()
+        let invoked = ['agent_trace']
+        const loop = load({
+            runManager: runs,
+            toolRegistry: fakeTools([]),
+            llmProxy: fakeLlm([
+                { success: true, action: DRAFT, raw: 'r1' },
+                { success: true, action: { action: 'tool_call', tool: 'agent_config', args: {} }, raw: 'r2' },
+                { success: true, action: DRAFT, raw: 'r3' },
+                { success: true, action: { action: 'tool_call', tool: 'schema_lookup', args: {} }, raw: 'r4' },
+                { success: true, action: DRAFT, raw: 'r5' },
+            ]),
+            fixReport: fixWith([{ valid: true, normalized: { ok: true } }], [GAP4]),
+            auditLogger: {
+                invokedTools: function () {
+                    return { available: true, tools: invoked.slice() }
+                },
+            },
+            maxIterations: 8,
+        })
+        const tools = loop._tools()
+        const originalDispatch = tools.dispatch
+        tools.dispatch = function (name, args, ctx) {
+            invoked.push(name)
+            return originalDispatch.call(tools, name, args, ctx)
+        }
+
+        expect(loop.run('RUN1').outcome).toBe('fix_report')
+
+        // Two holds were issued — the cap was fully spent before the model
+        // acted — and the release was still the trail's.
+        const holds = runs.transcript.filter((e) => /^HOLD:/.test(e.result_digest || ''))
+        expect(holds).toHaveLength(2)
+        expect(loop._holdCount).toBe(2)
+        const gate = runs.transcript.filter((e) => /^GATE:/.test(e.result_digest || ''))
+        expect(gate).toHaveLength(0)
     })
 
     test('bounds are still checked FIRST — a hold cannot outlive MAX_ITERATIONS', () => {
