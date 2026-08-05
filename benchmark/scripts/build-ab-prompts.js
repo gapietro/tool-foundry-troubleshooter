@@ -144,11 +144,28 @@ function buildPrompt(contract, scenario, holdBlock) {
 // The treatment arm's hold is the DEPLOYED text, read out of PaAgentLoop
 // rather than retyped — the v7 hold arms were composed ad hoc and are not
 // reproducible from the repo, which is what this closes.
+//
+// NEW_ITEM1 is pinned to ground truth by the indexOf(NEW_ITEM1) check below,
+// but OLD_ITEM1 has no live source — v6/v7 wording is retired, not something
+// any script include still emits. Without an anchor, a future edit could
+// silently drift OLD_ITEM1 away from what v6/v7 actually rendered and the
+// per-scenario "differs ONLY in item 1" check would keep passing regardless,
+// because both the substitution and the invariant re-use the same (now
+// wrong) constant. `raw-evidence-v5-depth-smoke.md` is published evidence
+// recording the hold block as it was actually rendered in the v5 smoke, so
+// checking OLD_ITEM1 against it is a genuine historical anchor rather than a
+// copy of the constant checking itself.
+const OLD_ITEM1_EVIDENCE_FILE = path.join(__dirname, '..', 'raw-evidence-v5-depth-smoke.md')
+
 function holdArms() {
     const ctx = loadScriptInclude('PaAgentLoop.js', { JSON: JSON })
     const treatment = new ctx.PaAgentLoop({})._holdBlock(HOLD_GAPS, 'gaps', HOLD_TARGET)
     if (treatment.indexOf(NEW_ITEM1) === -1) {
         throw new Error('_holdBlock does not carry NEW_ITEM1 — Task 2 not applied, or the wording drifted')
+    }
+    const evidence = fs.readFileSync(OLD_ITEM1_EVIDENCE_FILE, 'utf8')
+    if (evidence.indexOf(OLD_ITEM1) === -1) {
+        throw new Error('OLD_ITEM1 does not match ' + OLD_ITEM1_EVIDENCE_FILE + ' — the v6/v7 wording drifted')
     }
     return { treatment: treatment, control: treatment.split(NEW_ITEM1).join(OLD_ITEM1) }
 }
