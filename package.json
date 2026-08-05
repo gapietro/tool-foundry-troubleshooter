@@ -1,28 +1,28 @@
 {
-    "name": "x-snc-troubleshoot",
-    "version": "2026.08.0502",
-    "description": "",
-    "license": "UNLICENSED",
-    "imports": {
-        "#now:*": "./@types/servicenow/fluent/*/index.js"
-    },
-    "scripts": {
-        "build": "now-sdk build",
-        "deploy": "now-sdk install",
-        "transform": "now-sdk transform",
-        "types": "now-sdk dependencies",
-        "test": "jest"
-    },
-    "jest": {
-        "testEnvironment": "node",
-        "testMatch": [
-            "<rootDir>/test/**/*.test.js"
-        ]
-    },
-    "devDependencies": {
-        "@servicenow/sdk": "4.9.2",
-        "@servicenow/glide": "27.0.5",
-        "jest": "29.7.0",
-        "typescript": "5.5.4"
-    }
+  "name": "x-snc-troubleshoot",
+  "version": "2026.08.0503",
+  "description": "",
+  "license": "UNLICENSED",
+  "imports": {
+    "#now:*": "./@types/servicenow/fluent/*/index.js"
+  },
+  "scripts": {
+    "build": "now-sdk build",
+    "deploy": "now-sdk install",
+    "transform": "now-sdk transform",
+    "types": "now-sdk dependencies",
+    "test": "jest"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "<rootDir>/test/**/*.test.js"
+    ]
+  },
+  "devDependencies": {
+    "@servicenow/sdk": "4.9.2",
+    "@servicenow/glide": "27.0.5",
+    "jest": "29.7.0",
+    "typescript": "5.5.4"
+  }
 }

@@ -131,6 +131,12 @@ Two alternatives were considered and rejected:
 
 ## 5. Change B — `_holdBlock` item 1 stops quoting a field on its own
 
+> **OUTCOME: REVERTED, NOT SHIPPED.** The A/B specified in §6 refuted this section's hypothesis —
+> six scenarios, twelve trials, every pair byte-identical between arms, including the one that
+> reproduced the defect (S6 REFUTED). The rewording was reverted; §3's Change A shipped alone.
+> See `benchmark/raw-evidence-v8-hold-item1-ab.md` and DECISION.md §R6. The design below is left
+> as written, as the record of what was hypothesised and tested.
+
 ```diff
 -  1. What did the last tool result actually establish? Quote the specific field
 -     or value you are relying on.

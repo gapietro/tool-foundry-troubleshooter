@@ -17,6 +17,62 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0503 — 2026-08-05
+
+### Fixed
+
+- **The depth gate's declared path let the model select its own cheap compliance (#116).**
+  `_selectTarget` gave the model's own `would_confirm` layer precedence whenever it named an open
+  gap. DECISION.md §Q4 measured the cost: that path carried 4 of 6 holds, and twice it steered the
+  run to a cheap layer — both seed-04 runs named layer 3, whose `agent_config` has fan-out 3, while
+  layers 4 and 5 sat open at fan-out 1, and `agent_config` legitimately discharged the hold. The
+  target is now always drawn from the **minimal-fan-out class** of open gaps, with the declaration
+  deciding only which member of that class wins. Direction survives — the model still chooses among
+  equals; force survives — it can no longer nominate a layer cheaper than the run has available.
+  Retro-applied to the verbatim v6 hold records, this flips exactly the two seed-04 holds
+  (layer 3 → layer 4) and regresses nothing. The `matched` flag retired with it, so an unscorable
+  named gap no longer forces the undirected union hold.
+
+  **It does not make layer 6 reachable, and that was pre-registered (S3/S4).** Layers 1, 4 and 5
+  score fan-out 1 and layer 6 scores 2, so layer 6 is targeted only once 4 and 5 are closed —
+  and `MAX_HOLDS` is 2. `genai_log` and `log_analysis` stay unreached. A tie-break that preferred
+  layer 6 was rejected: no structural argument picks it over layer 4 other than "that is where the
+  unreached tool is", which forfeits §H8 item 3's non-vacuity condition.
+
+### Measured
+
+- **A hold-block prompt fix was refuted by its own pre-registered test, and reverted (#116).** v7 §4
+  found the gate's hold pushing `schema_lookup` arguments onto bare scalars that dropped the table.
+  The hypothesis was that item 1's "Quote the specific **field** or value" offered a bare field name
+  as a quotable unit. A paired A/B moved **nothing**: six scenarios, twelve trials, every pair
+  byte-identical between arms — including the one scenario that reproduced the defect (S6 REFUTED,
+  `benchmark/raw-evidence-v8-hold-item1-ab.md`). The rewording was reverted rather than shipped; a
+  prompt change to text with 57 runs of history does not ship on a mechanism its own test declined
+  to confirm. **This also refines v7 §7:** with the corrected contract deployed, an s3-shaped prompt
+  still returns `"assignment_group"`, so the contract fix is not a general remedy for the
+  table-omitted class. That residual is still live and its mechanism is unknown.
+
+### Changed
+
+- **The A/B instrument is reproducible from the repo for the first time (#116).**
+  `benchmark/scripts/build-ab-prompts.js` gains a `--hold` mode composing both arms from the real
+  `_holdBlock` via `loadScriptInclude` — v7's hold arms were composed ad hoc and the committed
+  script had no hold block at all. Both item-1 constants are anchored to ground truth: the deployed
+  wording against the live source, and against its verbatim appearance in
+  `raw-evidence-v5-depth-smoke.md`. Without the second anchor, a wrong claim about the historical
+  wording would still have printed `differs ONLY in item 1: true` and exited 0, because the
+  substitution and the invariant re-use the same constant.
+
+### Found
+
+- **A deactivated NASK skill executed normally, twelve times.** `servicenow_skill_list` reports
+  `pa llm reason` as `[OFF]` on gpinst01, yet every `servicenow_skill_execute` call against it
+  returned normally. Build Rule #40 states a deactivated skill fails with a permission-flavoured
+  error — that failure signature is **not universal across invocation paths**. Recorded, not
+  chased: a future run that trusts `[OFF]` to mean "will fail" would misdiagnose.
+
+---
+
 ## 2026.08.0502 — 2026-08-05
 
 ### Fixed
