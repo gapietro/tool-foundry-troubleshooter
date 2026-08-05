@@ -1910,6 +1910,20 @@ describe('depth gate (#103) — _holdBlock', () => {
         expect(block).toContain('layer 2 (Instructions)')
         expect(block).toContain('layer 4 (Data schemas)')
     })
+
+    test('#116: item 1 does not offer a bare field as a quotable unit', () => {
+        // v7 §4 measured the hold pushing schema_lookup arguments onto bare
+        // scalars, and C4/C5 returned "priority" and "assignment_group" — bare
+        // FIELD names with the table dropped, which no lexical guard can catch
+        // because both are valid table names. Item 1 named `field` as a
+        // standalone quotable unit three lines above "Call a tool that reaches
+        // layer N", in a block that renders LAST in the prompt. This makes the
+        // table and the field co-salient instead.
+        const block = load()._holdBlock(GAPS, 'gaps')
+        expect(block).toContain('Quote the specific value you')
+        expect(block).toContain('the table and field it came from')
+        expect(block).not.toMatch(/Quote the specific field/i)
+    })
 })
 
 // ===========================================================================
