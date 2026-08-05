@@ -1601,6 +1601,10 @@ describe('depth gate (#103) — wired into the loop', () => {
         // RANKED directed wording rather than #103's generic item 2.
         expect(second).toMatch(/no other line of investigation reaches/i)
         expect(second).toContain('Call a tool that reaches layer 4')
+        // NEGATIVE (test-hygiene finding on #109 review): confirm the
+        // generic #103 wording this directed rendering REPLACES is truly
+        // absent, not merely that the directed wording is also present.
+        expect(second).not.toContain('most change your conclusion')
         // The #72 regression guard: the block must arrive WHOLE, not as a
         // 200-char digest stub.
         expect(second).not.toContain('more chars]')
@@ -1816,6 +1820,11 @@ describe('directed depth gate (#109) — _holdBlock', () => {
         expect(block).toContain('layer 4')
         expect(block).toMatch(/no other line of investigation reaches/i)
         expect(block).toMatch(/Call a tool that reaches layer 4/i)
+        // NEGATIVE (test-hygiene finding on #109 review): a dropped `else`
+        // would emit the directed lines ALONGSIDE the #103 generic ones and
+        // still pass every assertion above. The generic item-2 wording must
+        // be ABSENT, not merely "the directed wording is also present".
+        expect(block).not.toMatch(/most change your conclusion/i)
     })
 
     test('DECLARED: quotes the model back to itself instead', () => {
@@ -1823,6 +1832,8 @@ describe('directed depth gate (#109) — _holdBlock', () => {
         expect(block).toContain('layer 2')
         expect(block).toMatch(/your own report names it/i)
         expect(block).toMatch(/Call a tool that reaches layer 2/i)
+        // NEGATIVE — same reasoning as the RANKED case above.
+        expect(block).not.toMatch(/most change your conclusion/i)
     })
 
     test('both gaps still appear — the target directs, it does not hide the rest', () => {
@@ -1851,6 +1862,12 @@ describe('directed depth gate (#109) — _holdBlock', () => {
             }).not.toThrow()
             expect(block).toContain('HOLD')
             expect(block).toMatch(/did it not settle|not settle/i)
+            // NEGATIVE — the fallback path must render ONLY the generic
+            // wording. A dropped `else` would leak the directed lines in
+            // here too even with no usable target; none of them may appear.
+            expect(block).not.toMatch(/no other line of investigation reaches/i)
+            expect(block).not.toMatch(/your own report names it/i)
+            expect(block).not.toContain('Call a tool that reaches layer')
         }
     )
 
