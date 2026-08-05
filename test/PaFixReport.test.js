@@ -1915,3 +1915,70 @@ describe('unsweptGaps (#103)', () => {
         }
     )
 })
+
+// ===========================================================================
+// directed depth gate (#109) — toolFanOut / declaredLayers
+//
+// Two thin accessors over `_layerToolMap` and `_layersNamedBy`, added so
+// PaAgentLoop can rank gaps by how DEDICATED their tools are without ever
+// re-typing the map. Pure: no Glide, no audit query, no validation effect.
+// ===========================================================================
+
+describe('directed depth gate (#109) — toolFanOut', () => {
+    test('counts the layers each tool can close', () => {
+        expect(load().toolFanOut()).toEqual({
+            agent_trace: 1,
+            genai_log: 2,
+            log_analysis: 3,
+            agent_config: 3,
+            schema_lookup: 1,
+            query_table: 1,
+        })
+    })
+
+    test('every tool named anywhere in the layer map has a fan-out of at least 1', () => {
+        const fanOut = load().toolFanOut()
+        Object.keys(fanOut).forEach((tool) => {
+            expect(fanOut[tool]).toBeGreaterThanOrEqual(1)
+        })
+    })
+})
+
+describe('directed depth gate (#109) — declaredLayers', () => {
+    test('reads the layer a root cause names in would_confirm', () => {
+        const report = { root_causes: [{ would_confirm: 'layer 4 — the schema of the routing table' }] }
+        expect(load().declaredLayers(report)).toEqual([4])
+    })
+
+    test('collects across several root causes, de-duplicated and ascending', () => {
+        const report = {
+            root_causes: [
+                { would_confirm: 'layer 5 would settle it' },
+                { would_confirm: 'layer 4 as well' },
+                { would_confirm: 'layer 5 again' },
+            ],
+        }
+        expect(load().declaredLayers(report)).toEqual([4, 5])
+    })
+
+    test('a root cause with no would_confirm contributes nothing', () => {
+        const report = { root_causes: [{ layer: 1, finding: 'x' }, { would_confirm: 'layer 6' }] }
+        expect(load().declaredLayers(report)).toEqual([6])
+    })
+
+    test.each([undefined, null, 42, 'a string', [], { root_causes: 'not an array' }, { root_causes: [null, 7] }])(
+        'degrades to [] on malformed input (%p) rather than throwing (R-9)',
+        (input) => {
+            let out
+            expect(() => {
+                out = load().declaredLayers(input)
+            }).not.toThrow()
+            expect(out).toEqual([])
+        }
+    )
+
+    test('inherits _layersNamedBy: a table name carrying a digit is NOT read as a layer', () => {
+        const report = { root_causes: [{ would_confirm: 'check sn_aia_agent_tool_m2m' }] }
+        expect(load().declaredLayers(report)).toEqual([])
+    })
+})

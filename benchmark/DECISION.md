@@ -1997,3 +1997,157 @@ fixed first, not a full five-seed repeat.
 
 **Unchanged: native remains the recommended path on this instance, and the Phase 1b milestone is
 not met.**
+
+---
+
+## Q. The gate learned to aim (`2026.08.0403`, #109) — §H8's acceptance test is MET
+
+§P6's queued next item, run 2026-08-05. The change is the one §P6 named: `_depthGate` stops
+recording the **union** of every open gap's tools as its release set and instead selects **one**
+target gap, recording only that gap's **dedicated** tools. One rule applied twice — a tool's
+fan-out is the number of layers `_layerToolMap()` lets it close, and fan-out minimality both picks
+the target and narrows its release set. Selection prefers the model's own `would_confirm` layer
+when it names an open gap; otherwise the structural rank.
+
+Design: `docs/superpowers/specs/2026-08-04-directed-depth-gate-design.md`. Plan:
+`docs/superpowers/plans/2026-08-04-directed-depth-gate.md`. Measurements, verbatim arguments and
+the hold-prompt verification: `benchmark/raw-evidence-v6-directed-depth.md`. Predictions Q1–Q8 were
+filed on issue #109 **before the code was written**.
+
+### Q1. What was run
+
+**Six runs, custom harness only, seeds 01 / 03 / 04, two each**, fired sequentially with each
+polled to terminal before the next was POSTed. Seed 02 excluded per spec §11; seed 05 not in scope.
+Same shape as the v5 smoke, and byte-identical request bodies, so the two are comparable.
+
+**Native did not move on this branch** (§K5 / §I4 confound 3 stays closed), so there is no native
+arm and no cross-harness comparison from this smoke.
+
+Deploy was verified by reading the installed `PaAgentLoop` and `PaFixReport` bodies back through
+the MCP broker and matching literal source strings. **§P1's stale-timestamp oddity reproduced
+exactly** — `sys_updated_on` read `2026-08-02 05:15:25` after a successful install, the identical
+value §P1 recorded a day earlier. Observed twice now on two installs; treat it as this record's
+normal behaviour, not a one-off.
+
+### Q2. The scored predictions
+
+| | Prediction, as filed | Outcome | Measured |
+|---|---|---|---|
+| Q1 | The hold fires on ≥ 5 of 6 runs | **HELD** | 6 of 6 (7 holds; run 2 held twice) |
+| Q2 | **≥ 1 run reaches `schema_lookup`, `query_table` or `genai_log` on the seed that needs it — §H8's test MET** | **HELD** | 3 runs reached one; 2 of those with a well-formed call |
+| Q3 | Releases are no longer exclusively `agent_config` | **HELD** | `schema_lookup` ×3, `query_table` ×1, `agent_config` ×2 |
+| Q4 | `partial` stays at 0–2 of 6 | **HELD** | 0 — all six `complete` |
+| Q5 | Unsupported-sweep-claim rate does not rise above v5's 0 of 6 | **HELD** | 0 of 6 |
+| Q6 | `UNAVAILABLE` relabelling does not become the escape — ≤ 3 of 42 labels | **HELD** | 0 of 42 (v5: 2 of 42) |
+| Q7 | The **ranked** path carries most holds; declared fires on a minority | **REFUTED** | declared 4 of 6, ranked 2 of 6 |
+| Q8 | Seed 01 still misses `priority_stored: null` on ≥ 1 of 2 runs | **HELD** | missed on 1 of 2 — run 2 cited it |
+
+**Seven held, one refuted.**
+
+### Q3. §H8's acceptance test is met, and here is exactly how far that goes
+
+**The test as filed — one custom run reaching `schema_lookup`, `query_table` or `genai_log` on the
+seed that needs it — is MET, for the first time.** It was unmet across 51 runs. Three runs met it:
+runs 1 and 2 on seed 01, whose answer sits behind layer 4, both via `schema_lookup`; run 3 on seed
+03, whose answer sits behind layer 5, via `query_table`.
+
+**The strict reading is 2 of 6, not 3, and that is the number to quote.** Run 1 called
+`schema_lookup` with the argument `table:incident` — the parameter name prefixed onto the value —
+and the tool correctly answered `table_does_not_exist`. It reached the tool and retrieved no
+schema. Run 4 made the identical malformation on a different seed. Only runs 2 (`sn_aia_tool`) and
+3 (a well-formed `query_table` query returning 0 rows, which *is* the finding) issued calls that
+returned evidence.
+
+`table:incident` twice across two seeds is a reproducible tool-call-formatting defect, not a slip,
+and it is invisible to any measure that counts only which tools were invoked. Filed separately.
+
+**Run 2 is the cleanest single piece of evidence in this smoke, because it contains its own
+counterfactual.** It held; the model called `agent_config`; the gate did not release; it held
+again; the model called `schema_lookup`; the trail released it. Under #103's union rule that first
+`agent_config` call would have released the hold and the run would have ended with no layer-4
+evidence — which is exactly what all six v5 runs did. The narrowing is doing the work, and it is
+observable in a single run rather than inferred across a distribution.
+
+**The qualification stated in the design's §8 stands and is not waived.** The ranked order puts
+layers 4 and 5 near the top, which is where §H8's tools live. The rule is structural and names no
+tool, but a pass earned under this design is not the same as a pass earned by a harness that found
+those tools unaided. Read Q2 as "the gate can aim the model at a layer", not as "the harness
+investigates".
+
+### Q4. Q7's refutation is the finding, not a footnote
+
+**The declared path carried 4 of 6 holds, not the minority predicted.** `would_confirm` was
+populated far more often than the design expected — it appears only on UNCONFIRMED causes, and Q7
+assumed that would make it rare.
+
+And the declared path **steered toward cheap layers twice**: both seed-04 runs targeted **layer 3**
+because the model's own `would_confirm` named it, and `agent_config` — fan-out 3 — legitimately
+discharged the hold. Seed 04's answer sits behind layer 6. So on the one seed in this smoke whose
+answer needs `genai_log`, the model named a cheap layer, the gate honoured the naming, and the
+measured tool was never reached. Run 4 is the same shape in miniature: on a layer-5 seed the model
+named layer 4, and the gate faithfully sent it to `schema_lookup`.
+
+**This was pre-registered.** The final whole-branch review of #109 flagged, before any run, that
+the declared path is model-steerable — that giving `would_confirm` precedence lets a model select
+its own cheap compliance through text it authors. It was recorded as a design property rather than
+a defect, on the grounds that binding the gate to the model's own stated gap is the purest form of
+direction available. **This smoke measured it: the property is real, it fires on the majority of
+holds, and twice in six runs it cost the run its target layer.**
+
+That is the live question for the next iteration, and it is a genuine trade rather than a bug:
+honouring the model's own declaration is what makes the gate *direction* rather than *force*, and
+it is also what lets the model route around the layer that matters.
+
+### Q5. What moved, and what did not
+
+- **`genai_log` and `log_analysis` have still never been invoked** — now **57 runs**. Seed 04 was
+  the only path to layer 6 in this smoke and both its runs were steered to layer 3 (see §Q4).
+- **Audit-derived sweep breadth FELL against v5 on four of six runs** (2/7 against a uniform 4/7),
+  and that is the change working rather than failing. v5's 4/7 was the arithmetic of one
+  `agent_config` call crediting three layers at once; these runs spent the forced beat on a
+  single-layer tool instead. **Breadth of sweep and depth of investigation are different
+  quantities.** Any future pass reading `layers_swept` counts as progress will misread this smoke.
+- **The two-hold cap never fired.** Zero `GATE:` notes across six runs; all seven holds were
+  discharged by the trail. The cap bounded a risk that did not materialise here — including in
+  run 2, which reached the cap's threshold and complied rather than being released by it.
+- **Zero `UNAVAILABLE` labels** (v5: 2 of 42), zero unsupported sweep claims, zero `partial`.
+  Neither revert trigger fired.
+- **§O6's constraint 1 moved on one run of two.** Run 2's report cites `priority_stored`, the
+  discriminating value that sat unused in the turn-2 prompt of every prior seed-01 run in v4 and
+  v5. Run 1's does not. Constraint 1 is *evidence in hand and unused*, which this design explicitly
+  does not address — Q8 predicted it would stay broken and scored HELD on run 1. One run of two is
+  an observation to carry forward, not a fix.
+
+### Q6. What this does not establish
+
+- **No scored pass.** Six unscored runs, three seeds, one instance, one day. Whether any of these
+  diagnoses is *correct* is a scored pass's question; run 3's `CONFIRMED` root cause is backed by a
+  real `query_table` result, and that is a claim about provenance, not about accuracy.
+- **Nothing about seeds 02 and 05.** Seed 02 excluded by design; seed 05 — the absence seed, where
+  `UNAVAILABLE` on layer 1 is the honest answer and #78's exit must stay open — remains covered by
+  unit tests only, untested live, exactly as after v5.
+- **Nothing about native**, which did not move on this branch.
+- **Nothing about the cap under load.** It never fired, so its release path is unexercised in
+  production and remains covered by unit tests only.
+- **Q7's mechanism rests on 4 declared holds**, two of which landed on the same seed. It is a
+  direction, not a rate.
+
+### Q7. Recommendation
+
+**Fire a scored pass next, and make the declared path its subject.** §P6 declined to recommend one
+because the depth mechanism had not moved the acceptance test; it now has, three of the last four
+substantive questions are about report *correctness* rather than tool reach, and §O6's constraint 1
+showed its first movement. The informative pass is seeds 01, 03 and 04, scored with independent
+per-row scorers (§O5), with the tool-call-formatting defect fixed first so that a malformed
+`schema_lookup` argument does not confound a correctness measurement.
+
+**Before that pass, decide what the declared path should do when the model names a cheap layer.**
+The candidates, in the order the evidence supports them: cap the declared path's precedence so it
+cannot select a gap whose fan-out exceeds the best available; or let it stand and count the cost,
+on the argument that a model naming its own gap is the behaviour worth cultivating even when it
+names the wrong one. This smoke does not settle it — it establishes that the choice matters twice
+in six runs.
+
+**Unchanged: native remains the recommended path on this instance, and the Phase 1b milestone is
+not met.** §H8's acceptance test is one gate among several, and meeting it moves the depth
+blocker — it does not by itself make the custom harness competitive.

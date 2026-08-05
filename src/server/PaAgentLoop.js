@@ -69,6 +69,16 @@
  * `_depthGate` and `_holdBlock` for the full rationale, and issue #103 for
  * the predictions this was built against.
  *
+ * `_depthGate` NOW NAMES ONE LAYER, NOT THE FULL GAP SET (issue #109)
+ * DECISION.md §P found that a hold naming every open layer let the model
+ * discharge the gate with whichever tool happened to be cheapest, closing
+ * layers it never actually investigated. `_selectTarget` picks a single
+ * layer to hold against, and `_holdBlock`/`_holdNote` render that one
+ * target — the released set narrows to its tools alone. That narrowing is
+ * also why the gate is CAPPED at `MAX_HOLDS` (2) rather than buying exactly
+ * one beat: the prompt advertises more tools per layer than the narrowed set
+ * accepts, so a compliant-looking call can fail to release. See `_depthGate`.
+ *
  * `_buildPrompt(playbook, promptBlock, context, request)` TAKES PLAYBOOK AS
  * AN ARGUMENT, NOT A HARDCODED STRING
  * The playbook is `docs/agent/agent-doctor-instructions.md` — the SAME text
@@ -132,6 +142,17 @@ PaAgentLoop.prototype = {
     MAX_ITERATIONS: 15,
     BUDGET_MS: 300000,
 
+    /** C1 (final whole-branch review) — the depth gate issues AT MOST this
+     *  many holds in a run, counting holds on EVERY path (`no_layer_report`
+     *  included); the next terminal action after the cap is reached is
+     *  allowed through unless the trail released it first. R1/R2: the cap
+     *  check sits below the sticky trail check — so compliance after the cap
+     *  is spent is still a genuine release — and above every other hold path,
+     *  so a run that never files a fix_report is bounded too. See
+     *  `_depthGate` for why an uncapped gate is not safe now that the release
+     *  set is narrowed to a target layer's DEDICATED tools. */
+    MAX_HOLDS: 2,
+
     /** The installed native agent this class reads its default playbook
      *  from — see `_defaultPlaybook()`. */
     AGENT_NAME: 'Agent Doctor',
@@ -168,13 +189,14 @@ PaAgentLoop.prototype = {
 
         // Depth gate state (issue #103). A run is one synchronous
         // invocation, so instance fields are sufficient — no column, no
-        // schema change. `_heldTools` is the union of tools that close the
-        // gaps recorded at the FIRST hold; it is the only thing that can
-        // release the gate afterwards.
-        this._gateReleased = false
-        this._heldGaps = null
-        this._heldTools = null
-        this._holdActive = null
+        // schema change. `_heldTools` is recorded at the FIRST hold and is
+        // the only thing a later tool call can release the gate with. I4
+        // (final whole-branch review): since #109 it holds the DEDICATED
+        // tools of the ONE target layer `_selectTarget` picked — the union
+        // of every open gap's tools only on the degraded fallback path,
+        // when nothing was scorable (see `_depthGate` and `_unionTools`).
+        // C1: `_holdCount` bounds how many holds that set can produce.
+        this._resetGate()
 
         if (o.maxIterations > 0) this.MAX_ITERATIONS = o.maxIterations
         if (o.budgetMs > 0) this.BUDGET_MS = o.budgetMs
@@ -286,12 +308,24 @@ PaAgentLoop.prototype = {
             // not in `PaFixReport.validate`.
             var gate = this._depthGate(runId, action)
             if (gate.hold) {
-                this._holdActive = this._holdBlock(gate.gaps, gate.kind)
+                this._holdActive = this._holdBlock(gate.gaps, gate.kind, gate.target)
                 this._runs().appendTranscript(runId, {
                     actor: 'system',
                     result_digest: this._holdNote(gate),
                 })
                 return { terminal: false }
+            }
+            // C1: a release the CAP granted is not a release the model
+            // earned, and the benchmark smoke has to count the two apart.
+            // Kept well inside PaRunManager's DIGEST_CHARS (200) for the
+            // same reason `_holdNote` is — a longer note is silently
+            // truncated, which is the defect class this design exists to
+            // avoid (#72 / §G3a).
+            if (gate.capped === true) {
+                this._runs().appendTranscript(runId, {
+                    actor: 'system',
+                    result_digest: this._cappedNote(),
+                })
             }
             this._holdActive = null
         }
@@ -489,6 +523,28 @@ PaAgentLoop.prototype = {
     },
 
     /**
+     * Per-run gate state, cleared from `initialize()`. Lifted out of the
+     * body when #109 added `_heldTarget`, so the reset has exactly one
+     * definition and a test can assert it.
+     *
+     * I5 (final whole-branch review): this docblock used to say "cleared at
+     * the top of `run()`", which was never true — `initialize()` is the only
+     * caller and `run()` never resets. The behaviour is correct because
+     * production constructs a fresh loop per run (the async ScriptAction
+     * worker news up a `PaAgentLoop` for each event); the claim about WHERE
+     * it happened was the only defect, so only the claim is fixed here.
+     */
+    _resetGate: function () {
+        this._gateReleased = false
+        this._heldGaps = null
+        this._heldTools = null
+        this._heldTarget = null
+        this._holdActive = null
+        // C1: how many holds this run has issued, across every hold path.
+        this._holdCount = 0
+    },
+
+    /**
      * THE DEPTH GATE (issue #103) — the floor `run()`'s bounds are not.
      *
      * DECISION.md §O4: the custom harness swept 1/7 on all 20 rows of the v4
@@ -515,71 +571,183 @@ PaAgentLoop.prototype = {
      * The gap set is recorded at the FIRST hold and never re-derived. Without
      * that the goalposts move — close layer 4, declare layer 5, be held again
      * — and every run rides to `MAX_ITERATIONS`, since even native's best
-     * sweep in the v4 pass was 6/7. The gate buys exactly ONE forced beat,
-     * which is the size of the acceptance test. A run that then declines to
-     * act rides the bounds to `outcome:'partial'`, and that tail is counted
-     * rather than special-cased (issue #103, prediction P4).
+     * sweep in the v4 pass was 6/7. A run that then declines to act rides the
+     * bounds to `outcome:'partial'`, and that tail is counted rather than
+     * special-cased (issue #103, prediction P4).
      *
-     * KNOWN TILT, ACCEPTED: `_layerToolMap()` gives `agent_config` three
-     * layers (2, 3, 7) against one apiece for layers 4 and 5, so the cheapest
-     * compliance is a single `agent_config` call — a built-in tilt AWAY from
-     * the tools the acceptance test measures. Pre-registered as P7 on #103
-     * rather than engineered around: if it happens the trail says so plainly,
-     * and "the gate mandates depth but does not direct it" is a clean
-     * finding that directs the next iteration.
+     * AND CAPPED AT `MAX_HOLDS` (2) — AT MOST TWO FORCED BEATS, NOT ONE
+     * C1 (final whole-branch review). #103's one-beat claim rested on the
+     * release set being the union of every open gap's tools: any tool the
+     * prompt advertised for a held layer discharged the hold, so a compliant
+     * call always released. #109 narrowed the release set to the target
+     * layer's DEDICATED tools — but `PaFixReport.schemaText()` still renders
+     * the WHOLE layer-to-tool map into every prompt ("5 (Data) needs one of:
+     * query_table, log_analysis"), and for targets on layers 1, 5 and 6 the
+     * dedicated set is a strict SUBSET of that advertised list. A model
+     * reading the harness's own mapping can therefore make a call that looks
+     * compliant (`log_analysis` for a layer-5 target), fail to release, be
+     * re-held, and — uncapped — ride to `MAX_ITERATIONS` and finish
+     * `partial`. That outcome is a pre-registered revert trigger for the
+     * benchmark this gate exists to move, so it is bounded rather than
+     * measured: `_holdCount` counts every hold this run issued, on every
+     * path, and once it has reached `MAX_HOLDS` the next terminal action is
+     * allowed through. The sequence is hold #1 -> model acts -> hold #2 ->
+     * release. The cap release is flagged (`capped:true`) and written to the
+     * transcript by `_step`, so the smoke can count capped releases
+     * separately from trail-backed ones instead of reading them as
+     * compliance.
+     *
+     * WHERE THE CAP SITS, AND WHY IT MOVED (R1 + R2)
+     * The cap check is the FOURTH test in this method: after the
+     * already-released and unreadable-trail short-circuits, after the sticky
+     * TRAIL check, and above everything else. Both halves of that position
+     * were bugs in the first cut of C1.
+     *
+     * R1 — it used to sit ABOVE the trail check inside the sticky branch, so
+     * a model that complied on the turn after hold #2 was released by the CAP
+     * and flagged `capped:true`. That is the one behaviour the gate exists to
+     * produce, recorded as the gate giving up, in the exact quantity the
+     * `capped` flag was added to measure. The trail check therefore runs
+     * first: a trail row that discharges the recorded set is a genuine
+     * release however many holds preceded it.
+     *
+     * R2 — it used to sit INSIDE the sticky branch, which `_heldTools` only
+     * ever opens from the `fix_report` route. A run that never emitted a
+     * `fix_report` never entered that branch: it took the `no_layer_report`
+     * hold on every iteration, incrementing the counter against a check it
+     * could not reach, and rode to `MAX_ITERATIONS` -> `partial` — the very
+     * revert trigger the cap was added to prevent, reachable by a second
+     * route. So the cap now dominates every remaining path — sticky with no
+     * matching trail row, `no_layer_report`, and the first hold alike. The
+     * counter's "every path" was always true; the CAP's is true only since
+     * this move.
+     *
+     * The residue of that ordering, accepted: because the cap is above the
+     * first-hold derivation, a run whose cap is already spent by
+     * `no_layer_report` holds is released `capped:true` even if the
+     * `fix_report` it finally files has no open gap and would have been
+     * allowed on the merits. The bound is what matters at that point, and
+     * `_cappedNote()` is worded to claim only which branch released the run —
+     * never that the model failed to sweep.
+     *
+     * KNOWN TILT, ACCEPTED UNDER #103, CLOSED BY #109: `_layerToolMap()` gives
+     * `agent_config` three layers (2, 3, 7) against one apiece for layers 4
+     * and 5, so recording the UNION of every open gap's tools (as #103 did)
+     * made the cheapest compliance a single `agent_config` call — a built-in
+     * tilt AWAY from the tools the acceptance test measures. Pre-registered
+     * as P7 on #103 rather than engineered around at the time: if it
+     * happened the trail would say so plainly. It did — DECISION.md
+     * §P2/§P7 measured six of six v5 releases on exactly `agent_config`,
+     * with the layer-4/layer-5 tools it never covers reached zero times.
+     * That finding is what #109 engineers around: `_selectTarget` now picks
+     * ONE target gap and `_heldTools` records only that gap's DEDICATED
+     * tools (`_dedicatedTools`), so a shared tool like `agent_config` can no
+     * longer discharge a gap it never touched. See `_selectTarget`'s header
+     * for the ranking and precedence rules.
      *
      * @param {String} runId
      * @param {Object} action the terminal action the model just emitted
-     * @returns {Object} {hold:Boolean, gaps:Array, kind:'gaps'|'no_layer_report'|''}
+     * @returns {Object} {hold:Boolean, gaps:Array, kind:'gaps'|'no_layer_report'|'',
+     *          target:{layer:Number,source:'declared'|'ranked',tools:[String],
+     *          fanOut:Number}|null, capped:Boolean}
      *          — `kind` is `''` on every ALLOW path (already released, an
      *          unreadable trail, every declared gap closed, or no gap
      *          declared at all); only the two HOLD paths use the other two
-     *          values.
+     *          values. `target` (issue #109) is the single gap `_heldTools`
+     *          was narrowed to, and is `null` on every ALLOW path, on the
+     *          `no_layer_report` path, and whenever `_selectTarget` found
+     *          nothing scorable and `_heldTools` fell back to the #103
+     *          union instead. `capped` (C1) is `true` on exactly ONE path:
+     *          the ALLOW issued because `MAX_HOLDS` was reached and the
+     *          trail never showed the target closed. Every other result —
+     *          hold or allow, trail-backed release included — is `false`.
      */
     _depthGate: function (runId, action) {
-        if (this._gateReleased) return { hold: false, gaps: [], kind: '' }
+        if (this._gateReleased) return { hold: false, gaps: [], kind: '', target: null, capped: false }
 
         var trail = this._trailTools(runId)
-        if (!trail.readable) return { hold: false, gaps: [], kind: '' }
+        if (!trail.readable) return { hold: false, gaps: [], kind: '', target: null, capped: false }
 
-        // Once a hold has been issued, the recorded set is the ONLY thing
-        // that can release the gate — later drafts never move it.
+        // STICKY. Once a hold has been issued, the recorded set is the ONLY
+        // thing that can release the gate — later drafts never move it. The
+        // two branches that read this flag are split by R1/R2 below: the
+        // trail-backed RELEASE sits above the cap, the sticky HOLD below it.
         //
         // I2 (final whole-branch review): `[]` is truthy in JS. A bare
-        // `if (this._heldTools)` would enter this branch on an EMPTY
-        // recorded set and stay there forever — `_anyOf([], trail.tools)`
-        // is false no matter what the model does next, so every terminal
-        // action would be held for the rest of the run with no possible
-        // exit. Requiring a NON-EMPTY array means an empty recorded set
+        // `if (this._heldTools)` would treat an EMPTY
+        // recorded set as sticky and stay there forever — `_anyOf([],
+        // trail.tools)` is false no matter what the model does next, so every
+        // terminal action would be held for the rest of the run with no
+        // possible exit. Requiring a NON-EMPTY array means an empty recorded set
         // (which should never happen in production — `unsweptGaps` never
         // maps a layer to zero tools, and `_layerToolMap()` never returns
         // an empty list — but which a malformed collaborator could still
         // produce) falls through and re-derives gaps fresh from the
         // CURRENT draft instead of latching onto an unrecoverable hold.
-        if (this._isArray(this._heldTools) && this._heldTools.length > 0) {
-            if (this._anyOf(this._heldTools, trail.tools)) {
-                this._gateReleased = true
-                return { hold: false, gaps: [], kind: '' }
-            }
-            return { hold: true, gaps: this._heldGaps, kind: 'gaps' }
+        var sticky = this._isArray(this._heldTools) && this._heldTools.length > 0
+
+        // R1: THE TRAIL CHECK RUNS BEFORE THE CAP. It used to run after, so a
+        // model that complied on the turn AFTER hold #2 — the exact behaviour
+        // this gate exists to produce — took the cap exit and was recorded
+        // `capped:true`, telling the benchmark the gate had given up on the
+        // one run where it worked. A trail row that discharges the recorded
+        // set is a genuine release whatever the counter says.
+        if (sticky && this._anyOf(this._heldTools, trail.tools)) {
+            this._gateReleased = true
+            return { hold: false, gaps: [], kind: '', target: null, capped: false }
+        }
+
+        // R2: THE CAP SITS HERE, ABOVE EVERY REMAINING PATH — sticky-with-no-
+        // match, `no_layer_report` and the first hold alike. It used to live
+        // inside the sticky branch, and `_heldTools` is assigned on the
+        // fix_report route ALONE, so a run that never emitted a fix_report
+        // never reached the sticky branch at all: it held on every iteration,
+        // incrementing the counter against a check it could not reach, and
+        // rode to `MAX_ITERATIONS` -> `partial`. That is the pre-registered
+        // revert trigger the cap exists to prevent, so the cap has to dominate
+        // the paths that can hold without recording anything.
+        if (this._holdCount >= this.MAX_HOLDS) {
+            this._gateReleased = true
+            return { hold: false, gaps: [], kind: '', target: null, capped: true }
+        }
+
+        // The sticky HOLD: a recorded set the trail has not discharged, with
+        // cap headroom left.
+        if (sticky) {
+            this._holdCount += 1
+            return { hold: true, gaps: this._heldGaps, kind: 'gaps', target: this._heldTarget, capped: false }
         }
 
         if (!this._isPlainObject(action) || action.action !== 'fix_report') {
             // `answer` carries no `layers_swept`, so it declares no gap and
             // there is nothing to enforce against. Hold and ask for a layer
-            // report; no run took this exit in the v4 pass.
-            return { hold: true, gaps: [], kind: 'no_layer_report' }
+            // report. How often runs take this exit is UNMEASURED: this hold
+            // did not exist in the build the v4 pass was run against, so that
+            // pass's distribution of model behaviour says nothing about it —
+            // treat the path as unmeasured, not unlikely. R2 is why it now
+            // sits below the cap: it counts against the cap like any other
+            // hold (one counter, all holds), and before the reorder it was
+            // the one hold path the cap could never bound.
+            this._holdCount += 1
+            return { hold: true, gaps: [], kind: 'no_layer_report', target: null, capped: false }
         }
 
         var open = this._openGaps(this._safeGaps(action.report), trail.tools)
         if (open.length === 0) {
             this._gateReleased = true
-            return { hold: false, gaps: [], kind: '' }
+            return { hold: false, gaps: [], kind: '', target: null, capped: false }
         }
 
+        // #109: ONE target gap, and only its dedicated tools, instead of the
+        // union of every gap's tools. `null` means nothing was scorable —
+        // fall back to #103's union rather than recording an empty,
+        // unreleasable set (the same reasoning as the I2 guard above).
+        var target = this._selectTarget(open, action)
         this._heldGaps = open
-        this._heldTools = this._unionTools(open)
-        return { hold: true, gaps: open, kind: 'gaps' }
+        this._heldTarget = target
+        this._heldTools = target === null ? this._unionTools(open) : target.tools
+        this._holdCount += 1
+        return { hold: true, gaps: open, kind: 'gaps', target: target, capped: false }
     },
 
     /**
@@ -620,6 +788,12 @@ PaAgentLoop.prototype = {
      * Every tool that would close any of these gaps, de-duplicated. Same
      * per-element guard as `_openGaps` — a malformed element contributes NO
      * tools to the recorded union rather than throwing.
+     *
+     * M3 (final whole-branch review): this is the DEGRADED path only. It was
+     * #103's release set; since #109 the normal set is the target layer's
+     * dedicated tools, and `_depthGate` calls this only when `_selectTarget`
+     * returns `null` — nothing scorable, or a broken `PaFixReport` — where
+     * the union is preferable to recording an empty, unreleasable set.
      */
     _unionTools: function (gaps) {
         var list = this._isArray(gaps) ? gaps : []
@@ -637,6 +811,228 @@ PaAgentLoop.prototype = {
             }
         }
         return out
+    },
+
+    /**
+     * The FAN-OUT of a gap: the lowest fan-out among the tools that close it
+     * (issue #109). A gap reachable only by a tool that closes nothing else
+     * scores 1 and is the most worth forcing — nothing else the model does
+     * will produce that evidence incidentally.
+     *
+     * @returns {Number} the score, or -1 when no tool of this gap appears in
+     *          the fan-out map at all (an unknown tool, or a degraded map) —
+     *          which `_selectTarget` reads as "unscorable" and skips.
+     */
+    _gapFanOut: function (gap, fanOut) {
+        var tools = this._isArray(gap.tools) ? gap.tools : []
+        var best = -1
+        for (var i = 0; i < tools.length; i++) {
+            var score = fanOut[tools[i]]
+            if (typeof score !== 'number' || score < 1) continue
+            if (best === -1 || score < best) best = score
+        }
+        return best
+    },
+
+    /**
+     * The DEDICATED tools of a gap: those whose fan-out equals the gap's own
+     * (issue #109). Layer 5 keeps `query_table` and drops `log_analysis`,
+     * which also closes layers 1 and 6 and would otherwise discharge a data
+     * gap without touching data — DECISION.md §P6's second candidate remedy,
+     * falling out of the same rule as the ranking rather than needing one of
+     * its own.
+     */
+    _dedicatedTools: function (gap, fanOut) {
+        var best = this._gapFanOut(gap, fanOut)
+        if (best === -1) return []
+        var tools = this._isArray(gap.tools) ? gap.tools : []
+        var out = []
+        for (var i = 0; i < tools.length; i++) {
+            if (fanOut[tools[i]] === best) out.push(tools[i])
+        }
+        return out
+    },
+
+    /**
+     * ONE target gap, and the tools that can close it (issue #109).
+     *
+     * WHY ONE. #103 recorded the UNION of every open gap's tools, and
+     * `_layerToolMap` gives `agent_config` three layers against one apiece
+     * for layers 4 and 5 — so the cheapest compliance was a single
+     * `agent_config` call that discharged gaps on layers it never touched.
+     * Measured 6 of 6 on the v5 smoke (DECISION.md §P2/§P7): holds fired
+     * every time and the tools the acceptance test measures were reached
+     * zero times. Force was sufficient to make the model act and insufficient
+     * to make it act on the right layer.
+     *
+     * PRECEDENCE. The model's OWN `would_confirm` layer wins when it names an
+     * open gap — §P4 recorded a run naming layer 4 correctly and still not
+     * calling the tool that closes it, so the model can identify the missing
+     * layer and this binds it to its own naming. Otherwise the structural
+     * rank: lowest fan-out, ties to the lowest layer number. When
+     * `would_confirm` names more than one open gap, THE SAME RANK PICKS
+     * AMONG THEM — lowest fan-out, ties to the lowest layer number — rather
+     * than the lowest-numbered named layer winning regardless of fan-out. A
+     * draft naming layers 2 and 4 must not land on layer 2's `agent_config`
+     * (fan-out 3, the cheap incidental compliance this whole gate exists to
+     * remove) just because 2 sorts first, when layer 4's `schema_lookup`
+     * (fan-out 1) was also named. Naming ANY open gap still strictly
+     * outranks the ranked path below — the target is chosen from the named
+     * subset only, even when nothing in that subset can be scored (that
+     * falls through to the union fallback, same as an unscorable ranked set
+     * does).
+     *
+     * THE RANK NEVER MENTIONS A TOOL NAME, and neither does the block built
+     * from it (`_holdBlock`). §H8 item 3's non-vacuity condition is that the
+     * harness does not name the measured tools to the model; the rank is
+     * stated over the map's structure and would produce its ordering under a
+     * different map. The spec's §8 records the qualification this still
+     * carries, and issue #110 records the one that predates it.
+     *
+     * COST IS AT MOST TWO FORCED BEATS, NOT ONE (C1, final whole-branch
+     * review). Narrowing the release set to the DEDICATED tools is exactly
+     * what breaks #103's "one target, one release, one beat" arithmetic: for
+     * a target on layer 1, 5 or 6 the dedicated set is a strict SUBSET of the
+     * tool list `PaFixReport.schemaText()` advertises for that layer in every
+     * prompt, so a model following the harness's own mapping can make a
+     * compliant-looking call that does NOT release, and be re-held. Uncapped
+     * that rides to `MAX_ITERATIONS` and finishes `partial` — a pre-registered
+     * revert trigger. `_depthGate` therefore caps holds at `MAX_HOLDS` (2)
+     * and releases the third terminal attempt unconditionally, flagged
+     * `capped:true` so the smoke can tell it from a trail-backed release. The
+     * stickiness argument in `_depthGate`'s header is otherwise unaltered.
+     *
+     * @param {Array} open gaps the trail shows were never closed; already
+     *        filtered by `_openGaps` to plain objects with an array `tools`
+     * @param {Object} action the terminal action carrying the draft
+     * @returns {Object|null} {layer, source:'declared'|'ranked', tools,
+     *          fanOut} or `null` when nothing is scorable — the caller then
+     *          falls back to #103's union rather than recording an
+     *          unreleasable set. `fanOut` (I3) is the target gap's own
+     *          fan-out score, carried on the target so `_holdBlock` can pick
+     *          its item-2 wording without recomputing it: the "no other line
+     *          of investigation reaches" claim is only TRUE at fan-out 1.
+     */
+    _selectTarget: function (open, action) {
+        var fanOut = this._safeFanOut()
+        var report = this._isPlainObject(action) ? action.report : null
+        var declared = this._safeDeclaredLayers(report)
+        var chosen = null
+        var source = ''
+        var matched = false
+        var best = -1
+        var i
+
+        // 1. Declared. `declaredLayers` is documented to return ascending,
+        //    de-duplicated layers, but this loop does not trust that order —
+        //    it scans every declared entry against every open gap rather
+        //    than assuming either arrives sorted. A named layer that is not
+        //    an open gap is ignored, same as today.
+        //
+        //    Among the named layers that DO match an open gap, this applies
+        //    the SAME rule as the ranked path below — reusing `_gapFanOut`
+        //    rather than a second scorer — lowest fan-out wins, ties break
+        //    on the lowest layer number.
+        //
+        //    `matched` tracks whether ANYTHING in `would_confirm` named an
+        //    open gap, independently of whether that gap could be scored.
+        //    A named gap that cannot be scored still sets `matched` and
+        //    therefore still blocks the ranked fallback below — declared
+        //    strictly outranks ranked, so a `would_confirm` hit never lets
+        //    the wider gap set back in — and `chosen` stays null, which
+        //    falls through to the null return at the bottom exactly as an
+        //    all-unscorable declared set does today.
+        for (var d = 0; d < declared.length; d++) {
+            for (i = 0; i < open.length; i++) {
+                if (open[i].layer === declared[d]) {
+                    matched = true
+                    var dScore = this._gapFanOut(open[i], fanOut)
+                    if (dScore !== -1 && (chosen === null || dScore < best || (dScore === best && open[i].layer < chosen.layer))) {
+                        best = dScore
+                        chosen = open[i]
+                        source = 'declared'
+                    }
+                    break
+                }
+            }
+        }
+
+        // 2. Ranked. Only reached when NOTHING in `would_confirm` named an
+        //    open gap (`matched` is false) — see the declared-outranks-
+        //    ranked note above. Ties break on the lowest layer number via an
+        //    explicit comparison against `chosen.layer` — not by relying on
+        //    `open` arriving in ascending order, so a differently-ordered
+        //    `open` (e.g. from an `unsweptGaps` that does not sort) cannot
+        //    change the result. Same defensive posture as the declared loop
+        //    above.
+        if (!matched) {
+            best = -1
+            for (i = 0; i < open.length; i++) {
+                var score = this._gapFanOut(open[i], fanOut)
+                if (score === -1) continue
+                if (best === -1 || score < best || (score === best && open[i].layer < chosen.layer)) {
+                    best = score
+                    chosen = open[i]
+                }
+            }
+            source = 'ranked'
+        }
+
+        if (chosen === null) return null
+
+        // I2 (final whole-branch review): selection and rendering must agree
+        // on what a usable target is. `_holdBlock`/`_holdNote` both require
+        // `typeof target.layer === 'number'` and fall back to the UNDIRECTED
+        // wording otherwise — but this method used to accept a `chosen.layer`
+        // of ANY type, so a contract-violating collaborator (a gap whose
+        // `layer` is a string, or NaN from a bad parse) produced narrow
+        // enforcement — `_heldTools` cut to one dedicated tool — behind a
+        // vague instruction that directs at no layer at all. That is the
+        // worst combination available. Reject it at the SOURCE instead, so
+        // the gate takes the union fallback and enforcement matches wording.
+        // This also closes the separately-filed NaN concern: `NaN` is
+        // `typeof 'number'` and every `<` comparison against it is false, so
+        // it survives both ranking loops — `isFinite` is what excludes it.
+        if (typeof chosen.layer !== 'number' || !isFinite(chosen.layer)) return null
+
+        var tools = this._dedicatedTools(chosen, fanOut)
+        if (tools.length === 0) return null
+
+        // I3: the target's own fan-out travels WITH the target. `_holdBlock`
+        // needs it to choose between the "no other line of investigation
+        // reaches" claim (true only at fan-out 1) and the neutral variant,
+        // and the renderer must not re-derive it from a map it does not hold.
+        return { layer: chosen.layer, source: source, tools: tools, fanOut: this._gapFanOut(chosen, fanOut) }
+    },
+
+    /**
+     * `PaFixReport.toolFanOut()`, guarded. Same standard as
+     * `_safeSchemaText`/`_safeGaps`: a broken or absent PaFixReport degrades
+     * the gate to #103's union behaviour, never trapping the run.
+     */
+    _safeFanOut: function () {
+        try {
+            var map = this._reports().toolFanOut()
+            return this._isPlainObject(map) ? map : {}
+        } catch (e) {
+            // R-1: `e` is deliberately not inspected.
+            return {}
+        }
+    },
+
+    /**
+     * `PaFixReport.declaredLayers()`, guarded. A failure here means "the
+     * model declared nothing", which falls to the structural rank — a strictly
+     * milder degradation than losing the gate.
+     */
+    _safeDeclaredLayers: function (report) {
+        try {
+            var layers = this._reports().declaredLayers(report)
+            return this._isArray(layers) ? layers : []
+        } catch (e) {
+            // R-1: `e` is deliberately not inspected.
+            return []
+        }
     },
 
     _anyOf: function (candidates, invoked) {
@@ -676,7 +1072,7 @@ PaAgentLoop.prototype = {
      * preserved and resubmittable unchanged; there is no way to satisfy the
      * hold by writing better. Stopping is not expensive — it is unavailable.
      */
-    _holdBlock: function (gaps, kind) {
+    _holdBlock: function (gaps, kind, target) {
         var lines = ['## HOLD — a terminal action is not available yet', '']
 
         if (kind === 'no_layer_report') {
@@ -702,12 +1098,53 @@ PaAgentLoop.prototype = {
         }
         lines.push('The trail shows no tool call has reached any of them.')
         lines.push('')
+        // #109: items 2 and 3 are DIRECTED. #103 asked the model which layer
+        // mattered most and accepted any tool call in reply, so the cheapest
+        // release — one `agent_config` call, which the map credits with three
+        // layers — discharged gaps on layers it never touched (§P2/§P7, six
+        // of six). The target is chosen in `_selectTarget`; this only renders
+        // it, and it renders a LAYER NUMBER, never a tool name.
+        var directed = this._isPlainObject(target) && typeof target.layer === 'number'
+
         lines.push('Before concluding:')
         lines.push('  1. What did the last tool result actually establish? Quote the specific field')
         lines.push('     or value you are relying on.')
-        lines.push('  2. What did it NOT settle? Of the layers above, name the one whose answer would')
-        lines.push('     most change your conclusion.')
-        lines.push('  3. Call a tool that reaches that layer.')
+
+        if (!directed) {
+            // R-9: no usable target (an unscorable gap set, or a degraded
+            // PaFixReport) — fall back to #103's wording rather than
+            // rendering a hold that directs at nothing.
+            lines.push('  2. What did it NOT settle? Of the layers above, name the one whose answer would')
+            lines.push('     most change your conclusion.')
+            lines.push('  3. Call a tool that reaches that layer.')
+        } else {
+            if (target.source === 'declared') {
+                lines.push(
+                    '  2. Layer ' + target.layer + ' is the one this run needs closed — your own report ' +
+                        'names it as what would confirm your finding.'
+                )
+            } else if (target.fanOut === 1) {
+                lines.push(
+                    '  2. Of the layers above, layer ' + target.layer + ' is the one no other line of ' +
+                        'investigation reaches.'
+                )
+            } else {
+                // I3 (final whole-branch review): that claim is only TRUE
+                // when the target's dedicated tools have fan-out 1. For a
+                // gap set confined to layers 2/3/7 the ranked target is
+                // layer 2 via `agent_config`, which also reaches 3 and 7;
+                // a layer-6 target releases on `genai_log`, which also
+                // reaches layer 1. Asserting it anyway would have the
+                // harness tell a falsehood to a model whose evidential
+                // honesty is the thing being measured. The neutral variant
+                // still directs at the layer and still names NO tool.
+                lines.push(
+                    '  2. Of the layers above, layer ' + target.layer + ' is the one this run needs ' +
+                        'closed next.'
+                )
+            }
+            lines.push('  3. Call a tool that reaches layer ' + target.layer + '.')
+        }
         lines.push('')
         lines.push(
             'Your draft is preserved. Once the trail shows you did, a terminal action is available ' +
@@ -744,7 +1181,44 @@ PaAgentLoop.prototype = {
             if (!this._isPlainObject(g)) continue
             nums.push(g.layer)
         }
-        return 'HOLD: terminal action refused — layer(s) ' + nums.join(', ') + ' declared NOT_SWEPT with no tool call behind them.'
+        var note = 'HOLD: terminal action refused — '
+        if (this._isPlainObject(gate.target) && typeof gate.target.layer === 'number') {
+            // #109: the SOURCE is what lets a smoke tell the declared path
+            // from the ranked one after the fact, without re-deriving it.
+            note += 'layer ' + gate.target.layer + ' (' + this._str(gate.target.source) + ') must be reached; '
+        }
+        return note + 'layer(s) ' + nums.join(', ') + ' declared NOT_SWEPT with no tool call behind them.'
+    },
+
+    /**
+     * The transcript's record of a CAP release (C1) — the counterpart to
+     * `_holdNote`, and under the same 200-character `DIGEST_CHARS` ceiling.
+     *
+     * It exists to be COUNTABLE. A release granted because `MAX_HOLDS` was
+     * reached and one earned by a trail row that discharged the hold are the
+     * same event as far as `run()` is concerned, and the benchmark smoke has
+     * to report them separately — a run that finished only because the gate
+     * gave up is not evidence the gate worked.
+     *
+     * R1: IT CLAIMS THE MECHANISM, NOT THE MODEL'S BEHAVIOUR. This note used
+     * to assert "the target layer was never reached", which is two kinds of
+     * wrong. On the `no_layer_report` route there is no target layer at all —
+     * nothing was ever recorded to reach — so the sentence is meaningless
+     * there. And the cap now dominates paths where the model's conduct is
+     * simply not in evidence: the counter can be spent by holds that recorded
+     * nothing, and this branch is reached without the gate having evaluated
+     * any gap against the trail. What is certain is only which branch granted
+     * the release, so that is all the note says — plus the reading the
+     * benchmark needs, that a capped release must not be counted as
+     * compliance. (A model that DOES comply after the cap is spent releases
+     * through the trail check above and writes no note at all — that is the
+     * R1 fix in `_depthGate`, and this wording is its counterpart.)
+     */
+    _cappedNote: function () {
+        return (
+            'GATE: released because the ' + this.MAX_HOLDS + '-hold cap was reached, not by the gate\'s ' +
+            'trail check. A capped release is not compliance — count it separately.'
+        )
     },
 
     /**

@@ -17,6 +17,62 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0403 — 2026-08-04
+
+### Changed
+
+- **The depth gate now DIRECTS, where #103 only compelled (#109).** §P2 refuted #103's headline
+  prediction: holds fired on 6 of 6 runs and the tools §H8 measures were reached 0 of 6. §P7 named
+  the mechanism, pre-registered as a known tilt — `_depthGate` recorded the **union** of every open
+  gap's tools as the release set, and `_layerToolMap()` credits `agent_config` with layers 2, 3 and
+  7, so one `agent_config` call discharged the layer-4 and layer-5 gaps having touched neither. All
+  six releases were `agent_config`, exclusively. Force was sufficient to make the model act and
+  insufficient to make it act on the right layer.
+
+  The gate now selects **one** target gap and records only that gap's **dedicated** tools. One rule,
+  applied twice: a tool's *fan-out* is the number of layers `_layerToolMap()` lets it close, and
+  fan-out minimality both picks the target and narrows its release set. Layer 5 is released by
+  `query_table` and no longer by `log_analysis`, which is shared with layers 1 and 6 and would close
+  a data gap without touching data — §P6's second candidate remedy, falling out of the same rule
+  rather than needing one of its own.
+
+  Selection prefers the model's **own** declaration: when a root cause's `would_confirm` names a
+  layer that is an open gap, the target comes from that named subset — §P4 recorded a run naming
+  layer 4 correctly while still not calling the tool that closes it. Within the named subset, and in
+  the structural fallback, the ordering is the same: lowest fan-out, ties on the lowest layer number.
+
+- **The interrogation names the target layer**, and still never names a tool — `_scrubToolNames` and
+  its guard tests are untouched, and the block's strong claim ("the one no other line of
+  investigation reaches") is now emitted only when the target's fan-out is actually 1, with a neutral
+  variant otherwise. The harness does not assert to the model something it cannot know.
+
+### Added
+
+- **A two-hold cap (`MAX_HOLDS`), and a `GATE:` transcript note that marks a capped release.**
+  Narrowing the release set broke #103's one-forced-beat arithmetic, which had rested on an
+  unexamined premise: that any tool the prompt advertised for a held layer would discharge the hold.
+  `PaFixReport.schemaText()` renders the **whole** layer-to-tool map into every prompt (*"5 (Data)
+  needs one of: `query_table`, `log_analysis`"*), so for targets on layers 1, 5 and 6 the release set
+  is now a strict **subset** of what the model has been told closes that layer — a compliant-looking
+  call can fail to release. Uncapped, that rides to `MAX_ITERATIONS` and finishes `partial`, which is
+  the pre-filed revert trigger for the smoke that follows, reached by a route the design did not
+  anticipate. The cap bounds the cost at two beats; the trail check outranks it, so a genuine
+  post-hold compliance is still classified as compliance. **A capped release is not compliance and
+  must be counted separately** — that is what the `GATE:` note is for. The underlying advertise/accept
+  mismatch is #110's, not this change's.
+
+- **`PaFixReport.toolFanOut()` and `PaFixReport.declaredLayers(report)`** — two pure accessors over
+  `_layerToolMap()` and the existing `_layersNamedBy`, so the loop ranks gaps without re-typing the
+  map. The map itself is untouched: editing it would change what every prior pass measured.
+
+### Not done in this version
+
+The six-run smoke and its scoring. §P6's recommendation against firing a scored pass on a single
+change stands, and this version is the code half only — `benchmark/DECISION.md` §Q and
+`raw-evidence-v6-directed-depth.md` follow with the measurement.
+
+---
+
 ## 2026.08.0402 — 2026-08-04
 
 ### Added

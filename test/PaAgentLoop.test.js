@@ -75,7 +75,7 @@ function fakeRunManager() {
     }
 }
 
-function fakeFixReport(validateResults, gaps) {
+function fakeFixReport(validateResults, gaps, declared) {
     const calls = []
     const contextCalls = []
     const renderCalls = { markdown: [], json: [] }
@@ -118,6 +118,25 @@ function fakeFixReport(validateResults, gaps) {
         // resulting list directly so they exercise gate logic only.
         unsweptGaps: function () {
             return gaps === undefined ? [] : gaps
+        },
+        // Directed depth gate (#109). The loop ranks gaps by fan-out and
+        // gives the model's own `would_confirm` layer precedence; both come
+        // from PaFixReport so the layer map stays single-sourced. These
+        // mirror the REAL values of `PaFixReport.toolFanOut()` — a fake that
+        // invented its own numbers would test the ranking against a map the
+        // product does not have.
+        toolFanOut: function () {
+            return {
+                agent_trace: 1,
+                genai_log: 2,
+                log_analysis: 3,
+                agent_config: 3,
+                schema_lookup: 1,
+                query_table: 1,
+            }
+        },
+        declaredLayers: function () {
+            return declared === undefined ? [] : declared
         },
     }
 }
@@ -958,14 +977,35 @@ describe('depth gate (#103) — _depthGate', () => {
                 unsweptGaps: function () {
                     return gaps
                 },
+                toolFanOut: function () {
+                    return {
+                        agent_trace: 1,
+                        genai_log: 2,
+                        log_analysis: 3,
+                        agent_config: 3,
+                        schema_lookup: 1,
+                        query_table: 1,
+                    }
+                },
+                declaredLayers: function () {
+                    return []
+                },
             },
         })
 
-        // First evaluation records layers {2,4} -> tools {agent_config, schema_lookup}.
+        // First evaluation records layers {2,4}. Under #109 the TARGET is
+        // layer 4 — `schema_lookup` closes nothing else, while `agent_config`
+        // also closes layers 3 and 7 — so the recorded set is
+        // {schema_lookup}, not the union.
         expect(loop._depthGate('RUN1', FIX).hold).toBe(true)
 
-        // The model closes layer 2 only. That is in the recorded set.
+        // Closing layer 2 no longer releases: that is the #103 tilt (§P7,
+        // six of six releases) which #109 exists to remove.
         invoked = ['agent_trace', 'agent_config']
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(true)
+
+        // The target's own tool releases it.
+        invoked = ['agent_trace', 'agent_config', 'schema_lookup']
         expect(loop._depthGate('RUN1', FIX).hold).toBe(false)
 
         // A later draft naming a brand-new gap must NOT re-hold: the gate
@@ -1051,6 +1091,596 @@ describe('depth gate (#103) — _depthGate', () => {
         // Only the well-formed gap's tool actually releases it.
         invoked = ['agent_trace', 'agent_config', 'schema_lookup']
         expect(loop._depthGate('RUN1', FIX).hold).toBe(false)
+    })
+})
+
+// ===========================================================================
+// directed depth gate (#109) — target selection
+//
+// #103 recorded the UNION of every open gap's tools as the release set, so
+// one `agent_config` call (layers 2, 3 and 7) discharged the layer-4 and
+// layer-5 gaps having touched neither — DECISION.md §P2/§P7, measured 6 of 6.
+// The gate now picks ONE target gap and records only its DEDICATED tools.
+// Cost is unchanged: still exactly one forced beat.
+// ===========================================================================
+
+describe('directed depth gate (#109) — target selection', () => {
+    const GAP2 = { layer: 2, name: 'Instructions', reason: 'r2', tools: ['agent_config'] }
+    const GAP4 = { layer: 4, name: 'Data schemas', reason: 'r4', tools: ['schema_lookup'] }
+    const GAP5 = { layer: 5, name: 'Data', reason: 'r5', tools: ['query_table', 'log_analysis'] }
+    const GAP6 = { layer: 6, name: 'GenAI stack', reason: 'r6', tools: ['genai_log', 'log_analysis'] }
+    const FIX = { action: 'fix_report', report: { layers_swept: {} } }
+
+    function gateLoop(invoked, gaps, declared) {
+        return load({
+            auditLogger: fakeAuditLogger({ available: true, tools: invoked }),
+            fixReport: fakeFixReport([], gaps, declared),
+        })
+    }
+
+    test('RANKED: the gap with the most dedicated tool wins over a shared-tool gap', () => {
+        const gate = gateLoop(['agent_trace'], [GAP2, GAP4])._depthGate('RUN1', FIX)
+        expect(gate.hold).toBe(true)
+        expect(gate.target.layer).toBe(4)
+        expect(gate.target.source).toBe('ranked')
+        expect(gate.target.tools).toEqual(['schema_lookup'])
+    })
+
+    test('RANKED: ties break on the lowest layer number', () => {
+        // Layers 4 and 5 both have a fan-out-1 tool. `open` is passed
+        // UNSORTED (layer 5 before layer 4) so this only passes if the
+        // tie-break is an explicit layer comparison — a bare
+        // strictly-less-than-on-score loop would pick whichever of the two
+        // came first in `open`, which here is the WRONG one.
+        const gate = gateLoop(['agent_trace'], [GAP5, GAP4])._depthGate('RUN1', FIX)
+        expect(gate.target.layer).toBe(4)
+    })
+
+    test('RANKED: a fan-out-2 gap outranks a fan-out-3 gap', () => {
+        const gate = gateLoop(['agent_trace'], [GAP2, GAP6])._depthGate('RUN1', FIX)
+        expect(gate.target.layer).toBe(6)
+        expect(gate.target.tools).toEqual(['genai_log'])
+    })
+
+    test('NARROWED: a shared tool is dropped from the target gap release set', () => {
+        // layer 5 is reachable by query_table (fan-out 1) and log_analysis
+        // (fan-out 3, shared with layers 1 and 6). Only the dedicated one is
+        // recorded — a log_analysis call must not close a data gap without
+        // touching data.
+        const gate = gateLoop(['agent_trace'], [GAP5])._depthGate('RUN1', FIX)
+        expect(gate.target.tools).toEqual(['query_table'])
+    })
+
+    test('NARROWED: the shared tool does NOT release the hold', () => {
+        let invoked = ['agent_trace']
+        const loop = load({
+            auditLogger: {
+                invokedTools: function () {
+                    return { available: true, tools: invoked.slice() }
+                },
+            },
+            fixReport: fakeFixReport([], [GAP5]),
+        })
+
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(true)
+
+        invoked = ['agent_trace', 'log_analysis']
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(true)
+
+        invoked = ['agent_trace', 'log_analysis', 'query_table']
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(false)
+    })
+
+    test('THE #103 TILT IS CLOSED: agent_config no longer discharges a layer-4 gap', () => {
+        let invoked = ['agent_trace']
+        const loop = load({
+            auditLogger: {
+                invokedTools: function () {
+                    return { available: true, tools: invoked.slice() }
+                },
+            },
+            fixReport: fakeFixReport([], [GAP2, GAP4]),
+        })
+
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(true)
+
+        // §P2's measured behaviour: all six v5 runs released on exactly this.
+        invoked = ['agent_trace', 'agent_config']
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(true)
+
+        invoked = ['agent_trace', 'agent_config', 'schema_lookup']
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(false)
+    })
+
+    test('DECLARED: would_confirm beats the ranking when it names an open gap', () => {
+        // Ranking alone would pick layer 4; the model named layer 2.
+        const gate = gateLoop(['agent_trace'], [GAP2, GAP4], [2])._depthGate('RUN1', FIX)
+        expect(gate.target.layer).toBe(2)
+        expect(gate.target.source).toBe('declared')
+        expect(gate.target.tools).toEqual(['agent_config'])
+    })
+
+    test('DECLARED: among several named open gaps, the lowest-fan-out one wins — not the lowest layer number', () => {
+        // Was 'the lowest-numbered declared layer that is open wins', asserting
+        // layer 2. That encoded the OLD rule this change removes: layer 2's only
+        // tool (agent_config) has fan-out 3, layer 5's query_table has fan-out 1
+        // — the same cheap incidental compliance the fan-out rank exists to
+        // block, now applied to the declared subset too.
+        const gate = gateLoop(['agent_trace'], [GAP2, GAP4, GAP5], [5, 2])._depthGate('RUN1', FIX)
+        expect(gate.target.layer).toBe(5)
+        expect(gate.target.source).toBe('declared')
+        expect(gate.target.tools).toEqual(['query_table'])
+    })
+
+    test('DECLARED: fan-out beats a lower layer number when both are named and open', () => {
+        // Ranking alone (and the OLD declared rule) would land on layer 2 —
+        // lowest layer, or first-scanned. The gap-2 tool (agent_config) has
+        // fan-out 3; the gap-4 tool (schema_lookup) has fan-out 1. The declared
+        // subset must apply the SAME rank as the ranked path: lowest fan-out
+        // wins.
+        const gate = gateLoop(['agent_trace'], [GAP2, GAP4], [2, 4])._depthGate('RUN1', FIX)
+        expect(gate.target.layer).toBe(4)
+        expect(gate.target.source).toBe('declared')
+        expect(gate.target.tools).toEqual(['schema_lookup'])
+    })
+
+    test('DECLARED: a fan-out tie within the named subset breaks on the lowest layer number', () => {
+        // Layers 4 and 5 both carry a fan-out-1 tool (schema_lookup,
+        // query_table). With both named, the tie-break is the same as the
+        // ranked path's: lowest layer number.
+        const gate = gateLoop(['agent_trace'], [GAP4, GAP5], [4, 5])._depthGate('RUN1', FIX)
+        expect(gate.target.layer).toBe(4)
+        expect(gate.target.source).toBe('declared')
+        expect(gate.target.tools).toEqual(['schema_lookup'])
+    })
+
+    test('DECLARED: still strictly outranks ranked — only the named subset is a candidate', () => {
+        // Layer 4 is open and would win on fan-out alone (schema_lookup, 1,
+        // versus layer 2's agent_config, 3) — but the model only named layer 2,
+        // so layer 2 is the ONLY candidate. The wider open-gap set never enters
+        // the comparison once `would_confirm` names anything.
+        const gate = gateLoop(['agent_trace'], [GAP2, GAP4], [2])._depthGate('RUN1', FIX)
+        expect(gate.target.layer).toBe(2)
+        expect(gate.target.source).toBe('declared')
+        expect(gate.target.tools).toEqual(['agent_config'])
+    })
+
+    test('DECLARED: a named layer that is NOT an open gap falls through to ranked', () => {
+        const gate = gateLoop(['agent_trace'], [GAP2, GAP4], [7])._depthGate('RUN1', FIX)
+        expect(gate.target.layer).toBe(4)
+        expect(gate.target.source).toBe('ranked')
+    })
+
+    test('STICKY: the target is recorded at the FIRST hold and a later draft cannot move it', () => {
+        let gaps = [GAP2, GAP4]
+        const loop = load({
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            fixReport: {
+                unsweptGaps: function () {
+                    return gaps
+                },
+                toolFanOut: function () {
+                    return { agent_config: 3, schema_lookup: 1, query_table: 1, log_analysis: 3 }
+                },
+                declaredLayers: function () {
+                    return []
+                },
+            },
+        })
+
+        const first = loop._depthGate('RUN1', FIX)
+        expect(first.target.layer).toBe(4)
+
+        gaps = [GAP5]
+        const second = loop._depthGate('RUN1', FIX)
+        expect(second.hold).toBe(true)
+        expect(second.target.layer).toBe(4)
+    })
+
+    test('FALLBACK: an unscorable gap set falls back to the union rather than latching', () => {
+        // A PaFixReport with no toolFanOut at all (an older or broken
+        // collaborator): no gap can be scored, so the gate must behave as
+        // #103 did rather than record an empty, unreleasable set.
+        let invoked = ['agent_trace']
+        const loop = load({
+            auditLogger: {
+                invokedTools: function () {
+                    return { available: true, tools: invoked.slice() }
+                },
+            },
+            fixReport: {
+                unsweptGaps: function () {
+                    return [GAP2, GAP4]
+                },
+            },
+        })
+
+        const gate = loop._depthGate('RUN1', FIX)
+        expect(gate.hold).toBe(true)
+        expect(gate.target).toBe(null)
+
+        invoked = ['agent_trace', 'agent_config']
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(false)
+    })
+
+    test('R-9: a throwing declaredLayers degrades to the ranked path, it does not trap the run', () => {
+        const loop = load({
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            fixReport: {
+                unsweptGaps: function () {
+                    return [GAP2, GAP4]
+                },
+                toolFanOut: function () {
+                    return { agent_config: 3, schema_lookup: 1 }
+                },
+                declaredLayers: function () {
+                    throw new Error('boom')
+                },
+            },
+        })
+
+        let gate
+        expect(() => {
+            gate = loop._depthGate('RUN1', FIX)
+        }).not.toThrow()
+        expect(gate.target.layer).toBe(4)
+        expect(gate.target.source).toBe('ranked')
+    })
+
+    test('R-9: a throwing toolFanOut degrades to the union fallback', () => {
+        const loop = load({
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            fixReport: {
+                unsweptGaps: function () {
+                    return [GAP2, GAP4]
+                },
+                toolFanOut: function () {
+                    throw new Error('boom')
+                },
+            },
+        })
+
+        let gate
+        expect(() => {
+            gate = loop._depthGate('RUN1', FIX)
+        }).not.toThrow()
+        expect(gate.hold).toBe(true)
+        expect(gate.target).toBe(null)
+    })
+
+    // I5 (final whole-branch review): this was named "a fresh run() resets
+    // the recorded target", which described something it never asserted —
+    // it calls `_resetGate()` directly, and `run()` does not reset anything
+    // (`initialize()` is `_resetGate`'s only caller). Renamed to what it
+    // actually covers; the behaviour is unchanged and correct, because
+    // production constructs a fresh loop per run.
+    test('_resetGate clears the recorded target', () => {
+        const loop = gateLoop(['agent_trace'], [GAP2, GAP4])
+        loop._depthGate('RUN1', FIX)
+        expect(loop._heldTarget).not.toBe(null)
+
+        loop._resetGate()
+        expect(loop._heldTarget).toBe(null)
+    })
+
+    // -----------------------------------------------------------------
+    // I2 — selection and rendering must agree on what a usable target is
+    // -----------------------------------------------------------------
+
+    test('I2: a non-numeric layer is rejected at selection, not silently half-honored', () => {
+        // `_holdBlock`/`_holdNote` both require a NUMBER and fall back to the
+        // undirected wording otherwise. Before the fix, `_selectTarget`
+        // accepted this and `_heldTools` narrowed to the one dedicated tool
+        // anyway — narrow enforcement behind a vague instruction. Now the
+        // whole target is refused and the union fallback applies.
+        let invoked = ['agent_trace']
+        const loop = load({
+            auditLogger: {
+                invokedTools: function () {
+                    return { available: true, tools: invoked.slice() }
+                },
+            },
+            fixReport: fakeFixReport([], [{ layer: '5', name: 'Data', reason: 'r', tools: ['query_table', 'log_analysis'] }]),
+        })
+
+        const gate = loop._depthGate('RUN1', FIX)
+        expect(gate.hold).toBe(true)
+        expect(gate.target).toBe(null)
+        // Union fallback: BOTH of the gap's tools release, matching the
+        // undirected wording the model is actually shown.
+        invoked = ['agent_trace', 'log_analysis']
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(false)
+    })
+
+    test('I2: a NaN layer is rejected too — typeof says "number" and every comparison against it is false', () => {
+        const gate = gateLoop(['agent_trace'], [
+            { layer: Number('nope'), name: 'Data', reason: 'r', tools: ['query_table'] },
+        ])._depthGate('RUN1', FIX)
+        expect(gate.hold).toBe(true)
+        expect(gate.target).toBe(null)
+    })
+
+    // -----------------------------------------------------------------
+    // I3 — the target carries its own fan-out to the renderer
+    // -----------------------------------------------------------------
+
+    test('I3: the target carries its fan-out — 1 for a dedicated-tool layer', () => {
+        const gate = gateLoop(['agent_trace'], [GAP2, GAP4])._depthGate('RUN1', FIX)
+        expect(gate.target.layer).toBe(4)
+        expect(gate.target.fanOut).toBe(1)
+    })
+
+    test('I3: the target carries its fan-out — 3 when the gap set is confined to layers 2/3/7', () => {
+        // `agent_config` is the only tool for layers 2, 3 and 7, and it
+        // reaches all three. The ranked target is layer 2 and NOTHING about
+        // it is exclusive — the renderer needs to know that.
+        const GAP3 = { layer: 3, name: 'Tools', reason: 'r3', tools: ['agent_config'] }
+        const GAP7 = { layer: 7, name: 'Platform', reason: 'r7', tools: ['agent_config'] }
+        const gate = gateLoop(['agent_trace'], [GAP2, GAP3, GAP7])._depthGate('RUN1', FIX)
+        expect(gate.target.layer).toBe(2)
+        expect(gate.target.fanOut).toBe(3)
+    })
+
+    test('I3: the target carries its fan-out — 2 for a layer-6 target reached by genai_log', () => {
+        const gate = gateLoop(['agent_trace'], [GAP2, GAP6])._depthGate('RUN1', FIX)
+        expect(gate.target.layer).toBe(6)
+        expect(gate.target.fanOut).toBe(2)
+    })
+})
+
+// ===========================================================================
+// capped depth gate (C1) — at most two holds, then release
+//
+// #109 narrowed the release set to the target layer's DEDICATED tools, but
+// `PaFixReport.schemaText()` still advertises the WHOLE layer-to-tool map in
+// every prompt — for layers 1, 5 and 6 the dedicated set is a strict subset
+// of what the model is told closes that layer. So a compliant-looking call
+// (`log_analysis` for a layer-5 target) can fail to release, and an uncapped
+// gate would re-hold until MAX_ITERATIONS and finish `partial` — a
+// pre-registered revert trigger for the benchmark. The gate therefore issues
+// at most MAX_HOLDS (2) holds and lets the third terminal attempt through.
+// ===========================================================================
+
+describe('capped depth gate (C1) — at most two holds', () => {
+    const GAP4 = { layer: 4, name: 'Data schemas', reason: 'r4', tools: ['schema_lookup'] }
+    const GAP5 = { layer: 5, name: 'Data', reason: 'r5', tools: ['query_table', 'log_analysis'] }
+    const FIX = { action: 'fix_report', report: { layers_swept: {} } }
+    const ANSWER = { action: 'answer', text: 'done' }
+
+    function movingTrail(initial, gaps, declared) {
+        const state = { invoked: initial.slice() }
+        state.loop = load({
+            auditLogger: {
+                invokedTools: function () {
+                    return { available: true, tools: state.invoked.slice() }
+                },
+            },
+            fixReport: fakeFixReport([], gaps, declared),
+        })
+        return state
+    }
+
+    test('two holds, then the third terminal attempt is ALLOWED even though the trail never moved', () => {
+        const loop = load({
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            fixReport: fakeFixReport([], [GAP4]),
+        })
+
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(true)
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(true)
+
+        const third = loop._depthGate('RUN1', FIX)
+        expect(third.hold).toBe(false)
+        expect(loop._gateReleased).toBe(true)
+    })
+
+    test('the model doing something IRRELEVANT between holds does not release it — the cap does', () => {
+        // The realistic shape of the failure C1 bounds: the model reads the
+        // advertised map, calls a tool that reaches the layer but is NOT
+        // dedicated to it, and is re-held. Layer 5 advertises query_table
+        // AND log_analysis; only query_table releases.
+        const state = movingTrail(['agent_trace'], [GAP5])
+
+        expect(state.loop._depthGate('RUN1', FIX).hold).toBe(true)
+        state.invoked = ['agent_trace', 'log_analysis']
+        expect(state.loop._depthGate('RUN1', FIX).hold).toBe(true)
+
+        const third = state.loop._depthGate('RUN1', FIX)
+        expect(third.hold).toBe(false)
+        expect(third.capped).toBe(true)
+    })
+
+    test('the cap release carries the distinguishing flag', () => {
+        const loop = load({
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            fixReport: fakeFixReport([], [GAP4]),
+        })
+        loop._depthGate('RUN1', FIX)
+        loop._depthGate('RUN1', FIX)
+        expect(loop._depthGate('RUN1', FIX).capped).toBe(true)
+    })
+
+    test('a genuine trail-backed release does NOT carry the flag', () => {
+        const state = movingTrail(['agent_trace'], [GAP4])
+        expect(state.loop._depthGate('RUN1', FIX).hold).toBe(true)
+
+        state.invoked = ['agent_trace', 'schema_lookup']
+        const released = state.loop._depthGate('RUN1', FIX)
+        expect(released.hold).toBe(false)
+        expect(released.capped).toBe(false)
+    })
+
+    test('a genuine release on the SECOND attempt still works and does not consume the cap path', () => {
+        const state = movingTrail(['agent_trace'], [GAP4])
+        expect(state.loop._depthGate('RUN1', FIX).hold).toBe(true)
+        expect(state.loop._holdCount).toBe(1)
+
+        state.invoked = ['agent_trace', 'schema_lookup']
+        const released = state.loop._depthGate('RUN1', FIX)
+        expect(released.hold).toBe(false)
+        expect(released.capped).toBe(false)
+        // Only ONE hold was ever issued — the cap branch was not the exit.
+        expect(state.loop._holdCount).toBe(1)
+    })
+
+    test('every ALLOW path that is not the cap reports capped:false', () => {
+        // Already released, an unreadable trail, and no open gap at all.
+        const readable = load({
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace', 'schema_lookup'] }),
+            fixReport: fakeFixReport([], [GAP4]),
+        })
+        expect(readable._depthGate('RUN1', FIX).capped).toBe(false)
+        // Second call takes the `_gateReleased` short-circuit.
+        expect(readable._depthGate('RUN1', FIX).capped).toBe(false)
+
+        const degraded = load({
+            auditLogger: fakeAuditLogger({ available: false, degraded: 'glide_unavailable', tools: [] }),
+            fixReport: fakeFixReport([], [GAP4]),
+        })
+        expect(degraded._depthGate('RUN1', FIX).capped).toBe(false)
+    })
+
+    test('every HOLD reports capped:false', () => {
+        const loop = load({
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            fixReport: fakeFixReport([], [GAP4]),
+        })
+        expect(loop._depthGate('RUN1', FIX).capped).toBe(false)
+        expect(loop._depthGate('RUN1', FIX).capped).toBe(false)
+    })
+
+    test('ONE counter, all holds — the no_layer_report path counts too', () => {
+        const loop = load({
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            fixReport: fakeFixReport([], [GAP4]),
+        })
+        const first = loop._depthGate('RUN1', ANSWER)
+        expect(first.hold).toBe(true)
+        expect(first.kind).toBe('no_layer_report')
+        expect(loop._holdCount).toBe(1)
+
+        // A fix_report next: still the FIRST recorded hold for the gap set,
+        // but the second hold overall, so the cap is already spent.
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(true)
+        expect(loop._holdCount).toBe(2)
+        expect(loop._depthGate('RUN1', FIX).capped).toBe(true)
+    })
+
+    test('the counter resets between runs', () => {
+        const loop = load({
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            fixReport: fakeFixReport([], [GAP4]),
+        })
+        loop._depthGate('RUN1', FIX)
+        loop._depthGate('RUN1', FIX)
+        expect(loop._holdCount).toBe(2)
+
+        loop._resetGate()
+        expect(loop._holdCount).toBe(0)
+        // And the gate holds again from scratch rather than staying capped.
+        expect(loop._depthGate('RUN2', FIX).hold).toBe(true)
+    })
+
+    test('the cap note is short, distinguishable from a HOLD note, and names no tool', () => {
+        const note = load()._cappedNote()
+        expect(note.length).toBeLessThan(200)
+        expect(note).not.toMatch(/^HOLD:/)
+        expect(note).toMatch(/cap/i)
+        expect(note).toMatch(/not by the trail|not compliance/i)
+        expect(note).not.toContain('schema_lookup')
+        expect(note).not.toContain('query_table')
+        expect(note).not.toContain('genai_log')
+    })
+
+    // -----------------------------------------------------------------------
+    // R1 — the trail check must run BEFORE the cap, or the one behaviour the
+    // gate exists to produce is recorded as the gate giving up.
+    // -----------------------------------------------------------------------
+
+    test('R1: a model that complies AFTER hold #2 gets a GENUINE release, not a capped one', () => {
+        const state = movingTrail(['agent_trace'], [GAP4])
+
+        expect(state.loop._depthGate('RUN1', FIX).hold).toBe(true)
+        expect(state.loop._depthGate('RUN1', FIX).hold).toBe(true)
+        expect(state.loop._holdCount).toBe(2)
+
+        // The cap is spent, but the model has now done exactly what the hold
+        // asked. What releases this is the trail row, not the cap — and the
+        // benchmark counts capped releases against the gate, so classifying
+        // this one as capped would undercount the compliance it measures.
+        state.invoked = ['agent_trace', 'schema_lookup']
+        const released = state.loop._depthGate('RUN1', FIX)
+        expect(released.hold).toBe(false)
+        expect(released.capped).toBe(false)
+    })
+
+    test('R1: compliance after hold #2 is still a genuine release when the cap is over-spent', () => {
+        // Same shape, one hold further along: the counter is past MAX_HOLDS
+        // (the no_layer_report path can push it there), and the trail check
+        // still wins.
+        const state = movingTrail(['agent_trace'], [GAP4])
+        state.loop._depthGate('RUN1', FIX)
+        state.loop._depthGate('RUN1', FIX)
+        state.loop._holdCount = 7
+
+        state.invoked = ['agent_trace', 'schema_lookup']
+        const released = state.loop._depthGate('RUN1', FIX)
+        expect(released.hold).toBe(false)
+        expect(released.capped).toBe(false)
+    })
+
+    // -----------------------------------------------------------------------
+    // R2 — the cap has to bound the no_layer_report path too. `_heldTools` is
+    // only ever assigned on the fix_report route, so a run that never files a
+    // layer report never enters the sticky branch — and before this fix the
+    // cap lived INSIDE that branch, leaving the path unbounded.
+    // -----------------------------------------------------------------------
+
+    test('R2: the no_layer_report path is bounded — two holds, then a capped release', () => {
+        const loop = load({
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            fixReport: fakeFixReport([], [GAP4]),
+        })
+
+        expect(loop._depthGate('RUN1', ANSWER).kind).toBe('no_layer_report')
+        expect(loop._depthGate('RUN1', ANSWER).kind).toBe('no_layer_report')
+        expect(loop._holdCount).toBe(2)
+
+        const third = loop._depthGate('RUN1', ANSWER)
+        expect(third.hold).toBe(false)
+        expect(third.capped).toBe(true)
+        expect(loop._gateReleased).toBe(true)
+    })
+
+    test('R2: the cap bounds a FIRST hold too — no recorded release set is needed', () => {
+        // Two no_layer_report holds spend the cap; the first fix_report then
+        // arrives with an open gap it would otherwise be held on.
+        const loop = load({
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            fixReport: fakeFixReport([], [GAP4]),
+        })
+        loop._depthGate('RUN1', ANSWER)
+        loop._depthGate('RUN1', ANSWER)
+
+        const third = loop._depthGate('RUN1', FIX)
+        expect(third.hold).toBe(false)
+        expect(third.capped).toBe(true)
+        // Nothing was recorded — the cap, not the sticky branch, was the exit.
+        expect(loop._heldTools).toBe(null)
+    })
+
+    test('the cap note claims only the mechanism, and stays countable', () => {
+        const note = load()._cappedNote()
+        expect(note.length).toBeLessThan(200)
+        expect(note.indexOf('GATE:')).toBe(0)
+        // It must NOT assert the target layer went unreached: R1 shows a
+        // capped-looking release can follow real compliance, and the
+        // no_layer_report route has no target layer at all.
+        expect(note).not.toMatch(/never reached|was not reached|target layer/i)
+        // Still tells a capped release from an earned one, and still says
+        // plainly that it is not compliance.
+        expect(note).toMatch(/cap/i)
+        expect(note).toMatch(/not compliance/i)
     })
 })
 
@@ -1332,7 +1962,15 @@ describe('depth gate (#103) — wired into the loop', () => {
         expect(second).toContain('HOLD')
         expect(second).toContain('layer 4 (Data schemas)')
         expect(second).toContain('no schema read was needed')
-        expect(second).toContain('most change your conclusion')
+        // #109: the loop now wires `gate.target` through to `_holdBlock`,
+        // so a single-gap hold (GAP4, no declared layer) renders the
+        // RANKED directed wording rather than #103's generic item 2.
+        expect(second).toMatch(/no other line of investigation reaches/i)
+        expect(second).toContain('Call a tool that reaches layer 4')
+        // NEGATIVE (test-hygiene finding on #109 review): confirm the
+        // generic #103 wording this directed rendering REPLACES is truly
+        // absent, not merely that the directed wording is also present.
+        expect(second).not.toContain('most change your conclusion')
         // The #72 regression guard: the block must arrive WHOLE, not as a
         // 200-char digest stub.
         expect(second).not.toContain('more chars]')
@@ -1379,18 +2017,158 @@ describe('depth gate (#103) — wired into the loop', () => {
     })
 
     test('a run that refuses to act rides the bounds to partial (P4, the refusal tail)', () => {
+        // C1 (final whole-branch review): this test used to run three DRAFT
+        // iterations. The gate now caps at MAX_HOLDS (2), so a third terminal
+        // attempt is RELEASED rather than held and the run finishes — see the
+        // dedicated cap tests below. The P4 refusal tail still exists where
+        // the bounds bite BEFORE the cap does, which is what this now covers:
+        // two attempts, two holds, no iteration left to spend the release on.
         const loop = load({
+            llmProxy: fakeLlm([
+                { success: true, action: DRAFT, raw: 'r1' },
+                { success: true, action: DRAFT, raw: 'r2' },
+            ]),
+            runManager: fakeRunManager(),
+            fixReport: fixWith([], [GAP4]),
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            maxIterations: 2,
+        })
+        expect(loop.run('RUN1').outcome).toBe('partial')
+    })
+
+    test('C1: the cap releases the third terminal attempt, and the transcript says it was the cap', () => {
+        const runs = fakeRunManager()
+        const loop = load({
+            runManager: runs,
             llmProxy: fakeLlm([
                 { success: true, action: DRAFT, raw: 'r1' },
                 { success: true, action: DRAFT, raw: 'r2' },
                 { success: true, action: DRAFT, raw: 'r3' },
             ]),
-            runManager: fakeRunManager(),
+            fixReport: fixWith([{ valid: true, normalized: { ok: true } }], [GAP4]),
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            maxIterations: 5,
+        })
+
+        // The model never calls schema_lookup. Uncapped this rides to
+        // MAX_ITERATIONS and finishes `partial` — the revert trigger.
+        expect(loop.run('RUN1').outcome).toBe('fix_report')
+
+        const holds = runs.transcript.filter((e) => /^HOLD:/.test(e.result_digest || ''))
+        expect(holds).toHaveLength(2)
+
+        const capped = runs.transcript.filter(
+            (e) => e.actor === 'system' && /cap/i.test(e.result_digest || '') && !/^HOLD:/.test(e.result_digest || '')
+        )
+        expect(capped).toHaveLength(1)
+        expect(capped[0].result_digest.length).toBeLessThan(200)
+    })
+
+    test('C1: a run the model actually complies with writes NO cap note', () => {
+        const runs = fakeRunManager()
+        let invoked = ['agent_trace']
+        const loop = load({
+            runManager: runs,
+            toolRegistry: fakeTools([]),
+            llmProxy: fakeLlm([
+                { success: true, action: DRAFT, raw: 'r1' },
+                { success: true, action: { action: 'tool_call', tool: 'schema_lookup', args: {} }, raw: 'r2' },
+                { success: true, action: DRAFT, raw: 'r3' },
+            ]),
+            fixReport: fixWith([{ valid: true, normalized: { ok: true } }], [GAP4]),
+            auditLogger: {
+                invokedTools: function () {
+                    return { available: true, tools: invoked.slice() }
+                },
+            },
+            maxIterations: 5,
+        })
+        // The trail catches up once the tool has been dispatched.
+        const tools = loop._tools()
+        const originalDispatch = tools.dispatch
+        tools.dispatch = function (name, args, ctx) {
+            invoked.push(name)
+            return originalDispatch.call(tools, name, args, ctx)
+        }
+
+        expect(loop.run('RUN1').outcome).toBe('fix_report')
+        const capped = runs.transcript.filter((e) => /cap/i.test(e.result_digest || ''))
+        expect(capped).toHaveLength(0)
+    })
+
+    test('R2: a run that never files a fix_report is bounded by the cap, not by MAX_ITERATIONS', () => {
+        // `_heldTools` is assigned on the fix_report route ALONE, so a run
+        // that only ever answers never enters the sticky branch. With the cap
+        // living inside that branch this run held on every iteration and rode
+        // to MAX_ITERATIONS -> `partial`. The cap now dominates the
+        // no_layer_report path too: two holds, then the answer is honoured.
+        const runs = fakeRunManager()
+        const ANSWER = { action: 'answer', text: 'done' }
+        const loop = load({
+            runManager: runs,
+            llmProxy: fakeLlm([
+                { success: true, action: ANSWER, raw: 'r1' },
+                { success: true, action: ANSWER, raw: 'r2' },
+                { success: true, action: ANSWER, raw: 'r3' },
+                { success: true, action: ANSWER, raw: 'r4' },
+                { success: true, action: ANSWER, raw: 'r5' },
+            ]),
             fixReport: fixWith([], [GAP4]),
             auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
-            maxIterations: 3,
+            maxIterations: 5,
         })
-        expect(loop.run('RUN1').outcome).toBe('partial')
+
+        expect(loop.run('RUN1').outcome).toBe('answer')
+
+        const holds = runs.transcript.filter((e) => /^HOLD:/.test(e.result_digest || ''))
+        expect(holds).toHaveLength(2)
+
+        const gate = runs.transcript.filter((e) => e.actor === 'system' && /^GATE:/.test(e.result_digest || ''))
+        expect(gate).toHaveLength(1)
+        expect(gate[0].result_digest.length).toBeLessThan(200)
+    })
+
+    test('R1: a run that complies AFTER the second hold writes NO cap note', () => {
+        // The gate's whole purpose, arriving one beat later than the cap: the
+        // model is held twice, then calls the tool the hold asked for. The
+        // release is the trail's, so the transcript must carry no GATE: note
+        // for the benchmark to count against the gate.
+        const runs = fakeRunManager()
+        let invoked = ['agent_trace']
+        const loop = load({
+            runManager: runs,
+            toolRegistry: fakeTools([]),
+            llmProxy: fakeLlm([
+                { success: true, action: DRAFT, raw: 'r1' },
+                { success: true, action: { action: 'tool_call', tool: 'agent_config', args: {} }, raw: 'r2' },
+                { success: true, action: DRAFT, raw: 'r3' },
+                { success: true, action: { action: 'tool_call', tool: 'schema_lookup', args: {} }, raw: 'r4' },
+                { success: true, action: DRAFT, raw: 'r5' },
+            ]),
+            fixReport: fixWith([{ valid: true, normalized: { ok: true } }], [GAP4]),
+            auditLogger: {
+                invokedTools: function () {
+                    return { available: true, tools: invoked.slice() }
+                },
+            },
+            maxIterations: 8,
+        })
+        const tools = loop._tools()
+        const originalDispatch = tools.dispatch
+        tools.dispatch = function (name, args, ctx) {
+            invoked.push(name)
+            return originalDispatch.call(tools, name, args, ctx)
+        }
+
+        expect(loop.run('RUN1').outcome).toBe('fix_report')
+
+        // Two holds were issued — the cap was fully spent before the model
+        // acted — and the release was still the trail's.
+        const holds = runs.transcript.filter((e) => /^HOLD:/.test(e.result_digest || ''))
+        expect(holds).toHaveLength(2)
+        expect(loop._holdCount).toBe(2)
+        const gate = runs.transcript.filter((e) => /^GATE:/.test(e.result_digest || ''))
+        expect(gate).toHaveLength(0)
     })
 
     test('bounds are still checked FIRST — a hold cannot outlive MAX_ITERATIONS', () => {
@@ -1525,5 +2303,208 @@ describe('depth gate (#103) — wired into the loop', () => {
         // are re-derived fresh from the CURRENT draft — the second draft
         // declares no gap at all, so it passes.
         expect(res.outcome).toBe('fix_report')
+    })
+})
+
+// ===========================================================================
+// directed depth gate (#109) — the directed interrogation
+//
+// Item 2 used to ask the model which layer mattered most. The harness now
+// answers that itself, so leaving the question would be theatre. It still
+// names a LAYER and never a tool — see the #103 GUARD tests, which must keep
+// passing unchanged.
+// ===========================================================================
+
+describe('directed depth gate (#109) — _holdBlock', () => {
+    const GAPS = [
+        { layer: 2, name: 'Instructions', reason: 'the trace showed no routing problem', tools: ['agent_config'] },
+        { layer: 4, name: 'Data schemas', reason: 'no schema read was needed', tools: ['schema_lookup'] },
+    ]
+
+    test('RANKED: states which layer must be closed, and why that one', () => {
+        // I3 (final whole-branch review): the strong claim is emitted only
+        // at fan-out 1, so the target now carries its fan-out. Layer 4 is
+        // reachable by `schema_lookup` alone, so this is the true case.
+        const block = load()._holdBlock(GAPS, 'gaps', {
+            layer: 4,
+            source: 'ranked',
+            tools: ['schema_lookup'],
+            fanOut: 1,
+        })
+        expect(block).toContain('layer 4')
+        expect(block).toMatch(/no other line of investigation reaches/i)
+        expect(block).toMatch(/Call a tool that reaches layer 4/i)
+        // NEGATIVE (test-hygiene finding on #109 review): a dropped `else`
+        // would emit the directed lines ALONGSIDE the #103 generic ones and
+        // still pass every assertion above. The generic item-2 wording must
+        // be ABSENT, not merely "the directed wording is also present".
+        expect(block).not.toMatch(/most change your conclusion/i)
+    })
+
+    test('I3: a fan-out-3 target gets the NEUTRAL variant — the exclusivity claim would be false', () => {
+        // For a gap set confined to layers 2/3/7 the ranked target is layer 2
+        // via `agent_config`, which also reaches 3 and 7. "No other line of
+        // investigation reaches it" is simply untrue, and the harness must
+        // not assert a falsehood to a model whose evidential honesty is the
+        // thing being measured.
+        const block = load()._holdBlock(GAPS, 'gaps', {
+            layer: 2,
+            source: 'ranked',
+            tools: ['agent_config'],
+            fanOut: 3,
+        })
+        expect(block).toContain('layer 2')
+        expect(block).toMatch(/this run needs closed next/i)
+        expect(block).toMatch(/Call a tool that reaches layer 2/i)
+        // The load-bearing NEGATIVE: the false claim must be ABSENT.
+        expect(block).not.toMatch(/no other line of investigation reaches/i)
+        // And it is still directed, not the #103 generic fallback.
+        expect(block).not.toMatch(/most change your conclusion/i)
+    })
+
+    test('I3: a fan-out-2 target gets the neutral variant too', () => {
+        // Layer 6 releases on `genai_log`, which also reaches layer 1.
+        const block = load()._holdBlock(GAPS, 'gaps', {
+            layer: 6,
+            source: 'ranked',
+            tools: ['genai_log'],
+            fanOut: 2,
+        })
+        expect(block).toMatch(/this run needs closed next/i)
+        expect(block).not.toMatch(/no other line of investigation reaches/i)
+    })
+
+    test('I3: a target with no fan-out recorded gets the neutral variant, not the strong claim', () => {
+        // Defensive: the claim is only made on positive evidence of fan-out 1.
+        const block = load()._holdBlock(GAPS, 'gaps', { layer: 4, source: 'ranked', tools: ['schema_lookup'] })
+        expect(block).toContain('layer 4')
+        expect(block).toMatch(/this run needs closed next/i)
+        expect(block).not.toMatch(/no other line of investigation reaches/i)
+    })
+
+    test('I3: the neutral variant still names NO tool', () => {
+        const block = load()._holdBlock(
+            [{ layer: 2, name: 'Instructions', reason: 'r', tools: ['agent_config'] }],
+            'gaps',
+            { layer: 2, source: 'ranked', tools: ['agent_config'], fanOut: 3 }
+        )
+        expect(block).not.toContain('agent_config')
+        expect(block).not.toContain('schema_lookup')
+        expect(block).not.toContain('query_table')
+        expect(block).not.toContain('genai_log')
+        expect(block).not.toContain('log_analysis')
+    })
+
+    test('DECLARED: quotes the model back to itself instead', () => {
+        const block = load()._holdBlock(GAPS, 'gaps', { layer: 2, source: 'declared', tools: ['agent_config'] })
+        expect(block).toContain('layer 2')
+        expect(block).toMatch(/your own report names it/i)
+        expect(block).toMatch(/Call a tool that reaches layer 2/i)
+        // NEGATIVE — same reasoning as the RANKED case above.
+        expect(block).not.toMatch(/most change your conclusion/i)
+    })
+
+    test('both gaps still appear — the target directs, it does not hide the rest', () => {
+        const block = load()._holdBlock(GAPS, 'gaps', { layer: 4, source: 'ranked', tools: ['schema_lookup'] })
+        expect(block).toContain('layer 2 (Instructions)')
+        expect(block).toContain('layer 4 (Data schemas)')
+    })
+
+    test('item 1 is unchanged — it still asks for a quoted field', () => {
+        const block = load()._holdBlock(GAPS, 'gaps', { layer: 4, source: 'ranked', tools: ['schema_lookup'] })
+        expect(block).toMatch(/quote/i)
+    })
+
+    test('the draft-is-preserved closing survives verbatim', () => {
+        const block = load()._holdBlock(GAPS, 'gaps', { layer: 4, source: 'ranked', tools: ['schema_lookup'] })
+        expect(block).toContain('preserved')
+        expect(block).toMatch(/resubmit/i)
+    })
+
+    test.each([undefined, null, {}, { layer: 'four' }, 42])(
+        'R-9: a missing or malformed target (%p) keeps the #103 generic wording rather than throwing',
+        (target) => {
+            let block
+            expect(() => {
+                block = load()._holdBlock(GAPS, 'gaps', target)
+            }).not.toThrow()
+            expect(block).toContain('HOLD')
+            expect(block).toMatch(/did it not settle|not settle/i)
+            // NEGATIVE — the fallback path must render ONLY the generic
+            // wording. A dropped `else` would leak the directed lines in
+            // here too even with no usable target; none of them may appear.
+            expect(block).not.toMatch(/no other line of investigation reaches/i)
+            expect(block).not.toMatch(/your own report names it/i)
+            expect(block).not.toContain('Call a tool that reaches layer')
+        }
+    )
+
+    test('GUARD: the directed variants still never name a measured tool', () => {
+        const ranked = load()._holdBlock(
+            [{ layer: 4, name: 'Data schemas', reason: 'r', tools: ['schema_lookup'] }],
+            'gaps',
+            { layer: 4, source: 'ranked', tools: ['schema_lookup'] }
+        )
+        const declared = load()._holdBlock(
+            [{ layer: 5, name: 'Data', reason: 'r', tools: ['query_table'] }],
+            'gaps',
+            { layer: 5, source: 'declared', tools: ['query_table'] }
+        )
+        ;[ranked, declared].forEach((block) => {
+            expect(block).not.toContain('schema_lookup')
+            expect(block).not.toContain('query_table')
+            expect(block).not.toContain('genai_log')
+        })
+    })
+})
+
+describe('directed depth gate (#109) — _holdNote', () => {
+    const GAPS = [
+        { layer: 2, name: 'Instructions', reason: 'r', tools: ['agent_config'] },
+        { layer: 4, name: 'Data schemas', reason: 'r', tools: ['schema_lookup'] },
+    ]
+
+    test('records the target layer and the selection source', () => {
+        const note = load()._holdNote({
+            kind: 'gaps',
+            gaps: GAPS,
+            target: { layer: 4, source: 'ranked', tools: ['schema_lookup'] },
+        })
+        expect(note).toContain('layer 4')
+        expect(note).toContain('ranked')
+    })
+
+    test('records the declared source distinctly — the smoke tells the two paths apart by this', () => {
+        const note = load()._holdNote({
+            kind: 'gaps',
+            gaps: GAPS,
+            target: { layer: 2, source: 'declared', tools: ['agent_config'] },
+        })
+        expect(note).toContain('declared')
+    })
+
+    test('stays inside DIGEST_CHARS (200) — the #72 / §G3a constraint', () => {
+        const note = load()._holdNote({
+            kind: 'gaps',
+            gaps: [
+                { layer: 1, name: 'Execution', reason: 'r', tools: ['agent_trace'] },
+                { layer: 2, name: 'Instructions', reason: 'r', tools: ['agent_config'] },
+                { layer: 3, name: 'Tools', reason: 'r', tools: ['agent_config'] },
+                { layer: 4, name: 'Data schemas', reason: 'r', tools: ['schema_lookup'] },
+                { layer: 5, name: 'Data', reason: 'r', tools: ['query_table'] },
+                { layer: 6, name: 'GenAI stack', reason: 'r', tools: ['genai_log'] },
+                { layer: 7, name: 'Platform', reason: 'r', tools: ['agent_config'] },
+            ],
+            target: { layer: 4, source: 'declared', tools: ['schema_lookup'] },
+        })
+        expect(note.length).toBeLessThanOrEqual(200)
+    })
+
+    test('R-9: a missing target is omitted rather than dereferenced', () => {
+        let note
+        expect(() => {
+            note = load()._holdNote({ kind: 'gaps', gaps: GAPS })
+        }).not.toThrow()
+        expect(note).toContain('HOLD')
     })
 })

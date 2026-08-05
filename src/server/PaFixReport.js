@@ -375,6 +375,75 @@ PaFixReport.prototype = {
         }
     },
 
+    /**
+     * Fan-out per tool: how many of the seven layers `_layerToolMap()` lets
+     * that tool close. Exposed for PaAgentLoop's directed depth gate (issue
+     * #109), which ranks a draft's declared gaps by how DEDICATED their tools
+     * are — a tool that closes three layers discharges a gap incidentally, a
+     * tool that closes one can only discharge it deliberately.
+     *
+     * Derived from `_layerToolMap()` rather than hand-listed, for the same
+     * reason PaAgentLoop reads `schemaText()` instead of re-typing the
+     * schema: one source, so a map edit cannot silently desynchronise the
+     * ranking from the mapping it claims to rank.
+     *
+     * PURE: no Glide, no audit query, no validation side effects.
+     *
+     * @returns {Object} {toolName: Number}, every value >= 1
+     */
+    toolFanOut: function () {
+        var map = this._layerToolMap()
+        var out = {}
+        for (var layer in map) {
+            if (!Object.prototype.hasOwnProperty.call(map, layer)) continue
+            var tools = map[layer]
+            if (!this._isArray(tools)) continue
+            for (var i = 0; i < tools.length; i++) {
+                out[tools[i]] = out[tools[i]] === undefined ? 1 : out[tools[i]] + 1
+            }
+        }
+        return out
+    },
+
+    /**
+     * Layer numbers this draft's root causes name in `would_confirm`, the
+     * model's OWN statement of what evidence it is missing (#93).
+     *
+     * The directed depth gate (#109) gives this precedence over its
+     * structural ranking: DECISION.md §P4 recorded a run whose
+     * `would_confirm` correctly named layer 4 while the model still did not
+     * call the tool that closes it. The model can identify the missing layer;
+     * binding the release to its own naming is direction rather than force.
+     *
+     * Parsing is `_layersNamedBy`'s, unchanged — deliberately not a bare
+     * digit scan, since table names carry digits.
+     *
+     * PURE: no Glide, no audit query, no validation side effects.
+     *
+     * @param {*} report a fix_report draft; any shape (R-9)
+     * @returns {Array} ascending, de-duplicated layer numbers; `[]` for
+     *          anything malformed
+     */
+    declaredLayers: function (report) {
+        var rep = this._isPlainObject(report) ? report : {}
+        var rcs = this._isArray(rep.root_causes) ? rep.root_causes : []
+        var found = []
+
+        for (var i = 0; i < rcs.length; i++) {
+            var rc = rcs[i]
+            if (!this._isPlainObject(rc) || !this._nonEmptyString(rc.would_confirm)) continue
+            var named = this._layersNamedBy(rc.would_confirm)
+            for (var j = 0; j < named.length; j++) {
+                if (this._indexOf(found, named[j]) === -1) found.push(named[j])
+            }
+        }
+
+        found.sort(function (a, b) {
+            return a - b
+        })
+        return found
+    },
+
     _checkRootCauses: function (report, problems, ctx) {
         var rcs = report.root_causes
         if (!this._isArray(rcs)) {
