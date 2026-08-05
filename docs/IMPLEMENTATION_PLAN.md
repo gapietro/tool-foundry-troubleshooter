@@ -67,7 +67,7 @@
 - Create directories: `benchmark/` (seeds + scorecards). Fluent artifacts go in the existing `src/fluent/`; Script Include bodies in the existing `src/server/`. No `src/instance/**` tree — that structure was superseded by the SDK scaffold
 
 **Table names (final — LLD §3):**
-- **`x_snc_troubleshoot_run`** — number, user, harness (`native`|`custom`), agent ref, execution_ref, status, transcript (JSON), context_summary, fix_report (JSON), mode, error
+- **`x_snc_troubleshoot_run`** — number, user, harness (`native`|`custom`), agent ref, execution_ref, status, transcript (JSON), context_summary, fix_report (JSON), mode, error, request, request_truncated (added at issue #99 — see LOW_LEVEL_DESIGN.md §3.1 for the three-state truncation contract; not part of the original Task 2 build)
 - **`x_snc_troubleshoot_audit`** — run (ref → `x_snc_troubleshoot_run`), user, action_type, tool_name, input, output, target_table, target_record, confirmed_by_user
 
 **What:** The `harness` field is what lets one run table serve both worlds. Follow `.claude/context/sdk-examples/table.now.ts`; note Build Rule #9 (export name must equal table name) and #8 (`ChoiceColumn` choices are `{ value_key: 'Label' }`, not `[{value,label}]`) — the `harness`, `mode`, `status` and `action_type` columns are all choices.

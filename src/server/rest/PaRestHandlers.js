@@ -152,6 +152,13 @@ PaRestHandlers.prototype = {
             agent: body.agent,
             executionRef: body.execution,
             mode: validation.mode,
+            // The whole validated body, so the run records its own subject
+            // (issue #99). Passed as an object, not a string: PaRunManager
+            // owns the run table's write contract and with it the column's
+            // ceiling and truncation flag. Deliberately NOT reusing
+            // `_queueDiagnose`'s `_safeStringify` result — that one exists
+            // for the event payload and has no ceiling.
+            request: body,
         })
 
         if (!created || !created.run_id) {
@@ -277,6 +284,11 @@ PaRestHandlers.prototype = {
             context_summary: run.context_summary || '',
             error: run.error || '',
             fix_report: run.status === 'complete' ? this._parseJsonSafe(run.fix_report) : null,
+            // The run's own subject (issue #99). Persisting it without
+            // exposing it would repeat the #78 shape — the data in the row,
+            // and every API consumer still reading the table by hand.
+            request: this._requestBody(run),
+            request_truncated: this._toBool(run.request_truncated),
         }
 
         // #78 side-defect. The rejected draft IS stored — _finishFailedFixReport
@@ -708,6 +720,8 @@ PaRestHandlers.prototype = {
                 context_summary: gr.getValue('context_summary') || '',
                 fix_report: gr.getValue('fix_report') || '',
                 error: gr.getValue('error') || '',
+                request: gr.getValue('request') || '',
+                request_truncated: this._toBool(gr.getValue('request_truncated')),
             }
         } catch (e) {
             // R-1: `e` untouched.
@@ -831,6 +845,37 @@ PaRestHandlers.prototype = {
 
     _isArray: function (value) {
         return Object.prototype.toString.call(value) === '[object Array]'
+    },
+
+    /**
+     * A ServiceNow boolean column reads back through `getValue` as the
+     * STRING '0' or '1', not as a boolean — so a bare truthiness test on it
+     * makes '0' true. Real booleans arrive from the injected `readRun` seam
+     * in tests and from any in-process caller, so both shapes are handled.
+     *
+     * @returns {Boolean} always a boolean — junk and absence are false.
+     */
+    _toBool: function (value) {
+        if (value === true) return true
+        if (typeof value === 'string') return value === '1' || value === 'true'
+        return false
+    },
+
+    /**
+     * The persisted inbound request, for the `getRun` body (issue #99).
+     *
+     * @returns {Object|String|null} the parsed body when it is whole, the
+     *          RAW prefix string when `request_truncated` is set (a clipped
+     *          body is not parseable and must never be presented as though
+     *          it were), the raw string when it is whole but unparseable
+     *          (returned rather than dropped — losing it is the defect this
+     *          change exists to fix), and null when absent.
+     */
+    _requestBody: function (run) {
+        if (!this._nonEmptyString(run.request)) return null
+        if (this._toBool(run.request_truncated)) return run.request
+        var parsed = this._parseJsonSafe(run.request)
+        return parsed === null ? run.request : parsed
     },
 
     _nonEmptyString: function (value) {
