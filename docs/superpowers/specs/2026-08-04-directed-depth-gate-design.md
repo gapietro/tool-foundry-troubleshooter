@@ -126,12 +126,39 @@ gap on a layer it did not touch* — and it falls out of the same rule rather th
 own. A layer-5 gap is no longer discharged by `log_analysis`, which is shared with layers 1 and 6
 and would close a data gap without touching data.
 
-### 4.3 What does not change
+### 4.3 What does not change, and the one thing that does
 
-**Cost stays at exactly one forced beat.** The target and its narrowed release set are recorded at
-the **first** hold and never re-derived, so later drafts cannot move the goalposts. Release is still
-a row in the audit trail the model cannot author. Constraint A is satisfied by construction, and
-P4's not-a-denial-of-service result carries over rather than needing to be re-earned.
+**Stickiness is untouched.** The target and its narrowed release set are recorded at the **first**
+hold and never re-derived, so later drafts cannot move the goalposts. Release is still a row in the
+audit trail the model cannot author.
+
+**Cost is at most two forced beats, not one — and Constraint A is satisfied by a CAP, not by
+construction.** This is the correction the final whole-branch review forced (C1), and the earlier
+draft of this section was wrong to claim otherwise.
+
+The one-beat arithmetic in §3 was inherited from #103, where `_heldTools` was the union of every
+open gap's tools: any tool the prompt advertised for a held layer discharged the hold, so a
+compliant call always released and one beat was all the gate could cost. §4.2 breaks exactly that
+premise. `PaFixReport.schemaText()` renders the **whole** layer-to-tool map into every prompt —
+*"5 (Data) needs one of: `query_table`, `log_analysis`"* — while the release set is now the
+`dropped` column's complement. For targets on layers 1, 5 and 6 the release set is a strict
+**subset** of what the model has been told closes that layer. A model reading the harness's own
+mapping can therefore make a call that is compliant on its face, fail to release, and be re-held.
+Uncapped, that rides to `MAX_ITERATIONS` and finishes `partial` — which is the pre-filed revert
+trigger for the smoke that follows, arrived at by a route §3 did not anticipate.
+
+So the beat count is **bounded rather than measured**. `_depthGate` counts every hold it issues, on
+every path including `no_layer_report`, and once the count reaches `MAX_HOLDS` (2) the next terminal
+action is allowed through regardless of the trail: hold #1 → the model acts → hold #2 → release. The
+cap release is flagged (`capped:true`) and written to the transcript as its own note, because a run
+that finished only because the gate gave up is not evidence the gate worked and the smoke has to
+count the two apart. P4's not-a-denial-of-service result carries over — the cap can only make the
+tail shorter, never longer.
+
+The honest reading of the trade: the gate now guarantees a bound on cost and no longer guarantees
+that a release means compliance. Making the release set and the advertised tool list agree — either
+by narrowing `schemaText()` per hold or by widening the release set back — would restore the
+guarantee, but both touch `PaFixReport`, which §7 puts out of bounds for this change.
 
 ## 5. The interrogation
 
@@ -145,7 +172,18 @@ selection paths:
 
 - **Declared:** `Layer 5 is the one this run needs closed — your own report names it as what would
   confirm your finding.`
-- **Ranked:** `Of the layers above, layer 4 is the one no other line of investigation reaches.`
+- **Ranked, target fan-out 1:** `Of the layers above, layer 4 is the one no other line of
+  investigation reaches.`
+- **Ranked, target fan-out > 1:** `Of the layers above, layer 2 is the one this run needs closed
+  next.`
+
+The ranked variant splits on fan-out because the exclusivity claim is only **true** at fan-out 1
+(I3, final whole-branch review). For a gap set confined to layers 2/3/7 the ranked target is layer 2
+via `agent_config`, which also reaches 3 and 7; a layer-6 target releases on `genai_log`, which also
+reaches layer 1. A harness measuring a model's evidential honesty does not get to assert a falsehood
+to it. The neutral variant still directs at the layer and still names no tool, so Constraint B is
+unaffected. The target carries its own fan-out out of `_selectTarget` rather than the renderer
+re-deriving it from a map it does not hold.
 
 Item 3 becomes `Call a tool that reaches layer N` — singular, the target.
 
@@ -159,8 +197,13 @@ difference between this gate and #88 and it is not being touched.
 
 ## 6. State, stickiness and degradation
 
-Two new fields alongside `_heldGaps` / `_heldTools`, reset in `run()` with the rest (`:174`): the
-target layer, and the selection source (`'declared'` | `'ranked'`).
+Two new fields alongside `_heldGaps` / `_heldTools`: the target layer, and the selection source
+(`'declared'` | `'ranked'`). C1 adds a third, the hold counter. All of them are cleared by
+`_resetGate()`, which is called from `initialize()` — **not** from `run()`, which resets nothing.
+Earlier drafts of this section and of `_resetGate`'s own docblock said `run()`; that was never true.
+The behaviour is nonetheless correct, because production constructs a fresh `PaAgentLoop` per run
+(the async ScriptAction worker news one up per event), so per-run state and per-instance state are
+the same thing here. Only the claim about where it happens was wrong.
 
 R-9 posture, matching the file's existing treatment of a degraded collaborator — the gate degrades,
 the run never traps:

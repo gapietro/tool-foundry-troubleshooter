@@ -74,7 +74,10 @@
  * discharge the gate with whichever tool happened to be cheapest, closing
  * layers it never actually investigated. `_selectTarget` picks a single
  * layer to hold against, and `_holdBlock`/`_holdNote` render that one
- * target — the released set narrows to its tools alone.
+ * target — the released set narrows to its tools alone. That narrowing is
+ * also why the gate is CAPPED at `MAX_HOLDS` (2) rather than buying exactly
+ * one beat: the prompt advertises more tools per layer than the narrowed set
+ * accepts, so a compliant-looking call can fail to release. See `_depthGate`.
  *
  * `_buildPrompt(playbook, promptBlock, context, request)` TAKES PLAYBOOK AS
  * AN ARGUMENT, NOT A HARDCODED STRING
@@ -139,6 +142,13 @@ PaAgentLoop.prototype = {
     MAX_ITERATIONS: 15,
     BUDGET_MS: 300000,
 
+    /** C1 (final whole-branch review) — the depth gate issues AT MOST this
+     *  many holds in a run; the next terminal action after the cap is
+     *  reached is allowed through regardless of the trail. See `_depthGate`
+     *  for why an uncapped gate is not safe now that the release set is
+     *  narrowed to a target layer's DEDICATED tools. */
+    MAX_HOLDS: 2,
+
     /** The installed native agent this class reads its default playbook
      *  from — see `_defaultPlaybook()`. */
     AGENT_NAME: 'Agent Doctor',
@@ -175,9 +185,13 @@ PaAgentLoop.prototype = {
 
         // Depth gate state (issue #103). A run is one synchronous
         // invocation, so instance fields are sufficient — no column, no
-        // schema change. `_heldTools` is the union of tools that close the
-        // gaps recorded at the FIRST hold; it is the only thing that can
-        // release the gate afterwards.
+        // schema change. `_heldTools` is recorded at the FIRST hold and is
+        // the only thing a later tool call can release the gate with. I4
+        // (final whole-branch review): since #109 it holds the DEDICATED
+        // tools of the ONE target layer `_selectTarget` picked — the union
+        // of every open gap's tools only on the degraded fallback path,
+        // when nothing was scorable (see `_depthGate` and `_unionTools`).
+        // C1: `_holdCount` bounds how many holds that set can produce.
         this._resetGate()
 
         if (o.maxIterations > 0) this.MAX_ITERATIONS = o.maxIterations
@@ -296,6 +310,18 @@ PaAgentLoop.prototype = {
                     result_digest: this._holdNote(gate),
                 })
                 return { terminal: false }
+            }
+            // C1: a release the CAP granted is not a release the model
+            // earned, and the benchmark smoke has to count the two apart.
+            // Kept well inside PaRunManager's DIGEST_CHARS (200) for the
+            // same reason `_holdNote` is — a longer note is silently
+            // truncated, which is the defect class this design exists to
+            // avoid (#72 / §G3a).
+            if (gate.capped === true) {
+                this._runs().appendTranscript(runId, {
+                    actor: 'system',
+                    result_digest: this._cappedNote(),
+                })
             }
             this._holdActive = null
         }
@@ -493,9 +519,16 @@ PaAgentLoop.prototype = {
     },
 
     /**
-     * Per-run gate state, cleared at the top of `run()`. Lifted out of the
+     * Per-run gate state, cleared from `initialize()`. Lifted out of the
      * body when #109 added `_heldTarget`, so the reset has exactly one
      * definition and a test can assert it.
+     *
+     * I5 (final whole-branch review): this docblock used to say "cleared at
+     * the top of `run()`", which was never true — `initialize()` is the only
+     * caller and `run()` never resets. The behaviour is correct because
+     * production constructs a fresh loop per run (the async ScriptAction
+     * worker news up a `PaAgentLoop` for each event); the claim about WHERE
+     * it happened was the only defect, so only the claim is fixed here.
      */
     _resetGate: function () {
         this._gateReleased = false
@@ -503,6 +536,8 @@ PaAgentLoop.prototype = {
         this._heldTools = null
         this._heldTarget = null
         this._holdActive = null
+        // C1: how many holds this run has issued, across every hold path.
+        this._holdCount = 0
     },
 
     /**
@@ -532,10 +567,31 @@ PaAgentLoop.prototype = {
      * The gap set is recorded at the FIRST hold and never re-derived. Without
      * that the goalposts move — close layer 4, declare layer 5, be held again
      * — and every run rides to `MAX_ITERATIONS`, since even native's best
-     * sweep in the v4 pass was 6/7. The gate buys exactly ONE forced beat,
-     * which is the size of the acceptance test. A run that then declines to
-     * act rides the bounds to `outcome:'partial'`, and that tail is counted
-     * rather than special-cased (issue #103, prediction P4).
+     * sweep in the v4 pass was 6/7. A run that then declines to act rides the
+     * bounds to `outcome:'partial'`, and that tail is counted rather than
+     * special-cased (issue #103, prediction P4).
+     *
+     * AND CAPPED AT `MAX_HOLDS` (2) — AT MOST TWO FORCED BEATS, NOT ONE
+     * C1 (final whole-branch review). #103's one-beat claim rested on the
+     * release set being the union of every open gap's tools: any tool the
+     * prompt advertised for a held layer discharged the hold, so a compliant
+     * call always released. #109 narrowed the release set to the target
+     * layer's DEDICATED tools — but `PaFixReport.schemaText()` still renders
+     * the WHOLE layer-to-tool map into every prompt ("5 (Data) needs one of:
+     * query_table, log_analysis"), and for targets on layers 1, 5 and 6 the
+     * dedicated set is a strict SUBSET of that advertised list. A model
+     * reading the harness's own mapping can therefore make a call that looks
+     * compliant (`log_analysis` for a layer-5 target), fail to release, be
+     * re-held, and — uncapped — ride to `MAX_ITERATIONS` and finish
+     * `partial`. That outcome is a pre-registered revert trigger for the
+     * benchmark this gate exists to move, so it is bounded rather than
+     * measured: `_holdCount` counts every hold this run issued, on every
+     * path, and once it has reached `MAX_HOLDS` the next terminal action is
+     * allowed through regardless of the trail. The sequence is hold #1 ->
+     * model acts -> hold #2 -> release. The cap release is flagged
+     * (`capped:true`) and written to the transcript by `_step`, so the smoke
+     * can count capped releases separately from trail-backed ones instead of
+     * reading them as compliance.
      *
      * KNOWN TILT, ACCEPTED UNDER #103, CLOSED BY #109: `_layerToolMap()` gives
      * `agent_config` three layers (2, 3, 7) against one apiece for layers 4
@@ -555,7 +611,8 @@ PaAgentLoop.prototype = {
      * @param {String} runId
      * @param {Object} action the terminal action the model just emitted
      * @returns {Object} {hold:Boolean, gaps:Array, kind:'gaps'|'no_layer_report'|'',
-     *          target:{layer:Number,source:'declared'|'ranked',tools:[String]}|null}
+     *          target:{layer:Number,source:'declared'|'ranked',tools:[String],
+     *          fanOut:Number}|null, capped:Boolean}
      *          — `kind` is `''` on every ALLOW path (already released, an
      *          unreadable trail, every declared gap closed, or no gap
      *          declared at all); only the two HOLD paths use the other two
@@ -563,13 +620,16 @@ PaAgentLoop.prototype = {
      *          was narrowed to, and is `null` on every ALLOW path, on the
      *          `no_layer_report` path, and whenever `_selectTarget` found
      *          nothing scorable and `_heldTools` fell back to the #103
-     *          union instead.
+     *          union instead. `capped` (C1) is `true` on exactly ONE path:
+     *          the ALLOW issued because `MAX_HOLDS` was reached and the
+     *          trail never showed the target closed. Every other result —
+     *          hold or allow, trail-backed release included — is `false`.
      */
     _depthGate: function (runId, action) {
-        if (this._gateReleased) return { hold: false, gaps: [], kind: '', target: null }
+        if (this._gateReleased) return { hold: false, gaps: [], kind: '', target: null, capped: false }
 
         var trail = this._trailTools(runId)
-        if (!trail.readable) return { hold: false, gaps: [], kind: '', target: null }
+        if (!trail.readable) return { hold: false, gaps: [], kind: '', target: null, capped: false }
 
         // Once a hold has been issued, the recorded set is the ONLY thing
         // that can release the gate — later drafts never move it.
@@ -586,24 +646,36 @@ PaAgentLoop.prototype = {
         // produce) falls through and re-derives gaps fresh from the
         // CURRENT draft instead of latching onto an unrecoverable hold.
         if (this._isArray(this._heldTools) && this._heldTools.length > 0) {
+            // C1: the cap is checked BEFORE the trail, so once `MAX_HOLDS`
+            // holds have been issued this branch has exactly one exit and it
+            // is an ALLOW. See the "AND CAPPED AT `MAX_HOLDS`" section of
+            // this method's header for why an uncapped gate can no longer be
+            // assumed to release on a compliant-looking call.
+            if (this._holdCount >= this.MAX_HOLDS) {
+                this._gateReleased = true
+                return { hold: false, gaps: [], kind: '', target: null, capped: true }
+            }
             if (this._anyOf(this._heldTools, trail.tools)) {
                 this._gateReleased = true
-                return { hold: false, gaps: [], kind: '', target: null }
+                return { hold: false, gaps: [], kind: '', target: null, capped: false }
             }
-            return { hold: true, gaps: this._heldGaps, kind: 'gaps', target: this._heldTarget }
+            this._holdCount += 1
+            return { hold: true, gaps: this._heldGaps, kind: 'gaps', target: this._heldTarget, capped: false }
         }
 
         if (!this._isPlainObject(action) || action.action !== 'fix_report') {
             // `answer` carries no `layers_swept`, so it declares no gap and
             // there is nothing to enforce against. Hold and ask for a layer
-            // report; no run took this exit in the v4 pass.
-            return { hold: true, gaps: [], kind: 'no_layer_report', target: null }
+            // report; no run took this exit in the v4 pass. C1: it counts
+            // against the cap like any other hold — one counter, all holds.
+            this._holdCount += 1
+            return { hold: true, gaps: [], kind: 'no_layer_report', target: null, capped: false }
         }
 
         var open = this._openGaps(this._safeGaps(action.report), trail.tools)
         if (open.length === 0) {
             this._gateReleased = true
-            return { hold: false, gaps: [], kind: '', target: null }
+            return { hold: false, gaps: [], kind: '', target: null, capped: false }
         }
 
         // #109: ONE target gap, and only its dedicated tools, instead of the
@@ -614,7 +686,8 @@ PaAgentLoop.prototype = {
         this._heldGaps = open
         this._heldTarget = target
         this._heldTools = target === null ? this._unionTools(open) : target.tools
-        return { hold: true, gaps: open, kind: 'gaps', target: target }
+        this._holdCount += 1
+        return { hold: true, gaps: open, kind: 'gaps', target: target, capped: false }
     },
 
     /**
@@ -655,6 +728,12 @@ PaAgentLoop.prototype = {
      * Every tool that would close any of these gaps, de-duplicated. Same
      * per-element guard as `_openGaps` — a malformed element contributes NO
      * tools to the recorded union rather than throwing.
+     *
+     * M3 (final whole-branch review): this is the DEGRADED path only. It was
+     * #103's release set; since #109 the normal set is the target layer's
+     * dedicated tools, and `_depthGate` calls this only when `_selectTarget`
+     * returns `null` — nothing scorable, or a broken `PaFixReport` — where
+     * the union is preferable to recording an empty, unreleasable set.
      */
     _unionTools: function (gaps) {
         var list = this._isArray(gaps) ? gaps : []
@@ -739,15 +818,29 @@ PaAgentLoop.prototype = {
      * different map. The spec's §8 records the qualification this still
      * carries, and issue #110 records the one that predates it.
      *
-     * COST IS UNCHANGED: one target, one release, one forced beat. The
-     * stickiness argument in `_depthGate`'s header applies unaltered.
+     * COST IS AT MOST TWO FORCED BEATS, NOT ONE (C1, final whole-branch
+     * review). Narrowing the release set to the DEDICATED tools is exactly
+     * what breaks #103's "one target, one release, one beat" arithmetic: for
+     * a target on layer 1, 5 or 6 the dedicated set is a strict SUBSET of the
+     * tool list `PaFixReport.schemaText()` advertises for that layer in every
+     * prompt, so a model following the harness's own mapping can make a
+     * compliant-looking call that does NOT release, and be re-held. Uncapped
+     * that rides to `MAX_ITERATIONS` and finishes `partial` — a pre-registered
+     * revert trigger. `_depthGate` therefore caps holds at `MAX_HOLDS` (2)
+     * and releases the third terminal attempt unconditionally, flagged
+     * `capped:true` so the smoke can tell it from a trail-backed release. The
+     * stickiness argument in `_depthGate`'s header is otherwise unaltered.
      *
      * @param {Array} open gaps the trail shows were never closed; already
      *        filtered by `_openGaps` to plain objects with an array `tools`
      * @param {Object} action the terminal action carrying the draft
-     * @returns {Object|null} {layer, source:'declared'|'ranked', tools} or
-     *          `null` when nothing is scorable — the caller then falls back
-     *          to #103's union rather than recording an unreleasable set
+     * @returns {Object|null} {layer, source:'declared'|'ranked', tools,
+     *          fanOut} or `null` when nothing is scorable — the caller then
+     *          falls back to #103's union rather than recording an
+     *          unreleasable set. `fanOut` (I3) is the target gap's own
+     *          fan-out score, carried on the target so `_holdBlock` can pick
+     *          its item-2 wording without recomputing it: the "no other line
+     *          of investigation reaches" claim is only TRUE at fan-out 1.
      */
     _selectTarget: function (open, action) {
         var fanOut = this._safeFanOut()
@@ -796,10 +889,29 @@ PaAgentLoop.prototype = {
 
         if (chosen === null) return null
 
+        // I2 (final whole-branch review): selection and rendering must agree
+        // on what a usable target is. `_holdBlock`/`_holdNote` both require
+        // `typeof target.layer === 'number'` and fall back to the UNDIRECTED
+        // wording otherwise — but this method used to accept a `chosen.layer`
+        // of ANY type, so a contract-violating collaborator (a gap whose
+        // `layer` is a string, or NaN from a bad parse) produced narrow
+        // enforcement — `_heldTools` cut to one dedicated tool — behind a
+        // vague instruction that directs at no layer at all. That is the
+        // worst combination available. Reject it at the SOURCE instead, so
+        // the gate takes the union fallback and enforcement matches wording.
+        // This also closes the separately-filed NaN concern: `NaN` is
+        // `typeof 'number'` and every `<` comparison against it is false, so
+        // it survives both ranking loops — `isFinite` is what excludes it.
+        if (typeof chosen.layer !== 'number' || !isFinite(chosen.layer)) return null
+
         var tools = this._dedicatedTools(chosen, fanOut)
         if (tools.length === 0) return null
 
-        return { layer: chosen.layer, source: source, tools: tools }
+        // I3: the target's own fan-out travels WITH the target. `_holdBlock`
+        // needs it to choose between the "no other line of investigation
+        // reaches" claim (true only at fan-out 1) and the neutral variant,
+        // and the renderer must not re-derive it from a map it does not hold.
+        return { layer: chosen.layer, source: source, tools: tools, fanOut: this._gapFanOut(chosen, fanOut) }
     },
 
     /**
@@ -920,10 +1032,24 @@ PaAgentLoop.prototype = {
                     '  2. Layer ' + target.layer + ' is the one this run needs closed — your own report ' +
                         'names it as what would confirm your finding.'
                 )
-            } else {
+            } else if (target.fanOut === 1) {
                 lines.push(
                     '  2. Of the layers above, layer ' + target.layer + ' is the one no other line of ' +
                         'investigation reaches.'
+                )
+            } else {
+                // I3 (final whole-branch review): that claim is only TRUE
+                // when the target's dedicated tools have fan-out 1. For a
+                // gap set confined to layers 2/3/7 the ranked target is
+                // layer 2 via `agent_config`, which also reaches 3 and 7;
+                // a layer-6 target releases on `genai_log`, which also
+                // reaches layer 1. Asserting it anyway would have the
+                // harness tell a falsehood to a model whose evidential
+                // honesty is the thing being measured. The neutral variant
+                // still directs at the layer and still names NO tool.
+                lines.push(
+                    '  2. Of the layers above, layer ' + target.layer + ' is the one this run needs ' +
+                        'closed next.'
                 )
             }
             lines.push('  3. Call a tool that reaches layer ' + target.layer + '.')
@@ -971,6 +1097,24 @@ PaAgentLoop.prototype = {
             note += 'layer ' + gate.target.layer + ' (' + this._str(gate.target.source) + ') must be reached; '
         }
         return note + 'layer(s) ' + nums.join(', ') + ' declared NOT_SWEPT with no tool call behind them.'
+    },
+
+    /**
+     * The transcript's record of a CAP release (C1) — the counterpart to
+     * `_holdNote`, and under the same 200-character `DIGEST_CHARS` ceiling.
+     *
+     * It exists to be COUNTABLE. A release granted because `MAX_HOLDS` was
+     * reached and one earned by a trail row that closed the target layer are
+     * the same event as far as `run()` is concerned, and the benchmark smoke
+     * has to report them separately — a run that finished only because the
+     * gate gave up is not evidence the gate worked. So the wording says
+     * plainly that the trail did not release this one.
+     */
+    _cappedNote: function () {
+        return (
+            'GATE: released by the ' + this.MAX_HOLDS + '-hold cap, NOT by the trail — the target layer ' +
+            'was never reached. Not compliance; count separately.'
+        )
     },
 
     /**
