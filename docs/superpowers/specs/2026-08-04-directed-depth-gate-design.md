@@ -95,11 +95,14 @@ See §8 for the qualification this constraint already carries (issue #110).
 
 At the first hold, `_depthGate` selects **one** gap from `open` instead of recording the union:
 
-1. **Declared.** If any root cause's `would_confirm` names a layer that is in the gap set, that
-   gap is the target. Lowest-numbered match wins if several. §P4 recorded run 3's `would_confirm`
-   correctly naming layer 4 while the model still did not call the tool that closes it — so the
-   model demonstrably can identify the missing layer, and binding the release to its own naming is
-   the purest available form of direction.
+1. **Declared.** If any root cause's `would_confirm` names a layer that is in the gap set, the
+   target is chosen from that named subset only. If several match, the same rule as the ranked
+   path below decides: lowest min-fan-out wins, ties broken by ascending layer number — not the
+   lowest-numbered match, which would let the model's naming order (rather than the section's own
+   fan-out rule) pick the cheapest tool to satisfy. §P4 recorded run 3's `would_confirm` correctly
+   naming layer 4 while the model still did not call the tool that closes it — so the model
+   demonstrably can identify the missing layer, and binding the release to its own naming is the
+   purest available form of direction.
 2. **Ranked.** Otherwise the gap with the lowest min-fan-out across its tools; ties broken by
    ascending layer number. Today that orders layers 1, 4, 5 (min fan-out 1) above layer 6 (2) above
    layers 2, 3, 7 (3).

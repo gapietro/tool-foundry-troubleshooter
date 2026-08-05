@@ -869,7 +869,18 @@ PaAgentLoop.prototype = {
      * open gap — §P4 recorded a run naming layer 4 correctly and still not
      * calling the tool that closes it, so the model can identify the missing
      * layer and this binds it to its own naming. Otherwise the structural
-     * rank: lowest fan-out, ties to the lowest layer number.
+     * rank: lowest fan-out, ties to the lowest layer number. When
+     * `would_confirm` names more than one open gap, THE SAME RANK PICKS
+     * AMONG THEM — lowest fan-out, ties to the lowest layer number — rather
+     * than the lowest-numbered named layer winning regardless of fan-out. A
+     * draft naming layers 2 and 4 must not land on layer 2's `agent_config`
+     * (fan-out 3, the cheap incidental compliance this whole gate exists to
+     * remove) just because 2 sorts first, when layer 4's `schema_lookup`
+     * (fan-out 1) was also named. Naming ANY open gap still strictly
+     * outranks the ranked path below — the target is chosen from the named
+     * subset only, even when nothing in that subset can be scored (that
+     * falls through to the union fallback, same as an unscorable ranked set
+     * does).
      *
      * THE RANK NEVER MENTIONS A TOOL NAME, and neither does the block built
      * from it (`_holdBlock`). §H8 item 3's non-vacuity condition is that the
@@ -908,19 +919,36 @@ PaAgentLoop.prototype = {
         var declared = this._safeDeclaredLayers(report)
         var chosen = null
         var source = ''
+        var matched = false
+        var best = -1
         var i
 
         // 1. Declared. `declaredLayers` is documented to return ascending,
         //    de-duplicated layers, but this loop does not trust that order —
-        //    it scans every declared entry and keeps the lowest-numbered
-        //    match, so a collaborator that violates its own contract (or a
-        //    test double that does not bother sorting) still yields the
-        //    right target rather than whichever declared entry happened to
-        //    be scanned first.
+        //    it scans every declared entry against every open gap rather
+        //    than assuming either arrives sorted. A named layer that is not
+        //    an open gap is ignored, same as today.
+        //
+        //    Among the named layers that DO match an open gap, this applies
+        //    the SAME rule as the ranked path below — reusing `_gapFanOut`
+        //    rather than a second scorer — lowest fan-out wins, ties break
+        //    on the lowest layer number.
+        //
+        //    `matched` tracks whether ANYTHING in `would_confirm` named an
+        //    open gap, independently of whether that gap could be scored.
+        //    A named gap that cannot be scored still sets `matched` and
+        //    therefore still blocks the ranked fallback below — declared
+        //    strictly outranks ranked, so a `would_confirm` hit never lets
+        //    the wider gap set back in — and `chosen` stays null, which
+        //    falls through to the null return at the bottom exactly as an
+        //    all-unscorable declared set does today.
         for (var d = 0; d < declared.length; d++) {
             for (i = 0; i < open.length; i++) {
                 if (open[i].layer === declared[d]) {
-                    if (chosen === null || open[i].layer < chosen.layer) {
+                    matched = true
+                    var dScore = this._gapFanOut(open[i], fanOut)
+                    if (dScore !== -1 && (chosen === null || dScore < best || (dScore === best && open[i].layer < chosen.layer))) {
+                        best = dScore
                         chosen = open[i]
                         source = 'declared'
                     }
@@ -929,13 +957,16 @@ PaAgentLoop.prototype = {
             }
         }
 
-        // 2. Ranked. Ties break on the lowest layer number via an explicit
-        //    comparison against `chosen.layer` — not by relying on `open`
-        //    arriving in ascending order, so a differently-ordered `open`
-        //    (e.g. from an `unsweptGaps` that does not sort) cannot change
-        //    the result. Same defensive posture as the declared loop above.
-        if (chosen === null) {
-            var best = -1
+        // 2. Ranked. Only reached when NOTHING in `would_confirm` named an
+        //    open gap (`matched` is false) — see the declared-outranks-
+        //    ranked note above. Ties break on the lowest layer number via an
+        //    explicit comparison against `chosen.layer` — not by relying on
+        //    `open` arriving in ascending order, so a differently-ordered
+        //    `open` (e.g. from an `unsweptGaps` that does not sort) cannot
+        //    change the result. Same defensive posture as the declared loop
+        //    above.
+        if (!matched) {
+            best = -1
             for (i = 0; i < open.length; i++) {
                 var score = this._gapFanOut(open[i], fanOut)
                 if (score === -1) continue

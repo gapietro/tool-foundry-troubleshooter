@@ -1200,9 +1200,49 @@ describe('directed depth gate (#109) — target selection', () => {
         expect(gate.target.tools).toEqual(['agent_config'])
     })
 
-    test('DECLARED: the lowest-numbered declared layer that is open wins', () => {
+    test('DECLARED: among several named open gaps, the lowest-fan-out one wins — not the lowest layer number', () => {
+        // Was 'the lowest-numbered declared layer that is open wins', asserting
+        // layer 2. That encoded the OLD rule this change removes: layer 2's only
+        // tool (agent_config) has fan-out 3, layer 5's query_table has fan-out 1
+        // — the same cheap incidental compliance the fan-out rank exists to
+        // block, now applied to the declared subset too.
         const gate = gateLoop(['agent_trace'], [GAP2, GAP4, GAP5], [5, 2])._depthGate('RUN1', FIX)
+        expect(gate.target.layer).toBe(5)
+        expect(gate.target.source).toBe('declared')
+        expect(gate.target.tools).toEqual(['query_table'])
+    })
+
+    test('DECLARED: fan-out beats a lower layer number when both are named and open', () => {
+        // Ranking alone (and the OLD declared rule) would land on layer 2 —
+        // lowest layer, or first-scanned. The gap-2 tool (agent_config) has
+        // fan-out 3; the gap-4 tool (schema_lookup) has fan-out 1. The declared
+        // subset must apply the SAME rank as the ranked path: lowest fan-out
+        // wins.
+        const gate = gateLoop(['agent_trace'], [GAP2, GAP4], [2, 4])._depthGate('RUN1', FIX)
+        expect(gate.target.layer).toBe(4)
+        expect(gate.target.source).toBe('declared')
+        expect(gate.target.tools).toEqual(['schema_lookup'])
+    })
+
+    test('DECLARED: a fan-out tie within the named subset breaks on the lowest layer number', () => {
+        // Layers 4 and 5 both carry a fan-out-1 tool (schema_lookup,
+        // query_table). With both named, the tie-break is the same as the
+        // ranked path's: lowest layer number.
+        const gate = gateLoop(['agent_trace'], [GAP4, GAP5], [4, 5])._depthGate('RUN1', FIX)
+        expect(gate.target.layer).toBe(4)
+        expect(gate.target.source).toBe('declared')
+        expect(gate.target.tools).toEqual(['schema_lookup'])
+    })
+
+    test('DECLARED: still strictly outranks ranked — only the named subset is a candidate', () => {
+        // Layer 4 is open and would win on fan-out alone (schema_lookup, 1,
+        // versus layer 2's agent_config, 3) — but the model only named layer 2,
+        // so layer 2 is the ONLY candidate. The wider open-gap set never enters
+        // the comparison once `would_confirm` names anything.
+        const gate = gateLoop(['agent_trace'], [GAP2, GAP4], [2])._depthGate('RUN1', FIX)
         expect(gate.target.layer).toBe(2)
+        expect(gate.target.source).toBe('declared')
+        expect(gate.target.tools).toEqual(['agent_config'])
     })
 
     test('DECLARED: a named layer that is NOT an open gap falls through to ranked', () => {
