@@ -75,7 +75,7 @@ function fakeRunManager() {
     }
 }
 
-function fakeFixReport(validateResults, gaps) {
+function fakeFixReport(validateResults, gaps, declared) {
     const calls = []
     const contextCalls = []
     const renderCalls = { markdown: [], json: [] }
@@ -118,6 +118,25 @@ function fakeFixReport(validateResults, gaps) {
         // resulting list directly so they exercise gate logic only.
         unsweptGaps: function () {
             return gaps === undefined ? [] : gaps
+        },
+        // Directed depth gate (#109). The loop ranks gaps by fan-out and
+        // gives the model's own `would_confirm` layer precedence; both come
+        // from PaFixReport so the layer map stays single-sourced. These
+        // mirror the REAL values of `PaFixReport.toolFanOut()` — a fake that
+        // invented its own numbers would test the ranking against a map the
+        // product does not have.
+        toolFanOut: function () {
+            return {
+                agent_trace: 1,
+                genai_log: 2,
+                log_analysis: 3,
+                agent_config: 3,
+                schema_lookup: 1,
+                query_table: 1,
+            }
+        },
+        declaredLayers: function () {
+            return declared === undefined ? [] : declared
         },
     }
 }
@@ -958,14 +977,35 @@ describe('depth gate (#103) — _depthGate', () => {
                 unsweptGaps: function () {
                     return gaps
                 },
+                toolFanOut: function () {
+                    return {
+                        agent_trace: 1,
+                        genai_log: 2,
+                        log_analysis: 3,
+                        agent_config: 3,
+                        schema_lookup: 1,
+                        query_table: 1,
+                    }
+                },
+                declaredLayers: function () {
+                    return []
+                },
             },
         })
 
-        // First evaluation records layers {2,4} -> tools {agent_config, schema_lookup}.
+        // First evaluation records layers {2,4}. Under #109 the TARGET is
+        // layer 4 — `schema_lookup` closes nothing else, while `agent_config`
+        // also closes layers 3 and 7 — so the recorded set is
+        // {schema_lookup}, not the union.
         expect(loop._depthGate('RUN1', FIX).hold).toBe(true)
 
-        // The model closes layer 2 only. That is in the recorded set.
+        // Closing layer 2 no longer releases: that is the #103 tilt (§P7,
+        // six of six releases) which #109 exists to remove.
         invoked = ['agent_trace', 'agent_config']
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(true)
+
+        // The target's own tool releases it.
+        invoked = ['agent_trace', 'agent_config', 'schema_lookup']
         expect(loop._depthGate('RUN1', FIX).hold).toBe(false)
 
         // A later draft naming a brand-new gap must NOT re-hold: the gate
@@ -1051,6 +1091,226 @@ describe('depth gate (#103) — _depthGate', () => {
         // Only the well-formed gap's tool actually releases it.
         invoked = ['agent_trace', 'agent_config', 'schema_lookup']
         expect(loop._depthGate('RUN1', FIX).hold).toBe(false)
+    })
+})
+
+// ===========================================================================
+// directed depth gate (#109) — target selection
+//
+// #103 recorded the UNION of every open gap's tools as the release set, so
+// one `agent_config` call (layers 2, 3 and 7) discharged the layer-4 and
+// layer-5 gaps having touched neither — DECISION.md §P2/§P7, measured 6 of 6.
+// The gate now picks ONE target gap and records only its DEDICATED tools.
+// Cost is unchanged: still exactly one forced beat.
+// ===========================================================================
+
+describe('directed depth gate (#109) — target selection', () => {
+    const GAP2 = { layer: 2, name: 'Instructions', reason: 'r2', tools: ['agent_config'] }
+    const GAP4 = { layer: 4, name: 'Data schemas', reason: 'r4', tools: ['schema_lookup'] }
+    const GAP5 = { layer: 5, name: 'Data', reason: 'r5', tools: ['query_table', 'log_analysis'] }
+    const GAP6 = { layer: 6, name: 'GenAI stack', reason: 'r6', tools: ['genai_log', 'log_analysis'] }
+    const FIX = { action: 'fix_report', report: { layers_swept: {} } }
+
+    function gateLoop(invoked, gaps, declared) {
+        return load({
+            auditLogger: fakeAuditLogger({ available: true, tools: invoked }),
+            fixReport: fakeFixReport([], gaps, declared),
+        })
+    }
+
+    test('RANKED: the gap with the most dedicated tool wins over a shared-tool gap', () => {
+        const gate = gateLoop(['agent_trace'], [GAP2, GAP4])._depthGate('RUN1', FIX)
+        expect(gate.hold).toBe(true)
+        expect(gate.target.layer).toBe(4)
+        expect(gate.target.source).toBe('ranked')
+        expect(gate.target.tools).toEqual(['schema_lookup'])
+    })
+
+    test('RANKED: ties break on the lowest layer number', () => {
+        // Layers 4 and 5 both have a fan-out-1 tool.
+        const gate = gateLoop(['agent_trace'], [GAP4, GAP5])._depthGate('RUN1', FIX)
+        expect(gate.target.layer).toBe(4)
+    })
+
+    test('RANKED: a fan-out-2 gap outranks a fan-out-3 gap', () => {
+        const gate = gateLoop(['agent_trace'], [GAP2, GAP6])._depthGate('RUN1', FIX)
+        expect(gate.target.layer).toBe(6)
+        expect(gate.target.tools).toEqual(['genai_log'])
+    })
+
+    test('NARROWED: a shared tool is dropped from the target gap release set', () => {
+        // layer 5 is reachable by query_table (fan-out 1) and log_analysis
+        // (fan-out 3, shared with layers 1 and 6). Only the dedicated one is
+        // recorded — a log_analysis call must not close a data gap without
+        // touching data.
+        const gate = gateLoop(['agent_trace'], [GAP5])._depthGate('RUN1', FIX)
+        expect(gate.target.tools).toEqual(['query_table'])
+    })
+
+    test('NARROWED: the shared tool does NOT release the hold', () => {
+        let invoked = ['agent_trace']
+        const loop = load({
+            auditLogger: {
+                invokedTools: function () {
+                    return { available: true, tools: invoked.slice() }
+                },
+            },
+            fixReport: fakeFixReport([], [GAP5]),
+        })
+
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(true)
+
+        invoked = ['agent_trace', 'log_analysis']
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(true)
+
+        invoked = ['agent_trace', 'log_analysis', 'query_table']
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(false)
+    })
+
+    test('THE #103 TILT IS CLOSED: agent_config no longer discharges a layer-4 gap', () => {
+        let invoked = ['agent_trace']
+        const loop = load({
+            auditLogger: {
+                invokedTools: function () {
+                    return { available: true, tools: invoked.slice() }
+                },
+            },
+            fixReport: fakeFixReport([], [GAP2, GAP4]),
+        })
+
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(true)
+
+        // §P2's measured behaviour: all six v5 runs released on exactly this.
+        invoked = ['agent_trace', 'agent_config']
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(true)
+
+        invoked = ['agent_trace', 'agent_config', 'schema_lookup']
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(false)
+    })
+
+    test('DECLARED: would_confirm beats the ranking when it names an open gap', () => {
+        // Ranking alone would pick layer 4; the model named layer 2.
+        const gate = gateLoop(['agent_trace'], [GAP2, GAP4], [2])._depthGate('RUN1', FIX)
+        expect(gate.target.layer).toBe(2)
+        expect(gate.target.source).toBe('declared')
+        expect(gate.target.tools).toEqual(['agent_config'])
+    })
+
+    test('DECLARED: the lowest-numbered declared layer that is open wins', () => {
+        const gate = gateLoop(['agent_trace'], [GAP2, GAP4, GAP5], [5, 2])._depthGate('RUN1', FIX)
+        expect(gate.target.layer).toBe(2)
+    })
+
+    test('DECLARED: a named layer that is NOT an open gap falls through to ranked', () => {
+        const gate = gateLoop(['agent_trace'], [GAP2, GAP4], [7])._depthGate('RUN1', FIX)
+        expect(gate.target.layer).toBe(4)
+        expect(gate.target.source).toBe('ranked')
+    })
+
+    test('STICKY: the target is recorded at the FIRST hold and a later draft cannot move it', () => {
+        let gaps = [GAP2, GAP4]
+        const loop = load({
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            fixReport: {
+                unsweptGaps: function () {
+                    return gaps
+                },
+                toolFanOut: function () {
+                    return { agent_config: 3, schema_lookup: 1, query_table: 1, log_analysis: 3 }
+                },
+                declaredLayers: function () {
+                    return []
+                },
+            },
+        })
+
+        const first = loop._depthGate('RUN1', FIX)
+        expect(first.target.layer).toBe(4)
+
+        gaps = [GAP5]
+        const second = loop._depthGate('RUN1', FIX)
+        expect(second.hold).toBe(true)
+        expect(second.target.layer).toBe(4)
+    })
+
+    test('FALLBACK: an unscorable gap set falls back to the union rather than latching', () => {
+        // A PaFixReport with no toolFanOut at all (an older or broken
+        // collaborator): no gap can be scored, so the gate must behave as
+        // #103 did rather than record an empty, unreleasable set.
+        let invoked = ['agent_trace']
+        const loop = load({
+            auditLogger: {
+                invokedTools: function () {
+                    return { available: true, tools: invoked.slice() }
+                },
+            },
+            fixReport: {
+                unsweptGaps: function () {
+                    return [GAP2, GAP4]
+                },
+            },
+        })
+
+        const gate = loop._depthGate('RUN1', FIX)
+        expect(gate.hold).toBe(true)
+        expect(gate.target).toBe(null)
+
+        invoked = ['agent_trace', 'agent_config']
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(false)
+    })
+
+    test('R-9: a throwing declaredLayers degrades to the ranked path, it does not trap the run', () => {
+        const loop = load({
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            fixReport: {
+                unsweptGaps: function () {
+                    return [GAP2, GAP4]
+                },
+                toolFanOut: function () {
+                    return { agent_config: 3, schema_lookup: 1 }
+                },
+                declaredLayers: function () {
+                    throw new Error('boom')
+                },
+            },
+        })
+
+        let gate
+        expect(() => {
+            gate = loop._depthGate('RUN1', FIX)
+        }).not.toThrow()
+        expect(gate.target.layer).toBe(4)
+        expect(gate.target.source).toBe('ranked')
+    })
+
+    test('R-9: a throwing toolFanOut degrades to the union fallback', () => {
+        const loop = load({
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            fixReport: {
+                unsweptGaps: function () {
+                    return [GAP2, GAP4]
+                },
+                toolFanOut: function () {
+                    throw new Error('boom')
+                },
+            },
+        })
+
+        let gate
+        expect(() => {
+            gate = loop._depthGate('RUN1', FIX)
+        }).not.toThrow()
+        expect(gate.hold).toBe(true)
+        expect(gate.target).toBe(null)
+    })
+
+    test('a fresh run() resets the recorded target', () => {
+        const loop = gateLoop(['agent_trace'], [GAP2, GAP4])
+        loop._depthGate('RUN1', FIX)
+        expect(loop._heldTarget).not.toBe(null)
+
+        loop._resetGate()
+        expect(loop._heldTarget).toBe(null)
     })
 })
 

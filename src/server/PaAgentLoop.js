@@ -171,10 +171,7 @@ PaAgentLoop.prototype = {
         // schema change. `_heldTools` is the union of tools that close the
         // gaps recorded at the FIRST hold; it is the only thing that can
         // release the gate afterwards.
-        this._gateReleased = false
-        this._heldGaps = null
-        this._heldTools = null
-        this._holdActive = null
+        this._resetGate()
 
         if (o.maxIterations > 0) this.MAX_ITERATIONS = o.maxIterations
         if (o.budgetMs > 0) this.BUDGET_MS = o.budgetMs
@@ -489,6 +486,19 @@ PaAgentLoop.prototype = {
     },
 
     /**
+     * Per-run gate state, cleared at the top of `run()`. Lifted out of the
+     * body when #109 added `_heldTarget`, so the reset has exactly one
+     * definition and a test can assert it.
+     */
+    _resetGate: function () {
+        this._gateReleased = false
+        this._heldGaps = null
+        this._heldTools = null
+        this._heldTarget = null
+        this._holdActive = null
+    },
+
+    /**
      * THE DEPTH GATE (issue #103) — the floor `run()`'s bounds are not.
      *
      * DECISION.md §O4: the custom harness swept 1/7 on all 20 rows of the v4
@@ -537,10 +547,10 @@ PaAgentLoop.prototype = {
      *          values.
      */
     _depthGate: function (runId, action) {
-        if (this._gateReleased) return { hold: false, gaps: [], kind: '' }
+        if (this._gateReleased) return { hold: false, gaps: [], kind: '', target: null }
 
         var trail = this._trailTools(runId)
-        if (!trail.readable) return { hold: false, gaps: [], kind: '' }
+        if (!trail.readable) return { hold: false, gaps: [], kind: '', target: null }
 
         // Once a hold has been issued, the recorded set is the ONLY thing
         // that can release the gate — later drafts never move it.
@@ -559,27 +569,33 @@ PaAgentLoop.prototype = {
         if (this._isArray(this._heldTools) && this._heldTools.length > 0) {
             if (this._anyOf(this._heldTools, trail.tools)) {
                 this._gateReleased = true
-                return { hold: false, gaps: [], kind: '' }
+                return { hold: false, gaps: [], kind: '', target: null }
             }
-            return { hold: true, gaps: this._heldGaps, kind: 'gaps' }
+            return { hold: true, gaps: this._heldGaps, kind: 'gaps', target: this._heldTarget }
         }
 
         if (!this._isPlainObject(action) || action.action !== 'fix_report') {
             // `answer` carries no `layers_swept`, so it declares no gap and
             // there is nothing to enforce against. Hold and ask for a layer
             // report; no run took this exit in the v4 pass.
-            return { hold: true, gaps: [], kind: 'no_layer_report' }
+            return { hold: true, gaps: [], kind: 'no_layer_report', target: null }
         }
 
         var open = this._openGaps(this._safeGaps(action.report), trail.tools)
         if (open.length === 0) {
             this._gateReleased = true
-            return { hold: false, gaps: [], kind: '' }
+            return { hold: false, gaps: [], kind: '', target: null }
         }
 
+        // #109: ONE target gap, and only its dedicated tools, instead of the
+        // union of every gap's tools. `null` means nothing was scorable —
+        // fall back to #103's union rather than recording an empty,
+        // unreleasable set (the same reasoning as the I2 guard above).
+        var target = this._selectTarget(open, action)
         this._heldGaps = open
-        this._heldTools = this._unionTools(open)
-        return { hold: true, gaps: open, kind: 'gaps' }
+        this._heldTarget = target
+        this._heldTools = target === null ? this._unionTools(open) : target.tools
+        return { hold: true, gaps: open, kind: 'gaps', target: target }
     },
 
     /**
@@ -637,6 +653,162 @@ PaAgentLoop.prototype = {
             }
         }
         return out
+    },
+
+    /**
+     * The FAN-OUT of a gap: the lowest fan-out among the tools that close it
+     * (issue #109). A gap reachable only by a tool that closes nothing else
+     * scores 1 and is the most worth forcing — nothing else the model does
+     * will produce that evidence incidentally.
+     *
+     * @returns {Number} the score, or -1 when no tool of this gap appears in
+     *          the fan-out map at all (an unknown tool, or a degraded map) —
+     *          which `_selectTarget` reads as "unscorable" and skips.
+     */
+    _gapFanOut: function (gap, fanOut) {
+        var tools = this._isArray(gap.tools) ? gap.tools : []
+        var best = -1
+        for (var i = 0; i < tools.length; i++) {
+            var score = fanOut[tools[i]]
+            if (typeof score !== 'number' || score < 1) continue
+            if (best === -1 || score < best) best = score
+        }
+        return best
+    },
+
+    /**
+     * The DEDICATED tools of a gap: those whose fan-out equals the gap's own
+     * (issue #109). Layer 5 keeps `query_table` and drops `log_analysis`,
+     * which also closes layers 1 and 6 and would otherwise discharge a data
+     * gap without touching data — DECISION.md §P6's second candidate remedy,
+     * falling out of the same rule as the ranking rather than needing one of
+     * its own.
+     */
+    _dedicatedTools: function (gap, fanOut) {
+        var best = this._gapFanOut(gap, fanOut)
+        if (best === -1) return []
+        var tools = this._isArray(gap.tools) ? gap.tools : []
+        var out = []
+        for (var i = 0; i < tools.length; i++) {
+            if (fanOut[tools[i]] === best) out.push(tools[i])
+        }
+        return out
+    },
+
+    /**
+     * ONE target gap, and the tools that can close it (issue #109).
+     *
+     * WHY ONE. #103 recorded the UNION of every open gap's tools, and
+     * `_layerToolMap` gives `agent_config` three layers against one apiece
+     * for layers 4 and 5 — so the cheapest compliance was a single
+     * `agent_config` call that discharged gaps on layers it never touched.
+     * Measured 6 of 6 on the v5 smoke (DECISION.md §P2/§P7): holds fired
+     * every time and the tools the acceptance test measures were reached
+     * zero times. Force was sufficient to make the model act and insufficient
+     * to make it act on the right layer.
+     *
+     * PRECEDENCE. The model's OWN `would_confirm` layer wins when it names an
+     * open gap — §P4 recorded a run naming layer 4 correctly and still not
+     * calling the tool that closes it, so the model can identify the missing
+     * layer and this binds it to its own naming. Otherwise the structural
+     * rank: lowest fan-out, ties to the lowest layer number.
+     *
+     * THE RANK NEVER MENTIONS A TOOL NAME, and neither does the block built
+     * from it (`_holdBlock`). §H8 item 3's non-vacuity condition is that the
+     * harness does not name the measured tools to the model; the rank is
+     * stated over the map's structure and would produce its ordering under a
+     * different map. The spec's §8 records the qualification this still
+     * carries, and issue #110 records the one that predates it.
+     *
+     * COST IS UNCHANGED: one target, one release, one forced beat. The
+     * stickiness argument in `_depthGate`'s header applies unaltered.
+     *
+     * @param {Array} open gaps the trail shows were never closed; already
+     *        filtered by `_openGaps` to plain objects with an array `tools`
+     * @param {Object} action the terminal action carrying the draft
+     * @returns {Object|null} {layer, source:'declared'|'ranked', tools} or
+     *          `null` when nothing is scorable — the caller then falls back
+     *          to #103's union rather than recording an unreleasable set
+     */
+    _selectTarget: function (open, action) {
+        var fanOut = this._safeFanOut()
+        var report = this._isPlainObject(action) ? action.report : null
+        var declared = this._safeDeclaredLayers(report)
+        var chosen = null
+        var source = ''
+        var i
+
+        // 1. Declared. `declaredLayers` is documented to return ascending,
+        //    de-duplicated layers, but this loop does not trust that order —
+        //    it scans every declared entry and keeps the lowest-numbered
+        //    match, so a collaborator that violates its own contract (or a
+        //    test double that does not bother sorting) still yields the
+        //    right target rather than whichever declared entry happened to
+        //    be scanned first.
+        for (var d = 0; d < declared.length; d++) {
+            for (i = 0; i < open.length; i++) {
+                if (open[i].layer === declared[d]) {
+                    if (chosen === null || open[i].layer < chosen.layer) {
+                        chosen = open[i]
+                        source = 'declared'
+                    }
+                    break
+                }
+            }
+        }
+
+        // 2. Ranked. `open` arrives in ascending layer order and the
+        //    comparison is STRICTLY less-than, so the first minimum wins —
+        //    which is the ascending tie-break, without a second sort.
+        if (chosen === null) {
+            var best = -1
+            for (i = 0; i < open.length; i++) {
+                var score = this._gapFanOut(open[i], fanOut)
+                if (score === -1) continue
+                if (best === -1 || score < best) {
+                    best = score
+                    chosen = open[i]
+                }
+            }
+            source = 'ranked'
+        }
+
+        if (chosen === null) return null
+
+        var tools = this._dedicatedTools(chosen, fanOut)
+        if (tools.length === 0) return null
+
+        return { layer: chosen.layer, source: source, tools: tools }
+    },
+
+    /**
+     * `PaFixReport.toolFanOut()`, guarded. Same standard as
+     * `_safeSchemaText`/`_safeGaps`: a broken or absent PaFixReport degrades
+     * the gate to #103's union behaviour, never trapping the run.
+     */
+    _safeFanOut: function () {
+        try {
+            var map = this._reports().toolFanOut()
+            return this._isPlainObject(map) ? map : {}
+        } catch (e) {
+            // R-1: `e` is deliberately not inspected.
+            return {}
+        }
+    },
+
+    /**
+     * `PaFixReport.declaredLayers()`, guarded. A failure here means "the
+     * model declared nothing", which falls to the structural rank — a strictly
+     * milder degradation than losing the gate.
+     */
+    _safeDeclaredLayers: function (report) {
+        try {
+            var layers = this._reports().declaredLayers(report)
+            return this._isArray(layers) ? layers : []
+        } catch (e) {
+            // R-1: `e` is deliberately not inspected.
+            return []
+        }
     },
 
     _anyOf: function (candidates, invoked) {
