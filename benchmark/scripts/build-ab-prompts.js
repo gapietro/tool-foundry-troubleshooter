@@ -44,18 +44,18 @@ const OLD_CONTRACT =
 
 const EXECUTION = 'b07dc9082baa4314f243fed2ce91bf4b'
 
-// The hold-block variable under test (#116). NEW_ITEM1 is what `_holdBlock`
-// emits after Task 2; OLD_ITEM1 is what it emitted through v6 and v7, and is
-// substituted back in to build the control arm. Composing the control by
-// substitution rather than by hand is what makes the arms provably identical
-// everywhere else.
-const NEW_ITEM1 =
-    '  1. What did the last tool result actually establish? Quote the specific value you\n' +
-    '     are relying on, and the table and field it came from.'
-
-const OLD_ITEM1 =
+// The hold-block variable under test (#116). DEPLOYED_ITEM1 is what
+// `_holdBlock` emits; CANDIDATE_ITEM1 is the rewording that was tested and
+// reverted, and is substituted in to build the treatment arm. Composing the
+// treatment by substitution rather than by hand is what makes the arms
+// provably identical everywhere else.
+const DEPLOYED_ITEM1 =
     '  1. What did the last tool result actually establish? Quote the specific field\n' +
     '     or value you are relying on.'
+
+const CANDIDATE_ITEM1 =
+    '  1. What did the last tool result actually establish? Quote the specific value you\n' +
+    '     are relying on, and the table and field it came from.'
 
 // The gap set and target handed to `_holdBlock`. Layer 4 at fan-out 1 is the
 // shape that directs a run at schema_lookup, which is the tool whose contract
@@ -141,33 +141,33 @@ function buildPrompt(contract, scenario, holdBlock) {
     return lines.join('\n')
 }
 
-// The treatment arm's hold is the DEPLOYED text, read out of PaAgentLoop
-// rather than retyped — the v7 hold arms were composed ad hoc and are not
-// reproducible from the repo, which is what this closes.
+// The CONTROL arm's hold is the DEPLOYED text, read out of PaAgentLoop rather
+// than retyped — the v7 hold arms were composed ad hoc and are not
+// reproducible from the repo, which is what this closes. The TREATMENT arm is
+// the candidate rewording #116 tested and reverted (S6 REFUTED,
+// raw-evidence-v8-hold-item1-ab.md); it is kept so the run stays reproducible.
 //
-// NEW_ITEM1 is pinned to ground truth by the indexOf(NEW_ITEM1) check below,
-// but OLD_ITEM1 has no live source — v6/v7 wording is retired, not something
-// any script include still emits. Without an anchor, a future edit could
-// silently drift OLD_ITEM1 away from what v6/v7 actually rendered and the
-// per-scenario "differs ONLY in item 1" check would keep passing regardless,
-// because both the substitution and the invariant re-use the same (now
-// wrong) constant. `raw-evidence-v5-depth-smoke.md` is published evidence
-// recording the hold block as it was actually rendered in the v5 smoke, so
-// checking OLD_ITEM1 against it is a genuine historical anchor rather than a
-// copy of the constant checking itself.
-const OLD_ITEM1_EVIDENCE_FILE = path.join(__dirname, '..', 'raw-evidence-v5-depth-smoke.md')
+// TWO anchors, because one is not enough. DEPLOYED_ITEM1 is checked against
+// _holdBlock's live output below — that catches a drift in the source. It is
+// ALSO checked against raw-evidence-v5-depth-smoke.md, published evidence
+// recording the hold block as it was actually rendered in the v5 smoke, which
+// catches the case where the source and this constant drift TOGETHER. Without
+// the second anchor the per-scenario "differs ONLY in item 1" check would keep
+// passing against a wrong claim about what the gate emits, because the
+// substitution and the invariant re-use the same constant.
+const DEPLOYED_ITEM1_EVIDENCE_FILE = path.join(__dirname, '..', 'raw-evidence-v5-depth-smoke.md')
 
 function holdArms() {
     const ctx = loadScriptInclude('PaAgentLoop.js', { JSON: JSON })
-    const treatment = new ctx.PaAgentLoop({})._holdBlock(HOLD_GAPS, 'gaps', HOLD_TARGET)
-    if (treatment.indexOf(NEW_ITEM1) === -1) {
-        throw new Error('_holdBlock does not carry NEW_ITEM1 — Task 2 not applied, or the wording drifted')
+    const control = new ctx.PaAgentLoop({})._holdBlock(HOLD_GAPS, 'gaps', HOLD_TARGET)
+    if (control.indexOf(DEPLOYED_ITEM1) === -1) {
+        throw new Error('_holdBlock does not carry DEPLOYED_ITEM1 — the deployed wording drifted')
     }
-    const evidence = fs.readFileSync(OLD_ITEM1_EVIDENCE_FILE, 'utf8')
-    if (evidence.indexOf(OLD_ITEM1) === -1) {
-        throw new Error('OLD_ITEM1 does not match ' + OLD_ITEM1_EVIDENCE_FILE + ' — the v6/v7 wording drifted')
+    const evidence = fs.readFileSync(DEPLOYED_ITEM1_EVIDENCE_FILE, 'utf8')
+    if (evidence.indexOf(DEPLOYED_ITEM1) === -1) {
+        throw new Error('DEPLOYED_ITEM1 does not match ' + DEPLOYED_ITEM1_EVIDENCE_FILE + ' — the wording drifted')
     }
-    return { treatment: treatment, control: treatment.split(NEW_ITEM1).join(OLD_ITEM1) }
+    return { control: control, treatment: control.split(DEPLOYED_ITEM1).join(CANDIDATE_ITEM1) }
 }
 
 const outDir = process.argv[2]
@@ -199,7 +199,7 @@ if (!holdMode) {
         const treatment = buildPrompt(NEW_CONTRACT, scenario, hold.treatment)
         write(scenario.id + '.control', control)
         write(scenario.id + '.treatment', treatment)
-        const same = control.split(OLD_ITEM1).join('@@') === treatment.split(NEW_ITEM1).join('@@')
+        const same = control.split(DEPLOYED_ITEM1).join('@@') === treatment.split(CANDIDATE_ITEM1).join('@@')
         console.log(scenario.id, 'differs ONLY in item 1:', same)
         if (!same) allSame = false
     }

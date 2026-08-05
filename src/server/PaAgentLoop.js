@@ -1075,20 +1075,21 @@ PaAgentLoop.prototype = {
      * finished artifact, so it SUMMARISED instead of INTERROGATING. Demanding
      * a quoted field buys one generation whose job is reading.
      *
-     * ITEM 1 NAMES A VALUE, NOT A FIELD (#116). It used to say "quote the
-     * specific FIELD or value", which offered a bare field name as a
-     * legitimate quotable unit three lines above "Call a tool that reaches
-     * layer N" — in a block that renders LAST in the prompt, after
-     * `_responseContract()`, by the M3 ordering below. v7 §4 measured the
-     * consequence on the real model seam: without a hold, 3 of 3 trials
-     * produced well-formed JSON; with a hold, 3 of 3 degraded to bare scalars,
-     * two of them dropping the table entirely (`"priority"`,
-     * `"assignment_group"` — both lexically valid table names, so
-     * `_normalizeArgs` cannot tell them from a real one). Naming the value and
-     * its table together removes the standalone-field reading. This does NOT
-     * try to push arguments back to object form: v7's R3 was refuted on
-     * exactly that point, both arms stayed scalar, and a bare scalar is legal
-     * for the tool in question. The defect is WHICH scalar, not that it is one.
+     * ITEM 1'S WORDING WAS TESTED AND LEFT ALONE (#116). v7 §4 measured the
+     * hold pushing `schema_lookup` arguments onto bare scalars, two of which
+     * dropped the table entirely (`"priority"`, `"assignment_group"` — both
+     * lexically valid table names, so `_normalizeArgs` cannot tell them from
+     * a real one). The hypothesis was that "the specific FIELD or value"
+     * below offers a bare field name as a quotable unit, three lines above
+     * "Call a tool that reaches layer N", in a block that renders LAST in the
+     * prompt. A paired A/B against a rewording that named the value and its
+     * table together moved NOTHING: six scenarios, twelve trials, every pair
+     * byte-identical, including the one scenario that reproduced the
+     * table-omitted argument (`benchmark/raw-evidence-v8-hold-item1-ab.md`,
+     * S6 REFUTED). The rewording was reverted rather than shipped. The
+     * mechanism behind that residual is UNKNOWN — do not re-litigate this
+     * wording without a scenario set where the defect reproduces more than
+     * once.
      *
      * IT DEFERS, IT DOES NOT PENALISE. #88 raised the cost of stopping and
      * the model paid in the only currency it controls. Here the draft is
@@ -1130,8 +1131,8 @@ PaAgentLoop.prototype = {
         var directed = this._isPlainObject(target) && typeof target.layer === 'number'
 
         lines.push('Before concluding:')
-        lines.push('  1. What did the last tool result actually establish? Quote the specific value you')
-        lines.push('     are relying on, and the table and field it came from.')
+        lines.push('  1. What did the last tool result actually establish? Quote the specific field')
+        lines.push('     or value you are relying on.')
 
         if (!directed) {
             // R-9: no usable target (an unscorable gap set, or a degraded
