@@ -1127,8 +1127,12 @@ describe('directed depth gate (#109) — target selection', () => {
     })
 
     test('RANKED: ties break on the lowest layer number', () => {
-        // Layers 4 and 5 both have a fan-out-1 tool.
-        const gate = gateLoop(['agent_trace'], [GAP4, GAP5])._depthGate('RUN1', FIX)
+        // Layers 4 and 5 both have a fan-out-1 tool. `open` is passed
+        // UNSORTED (layer 5 before layer 4) so this only passes if the
+        // tie-break is an explicit layer comparison — a bare
+        // strictly-less-than-on-score loop would pick whichever of the two
+        // came first in `open`, which here is the WRONG one.
+        const gate = gateLoop(['agent_trace'], [GAP5, GAP4])._depthGate('RUN1', FIX)
         expect(gate.target.layer).toBe(4)
     })
 

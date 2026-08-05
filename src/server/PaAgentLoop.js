@@ -530,21 +530,33 @@ PaAgentLoop.prototype = {
      * act rides the bounds to `outcome:'partial'`, and that tail is counted
      * rather than special-cased (issue #103, prediction P4).
      *
-     * KNOWN TILT, ACCEPTED: `_layerToolMap()` gives `agent_config` three
-     * layers (2, 3, 7) against one apiece for layers 4 and 5, so the cheapest
-     * compliance is a single `agent_config` call — a built-in tilt AWAY from
-     * the tools the acceptance test measures. Pre-registered as P7 on #103
-     * rather than engineered around: if it happens the trail says so plainly,
-     * and "the gate mandates depth but does not direct it" is a clean
-     * finding that directs the next iteration.
+     * KNOWN TILT, ACCEPTED UNDER #103, CLOSED BY #109: `_layerToolMap()` gives
+     * `agent_config` three layers (2, 3, 7) against one apiece for layers 4
+     * and 5, so recording the UNION of every open gap's tools (as #103 did)
+     * made the cheapest compliance a single `agent_config` call — a built-in
+     * tilt AWAY from the tools the acceptance test measures. Pre-registered
+     * as P7 on #103 rather than engineered around at the time: if it
+     * happened the trail would say so plainly. It did — DECISION.md
+     * §P2/§P7 measured six of six v5 releases on exactly `agent_config`,
+     * with the layer-4/layer-5 tools it never covers reached zero times.
+     * That finding is what #109 engineers around: `_selectTarget` now picks
+     * ONE target gap and `_heldTools` records only that gap's DEDICATED
+     * tools (`_dedicatedTools`), so a shared tool like `agent_config` can no
+     * longer discharge a gap it never touched. See `_selectTarget`'s header
+     * for the ranking and precedence rules.
      *
      * @param {String} runId
      * @param {Object} action the terminal action the model just emitted
-     * @returns {Object} {hold:Boolean, gaps:Array, kind:'gaps'|'no_layer_report'|''}
+     * @returns {Object} {hold:Boolean, gaps:Array, kind:'gaps'|'no_layer_report'|'',
+     *          target:{layer:Number,source:'declared'|'ranked',tools:[String]}|null}
      *          — `kind` is `''` on every ALLOW path (already released, an
      *          unreadable trail, every declared gap closed, or no gap
      *          declared at all); only the two HOLD paths use the other two
-     *          values.
+     *          values. `target` (issue #109) is the single gap `_heldTools`
+     *          was narrowed to, and is `null` on every ALLOW path, on the
+     *          `no_layer_report` path, and whenever `_selectTarget` found
+     *          nothing scorable and `_heldTools` fell back to the #103
+     *          union instead.
      */
     _depthGate: function (runId, action) {
         if (this._gateReleased) return { hold: false, gaps: [], kind: '', target: null }
@@ -757,15 +769,17 @@ PaAgentLoop.prototype = {
             }
         }
 
-        // 2. Ranked. `open` arrives in ascending layer order and the
-        //    comparison is STRICTLY less-than, so the first minimum wins —
-        //    which is the ascending tie-break, without a second sort.
+        // 2. Ranked. Ties break on the lowest layer number via an explicit
+        //    comparison against `chosen.layer` — not by relying on `open`
+        //    arriving in ascending order, so a differently-ordered `open`
+        //    (e.g. from an `unsweptGaps` that does not sort) cannot change
+        //    the result. Same defensive posture as the declared loop above.
         if (chosen === null) {
             var best = -1
             for (i = 0; i < open.length; i++) {
                 var score = this._gapFanOut(open[i], fanOut)
                 if (score === -1) continue
-                if (best === -1 || score < best) {
+                if (best === -1 || score < best || (score === best && open[i].layer < chosen.layer)) {
                     best = score
                     chosen = open[i]
                 }
