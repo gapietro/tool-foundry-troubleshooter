@@ -1596,7 +1596,11 @@ describe('depth gate (#103) — wired into the loop', () => {
         expect(second).toContain('HOLD')
         expect(second).toContain('layer 4 (Data schemas)')
         expect(second).toContain('no schema read was needed')
-        expect(second).toContain('most change your conclusion')
+        // #109: the loop now wires `gate.target` through to `_holdBlock`,
+        // so a single-gap hold (GAP4, no declared layer) renders the
+        // RANKED directed wording rather than #103's generic item 2.
+        expect(second).toMatch(/no other line of investigation reaches/i)
+        expect(second).toContain('Call a tool that reaches layer 4')
         // The #72 regression guard: the block must arrive WHOLE, not as a
         // 200-char digest stub.
         expect(second).not.toContain('more chars]')
@@ -1789,5 +1793,133 @@ describe('depth gate (#103) — wired into the loop', () => {
         // are re-derived fresh from the CURRENT draft — the second draft
         // declares no gap at all, so it passes.
         expect(res.outcome).toBe('fix_report')
+    })
+})
+
+// ===========================================================================
+// directed depth gate (#109) — the directed interrogation
+//
+// Item 2 used to ask the model which layer mattered most. The harness now
+// answers that itself, so leaving the question would be theatre. It still
+// names a LAYER and never a tool — see the #103 GUARD tests, which must keep
+// passing unchanged.
+// ===========================================================================
+
+describe('directed depth gate (#109) — _holdBlock', () => {
+    const GAPS = [
+        { layer: 2, name: 'Instructions', reason: 'the trace showed no routing problem', tools: ['agent_config'] },
+        { layer: 4, name: 'Data schemas', reason: 'no schema read was needed', tools: ['schema_lookup'] },
+    ]
+
+    test('RANKED: states which layer must be closed, and why that one', () => {
+        const block = load()._holdBlock(GAPS, 'gaps', { layer: 4, source: 'ranked', tools: ['schema_lookup'] })
+        expect(block).toContain('layer 4')
+        expect(block).toMatch(/no other line of investigation reaches/i)
+        expect(block).toMatch(/Call a tool that reaches layer 4/i)
+    })
+
+    test('DECLARED: quotes the model back to itself instead', () => {
+        const block = load()._holdBlock(GAPS, 'gaps', { layer: 2, source: 'declared', tools: ['agent_config'] })
+        expect(block).toContain('layer 2')
+        expect(block).toMatch(/your own report names it/i)
+        expect(block).toMatch(/Call a tool that reaches layer 2/i)
+    })
+
+    test('both gaps still appear — the target directs, it does not hide the rest', () => {
+        const block = load()._holdBlock(GAPS, 'gaps', { layer: 4, source: 'ranked', tools: ['schema_lookup'] })
+        expect(block).toContain('layer 2 (Instructions)')
+        expect(block).toContain('layer 4 (Data schemas)')
+    })
+
+    test('item 1 is unchanged — it still asks for a quoted field', () => {
+        const block = load()._holdBlock(GAPS, 'gaps', { layer: 4, source: 'ranked', tools: ['schema_lookup'] })
+        expect(block).toMatch(/quote/i)
+    })
+
+    test('the draft-is-preserved closing survives verbatim', () => {
+        const block = load()._holdBlock(GAPS, 'gaps', { layer: 4, source: 'ranked', tools: ['schema_lookup'] })
+        expect(block).toContain('preserved')
+        expect(block).toMatch(/resubmit/i)
+    })
+
+    test.each([undefined, null, {}, { layer: 'four' }, 42])(
+        'R-9: a missing or malformed target (%p) keeps the #103 generic wording rather than throwing',
+        (target) => {
+            let block
+            expect(() => {
+                block = load()._holdBlock(GAPS, 'gaps', target)
+            }).not.toThrow()
+            expect(block).toContain('HOLD')
+            expect(block).toMatch(/did it not settle|not settle/i)
+        }
+    )
+
+    test('GUARD: the directed variants still never name a measured tool', () => {
+        const ranked = load()._holdBlock(
+            [{ layer: 4, name: 'Data schemas', reason: 'r', tools: ['schema_lookup'] }],
+            'gaps',
+            { layer: 4, source: 'ranked', tools: ['schema_lookup'] }
+        )
+        const declared = load()._holdBlock(
+            [{ layer: 5, name: 'Data', reason: 'r', tools: ['query_table'] }],
+            'gaps',
+            { layer: 5, source: 'declared', tools: ['query_table'] }
+        )
+        ;[ranked, declared].forEach((block) => {
+            expect(block).not.toContain('schema_lookup')
+            expect(block).not.toContain('query_table')
+            expect(block).not.toContain('genai_log')
+        })
+    })
+})
+
+describe('directed depth gate (#109) — _holdNote', () => {
+    const GAPS = [
+        { layer: 2, name: 'Instructions', reason: 'r', tools: ['agent_config'] },
+        { layer: 4, name: 'Data schemas', reason: 'r', tools: ['schema_lookup'] },
+    ]
+
+    test('records the target layer and the selection source', () => {
+        const note = load()._holdNote({
+            kind: 'gaps',
+            gaps: GAPS,
+            target: { layer: 4, source: 'ranked', tools: ['schema_lookup'] },
+        })
+        expect(note).toContain('layer 4')
+        expect(note).toContain('ranked')
+    })
+
+    test('records the declared source distinctly — the smoke tells the two paths apart by this', () => {
+        const note = load()._holdNote({
+            kind: 'gaps',
+            gaps: GAPS,
+            target: { layer: 2, source: 'declared', tools: ['agent_config'] },
+        })
+        expect(note).toContain('declared')
+    })
+
+    test('stays inside DIGEST_CHARS (200) — the #72 / §G3a constraint', () => {
+        const note = load()._holdNote({
+            kind: 'gaps',
+            gaps: [
+                { layer: 1, name: 'Execution', reason: 'r', tools: ['agent_trace'] },
+                { layer: 2, name: 'Instructions', reason: 'r', tools: ['agent_config'] },
+                { layer: 3, name: 'Tools', reason: 'r', tools: ['agent_config'] },
+                { layer: 4, name: 'Data schemas', reason: 'r', tools: ['schema_lookup'] },
+                { layer: 5, name: 'Data', reason: 'r', tools: ['query_table'] },
+                { layer: 6, name: 'GenAI stack', reason: 'r', tools: ['genai_log'] },
+                { layer: 7, name: 'Platform', reason: 'r', tools: ['agent_config'] },
+            ],
+            target: { layer: 4, source: 'declared', tools: ['schema_lookup'] },
+        })
+        expect(note.length).toBeLessThanOrEqual(200)
+    })
+
+    test('R-9: a missing target is omitted rather than dereferenced', () => {
+        let note
+        expect(() => {
+            note = load()._holdNote({ kind: 'gaps', gaps: GAPS })
+        }).not.toThrow()
+        expect(note).toContain('HOLD')
     })
 })

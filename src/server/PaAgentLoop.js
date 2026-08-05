@@ -69,6 +69,13 @@
  * `_depthGate` and `_holdBlock` for the full rationale, and issue #103 for
  * the predictions this was built against.
  *
+ * `_depthGate` NOW NAMES ONE LAYER, NOT THE FULL GAP SET (issue #109)
+ * DECISION.md §P found that a hold naming every open layer let the model
+ * discharge the gate with whichever tool happened to be cheapest, closing
+ * layers it never actually investigated. `_selectTarget` picks a single
+ * layer to hold against, and `_holdBlock`/`_holdNote` render that one
+ * target — the released set narrows to its tools alone.
+ *
  * `_buildPrompt(playbook, promptBlock, context, request)` TAKES PLAYBOOK AS
  * AN ARGUMENT, NOT A HARDCODED STRING
  * The playbook is `docs/agent/agent-doctor-instructions.md` — the SAME text
@@ -283,7 +290,7 @@ PaAgentLoop.prototype = {
             // not in `PaFixReport.validate`.
             var gate = this._depthGate(runId, action)
             if (gate.hold) {
-                this._holdActive = this._holdBlock(gate.gaps, gate.kind)
+                this._holdActive = this._holdBlock(gate.gaps, gate.kind, gate.target)
                 this._runs().appendTranscript(runId, {
                     actor: 'system',
                     result_digest: this._holdNote(gate),
@@ -862,7 +869,7 @@ PaAgentLoop.prototype = {
      * preserved and resubmittable unchanged; there is no way to satisfy the
      * hold by writing better. Stopping is not expensive — it is unavailable.
      */
-    _holdBlock: function (gaps, kind) {
+    _holdBlock: function (gaps, kind, target) {
         var lines = ['## HOLD — a terminal action is not available yet', '']
 
         if (kind === 'no_layer_report') {
@@ -888,12 +895,39 @@ PaAgentLoop.prototype = {
         }
         lines.push('The trail shows no tool call has reached any of them.')
         lines.push('')
+        // #109: items 2 and 3 are DIRECTED. #103 asked the model which layer
+        // mattered most and accepted any tool call in reply, so the cheapest
+        // release — one `agent_config` call, which the map credits with three
+        // layers — discharged gaps on layers it never touched (§P2/§P7, six
+        // of six). The target is chosen in `_selectTarget`; this only renders
+        // it, and it renders a LAYER NUMBER, never a tool name.
+        var directed = this._isPlainObject(target) && typeof target.layer === 'number'
+
         lines.push('Before concluding:')
         lines.push('  1. What did the last tool result actually establish? Quote the specific field')
         lines.push('     or value you are relying on.')
-        lines.push('  2. What did it NOT settle? Of the layers above, name the one whose answer would')
-        lines.push('     most change your conclusion.')
-        lines.push('  3. Call a tool that reaches that layer.')
+
+        if (!directed) {
+            // R-9: no usable target (an unscorable gap set, or a degraded
+            // PaFixReport) — fall back to #103's wording rather than
+            // rendering a hold that directs at nothing.
+            lines.push('  2. What did it NOT settle? Of the layers above, name the one whose answer would')
+            lines.push('     most change your conclusion.')
+            lines.push('  3. Call a tool that reaches that layer.')
+        } else {
+            if (target.source === 'declared') {
+                lines.push(
+                    '  2. Layer ' + target.layer + ' is the one this run needs closed — your own report ' +
+                        'names it as what would confirm your finding.'
+                )
+            } else {
+                lines.push(
+                    '  2. Of the layers above, layer ' + target.layer + ' is the one no other line of ' +
+                        'investigation reaches.'
+                )
+            }
+            lines.push('  3. Call a tool that reaches layer ' + target.layer + '.')
+        }
         lines.push('')
         lines.push(
             'Your draft is preserved. Once the trail shows you did, a terminal action is available ' +
@@ -930,7 +964,13 @@ PaAgentLoop.prototype = {
             if (!this._isPlainObject(g)) continue
             nums.push(g.layer)
         }
-        return 'HOLD: terminal action refused — layer(s) ' + nums.join(', ') + ' declared NOT_SWEPT with no tool call behind them.'
+        var note = 'HOLD: terminal action refused — '
+        if (this._isPlainObject(gate.target) && typeof gate.target.layer === 'number') {
+            // #109: the SOURCE is what lets a smoke tell the declared path
+            // from the ranked one after the fact, without re-deriving it.
+            note += 'layer ' + gate.target.layer + ' (' + this._str(gate.target.source) + ') must be reached; '
+        }
+        return note + 'layer(s) ' + nums.join(', ') + ' declared NOT_SWEPT with no tool call behind them.'
     },
 
     /**
