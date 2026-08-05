@@ -80,6 +80,69 @@ describe('argument handling (R-9)', () => {
     })
 })
 
+/**
+ * Issue #111, measured live in the v6 smoke: two of six runs called this tool
+ * with `table:incident` — the PARAMETER NAME prefixed onto the value. Root
+ * cause is the contract's `table.field` shorthand, whose notation cannot tell
+ * a model that `table` is a placeholder rather than literal text (fixed in
+ * PaToolRegistry + agent-doctor.now.ts).
+ *
+ * These two behaviours are the tool-side guard, and the SECOND one is the one
+ * that matters: an unparseable name previously produced a confident
+ * `table_does_not_exist`, which is a claim about the INSTANCE. A model that
+ * reasons from it concludes the table is missing and files a plausible,
+ * fully-audited, wrong root cause. A malformed name must never be able to say
+ * anything about what exists.
+ */
+describe('malformed table names (#111)', () => {
+    it('strips a parameter-name prefix and finds the real table', () => {
+        const { result } = run('table:sn_aia_agent', world())
+
+        expect(result.data.mode).toBe('table')
+        expect(result.data.table_exists).toBe(true)
+        expect(result.data.requested.table).toBe('sn_aia_agent')
+    })
+
+    it('records the repair rather than silently erasing it', () => {
+        // The issue is explicit: normalise LOUDLY. A silent strip would make
+        // the two measured calls work and destroy the evidence that the model
+        // is malforming arguments at all.
+        const { result } = run('table:sn_aia_agent', world())
+
+        expect(result.data.notes.join(' ')).toMatch(/table:sn_aia_agent/)
+        expect(result.data.notes.join(' ')).toMatch(/parameter name/i)
+    })
+
+    it('accepts the = form as well as the : form', () => {
+        // The tool's own no-table note tells the model `table=<name>`, so the
+        // `=` spelling is one this contract actively invites.
+        expect(run('table=sn_aia_agent', world()).result.data.requested.table).toBe('sn_aia_agent')
+    })
+
+    it('does NOT report a still-malformed name as table_does_not_exist', () => {
+        const { result } = run('not a table name!', world())
+
+        const findings = result.data.findings.map((f) => f.finding)
+        expect(findings).not.toContain('table_does_not_exist')
+        expect(findings).toContain('table_name_malformed')
+    })
+
+    it('says the malformed name settles nothing about what exists', () => {
+        const { result } = run('not a table name!', world())
+
+        const finding = result.data.findings[0]
+        expect(finding.why).toMatch(/not a well-formed table name/i)
+        expect(finding.why).toMatch(/says nothing about whether/i)
+    })
+
+    it('still reports a well-formed name that is genuinely absent as absent', () => {
+        // The guard must not swallow the real finding it sits next to.
+        const { result } = run('sn_aia_agnet', world())
+
+        expect(result.data.findings.map((f) => f.finding)).toContain('table_does_not_exist')
+    })
+})
+
 describe('existence — the distinction LLD 4.4 asks for', () => {
     it('reports a table that is genuinely not there', () => {
         const { result } = run('sn_aia_agnet', world())

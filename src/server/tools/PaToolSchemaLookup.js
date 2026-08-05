@@ -76,21 +76,74 @@ PaToolSchemaLookup.prototype = {
                 )
             }
 
+            if (a._prefix_stripped) {
+                // LOUDLY (issue #111). Repairing this silently would make the
+                // call work and erase the only evidence that the model is
+                // malforming arguments — which is exactly how it went
+                // unnoticed for a whole smoke: every measure counted which
+                // tools were invoked, and this one was.
+                data.notes.push(
+                    'The argument arrived as "' +
+                        a._prefix_stripped +
+                        '" — the parameter name prefixed onto its own value. It was read as "' +
+                        (a.table || '') +
+                        '". Pass the table name on its own, or a JSON object, and note that this ' +
+                        'call is recorded in the audit trail as it was sent, not as it was repaired.'
+                )
+            }
+
             data.requested = { table: a.table || null, field: a.field || null }
 
             if (!a.table) {
                 // R-9: a missing argument is expected, not a fault.
                 data.mode = 'no_table'
                 data.notes.push(
-                    'No table was supplied, so there is nothing to describe. Call with table=<name> for the ' +
-                        'full column list, or table=<name>, field=<column> for one column plus its choice ' +
-                        'values. This is not an error — a missing argument is expected (DESIGN.md R-9).'
+                    // #111: this note used to say `table=<name>`, modelling the
+                    // very parameter-prefixed shape that turned up in two live
+                    // runs as `table:incident`. It now shows the value alone.
+                    'No table was supplied, so there is nothing to describe. Call with the table name by ' +
+                        'itself for the full column list, or a JSON object with table and field for one ' +
+                        'column plus its choice values. This is not an error — a missing argument is ' +
+                        'expected (DESIGN.md R-9).'
                 )
                 data.evidence_basis = this._evidenceBasis(data)
                 return { success: true, data: data }
             }
 
             data.mode = a.field ? 'field' : 'table'
+
+            if (!this.TABLE_NAME_PATTERN.test(a.table)) {
+                // The finding this REPLACES is the defect (issue #111). A name
+                // that cannot belong to any table produces an empty
+                // sys_db_object read, which the absence branch below reports
+                // as "a genuine absence — the table name is wrong". That
+                // sentence is a claim about the INSTANCE, backed by a real
+                // read and a success:true audit row, and a model reasoning
+                // from it files a plausible, fully-audited, wrong root cause.
+                // A malformed name must settle nothing about what exists.
+                data.table_exists = 'unknown'
+                data.findings = [
+                    {
+                        finding: 'table_name_malformed',
+                        severity: 'high',
+                        table: a.table,
+                        why:
+                            '"' +
+                            a.table +
+                            '" is not a well-formed table name — table names are letters, digits, ' +
+                            'underscores and $ only. No lookup was attempted, so this says nothing about ' +
+                            'whether the table you meant exists. This is NOT the table_does_not_exist ' +
+                            'finding: that one is a read that came back empty, and this one is a read ' +
+                            'that was never worth making.',
+                        next_step:
+                            'Re-send the call with the table name on its own — "incident", not ' +
+                            '"table:incident" — or as a JSON object. Then read the result before ' +
+                            'concluding anything about the table.',
+                    },
+                ]
+                data.evidence_basis = this._evidenceBasis(data)
+                return { success: true, data: data }
+            }
 
             phase = 'check_table_exists'
             var existence = this._tableExists(a.table, data)
@@ -233,6 +286,27 @@ PaToolSchemaLookup.prototype = {
     // Arguments (R-9)
     // =======================================================================
 
+    /**
+     * A legal ServiceNow table name. Deliberately narrow: anything outside
+     * this set cannot name a table, so a lookup on it can only ever come back
+     * absent — see `table_name_malformed` in `execute` for why that matters.
+     */
+    TABLE_NAME_PATTERN: /^[A-Za-z0-9_$]+$/,
+
+    /**
+     * The parameter name prefixed onto its own value — `table:incident`.
+     *
+     * MEASURED, NOT ANTICIPATED (issue #111). Two of six v6 runs called this
+     * tool this way, on two different seeds. Root cause was this tool's own
+     * contract advertising "the shorthand table.field", whose notation gives a
+     * model no way to tell that `table` is a placeholder and not literal text
+     * — it is also the JSON key name, one sentence earlier. That wording is
+     * fixed at the source (PaToolRegistry + agent-doctor.now.ts); this is the
+     * guard for the calls already in flight, and for any model that reads the
+     * `table=<name>` spelling in our own no-table note below.
+     */
+    PARAM_PREFIX_PATTERN: /^(?:table|table_name)\s*[:=]\s*/i,
+
     _normalizeArgs: function (args) {
         var k = this._k()
         var raw = args
@@ -248,13 +322,24 @@ PaToolSchemaLookup.prototype = {
                 raw = parsed
             } else if (s.charAt(0) === '{' || s.charAt(0) === '[') {
                 return { _parse_error: true }
-            } else if (s.indexOf('.') !== -1) {
-                // "incident.priority" is the natural way to name a field and
-                // costs nothing to accept.
-                var parts = s.split('.')
-                return { table: k.trim(parts[0]), field: k.trim(parts[1]) }
             } else {
-                return { table: s }
+                // Strip before the `.` split, so `table:incident.priority`
+                // still reaches the shorthand path intact.
+                var bare = k.trim(s.replace(this.PARAM_PREFIX_PATTERN, ''))
+                var out0 = bare === s ? {} : { _prefix_stripped: s }
+                if (!bare) return out0
+
+                if (bare.indexOf('.') !== -1) {
+                    // "incident.priority" is the natural way to name a field
+                    // and costs nothing to accept.
+                    var parts = bare.split('.')
+                    out0.table = k.trim(parts[0])
+                    out0.field = k.trim(parts[1])
+                    return out0
+                }
+
+                out0.table = bare
+                return out0
             }
         }
 

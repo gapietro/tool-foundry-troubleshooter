@@ -17,6 +17,64 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0501 — 2026-08-05
+
+### Fixed
+
+- **`schema_lookup`'s own input contract was teaching the model to malform its arguments (#111).**
+  Two of the six v6 runs called the tool with `table:incident` — the parameter name prefixed onto
+  its own value — on two different seeds. §Q3 had to quote §H8's acceptance test as 2 of 6 rather
+  than 3 entirely because of it, and §Q7 named fixing it as a prerequisite for the scored pass.
+
+  Root-caused against the **live audit trail** rather than the benchmark markdown (the 15
+  `action_type=intent` rows from the v6 window). The split is total: `agent_trace` (×6),
+  `agent_config` (×3), `read_artifact` (×2) and `query_table` (×1) sent **well-formed JSON objects
+  12 times out of 12**, while all three `schema_lookup` calls sent bare strings and two of those
+  three carried the `table:` prefix. This was never a general tool-call-formatting defect in the
+  model — it was one tool's contract.
+
+  What was unique to that contract: `schema_lookup` is the only tool advertising a
+  **delimiter-joined shorthand written with the literal parameter names** — "the shorthand
+  `table.field`". One sentence earlier the same word names the JSON key ("a JSON object with table
+  and field"), so `table` is simultaneously a key name and a placeholder for the table's value, and
+  the notation gives a model no way to tell which. The model resolved the ambiguity toward
+  *key + delimiter + value* and wrote `table:incident`, picking the `:` it meant over the `.` it was
+  shown. Ruled out along the way: string-first phrasing (`agent_trace`, `agent_config` and
+  `read_artifact` are all string-first and sent clean JSON 11 of 11 times), the transcript teaching
+  the format (`_toText` `JSON.stringify`s objects, so prior calls render as JSON), and our own
+  parser flattening a well-formed object (`_toText` returns strings unchanged).
+
+  Fixed at the source in both copies of the description — `PaToolRegistry` and the byte-identical
+  duplicate in `agent-doctor.now.ts` — plus the native tool's input-schema text: the shorthand is
+  now shown with the real names substituted (`incident.priority`), and the rule that the parameter
+  names are never part of a value is stated outright. `PaToolSchemaLookup`'s own no-table note,
+  which modelled the same shape as `table=<name>`, now shows the value alone.
+
+- **A malformed table name could claim the table did not exist (#111, the silent half).**
+  `_normalizeArgs` took any bare string as a table name verbatim, so `table:incident` became a
+  `sys_db_object` lookup for a table that cannot exist — `:` is not legal in a table name — and the
+  empty read was reported as `table_does_not_exist`, whose `why` reads "a genuine absence — the
+  table name is wrong". That is a claim about the **instance**, backed by a real read and a
+  `success: true` audit row, and a model reasoning from it files a plausible, fully-audited, wrong
+  root cause. Same silent-wrong-answer shape as the phantom-GUID family, arriving through argument
+  formatting rather than through a ref, and invisible to every measure that counts which tools were
+  invoked — which is how it survived a whole smoke.
+
+  A name that cannot belong to any table now yields `table_name_malformed` with `table_exists`
+  `unknown` and no lookup attempted, stating explicitly that it settles nothing about what exists.
+  A recognised parameter prefix is stripped so the call still does its work, but **loudly**, per the
+  issue: a note records the argument as sent, so the audit trail keeps the evidence that the model
+  malformed it rather than having the repair erase it. A well-formed name that is genuinely absent
+  still reports `table_does_not_exist`, guarded by its own test.
+
+### Benchmark note
+
+The tool descriptions are duplicated verbatim into `agent-doctor.now.ts`, so the contract change
+lands on the **native** arm as well as the custom one. That is symmetric and is what §Q7 asked for,
+but it does mean v6's numbers are not comparable to post-fix numbers on either arm. The prompt-side
+half of this fix is unverified live — it is a behavioural claim about the model, and only a run can
+settle it.
+
 ## 2026.08.0403 — 2026-08-04
 
 ### Changed
