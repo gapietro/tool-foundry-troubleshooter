@@ -146,7 +146,7 @@ PaFixReport.prototype = {
 
         var normalized = this._clone(report)
         this._normalizeRootCauseLayers(normalized)
-        return { valid: true, normalized: normalized };
+        return { valid: true, normalized: normalized }
     },
 
     /**

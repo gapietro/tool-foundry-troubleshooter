@@ -40,11 +40,16 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ### Fixed
 
-- **A rejected `fix_report` draft now survives to the terminal record.** A run that is handed back
-  and never resubmits closes `failed` carrying its draft, so it stays retrievable as
-  `fix_report_rejected.report`. **Live-verified in production**, not only in tests: smoke run
-  TR1000168 closed `failed` with its draft intact. §T scored v9 rows 07 and 08 from exactly that
-  field, so this closes a hole that would otherwise have destroyed scorable rows.
+- **A rejected `fix_report` draft now survives to the terminal record — via two paths, and only
+  one of them has live evidence.** The **pre-existing** `_finishFailedFixReport` close path
+  (unchanged by this branch) is **live-verified in production**: smoke run TR1000168 (v10-1)
+  closed `failed` with its draft intact — its transcript note is that path's own error text, not
+  Task 6's. §T scored v9 rows 07 and 08 from exactly that field, so this pre-existing behaviour
+  closes a hole that would otherwise have destroyed scorable rows. **Task 6's new addition** — a
+  run that rides an evidence return out to `MAX_ITERATIONS`/`BUDGET_MS` without resubmitting now
+  also closes `failed` with its draft attached, via `_finishPartial`/`_finishFailedLlm` stashing
+  `_rejectedDraft` — is **tests-only**: 0 of 8 v10 smoke runs (both rounds) terminated `partial`,
+  so this path has never run in production. See `benchmark/DECISION.md` §U9.2.
 
 - **`_handleFixReport` now returns `_step`'s result shape** — a pure refactor removing a divergent
   return contract.

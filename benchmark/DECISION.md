@@ -2729,8 +2729,9 @@ carries the caveat in §T5 and should be quoted with it.
 ## U. Pre-registration — the evidence return (`2026.08.0601`, #81)
 
 **This section was written and committed before a single run fired.** Nothing below was authored
-with knowledge of an outcome; the git history of this file is the proof, and the outcome is recorded
-in §U7, added by a later commit that does not touch §U1–§U6.
+with knowledge of an outcome; the git history of this file is the proof. §U7 records round 1's
+outcome, but that verdict was subsequently withdrawn (§U8) — the disposition that stands is §U9,
+added by later commits that do not touch §U1–§U6.
 
 Design: `docs/superpowers/specs/2026-08-06-fixreport-evidence-return-design.md`. Plan:
 `docs/superpowers/plans/2026-08-06-fixreport-evidence-return.md`. Measurements, once they exist:
@@ -3111,10 +3112,16 @@ improvements and are enabled:
    is what makes §U9.1's question askable at all.
 2. **`_handleFixReport` returns `_step`'s result shape** — a pure refactor that removed a
    divergent return contract.
-3. **A rejected `fix_report` draft now survives to the terminal record** — and this one is
-   **live-verified in production, not just in tests**: v10-1 closed `failed` with its draft intact
-   and retrievable as `fix_report_rejected.report`. §T's pass scored rows 07 and 08 from exactly
-   that field, so this closes a hole that would have destroyed scorable rows.
+3. **A rejected `fix_report` draft now survives to the terminal record** — via two paths, and only
+   one has live evidence. The **pre-existing** `_finishFailedFixReport` close path (unchanged by
+   this branch) is **live-verified in production**: v10-1 closed `failed` with its draft intact
+   and retrievable as `fix_report_rejected.report` — its §3.4 transcript note is that path's own
+   error text (`'fix_report failed validation and could not be repaired: …'`), confirming the run
+   took the OLD path, not Task 6's new one. §T's pass scored rows 07 and 08 from that field, so the
+   pre-existing behaviour closes a hole that would have destroyed scorable rows. **Task 6's new
+   addition** — `_finishPartial`/`_finishFailedLlm` stashing `_rejectedDraft` for a run that rides
+   an evidence return out to the bounds without resubmitting — is **tests-only**: 0 of 8 v10 runs
+   across both rounds terminated `partial` (§U7, §U8.5), so it has never been exercised live.
 
 #### U9.3 Queued
 

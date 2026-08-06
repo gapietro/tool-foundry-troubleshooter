@@ -177,7 +177,7 @@ Two channels, matching the depth gate's split:
 
 Your report is well-formed, but its evidence does not support it:
 
-  - <each evidenceProblems entry, verbatim>
+  - <each validated.problems entry, verbatim — ALL problems, not just the evidence-class subset>
 
 The run is not over. Tools are still available and the audit trail records what you
 actually call. Before resubmitting: call a tool that reads the missing source and cite
@@ -186,11 +186,15 @@ what it returned, or state the claim at the strength your evidence supports.
 Resubmit the fix_report when the evidence backs it.
 ```
 
-Problems are quoted verbatim because `_checkCitationSupported` and `_checkSweptClaims` already name
-the supporting tools and the tools invoked this run — that text is the actionable part. Note this
-does **not** cross the boundary `DECISION.md` §R6 was burned for: it is the gate's own refusal
-text, authored by the validator, not an edit to `agent-doctor-instructions.md` or to the shared
-playbook.
+**Correction:** the shipped `_evidenceReturnBlock` renders every entry of `validated.problems`, not
+only `evidenceProblems`. This is deliberate, not an oversight — the model resubmits a whole report,
+so it needs the whole rejection, shape problems included, or a shape-and-evidence mixed rejection
+would silently drop half its own feedback. The function's docblock in `PaAgentLoop.js` states this
+explicitly. Problems are quoted verbatim because `_checkCitationSupported` and `_checkSweptClaims`
+already name the supporting tools and the tools invoked this run — that text is the actionable
+part. Note this does **not** cross the boundary `DECISION.md` §R6 was burned for: it is the gate's
+own refusal text, authored by the validator, not an edit to `agent-doctor-instructions.md` or to
+the shared playbook.
 
 **The transcript note** (`_evidenceNote`) must stay inside `PaRunManager.DIGEST_CHARS` (200) or it
 is silently truncated — the defect class `#72`/§G3a exists to avoid:
@@ -202,6 +206,18 @@ EVIDENCE RETURN <n>/<MAX>: fix_report not accepted — <k> evidence problem(s); 
 ---
 
 ## 7. Regression guard — the rejected draft must survive
+
+> **Superseded — see the plan's Task 6 and DECISION.md §U9.** What follows is the pre-escalation
+> design (attaching the draft to the `partial` return value, with a clause appended to the
+> `INCOMPLETE:` flag). What shipped is a redesign: a run that rides an evidence return out to the
+> bounds now closes `'failed'` (not `'complete'`/`outcome:'partial'`), because `'failed'` is what
+> makes `fix_report_rejected` reachable over `GET /runs/{id}` — the production worker discards
+> `run()`'s return value, and `PaRestHandlers` only exposes `fix_report_rejected` when
+> `status !== 'complete'` AND `fix_report` is non-empty. The stashed-draft marker is also its own
+> separate sub-200-char transcript note (`'PARTIAL: a rejected fix_report draft from this run is
+> persisted on the run record.'`), not a clause appended to the `INCOMPLETE:` flag — the flag is
+> already 218 characters, past `PaRunManager.DIGEST_CHARS` (200) and truncated today, so an
+> appended clause would never reach the transcript. See `_finishPartial` in `PaAgentLoop.js`.
 
 Today rows 07 and 08 end `failed` with the draft attached, and
 `benchmark/raw-evidence-v9-scored-pass.md` §3.4 states both were **scored from

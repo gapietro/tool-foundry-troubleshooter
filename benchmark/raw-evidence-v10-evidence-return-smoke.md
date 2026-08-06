@@ -14,6 +14,20 @@ two runs each, against the same four execution plans v9 diagnosed as rows 07–1
 > Four rows on two seeds measures whether a mechanism fires. It measures nothing about rate, and
 > **nothing whatsoever about diagnostic correctness** — see §5.
 
+> ## ⚠ SHIPPED DORMANT, AND ROUND 1's VERDICT BELOW WAS WITHDRAWN
+>
+> **`2026.08.0601` ships this mechanism at `MAX_EVIDENCE_RETURNS: 0` — disabled by default.**
+> Every run in this file — round 1 below and round 2 further down — ran with the cap at `2`. Read
+> this file as a record of what the return *did when enabled*, not as a description of the shipped
+> default. Full reasoning: `DECISION.md` §U9.
+>
+> **Round 1's verdict (§4 below) was withdrawn, not upheld.** §U3's clause was ruled defective —
+> its preamble let the prediction and its own refutation clause fire on the same two runs — and was
+> replaced before a fixed, pre-registered round 2, which itself returned **no verdict** (UNDER-
+> POWERED by its own stop rule; see "Round 2" further down and `DECISION.md` §U8/§U9). Do not read
+> §4's "the mechanism fires" framing, or "1 of 2 on seed 01. No regression on seed 03. No `partial`.
+> No revert." above, as a live or settled conclusion.
+
 The prediction was written and committed **before any run fired**: `DECISION.md` §U, commit
 `1657a92`, "bench(#81): pre-register the evidence-return prediction and revert trigger". The build
 and install that this file measures came *after* that commit. That ordering is the point, and it is
@@ -208,9 +222,17 @@ model omitted while restructuring, and the tool-less repair turn (seq 14) failed
 either. **That second failure is not #81's**: a missing required field is precisely the shape class
 the repair turn keeps, and #64/#65 established it works for that class. It did not work here.
 
-**Task 6's draft preservation held.** The run closed `failed`, not `partial`, and
-`fix_report_rejected.report` is populated and retrievable from `GET /runs/{id}` — so the row stays
-scorable, which is the property §U3's second refutation clause exists to protect.
+**Draft preservation held — via the pre-existing path, not Task 6's new one.** The run closed
+`failed`, not `partial`, and `fix_report_rejected.report` is populated and retrievable from
+`GET /runs/{id}` — so the row stays scorable, which is the property §U3's second refutation clause
+exists to protect. But the seq-15 note above (`fix_report failed validation and could not be
+repaired: …`) is `_finishFailedFixReport`'s own error text — the **pre-existing** close path,
+unchanged by this branch, that has carried a draft into a `failed` close since before `#81`. This
+run never reached Task 6's **new** path (`_finishPartial`/`_finishFailedLlm` stashing
+`_rejectedDraft`): that path fires only when a run rides an evidence return out to the bounds
+without resubmitting, and seq 13 here is a resubmission, so no bounds-out `partial` was ever
+possible. Task 6's new path remains untested live across all eight v10 runs — 0 of 8 terminated
+`partial` (§5, §U7, §U9.2).
 
 ### 3.5 The measurement that could not be made
 
@@ -244,6 +266,11 @@ question unanswerable every time, and the next pass will hit it too.
 
 ## 4. The verdict against the pre-registered prediction
 
+> **⚠ This section's verdict was subsequently withdrawn — see the banner at the top of this file
+> and "Round 2" below.** §U3's refutation clause was found defective and replaced; the fixed round
+> 2 returned no verdict either. Read what follows as round 1's reasoning at the time, not as the
+> mechanism's current status.
+
 Predictions as filed in `DECISION.md` §U2, commit `1657a92`, before any run.
 
 | | Prediction, as filed | Outcome | Measured |
@@ -260,6 +287,8 @@ Predictions as filed in `DECISION.md` §U2, commit `1657a92`, before any run.
 | §U3.2 | A run that ended `failed` carrying a draft now ends `partial` | **NO.** 0 `partial`; v10-1 ended `failed` with its draft preserved and retrievable |
 
 ### The revert trigger did not fire, and here is exactly why — including the part that cuts against it
+
+*(Round 1's reasoning — withdrawn, not upheld; see the banner at the top of this file.)*
 
 **`MAX_EVIDENCE_RETURNS` is left at `2`.** The pre-registered prediction U-a is quantified
 **"≥1 of 2"** and it held: one seed-01 run gathered evidence it had never gathered before and
