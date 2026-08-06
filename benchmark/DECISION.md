@@ -2845,3 +2845,64 @@ sample size."* Nine of twelve v9 rows required a judgment the rubric does not su
 on the gate itself. Spending a scored round before that clause is fixed would produce a headline
 decided by a coin the scorers are being asked to flip. So this round buys one thing only: whether
 the mechanism fires and what the run does with it.
+
+### U7. Outcome — the mechanism fires; one of two runs used it (added after the smoke)
+
+Added by a later commit. **§U1–§U6 above are unmodified** — `git log -p benchmark/DECISION.md` is
+the check. Measurements: `benchmark/raw-evidence-v10-evidence-return-smoke.md`.
+
+Four runs, 2026-08-06 23:12–23:16, strictly sequential, custom arm only, against v9's own rows
+07–10 targets.
+
+| run | seed/rep | run_id | terminal | tools | EVIDENCE RETURN | next tool after it |
+|---|---|---|---|---|---|---|
+| v10-1 | 01/1 | `ae7e16252b228794f243fed2ce91bf24` | **failed** | 4 | 1/2 @ 23:13:01 | **none** |
+| v10-2 | 01/2 | `a3be12a52b228794f243fed2ce91bfae` | complete | 4 | 1/2 @ 23:13:59 | **`genai_log`** @ 23:14:02 |
+| v10-3 | 03/1 | `c81f5ee52b228794f243fed2ce91bfb0` | complete | 2 | none | — |
+| v10-4 | 03/2 | `653f52292b228794f243fed2ce91bfb7` | complete | 2 | none | — |
+
+| | Outcome | Measured |
+|---|---|---|
+| U-a | **HELD** | 1 of 2. v10-2 fired the note and called `genai_log` three seconds later, then validated. v10-1 fired the note and made no tool call |
+| U-b | **HELD** | 0 `partial`; both seed-03 runs `complete` as in v9. Neither fired a return, so per U-b's own clause neither is evidence either way |
+| U-c | **HELD** | 0 of 4 `partial`. `_hasEvidenceHeadroom` never bound |
+| §U3.1 refutation | **OBSERVED on v10-1**, not on v10-2 | v10-1 resubmitted a weaker report with no intervening tool call |
+| §U3.2 refutation | **not observed** | v10-1 closed `failed` with its draft preserved in `fix_report_rejected` — Task 6 working |
+
+**`MAX_EVIDENCE_RETURNS` stays at `2`; the revert trigger did not fire — and the reasoning is
+contestable, so it is spelled out.** U-a is quantified "≥1 of 2" and held. §U3's preamble
+("either of these, on the seed-01 pair") is **ambiguous** between per-run and per-pair, and under
+the per-run reading U-a and §U3.1 are *both* satisfied — a contradiction §U3 permitted and should
+not have. **That is a defect in this pre-registration.** Three things argue against reverting:
+§U3.1's own stated rationale — *"bought two extra iterations for the same unfixable move"* — was
+**not** met, since v10-1's resubmission actually *cleared* the evidence problem (its final
+rejection is pure shape: `fixes` and `verification` missing) by taking option 2 of the two the
+return block offers; v10-2 is unexplainable any other way; and nothing regressed.
+**This call should be ratified or overruled by a human before the PR merges.**
+
+**The finding worth keeping: `genai_log` was called.** §T6 put the custom harness at **63 runs with
+zero `genai_log` and zero `log_analysis`**, a streak §Q5, §R3, §S and §T all carry, with the tool
+attached and active throughout. It broke three seconds after an evidence return, on the run whose
+v9 counterpart (row 08) died on three `unsupported citation` findings.
+
+**And the finding that cuts the other way.** On the one target where v9 and v10 can be compared
+directly and the return produced no tool call, **the draft got emptier**: v9 row 07 ended `failed`
+with a `CONFIRMED` (wrong) cause at layer 4, scored 1/6; v10-1 ends `failed` with `root_causes: []`
+plus a shape defect. n=1, confounded by nondeterminism and a different pre-return tool path, and
+recorded because it is what would most change the verdict if it repeated.
+
+**§U5 stands, unsoftened.** All four reports still conclude at layer 1 or at nothing, against
+seeded layers 3 and 5 — **four of four would score 0 on `root_cause_layer_correct`**, exactly as
+§T3 measured six of six. v10-2's own report names layer 5 and `query_table` in `would_confirm`: the
+call it still did not make. The return moved evidence *gathering*. It did not move the diagnosis
+one layer, and nothing here licenses a claim that it would.
+
+**One harness defect found, filed not fixed.** The evidence-problem TEXT is not persisted for a run
+that later validates — `_evidenceNote` carries only a count, the full text goes to the prompt, and
+`fix_report_rejected` is written only on `failed`. So **the reason v10-2 returned cannot be read
+back off the instance**; the raw-evidence file reconstructs it from `_citationToolMap` /
+`_layerToolMap` and labels the reconstruction as one. Every future pass hits this.
+
+**Unrelated but load-bearing for the next operator:** `now-sdk install` does **not** stamp
+`sys_updated_on` on the records it installs — the deployed script includes read 2026-08-02 hours
+after this install. **`sys_updated_on` is not a deploy check.** A `scriptLIKE<marker>` probe is.
