@@ -987,6 +987,171 @@ describe('evidence-return bounds (#81)', () => {
 })
 
 // ===========================================================================
+// evidence return routing (#81)
+// ===========================================================================
+
+describe('evidence return routing (#81)', () => {
+    const EVIDENCE_PROBLEM =
+        'root_causes[0] (x_snc_tsbench_ticket): evidence rule violation — evidence cites only the trace; ' +
+        'at least one config, schema, or data citation is required.'
+    const SHAPE_PROBLEM = 'failure_summary is required and must be a non-empty string'
+
+    function loopWith(validations, opts) {
+        const o = Object.assign(
+            {
+                llmProxy: fakeLlm([]),
+                toolRegistry: fakeTools([]),
+                runManager: fakeRunManager(),
+                fixReport: fakeFixReport(validations),
+                auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+                now: fakeClock([0, 0, 0, 0, 0, 0]),
+            },
+            opts || {}
+        )
+        const loop = load(o)
+        loop._iteration = 3
+        loop._startMs = 0
+        loop._fakes = o
+        return loop
+    }
+
+    it('returns {terminal:false} on an evidence-only rejection', () => {
+        const loop = loopWith([{ valid: false, problems: [EVIDENCE_PROBLEM], evidenceProblems: [EVIDENCE_PROBLEM] }])
+
+        const res = loop._handleFixReport('RUN1', { failure_summary: 'x' })
+
+        expect(res.terminal).toBe(false)
+        expect(loop._evidenceReturns).toBe(1)
+        expect(loop._fakes.llmProxy.calls.length).toBe(0)
+    })
+
+    it('sets an evidence block carrying the problems verbatim', () => {
+        const loop = loopWith([{ valid: false, problems: [EVIDENCE_PROBLEM], evidenceProblems: [EVIDENCE_PROBLEM] }])
+
+        loop._handleFixReport('RUN1', { failure_summary: 'x' })
+
+        expect(loop._evidenceBlock).toContain('EVIDENCE SHORTFALL')
+        expect(loop._evidenceBlock).toContain(EVIDENCE_PROBLEM)
+    })
+
+    it('writes a transcript note inside DIGEST_CHARS', () => {
+        const loop = loopWith([{ valid: false, problems: [EVIDENCE_PROBLEM], evidenceProblems: [EVIDENCE_PROBLEM] }])
+
+        loop._handleFixReport('RUN1', { failure_summary: 'x' })
+
+        const notes = loop._fakes.runManager.transcript.filter(function (e) {
+            return e.actor === 'system'
+        })
+        expect(notes.length).toBe(1)
+        expect(notes[0].result_digest).toContain('EVIDENCE RETURN 1/2')
+        expect(notes[0].result_digest.length).toBeLessThan(200)
+    })
+
+    it('stashes the rejected draft', () => {
+        const draft = { failure_summary: 'x' }
+        const loop = loopWith([{ valid: false, problems: [EVIDENCE_PROBLEM], evidenceProblems: [EVIDENCE_PROBLEM] }])
+
+        loop._handleFixReport('RUN1', draft)
+
+        expect(loop._rejectedDraft.report).toBe(draft)
+        expect(loop._rejectedDraft.problems).toEqual([EVIDENCE_PROBLEM])
+    })
+
+    it('routes back to the loop when evidence and shape problems are mixed', () => {
+        const loop = loopWith([
+            { valid: false, problems: [SHAPE_PROBLEM, EVIDENCE_PROBLEM], evidenceProblems: [EVIDENCE_PROBLEM] },
+        ])
+
+        const res = loop._handleFixReport('RUN1', { failure_summary: '' })
+
+        expect(res.terminal).toBe(false)
+        expect(loop._evidenceBlock).toContain(SHAPE_PROBLEM)
+    })
+
+    it('uses the repair turn for a shape-only rejection', () => {
+        const loop = loopWith(
+            [
+                { valid: false, problems: [SHAPE_PROBLEM], evidenceProblems: [] },
+                { valid: true, normalized: { failure_summary: 'fixed' } },
+            ],
+            {
+                llmProxy: fakeLlm([
+                    { success: true, raw: 'r', action: { action: 'fix_report', report: { failure_summary: 'fixed' } } },
+                ]),
+            }
+        )
+
+        const res = loop._handleFixReport('RUN1', {})
+
+        expect(res.terminal).toBe(true)
+        expect(res.outcome.outcome).toBe('fix_report')
+        expect(loop._evidenceReturns).toBe(0)
+        expect(loop._fakes.llmProxy.calls.length).toBe(1)
+    })
+
+    it('falls through to the repair turn once the cap is spent', () => {
+        const loop = loopWith(
+            [
+                { valid: false, problems: [EVIDENCE_PROBLEM], evidenceProblems: [EVIDENCE_PROBLEM] },
+                { valid: false, problems: [EVIDENCE_PROBLEM], evidenceProblems: [EVIDENCE_PROBLEM] },
+            ],
+            {
+                llmProxy: fakeLlm([{ success: false, error: 'llm down' }]),
+            }
+        )
+        loop._evidenceReturns = 2
+
+        const res = loop._handleFixReport('RUN1', { failure_summary: 'x' })
+
+        expect(res.terminal).toBe(true)
+        expect(res.outcome.outcome).toBe('failed')
+        expect(loop._fakes.llmProxy.calls.length).toBe(1)
+    })
+
+    it('falls through to the repair turn without headroom', () => {
+        const loop = loopWith([{ valid: false, problems: [EVIDENCE_PROBLEM], evidenceProblems: [EVIDENCE_PROBLEM] }], {
+            llmProxy: fakeLlm([{ success: false, error: 'llm down' }]),
+        })
+        loop._iteration = loop.MAX_ITERATIONS - 1
+
+        const res = loop._handleFixReport('RUN1', { failure_summary: 'x' })
+
+        expect(res.terminal).toBe(true)
+        expect(res.outcome.outcome).toBe('failed')
+        expect(loop._evidenceReturns).toBe(0)
+    })
+
+    it('clears a stale evidence block on the next submission', () => {
+        const loop = loopWith([{ valid: true, normalized: { failure_summary: 'ok' } }])
+        loop._evidenceBlock = 'STALE BLOCK'
+
+        loop._handleFixReport('RUN1', { failure_summary: 'ok' })
+
+        expect(loop._evidenceBlock).toBe(null)
+    })
+
+    it('renders the evidence block into the next prompt', () => {
+        const loop = loopWith([])
+        loop._evidenceBlock = '## EVIDENCE SHORTFALL — your fix_report was not accepted'
+
+        const prompt = loop._buildPrompt('PLAYBOOK', 'TOOLBLOCK', { transcript: [], context_summary: '' }, {})
+
+        expect(prompt).toContain('## EVIDENCE SHORTFALL')
+    })
+
+    it('tolerates a validate() result with no evidenceProblems key (R-9)', () => {
+        const loop = loopWith([{ valid: false, problems: [EVIDENCE_PROBLEM] }], {
+            llmProxy: fakeLlm([{ success: false, error: 'llm down' }]),
+        })
+
+        const res = loop._handleFixReport('RUN1', { failure_summary: 'x' })
+
+        expect(res.terminal).toBe(true)
+        expect(loop._evidenceReturns).toBe(0)
+    })
+})
+
+// ===========================================================================
 // depth gate (#103) — _trailTools
 // ===========================================================================
 

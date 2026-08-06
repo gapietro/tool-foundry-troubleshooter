@@ -415,11 +415,51 @@ PaAgentLoop.prototype = {
      *          hands an evidence-shortfall rejection back to the loop.
      */
     _handleFixReport: function (runId, report) {
+        // #81: the block is re-derived per submission, never carried. The
+        // depth gate freezes its gap set because re-deriving lets the
+        // goalposts move; that does not apply here — these problems are a
+        // function of THIS draft against the audit trail, so a model that
+        // actually gathered the missing source genuinely clears them. The
+        // CAP, not stickiness, is what bounds run length.
+        this._evidenceBlock = null
+
         var context = this._auditContext(runId)
 
         var validated = this._reports().validate(report, context)
         if (validated.valid) {
             return { terminal: true, outcome: this._completeFixReport(runId, validated.normalized) }
+        }
+
+        // ---------------------------------------------------------------
+        // #81 — THE EVIDENCE RETURN.
+        //
+        // A tool-less repair turn cannot fix a report rejected for
+        // INSUFFICIENT EVIDENCE. Its only legal moves are to weaken the root
+        // cause, switch to `inconclusive`, or fabricate a citation. v9 rows
+        // 07 and 08 both died here, and both had already been told which
+        // tool would support the citation — `_checkCitationSupported` names
+        // it — by a turn that could not call it.
+        //
+        // So an evidence-class rejection goes BACK TO THE LOOP, where tools
+        // are live and the trail records what actually gets called. Shape
+        // problems keep the repair turn, which #64/#65 established works for
+        // them.
+        //
+        // EVERY GUARD FAILS TOWARD TODAY'S BEHAVIOUR: no evidence problems,
+        // cap spent, or no headroom all fall through to the repair turn with
+        // the same arguments it receives now.
+        // ---------------------------------------------------------------
+        var evidence = this._isArray(validated.evidenceProblems) ? validated.evidenceProblems : []
+        if (evidence.length > 0 && this._evidenceReturns < this.MAX_EVIDENCE_RETURNS && this._hasEvidenceHeadroom()) {
+            this._evidenceReturns += 1
+            this._evidenceBlock = this._evidenceReturnBlock(validated)
+            // The draft must survive a `partial` — see `_finishPartial`.
+            this._rejectedDraft = { report: report, problems: this._isArray(validated.problems) ? validated.problems : [] }
+            this._runs().appendTranscript(runId, {
+                actor: 'system',
+                result_digest: this._evidenceNote(evidence.length),
+            })
+            return { terminal: false }
         }
 
         var repairPrompt = this._reports().repairPrompt(report, validated.problems)
@@ -1319,6 +1359,60 @@ PaAgentLoop.prototype = {
     },
 
     /**
+     * #81 — what the model reads on the next iteration.
+     *
+     * The problems are quoted VERBATIM because the actionable part is
+     * already in them: `_checkCitationSupported` names the supporting tools
+     * and the tools this run actually invoked, and `_checkSweptClaims` names
+     * the layer. ALL problems are rendered, not just the evidence-class
+     * ones — the model resubmits a whole report, so it needs the whole
+     * rejection.
+     *
+     * This is the GATE'S OWN refusal text, authored by the validator. It is
+     * not an edit to the playbook or to the fix_report contract — see
+     * DECISION.md §R6 for why that boundary is worth keeping visible.
+     */
+    _evidenceReturnBlock: function (validated) {
+        var probs = this._isPlainObject(validated) && this._isArray(validated.problems) ? validated.problems : []
+        var lines = ['## EVIDENCE SHORTFALL — your fix_report was not accepted', '']
+
+        lines.push('Your report was not accepted. Its evidence does not support what it claims:')
+        lines.push('')
+        for (var i = 0; i < probs.length; i++) {
+            lines.push('  - ' + this._str(probs[i]))
+        }
+        lines.push('')
+        lines.push(
+            'The run is NOT over. Tools are still available, and the audit trail records what you ' +
+                'actually call — a citation is supported only by a tool this run really invoked.'
+        )
+        lines.push('')
+        lines.push('Before you resubmit:')
+        lines.push('  1. Call a tool that reads the missing source, and cite what it actually returned.')
+        lines.push('  2. Or state the claim at the strength your evidence supports — an UNCONFIRMED')
+        lines.push('     cause that names the layer which would confirm it in `would_confirm` is a')
+        lines.push('     valid report, and so is the `inconclusive` shape.')
+        lines.push('')
+        lines.push('Then submit the fix_report again.')
+
+        return lines.join('\n')
+    },
+
+    /**
+     * #81 — the transcript digest. Kept well inside PaRunManager's
+     * DIGEST_CHARS (200) for the same reason `_holdNote` and `_cappedNote`
+     * are: a longer note is silently truncated, which is the defect class
+     * this design exists to avoid (#72 / DECISION.md §G3a). The full text
+     * goes into the PROMPT via `_evidenceReturnBlock`, not here.
+     */
+    _evidenceNote: function (count) {
+        return (
+            'EVIDENCE RETURN ' + this._evidenceReturns + '/' + this.MAX_EVIDENCE_RETURNS + ': fix_report not ' +
+            'accepted — ' + count + ' evidence problem(s) need a tool call, not a rewrite; run continues.'
+        )
+    },
+
+    /**
      * Renders the SAME normalized report both ways (PaFixReport header:
      * "the two renderings describe the same report") and stores each where
      * it is actually consumed, rather than a third ad-hoc re-stringify of
@@ -1471,6 +1565,17 @@ PaAgentLoop.prototype = {
         if (this._nonEmptyString(this._holdActive)) {
             lines.push('')
             lines.push(this._holdActive)
+        }
+
+        // #81 — its own slot, after the hold, for M3's reason: the last
+        // thing the model reads should be what to go do, not a spec for
+        // producing the terminal action it was just refused. The two are
+        // never both set in practice (`_depthGate` clears `_holdActive` on
+        // release, which is the only way `_handleFixReport` is reached), but
+        // rendering both is correct if they ever are.
+        if (this._nonEmptyString(this._evidenceBlock)) {
+            lines.push('')
+            lines.push(this._evidenceBlock)
         }
 
         return lines.join('\n')
