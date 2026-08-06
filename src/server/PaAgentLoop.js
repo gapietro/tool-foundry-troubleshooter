@@ -565,7 +565,12 @@ PaAgentLoop.prototype = {
      *
      * The target is the model's OWN: a layer it marked `NOT_SWEPT` is it
      * declaring a gap in its own words, and `_layerToolMap()` says which
-     * tools close it. The harness never names a tool (see `_holdBlock`).
+     * tools close it. The GATE's DIRECTION names no tool — `_holdBlock`
+     * states gaps as layer numbers and names, and `_scrubToolNames` strips
+     * tool names out of the model's own quoted-back reasons. The PROMPT
+     * names all seven and always has, via `PaToolRegistry.promptBlock()`;
+     * see issue #110 and DECISION.md §S. Do not read this as a claim that
+     * the model is unaware of the tools — it is a claim about the gate.
      *
      * STICKY, DELIBERATELY
      * The gap set is recorded at the FIRST hold and never re-derived. Without

@@ -665,6 +665,10 @@ measurable:
    (H5). Whatever is tried next — instruction changes, a required-sweep gate, forced tool selection —
    the acceptance test is the same: a run that reaches `schema_lookup`, `query_table` or `genai_log`
    on the seed that needs it.
+   > **Qualified 2026-08-05 (#110, §S).** The non-vacuity argument later built on this item assumed
+   > the harness never names these three tools to the model. It always has — all seven, with full
+   > descriptions and their sequencing, in every prompt. The acceptance test itself is unaffected;
+   > what changes is the premise used to argue it is non-vacuous. See §S.
 
 A re-run of this same benchmark, under the same doubled-run blind audit-derived protocol, with native
 re-measured on the same day to close the H7-4 gap, is the evidence that would justify revisiting the
@@ -1929,6 +1933,11 @@ difference; do not harden it either way.
   defect, confirmed avoided in the live artifact), and `_scrubToolNames` replaced the tool names in
   the model's own quoted-back reasons with `[tool]` — so the harness never named a tool and §H8's
   test stayed non-vacuous.
+- > **Corrected 2026-08-05 (#110, §S).** "The harness never named a tool" is false as written and
+  > was false when written. `_scrubToolNames` kept tool names out of *the hold block*; the prompt
+  > that block sits inside named all seven throughout, via `PaToolRegistry.promptBlock()`. The
+  > `[tool]` substitution is real and is verified — read the claim as scoped to the interrogation
+  > block, which is what §S preserves.
 - **§H8's acceptance test is still unmet.** `schema_lookup`, `query_table`, `genai_log` and
   `log_analysis` have now never been invoked by the custom harness in **51 runs**.
 
@@ -2073,6 +2082,11 @@ layers 4 and 5 near the top, which is where §H8's tools live. The rule is struc
 tool, but a pass earned under this design is not the same as a pass earned by a harness that found
 those tools unaided. Read Q2 as "the gate can aim the model at a layer", not as "the harness
 investigates".
+
+> **Scoped 2026-08-05 (#110, §S).** "The rule is structural and names no tool" is true of *the
+> rule*, and false as an unrestricted claim about the harness: the prompt names all seven tools and
+> always has. The sentence is left standing because its subject is the ranking rule, which is
+> exactly the scope §S preserves.
 
 ### Q4. Q7's refutation is the finding, not a footnote
 
@@ -2239,6 +2253,12 @@ lowest-layer tie-break still selects layer 4, so it changes no v6 outcome: cost 
 picks it over layer 4 other than "that is where the unreached tool is". That forfeits §H8 item 3's
 non-vacuity condition and would make 57 runs of evidence unreadable.
 
+> **Restated 2026-08-05 (#110, §S).** §H8 item 3's non-vacuity condition as originally worded — that
+> the harness never names the measured tools — was never true. This argument does not depend on it.
+> It depends on the narrower claim that survives: the depth gate's *direction* names no tool. A
+> tie-break selecting for layer 6 because that is where the unreached tool sits would forfeit that
+> claim, and the rejection stands unchanged.
+
 ### R5. The declared/ranked split inverts by construction
 
 Retro-applied, v6's 4 declared / 2 ranked becomes 2 / 4. **The next smoke's split is not
@@ -2313,3 +2333,122 @@ should now be read as scoped to v7's arms.
 
 **Unchanged: native remains the recommended path on this instance, and the Phase 1b milestone is
 not met.**
+
+---
+
+## S. The harness has always named its tools — restating §H8 item 3's premise (`2026.08.0504`, #110)
+
+Filed as a leak: `PaFixReport.schemaText()` renders the layer-to-tool map into every prompt,
+qualifying the premise that *"the harness never names to the model the tools the test measures."*
+Investigating it found the premise is not qualified. **It was never true, and could not have been
+true.** No measurement was run; this is bookkeeping on a claim, and it changes nothing the model
+reads.
+
+Design: `docs/superpowers/specs/2026-08-05-tool-naming-premise-design.md`.
+
+### S1. Five sites name a tool to the model, not two
+
+| # | Site | What it names | Removable? |
+|---|---|---|---|
+| 0 | `PaToolRegistry.promptBlock()` → `PaAgentLoop._safePromptBlock()` → `_buildPrompt()` (`PaAgentLoop.js:98`, `:1700`) | All seven, full descriptions, cross-referencing each other | **No** |
+| 1 | `PaFixReport.js:1099-1101` — the "EVIDENCE IS CHECKED" block | All seven, mapped to evidence-source categories | **No** — see S3 |
+| 2 | `PaFixReport.js:1104-1116` — the generated per-layer clause list | All seven, mapped to layers | Yes, at a cost — see S6 |
+| 3 | `PaFixReport.js:1130` — the `would_confirm` example | `query_table` | Yes |
+| 4 | `PaFixReport.js:732` — the `_checkUnconfirmed` rejection, reaching the model on the repair turn | `query_table` | Yes |
+
+Sites 0, 1 and 4 are new to the record. Site 2 is generated from `_layerToolMap()` rather than
+hand-written, so any map edit re-leaks by construction — which S7's test now catches.
+
+### S2. Site 0 is why the premise cannot be rescued
+
+The catalogue does not merely name the tools, it teaches their sequencing. `schema_lookup`'s
+description says **"Use it whenever a value read back blank and you need to know whether the column
+exists at all"** and **"query_table does that"**; `query_table`'s says **"run schema_lookup first so
+your query names real columns"**; `agent_trace`'s says **"page the rest with read_artifact"**.
+
+A harness that withheld this would be a harness whose model could not call tools. **There is no
+version of the acceptance test in which the measured tools are unnamed.**
+
+### S3. Site 1 is load-bearing, so issue option 3 is wrong as stated
+
+The evidence-source block is not stray prose. `PaFixReport` validates every citation's `source`
+against the tools the run actually invoked (#79, §H8 item 2, verified working in §I5). A model
+cannot comply with a rule it is not told, so the mapping has to be stated; it is contract-tested at
+`PaFixReport.test.js:1308`. The issue's option 3 was scoped to site 2 and did not account for site
+1. De-naming site 1 breaks a shipped feature. Recorded so the option is not revived on scheduling
+grounds alone.
+
+### S4. What replaces the premise
+
+**Struck:** *the harness never names to the model the tools the test measures.*
+
+**Replaces it:** *the depth gate's direction names no tool.*
+
+True, enforced, and the claim the arguments actually rest on: `_holdBlock` states gaps as layer
+numbers and names; `_scrubToolNames` (`PaAgentLoop.js:1781-1798`) replaces every `_ALL_TOOL_NAMES`
+entry with `[tool]` in the model's own quoted-back reasons; the fan-out rank is stated over the
+map's structure and would produce its ordering under a different map.
+
+**§R4 survives intact.** Its rejection of a layer-6 tie-break turns on the *gate* selecting for a
+measured tool, not on the catalogue mentioning one.
+
+### S5. The measurement, per tool — and a correction
+
+Issue #110 said the three tools "were invoked in 0 of 51 runs". **Stale as a present-tense claim.**
+§Q3, dated the same day, records the acceptance test met.
+
+| Tool | Status |
+|---|---|
+| `schema_lookup` | Invoked — v6 smoke, seed 01 runs 1–2. Run 1's call was malformed (`table:incident`, #111) and retrieved nothing; run 2's returned evidence |
+| `query_table` | Invoked — v6 smoke, seed 03 run 3; a well-formed query returning 0 rows, which *is* the finding |
+| `genai_log` | **Zero**, now 57 runs (§Q5) |
+| `log_analysis` | **Zero**, now 57 runs (§Q5) |
+
+Stated correctly the argument is **stronger** than the issue's version:
+
+**The model was handed full descriptions of all seven tools, an explicit instruction to run
+`schema_lookup` before `query_table`, the layer-to-tool map and the evidence-source map — in every
+prompt, for 51 runs — and invoked the measured tools zero times. They were first invoked when a
+structural gate aimed it at a layer (#109).**
+
+Naming a tool is not the mechanism that makes a model call it. Fifty-one runs of naming did
+nothing; one structural change did it in a six-run smoke. That is the strongest available evidence
+that #109 and #116 are not teaching to the test — available *because* of the leak, not in spite of
+it.
+
+### S6. The #109 collision — recorded, not fixed
+
+Site 2 advertises `log_analysis` as satisfying layer 5, and `genai_log`/`log_analysis` as satisfying
+layers 1 and 6. The #109 directed gate releases only on the target layer's **dedicated** tools — for
+layer 5, `query_table` alone. So for targets on layers 1, 5 and 6 the harness advertises a strictly
+wider set than the gate accepts, and a compliant-looking call can fail to release the hold. Already
+documented in source at `PaAgentLoop.js:588-604` and `:911-915`; bounded by `MAX_HOLDS: 2`.
+
+**Never observed live** — §Q5 records zero `GATE:` notes across six runs, all seven holds discharged
+by the trail, the cap never fired. A live mismatch with no measured instance.
+
+**Deliberately unfixed.** Both remedies — narrowing the advertised list, or widening the gate's
+release set — change what the model is told and would confound the scored pass §R9 asks for. It
+stays open on #110, to be read against that pass's S2–S4 evidence.
+
+### S7. What shipped
+
+DECISION.md §S plus dated pointers at §H8 item 3, §P, §Q3 and §R4; a corrected comment at
+`PaAgentLoop.js:568`; and one test pinning what site 2 advertises — each layer's tool list checked
+*positionally* against a hardcoded snapshot of `_layerToolMap()`, plus that the map cannot introduce a tool
+`_scrubToolNames` does not strip. Positional matters: all seven tools are named in the citation
+clause too, so a whole-text scan would not notice a layer losing its tool. The snapshot is a literal
+rather than a live re-read for the same reason: the clause is generated from the map, so checking
+one against the other is a tautology — found by the perturbation step that shipped with the test.
+The test is deliberately
+**not** extended to site 0 — the catalogue is 8-9KB of prose under active revision, and pinning its
+tool mentions would fire on every description edit.
+
+### S8. What this does not establish
+
+- **Nothing about correctness**, and nothing about native.
+- **No claim that the naming did or did not affect any prior score.** The 0-of-51 window is
+  consistent with "no effect" but does not prove it.
+- **No prompt change**, deliberately — the scored pass §R9 asks for must stay comparable to §O's
+  baseline.
+- **No fix for the #109 collision** (S6).

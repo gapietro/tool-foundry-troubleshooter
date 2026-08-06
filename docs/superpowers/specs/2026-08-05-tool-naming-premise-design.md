@@ -37,7 +37,7 @@ Five, in descending order of size. The issue named two.
 
 | # | Site | What it names | Removable? |
 |---|---|---|---|
-| 0 | `PaToolRegistry.promptBlock()`, threaded via `PaAgentLoop._safePromptBlock()` → `_buildPrompt()` (`PaAgentLoop.js:98`, `:1695`) | All seven tools with full descriptions, cross-referencing each other | **No** |
+| 0 | `PaToolRegistry.promptBlock()`, threaded via `PaAgentLoop._safePromptBlock()` → `_buildPrompt()` (`PaAgentLoop.js:98`, `:1700`) | All seven tools with full descriptions, cross-referencing each other | **No** |
 | 1 | `PaFixReport.js:1099-1101` — the "EVIDENCE IS CHECKED AGAINST WHAT YOU ACTUALLY CALLED" block | All seven, mapped to evidence-source categories, plus `read_artifact does NOT count` | **No** — see §3 |
 | 2 | `PaFixReport.js:1104-1116` — the generated layer-to-tool clause list | All seven, mapped to layers | Yes, at a cost — see §6 |
 | 3 | `PaFixReport.js:1130` — the `would_confirm` example | `query_table` | Yes |
