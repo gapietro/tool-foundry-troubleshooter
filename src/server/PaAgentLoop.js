@@ -1479,7 +1479,15 @@ PaAgentLoop.prototype = {
             '. Retry with mode: "collect" for the Evidence Bundle floor (no LLM required), or check /status for GenAI stack health.'
 
         this._runs().appendTranscript(runId, { actor: 'system', result_digest: errText })
-        var closeRes = this._runs().close(runId, 'failed', { error: errText })
+
+        // #81: same reason as `_finishPartial` above — an evidence return
+        // whose next LLM call died still produced a draft, and this is the
+        // only place it can be persisted.
+        var stashed = this._isPlainObject(this._rejectedDraft) ? this._rejectedDraft : null
+        var closeOpts = { error: errText }
+        if (stashed) closeOpts.fixReport = stashed.report
+
+        var closeRes = this._runs().close(runId, 'failed', closeOpts)
         return { success: false, outcome: 'failed', error: errText, run_id: runId }
     },
 
@@ -1490,6 +1498,30 @@ PaAgentLoop.prototype = {
      * must contain the literal word INCOMPLETE rather than a vague note.
      */
     _finishPartial: function (runId, reasonText) {
+        // #81: a run handed back for evidence that then rides the bounds
+        // out lands HERE rather than in `_finishFailedFixReport`, and the
+        // rejected draft is the only artifact of the diagnosis it produced.
+        // benchmark/raw-evidence-v9-scored-pass.md §3.4 scores rows 07 and
+        // 08 FROM `fix_report_rejected.report`; dropping the draft on this
+        // path would blind the next pass on exactly the rows the evidence
+        // return exists to improve. Runs with no evidence return are
+        // byte-identical to before.
+        var stashed = this._isPlainObject(this._rejectedDraft) ? this._rejectedDraft : null
+
+        // The marker is its OWN note, not a clause appended to the flag
+        // below. The flag is already 218 characters — past PaRunManager's
+        // DIGEST_CHARS (200) and truncated today — so an appended clause
+        // would be cut off entirely and never reach the transcript, while
+        // still reading as present in the source. Same reason `_holdNote`
+        // and `_cappedNote` are short standalone notes rather than
+        // additions to something longer.
+        if (stashed) {
+            this._runs().appendTranscript(runId, {
+                actor: 'system',
+                result_digest: 'PARTIAL: a rejected fix_report draft from this run is persisted on the run record.',
+            })
+        }
+
         var flag =
             'INCOMPLETE: ' +
             reasonText +
@@ -1497,13 +1529,42 @@ PaAgentLoop.prototype = {
             'above is the best partial diagnosis available, not a confirmed conclusion.'
 
         this._runs().appendTranscript(runId, { actor: 'system', result_digest: flag })
-        var closeRes = this._runs().close(runId, 'complete', {})
-        return {
+
+        // The STATUS is what makes the draft retrievable, not the return
+        // value: the production ScriptAction worker discards what run()
+        // returns (see this file's ~line 1428), and PaRestHandlers exposes
+        // `fix_report_rejected` only when status !== 'complete' AND
+        // fix_report is non-empty. Closing 'complete' with {} — what this
+        // did before — fails both conditions, so a draft attached only to
+        // the return value reaches nobody, including the benchmark that
+        // scores rejected rows through that REST path.
+        //
+        // 'failed' is also the honest status: the run did not produce a
+        // validated report. And the draft must NOT go into `fix_report`
+        // under a 'complete' close — that is the field a PASSED report
+        // occupies, and presenting a rejected draft as a validated one is
+        // strictly worse than losing it.
+        var closeRes
+        if (stashed) {
+            closeRes = this._runs().close(runId, 'failed', {
+                fixReport: stashed.report,
+                error: 'fix_report rejected and never resubmitted: ' + this._joinProblems(stashed.problems),
+            })
+        } else {
+            closeRes = this._runs().close(runId, 'complete', {})
+        }
+
+        var out = {
             success: !!(closeRes && closeRes.success === true),
             outcome: 'partial',
             reason: reasonText,
             run_id: runId,
         }
+        if (stashed) {
+            out.draft = stashed.report
+            out.problems = this._isArray(stashed.problems) ? stashed.problems : []
+        }
+        return out
     },
 
     // =======================================================================

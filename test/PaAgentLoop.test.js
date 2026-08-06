@@ -1152,6 +1152,126 @@ describe('evidence return routing (#81)', () => {
 })
 
 // ===========================================================================
+// partial preserves a rejected draft (#81)
+// ===========================================================================
+
+describe('partial preserves a rejected draft (#81)', () => {
+    function bare(rm) {
+        return load({
+            llmProxy: fakeLlm([]),
+            toolRegistry: fakeTools([]),
+            runManager: rm || fakeRunManager(),
+            fixReport: fakeFixReport([]),
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            now: fakeClock([0]),
+        })
+    }
+
+    it('attaches the stashed draft and problems to the return value', () => {
+        const loop = bare()
+        loop._rejectedDraft = { report: { failure_summary: 'x' }, problems: ['evidence rule violation'] }
+
+        const res = loop._finishPartial('RUN1', 'reached the maximum of 15 reasoning iterations')
+
+        expect(res.outcome).toBe('partial')
+        expect(res.draft).toEqual({ failure_summary: 'x' })
+        expect(res.problems).toEqual(['evidence rule violation'])
+    })
+
+    it('PERSISTS the stashed draft by closing failed with fixReport and error', () => {
+        const rm = fakeRunManager()
+        const loop = bare(rm)
+        loop._rejectedDraft = { report: { failure_summary: 'x' }, problems: ['evidence rule violation'] }
+
+        loop._finishPartial('RUN1', 'reached the maximum of 15 reasoning iterations')
+
+        // This is the assertion that makes the draft retrievable: PaRestHandlers
+        // exposes fix_report_rejected only when status !== 'complete' AND
+        // fix_report is non-empty.
+        const call = rm.closeCalls[rm.closeCalls.length - 1]
+        expect(call.status).toBe('failed')
+        expect(call.options.fixReport).toEqual({ failure_summary: 'x' })
+        expect(call.options.error).toContain('evidence rule violation')
+    })
+
+    it('closes complete with no draft when nothing was stashed', () => {
+        const rm = fakeRunManager()
+        const loop = bare(rm)
+
+        const res = loop._finishPartial('RUN1', 'exceeded the 300000ms diagnosis time budget')
+
+        expect(res.outcome).toBe('partial')
+        expect(res.draft).toBeUndefined()
+        expect(res.problems).toBeUndefined()
+        const call = rm.closeCalls[rm.closeCalls.length - 1]
+        expect(call.status).toBe('complete')
+        expect(call.options.fixReport).toBeUndefined()
+    })
+
+    it('_finishFailedLlm persists the stashed draft too', () => {
+        const rm = fakeRunManager()
+        const loop = bare(rm)
+        loop._rejectedDraft = { report: { failure_summary: 'x' }, problems: ['evidence rule violation'] }
+
+        loop._finishFailedLlm('RUN1', { success: false, error: 'llm down' })
+
+        const call = rm.closeCalls[rm.closeCalls.length - 1]
+        expect(call.status).toBe('failed')
+        expect(call.options.fixReport).toEqual({ failure_summary: 'x' })
+    })
+
+    it('_finishFailedLlm is unchanged when nothing was stashed', () => {
+        const rm = fakeRunManager()
+        const loop = bare(rm)
+
+        loop._finishFailedLlm('RUN1', { success: false, error: 'llm down' })
+
+        const call = rm.closeCalls[rm.closeCalls.length - 1]
+        expect(call.status).toBe('failed')
+        expect(call.options.fixReport).toBeUndefined()
+    })
+
+    it('writes a separate short note naming the stashed draft, inside DIGEST_CHARS', () => {
+        const rm = fakeRunManager()
+        const loop = load({
+            llmProxy: fakeLlm([]),
+            toolRegistry: fakeTools([]),
+            runManager: rm,
+            fixReport: fakeFixReport([]),
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            now: fakeClock([0]),
+        })
+        loop._rejectedDraft = { report: { failure_summary: 'x' }, problems: ['evidence rule violation'] }
+
+        loop._finishPartial('RUN1', 'reached the maximum of 15 reasoning iterations')
+
+        // Two notes: the draft marker FIRST, then the existing flag verbatim.
+        expect(rm.transcript.length).toBe(2)
+        const marker = rm.transcript[0].result_digest
+        expect(marker).toContain('rejected fix_report draft')
+        expect(marker.length).toBeLessThan(200)
+        expect(rm.transcript[1].result_digest).toContain('INCOMPLETE:')
+    })
+
+    it('writes only the INCOMPLETE flag when no draft was stashed', () => {
+        const rm = fakeRunManager()
+        const loop = load({
+            llmProxy: fakeLlm([]),
+            toolRegistry: fakeTools([]),
+            runManager: rm,
+            fixReport: fakeFixReport([]),
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            now: fakeClock([0]),
+        })
+
+        loop._finishPartial('RUN1', 'exceeded the 300000ms diagnosis time budget')
+
+        expect(rm.transcript.length).toBe(1)
+        expect(rm.transcript[0].result_digest).toContain('INCOMPLETE:')
+    })
+})
+
+// ===========================================================================
 // depth gate (#103) — _trailTools
 // ===========================================================================
 
