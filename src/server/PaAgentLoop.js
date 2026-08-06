@@ -159,8 +159,16 @@ PaAgentLoop.prototype = {
      *  beats on depth holds zero evidence returns, which is precisely v9 rows
      *  07 and 08 — the two runs this exists for. Worst case is 2 holds + 2
      *  returns = 4 forced beats against MAX_ITERATIONS of 15; the deepest
-     *  custom run in the v9 pass used 6 iterations in total. */
-    MAX_EVIDENCE_RETURNS: 2,
+     *  custom run in the v9 pass used 6 iterations in total.
+     *
+     *  SHIPS DORMANT AT 0 — see DECISION.md §U8/§U9. Two pre-registered smoke
+     *  rounds over eight seed-01 runs returned NO VERDICT (§U8.3's stop rule
+     *  fired at D<3), and of the 4 runs that fired a return only 2 made a tool
+     *  call and only 1 retrieved anything. Undecided is not proven, so the
+     *  default is off. At 0 the guard in `_handleFixReport` falls straight
+     *  through to the existing repair turn, which is `2026.08.0505` behaviour
+     *  exactly. Set `maxEvidenceReturns: 2` via `initialize()` to enable it. */
+    MAX_EVIDENCE_RETURNS: 0,
 
     /** #81 — the time margin `_hasEvidenceHeadroom` requires before handing a
      *  run back. Returning to the loop with a second left trips `run()`'s

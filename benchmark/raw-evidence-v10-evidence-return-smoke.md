@@ -1,4 +1,4 @@
-# v10 — the evidence-return smoke (`2026.08.06xx`, #81)
+# v10 — the evidence-return smoke (`2026.08.0601`, #81)
 
 Run 2026-08-06 on gpinst01 (Zurich Patch 10 Hotfix 3). **Four custom-arm runs — seeds 01 and 03,
 two runs each, against the same four execution plans v9 diagnosed as rows 07–10.**
@@ -336,7 +336,7 @@ should not be the thing that decides it either.
 
 ## 6. Changes made
 
-**To the instance:** the app was rebuilt and reinstalled (`2026.08.06xx`, rollback context
+**To the instance:** the app was rebuilt and reinstalled (`2026.08.0601`, rollback context
 `52ed92612b228794f243fed2ce91bf0c`), and four diagnostic runs were created —
 `ae7e16252b228794f243fed2ce91bf24`, `a3be12a52b228794f243fed2ce91bfae`,
 `c81f5ee52b228794f243fed2ce91bfb0`, `653f52292b228794f243fed2ce91bfb7` — with their audit rows and
@@ -344,12 +344,17 @@ artifacts. No seed agent, fixture table, tool, capability, ACL or execution plan
 modified or deleted. No bench ticket was inserted.
 
 **To the repository:** this file, and `DECISION.md` §U7 recording the outcome. **Nothing under
-`src/` or `test/` was modified** — `MAX_EVIDENCE_RETURNS` remains `2`, per §4.
+`src/` or `test/` was modified during round 1** — `MAX_EVIDENCE_RETURNS` was still `2` when every
+run above was measured.
 
-**Version note:** the section heading carries `2026.08.06xx` because the release version is
-assigned in the follow-on task. The build measured here is branch `fix/81-evidence-return-to-loop`
-at commit `1657a92`, whose `package.json` still reads `2026.08.0505`. Whoever assigns the version
-should replace `06xx` in this file and in `DECISION.md` §U.
+**Version note.** Both rounds were measured against branch `fix/81-evidence-return-to-loop` at
+commit `1657a92`, whose `package.json` read `2026.08.0505`; the release version `2026.08.0601` was
+assigned afterwards and is what the headings carry.
+
+> **⚠ WHAT SHIPPED IS NOT WHAT WAS MEASURED.** Every run in this file ran with
+> `MAX_EVIDENCE_RETURNS: 2`. **`2026.08.0601` ships the mechanism DORMANT at `0`** — see
+> `DECISION.md` §U9 — because the fixed test returned no verdict. Read this file as a record of
+> what the return *did when enabled*, not as a description of the shipped default.
 
 ---
 

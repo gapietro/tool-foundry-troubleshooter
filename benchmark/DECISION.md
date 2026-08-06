@@ -2726,7 +2726,7 @@ carries the caveat in §T5 and should be quoted with it.
 
 ---
 
-## U. Pre-registration — the evidence return (`2026.08.06xx`, #81)
+## U. Pre-registration — the evidence return (`2026.08.0601`, #81)
 
 **This section was written and committed before a single run fired.** Nothing below was authored
 with knowledge of an outcome; the git history of this file is the proof, and the outcome is recorded
@@ -2738,7 +2738,7 @@ Design: `docs/superpowers/specs/2026-08-06-fixreport-evidence-return-design.md`.
 
 ### U1. What is under test
 
-`2026.08.06xx` — the **evidence return** (#81), against `2026.08.0505` (§T).
+`2026.08.0601` — the **evidence return** (#81), against `2026.08.0505` (§T).
 
 §H7-5 filed the structural finding this change answers, and §T's rows 07 and 08 are it happening in
 a scored pass: *"the repair turn has no tool access, so a 'cite two distinct sources — found 0'
@@ -3057,3 +3057,73 @@ the numerator** so a gathering call counts only when it returns something — th
 **(b) then** run a round whose `n` is sized for a fire rate near one half, with the stopping rule
 fixed in advance. Until one of those happens, `MAX_EVIDENCE_RETURNS: 2` is carried as **undecided,
 not endorsed**, and nothing downstream should cite this change as validated.
+
+### U9. Disposition — the evidence return ships DORMANT at `0` (`2026.08.0601`, #81)
+
+§U1–§U8 unmodified; append-only, as throughout §U.
+
+**The ruling.** The fixed test (§U8.3) returned **no verdict**. *No verdict is not the same as
+proven*, so the default is **off**: `MAX_EVIDENCE_RETURNS: 0` at `src/server/PaAgentLoop.js`. The
+code ships — classifier, cap, headroom guard, prompt block, transcript note, draft stash — and is
+**inert** until someone passes `maxEvidenceReturns` through `initialize()`.
+
+**The question is OPEN, not closed.** Nothing here says the evidence return does not work. It says
+two pre-registered rounds did not establish that it does, and that shipping an unproven behaviour
+enabled-by-default is the wrong direction to fail in.
+
+**Behavioural equivalence to `2026.08.0505` is confirmed, not asserted.** At `0` the guard in
+`_handleFixReport` falls straight through to the existing repair turn. A test constructs the loop
+with **no** `maxEvidenceReturns` option and drives an evidence-class rejection through it, asserting
+the run goes terminal via the repair turn with `_evidenceReturns`, `_evidenceBlock` and
+`_rejectedDraft` all untouched (`test/PaAgentLoop.test.js`, *"ships dormant: at the shipped default
+an evidence rejection takes the repair turn"*). Full suite: **1160 passing, 26 suites.** The six
+tests that failed on the flip all assumed the old default; each was fixed by declaring
+`maxEvidenceReturns: 2` at the fixture, never by moving the production default back.
+
+#### U9.1 The number a future round has to beat is 1 of 4, not 2 of 4
+
+Pooled across **all eight seed-01 runs** in both rounds:
+
+| | count | runs |
+|---|---|---|
+| Runs that fired at least one `EVIDENCE RETURN` | **4** | v10-1, v10-2, r2-2, r2-3 |
+| …of those, runs that made a tool call after the note (`N`, as pre-registered) | **2** | v10-2, r2-2 |
+| …of those, runs whose call actually **retrieved anything** | **1** | **v10-2 only** |
+
+**v10-2's `genai_log` call was well-formed** — `{"execution":"…","mode":"for_execution"}` — and
+returned 5,176 chars with `llm_call_rows: 3`. **r2-2's was malformed** —
+`execution:45bbfd112ba6cf54f243fed2ce91bfcb`, a bare string carrying the `<param>:<value>` prefix —
+and the tool answered *"Unknown mode … Returning the default (llm)"* with `entries: []` and
+`llm_call_rows: 0`. **One gathering call in eight runs gathered anything.**
+
+**So `2 of 4` is an artefact of a numerator that counts a call rather than a retrieval** — §U8.3's
+metric carrying the identical defect §T4 found in the depth gate's release rule. **The honest rate
+is 1 of 4, and that is the figure any future round must improve on.** Do not quote 2 of 4.
+
+#### U9.2 What ships that is NOT in doubt
+
+The disposition above is about **one constant**. Three parts of this change are unconditional
+improvements and are enabled:
+
+1. **`PaFixReport.validate` returns `evidenceProblems`** — the rejection problems are now
+   *classified* into shape (fixable by rewriting) and evidence (fixable only by reading another
+   source). The classification is correct independently of what any consumer does with it, and it
+   is what makes §U9.1's question askable at all.
+2. **`_handleFixReport` returns `_step`'s result shape** — a pure refactor that removed a
+   divergent return contract.
+3. **A rejected `fix_report` draft now survives to the terminal record** — and this one is
+   **live-verified in production, not just in tests**: v10-1 closed `failed` with its draft intact
+   and retrievable as `fix_report_rejected.report`. §T's pass scored rows 07 and 08 from exactly
+   that field, so this closes a hole that would have destroyed scorable rows.
+
+#### U9.3 Queued
+
+- **Tighten the numerator, then run a sized round.** A gathering call should count only when it
+  returns something — the same correction §T9 asks for on the depth gate's release rule, so one fix
+  serves both metrics. Then size `n` against the observed fire rate (roughly half of runs, §R2.4)
+  with the stopping rule fixed in advance. A second 4-run round would land on the boundary again.
+- **The `<param>:<value>` malformation has regressed on `genai_log`.** T6 recorded it at 0 of 6 in
+  v9 after #111/#113/#115 — **those fixes were only ever exercised against the tools the harness
+  happened to call, and no custom run had ever called `genai_log`.**
+- **Unfixed and filed:** the evidence-problem text is not persisted for a run that later validates
+  (§U7), so the reason a return fired cannot be recovered afterwards.

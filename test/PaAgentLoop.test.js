@@ -909,9 +909,12 @@ describe('evidence-return bounds (#81)', () => {
         return load(o)
     }
 
-    it('defaults MAX_EVIDENCE_RETURNS to 2 and EVIDENCE_HEADROOM_MS to 30000', () => {
+    // #81 SHIPS DORMANT. Two pre-registered smoke rounds over eight seed-01
+    // runs returned NO VERDICT (DECISION.md §U8/§U9), so the default is off.
+    // This assertion is the guard against it being switched on by accident.
+    it('defaults MAX_EVIDENCE_RETURNS to 0 (dormant) and EVIDENCE_HEADROOM_MS to 30000', () => {
         const loop = bare()
-        expect(loop.MAX_EVIDENCE_RETURNS).toBe(2)
+        expect(loop.MAX_EVIDENCE_RETURNS).toBe(0)
         expect(loop.EVIDENCE_HEADROOM_MS).toBe(30000)
     })
 
@@ -1005,6 +1008,13 @@ describe('evidence return routing (#81)', () => {
                 fixReport: fakeFixReport(validations),
                 auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
                 now: fakeClock([0, 0, 0, 0, 0, 0]),
+                // #81: the mechanism SHIPS DORMANT (MAX_EVIDENCE_RETURNS: 0 —
+                // see DECISION.md §U9), so this block enables it explicitly.
+                // These tests describe what the return does WHEN ENABLED; the
+                // shipped default is asserted in the 'evidence-return bounds'
+                // block, and the dormant-by-default behaviour in
+                // 'ships dormant' below.
+                maxEvidenceReturns: 2,
             },
             opts || {}
         )
@@ -1137,6 +1147,42 @@ describe('evidence return routing (#81)', () => {
         const prompt = loop._buildPrompt('PLAYBOOK', 'TOOLBLOCK', { transcript: [], context_summary: '' }, {})
 
         expect(prompt).toContain('## EVIDENCE SHORTFALL')
+    })
+
+    // #81 SHIPS DORMANT (DECISION.md §U9). The claim made in the PR and in the
+    // constant's own comment is that at the shipped default the evidence return
+    // is INERT and an evidence-class rejection takes the `2026.08.0505` path —
+    // the tool-less repair turn. This test CONFIRMS that rather than asserting
+    // it: it constructs the loop with NO maxEvidenceReturns option at all, so
+    // the class default is what runs.
+    it('ships dormant: at the shipped default an evidence rejection takes the repair turn', () => {
+        const llmProxy = fakeLlm([{ success: false, error: 'llm down' }])
+        const loop = load({
+            llmProxy: llmProxy,
+            toolRegistry: fakeTools([]),
+            runManager: fakeRunManager(),
+            fixReport: fakeFixReport([
+                { valid: false, problems: [EVIDENCE_PROBLEM], evidenceProblems: [EVIDENCE_PROBLEM] },
+            ]),
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            now: fakeClock([0, 0, 0, 0, 0, 0]),
+        })
+        loop._iteration = 3
+        loop._startMs = 0
+
+        expect(loop.MAX_EVIDENCE_RETURNS).toBe(0)
+
+        const res = loop._handleFixReport('RUN1', { failure_summary: 'x' })
+
+        // Terminal, via the repair turn — not handed back to the loop.
+        expect(res.terminal).toBe(true)
+        expect(res.outcome.outcome).toBe('failed')
+        // The repair turn was actually taken.
+        expect(llmProxy.calls.length).toBe(1)
+        // And none of the return's state was touched.
+        expect(loop._evidenceReturns).toBe(0)
+        expect(loop._evidenceBlock).toBe(null)
+        expect(loop._rejectedDraft).toBe(null)
     })
 
     it('tolerates a validate() result with no evidenceProblems key (R-9)', () => {
