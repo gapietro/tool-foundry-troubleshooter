@@ -78,11 +78,11 @@ recorded so the option is not revived on scheduling grounds alone.
 This one is true, is enforced, and is the claim the arguments actually rest on:
 
 - `_holdBlock` states gaps as layer numbers and names, never tools.
-- `_scrubToolNames` (`PaAgentLoop.js:1776-1793`) replaces every `_ALL_TOOL_NAMES` entry with
+- `_scrubToolNames` (`PaAgentLoop.js:1781-1798`) replaces every `_ALL_TOOL_NAMES` entry with
   `[tool]` in the model's own quoted-back reasons, so a tool name cannot re-enter the direction by
   the model's own words. Guarded by unit tests in `PaAgentLoop.test.js`.
 - The fan-out rank is stated over the map's structure and would produce its ordering under a
-  different map (§R, `PaAgentLoop.js:895-900`).
+  different map (§R, `PaAgentLoop.js:900-905`).
 
 **This is the claim §R4 spends**, and it survives intact. §R4 rejects a tie-break preferring layer 6
 because no structural argument picks it over layer 4 "other than *that is where the unreached tool
@@ -126,7 +126,7 @@ satisfying layers 1 and 6. The #109 directed gate releases a hold only on the ta
 harness advertises a strictly wider set than the gate accepts, and a compliant-looking call can
 fail to release the hold.
 
-Already documented in the source at `PaAgentLoop.js:583-599` and `:906-910`. Bounded by
+Already documented in the source at `PaAgentLoop.js:588-604` and `:911-915`. Bounded by
 `MAX_HOLDS: 2`, which releases the third terminal attempt unconditionally, flagged `capped:true`.
 
 **Never observed live.** §Q5: zero `GATE:` notes across six runs; all seven holds discharged by the
