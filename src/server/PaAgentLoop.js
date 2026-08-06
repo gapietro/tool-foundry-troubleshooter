@@ -335,7 +335,11 @@ PaAgentLoop.prototype = {
         }
 
         if (action.action === 'fix_report') {
-            return { terminal: true, outcome: this._handleFixReport(runId, action.report) }
+            // #81: `_handleFixReport` may answer {terminal:false} — an
+            // evidence-shortfall rejection returns to the loop rather than
+            // spending the tool-less repair turn on a problem only a tool
+            // call can fix. Every other path is still terminal.
+            return this._handleFixReport(runId, action.report)
         }
 
         // Unreachable in practice — PaLlmProxy._parseResponse rejects any
@@ -382,13 +386,17 @@ PaAgentLoop.prototype = {
      * philosophy at the parse layer). Whatever the repair produces —
      * valid, invalid, not even another fix_report, or an LLM failure — is
      * final; there is no second repair attempt.
+     *
+     * @returns {Object} `_step`'s result shape — {terminal:true, outcome} for
+     *          every path today; #81 adds a {terminal:false} branch that
+     *          hands an evidence-shortfall rejection back to the loop.
      */
     _handleFixReport: function (runId, report) {
         var context = this._auditContext(runId)
 
         var validated = this._reports().validate(report, context)
         if (validated.valid) {
-            return this._completeFixReport(runId, validated.normalized)
+            return { terminal: true, outcome: this._completeFixReport(runId, validated.normalized) }
         }
 
         var repairPrompt = this._reports().repairPrompt(report, validated.problems)
@@ -400,22 +408,22 @@ PaAgentLoop.prototype = {
         })
 
         if (!repaired || repaired.success !== true) {
-            return this._finishFailedFixReport(runId, validated.problems, report)
+            return { terminal: true, outcome: this._finishFailedFixReport(runId, validated.problems, report) }
         }
 
         var repairedAction = this._isPlainObject(repaired.action) ? repaired.action : {}
         if (repairedAction.action !== 'fix_report') {
             // The repair turn did not come back with another fix_report —
             // the original draft and problems are the best evidence we have.
-            return this._finishFailedFixReport(runId, validated.problems, report)
+            return { terminal: true, outcome: this._finishFailedFixReport(runId, validated.problems, report) }
         }
 
         var validated2 = this._reports().validate(repairedAction.report, context)
         if (validated2.valid) {
-            return this._completeFixReport(runId, validated2.normalized)
+            return { terminal: true, outcome: this._completeFixReport(runId, validated2.normalized) }
         }
 
-        return this._finishFailedFixReport(runId, validated2.problems, repairedAction.report)
+        return { terminal: true, outcome: this._finishFailedFixReport(runId, validated2.problems, repairedAction.report) }
     },
 
     /**

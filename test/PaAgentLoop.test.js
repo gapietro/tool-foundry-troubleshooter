@@ -852,6 +852,44 @@ describe('audit context plumbing', () => {
 })
 
 // ===========================================================================
+// #81 — _handleFixReport returns _step's result shape
+// ===========================================================================
+
+describe('_handleFixReport returns a step result (#81)', () => {
+    it('wraps a completed fix_report in {terminal:true, outcome}', () => {
+        const loop = load({
+            llmProxy: fakeLlm([]),
+            toolRegistry: fakeTools([]),
+            runManager: fakeRunManager(),
+            fixReport: fakeFixReport([{ valid: true, normalized: { failure_summary: 'ok' } }]),
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            now: fakeClock([0]),
+        })
+
+        const res = loop._handleFixReport('RUN1', { failure_summary: 'ok' })
+
+        expect(res.terminal).toBe(true)
+        expect(res.outcome.outcome).toBe('fix_report')
+    })
+
+    it('wraps a failed fix_report in {terminal:true, outcome}', () => {
+        const loop = load({
+            llmProxy: fakeLlm([{ success: false, error: 'llm down' }]),
+            toolRegistry: fakeTools([]),
+            runManager: fakeRunManager(),
+            fixReport: fakeFixReport([{ valid: false, problems: ['failure_summary is required and must be a non-empty string'], evidenceProblems: [] }]),
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            now: fakeClock([0]),
+        })
+
+        const res = loop._handleFixReport('RUN1', {})
+
+        expect(res.terminal).toBe(true)
+        expect(res.outcome.outcome).toBe('failed')
+    })
+})
+
+// ===========================================================================
 // depth gate (#103) — _trailTools
 // ===========================================================================
 
