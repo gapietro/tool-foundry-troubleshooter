@@ -17,6 +17,57 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0504 — 2026-08-05
+
+### Documented
+
+- **§H8 item 3's tool-naming premise was never true, and is restated rather than qualified (#110).**
+  The premise — that the harness never names to the model the tools the acceptance test measures —
+  underpinned every non-vacuity reading of §H8. `PaToolRegistry.promptBlock()` puts ~8-9KB of
+  descriptions for all seven tools into every prompt by design, and those descriptions teach the
+  tools' *sequencing*: `schema_lookup`'s says "query_table does that", `query_table`'s says "run
+  schema_lookup first". A tool-calling agent has to be told what tools it has, so there is no
+  version of the test in which the measured tools are unnamed. Struck and replaced with the claim
+  that is true and is what the arguments actually rest on: **the depth gate's direction names no
+  tool** (`_holdBlock` + `_scrubToolNames`). §R4's rejection of a layer-6 tie-break survives
+  unchanged — it turns on the gate selecting for a measured tool, not on the catalogue mentioning
+  one. Five naming sites are now on the record, three of them new; site 1, the evidence-source map,
+  is load-bearing for #79's citation validation, which makes the issue's "just remove the names"
+  option wrong as stated rather than merely badly timed. DECISION.md §S, with dated pointers at
+  §H8 item 3, §P, §Q3 and §R4.
+
+- **The issue's "0 of 51 runs" was stale and is corrected per tool (#110).** §Q3, dated the same
+  day, records the acceptance test met. `schema_lookup` and `query_table` have been invoked;
+  `genai_log` and `log_analysis` are still at **zero across 57 runs**. Stated correctly the argument
+  is stronger: the model was handed full descriptions of all seven tools, plus the layer and
+  evidence-source maps, in every prompt for 51 runs, and called the measured tools zero times — they
+  were first reached when a structural gate aimed it at a layer. **Naming is not the mechanism.**
+
+- **The #109 collision is recorded as known-open and deliberately unfixed (#110).** The per-layer
+  clause list advertises `log_analysis` for layer 5 and `genai_log`/`log_analysis` for layers 1 and
+  6, but the directed gate releases only on the target layer's dedicated tools, so a
+  compliant-looking call can fail to release. Bounded by `MAX_HOLDS: 2` and never observed live
+  (§Q5: zero `GATE:` notes, cap never fired). Both remedies change what the model is told and would
+  confound the scored pass §R9 asks for. DECISION.md §S6.
+
+### Added
+
+- **A test pinning what the per-layer clause advertises (#110).** Inverted from what the issue asked
+  for, because the names cannot be removed. It checks each layer's advertised tool list
+  *positionally* against a **hardcoded literal snapshot** of `_layerToolMap()` — not a live re-read,
+  which would be tautological, since the clause is generated from the map and both sides would move
+  together. That defect was in the plan's own test design and was caught by the perturbation step
+  written to catch exactly it. A second assertion pins that the map introduces no tool outside
+  `_ALL_TOOL_NAMES`, which is where widening bites: such a tool would also survive `_scrubToolNames`
+  and leak into the depth gate's direction. Teeth verified by perturbation in both directions. The
+  literal must be updated by hand when the map changes — that friction is the point. Not extended to
+  `PaToolRegistry.promptBlock()`, whose 8-9KB of prose is under active revision.
+
+### Unchanged
+
+- **No string the model reads.** `src/server/PaFixReport.js` is untouched; `PaAgentLoop.js` gained
+  one corrected comment. The scored pass §R9 asks for stays comparable to §O's baseline.
+
 ## 2026.08.0503 — 2026-08-05
 
 ### Fixed
