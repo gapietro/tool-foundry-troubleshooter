@@ -1280,26 +1280,38 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 Without this, the change costs the benchmark the rows it exists to fix.
 
 **Files:**
-- Modify: `src/server/PaAgentLoop.js` — `_finishPartial` (~line 1275)
+- Modify: `src/server/PaAgentLoop.js` — `_finishPartial`, `_finishFailedLlm`
 - Test: `test/PaAgentLoop.test.js`
 
 **Interfaces:**
-- Consumes: `this._rejectedDraft` (Task 4/5).
-- Produces: `_finishPartial(runId, reasonText)` returns `{success, outcome:'partial', reason, run_id}` plus `draft` and `problems` **only when** `_rejectedDraft` is set.
+- Consumes: `this._rejectedDraft` (Task 4/5), `this._joinProblems(problems)` (existing).
+- Produces:
+  - `_finishPartial(runId, reasonText)` returns `{success, outcome:'partial', reason, run_id}` plus `draft` and `problems` **only when** `_rejectedDraft` is set. When a draft is stashed it closes the run `'failed'` with `{fixReport, error}`; otherwise it closes `'complete'` with `{}` exactly as today.
+  - `_finishFailedLlm(runId, reasoned)` additionally passes `{fixReport: _rejectedDraft.report}` to `close()` when a draft is stashed. Its return shape is unchanged.
+
+**Why the close status carries this, and not the return value.** `PaAgentLoop.js:1428` records that the production ScriptAction worker **discards `run()`'s return value**, and `PaRestHandlers.js:306` exposes `fix_report_rejected` only when `run.status !== 'complete'` **and** `run.fix_report` is non-empty. `_finishPartial` closes `'complete'` with `{}`, so both conditions fail — a draft attached only to the return value is retrievable by nobody, and the benchmark reads rows 07/08 through exactly that REST path. `PaRunManager.LEGAL_CLOSE_TARGETS` is `['complete', 'failed']`, so `'failed'` is the only status that satisfies the existing gate, and it is the honest one: the run did fail to produce a validated report.
+
+**The trap to avoid.** Do **not** write the draft to `fix_report` while closing `'complete'`. That is the field a *passed* report occupies, and the REST layer would present a rejected draft as a validated one — strictly worse than losing it.
+
+**Deliberately NOT covered:** `_finishAnswer`. A run whose report was rejected and which then pivoted to a plain `answer` has the answer as its outcome; the stale draft is noise there. Recorded as a known, decided omission.
 
 - [ ] **Step 1: Write the failing tests**
 
 ```js
 describe('partial preserves a rejected draft (#81)', () => {
-    it('attaches the stashed draft and problems', () => {
-        const loop = load({
+    function bare(rm) {
+        return load({
             llmProxy: fakeLlm([]),
             toolRegistry: fakeTools([]),
-            runManager: fakeRunManager(),
+            runManager: rm || fakeRunManager(),
             fixReport: fakeFixReport([]),
             auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
             now: fakeClock([0]),
         })
+    }
+
+    it('attaches the stashed draft and problems to the return value', () => {
+        const loop = bare()
         loop._rejectedDraft = { report: { failure_summary: 'x' }, problems: ['evidence rule violation'] }
 
         const res = loop._finishPartial('RUN1', 'reached the maximum of 15 reasoning iterations')
@@ -1309,21 +1321,57 @@ describe('partial preserves a rejected draft (#81)', () => {
         expect(res.problems).toEqual(['evidence rule violation'])
     })
 
-    it('omits draft and problems when no draft was stashed', () => {
-        const loop = load({
-            llmProxy: fakeLlm([]),
-            toolRegistry: fakeTools([]),
-            runManager: fakeRunManager(),
-            fixReport: fakeFixReport([]),
-            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
-            now: fakeClock([0]),
-        })
+    it('PERSISTS the stashed draft by closing failed with fixReport and error', () => {
+        const rm = fakeRunManager()
+        const loop = bare(rm)
+        loop._rejectedDraft = { report: { failure_summary: 'x' }, problems: ['evidence rule violation'] }
+
+        loop._finishPartial('RUN1', 'reached the maximum of 15 reasoning iterations')
+
+        // This is the assertion that makes the draft retrievable: PaRestHandlers
+        // exposes fix_report_rejected only when status !== 'complete' AND
+        // fix_report is non-empty.
+        const call = rm.closeCalls[rm.closeCalls.length - 1]
+        expect(call.status).toBe('failed')
+        expect(call.options.fixReport).toEqual({ failure_summary: 'x' })
+        expect(call.options.error).toContain('evidence rule violation')
+    })
+
+    it('closes complete with no draft when nothing was stashed', () => {
+        const rm = fakeRunManager()
+        const loop = bare(rm)
 
         const res = loop._finishPartial('RUN1', 'exceeded the 300000ms diagnosis time budget')
 
         expect(res.outcome).toBe('partial')
         expect(res.draft).toBeUndefined()
         expect(res.problems).toBeUndefined()
+        const call = rm.closeCalls[rm.closeCalls.length - 1]
+        expect(call.status).toBe('complete')
+        expect(call.options.fixReport).toBeUndefined()
+    })
+
+    it('_finishFailedLlm persists the stashed draft too', () => {
+        const rm = fakeRunManager()
+        const loop = bare(rm)
+        loop._rejectedDraft = { report: { failure_summary: 'x' }, problems: ['evidence rule violation'] }
+
+        loop._finishFailedLlm('RUN1', { success: false, error: 'llm down' })
+
+        const call = rm.closeCalls[rm.closeCalls.length - 1]
+        expect(call.status).toBe('failed')
+        expect(call.options.fixReport).toEqual({ failure_summary: 'x' })
+    })
+
+    it('_finishFailedLlm is unchanged when nothing was stashed', () => {
+        const rm = fakeRunManager()
+        const loop = bare(rm)
+
+        loop._finishFailedLlm('RUN1', { success: false, error: 'llm down' })
+
+        const call = rm.closeCalls[rm.closeCalls.length - 1]
+        expect(call.status).toBe('failed')
+        expect(call.options.fixReport).toBeUndefined()
     })
 
     it('writes a separate short note naming the stashed draft, inside DIGEST_CHARS', () => {
@@ -1399,7 +1447,7 @@ Expected: FAIL — `res.draft` is `undefined` in the first test.
         if (stashed) {
             this._runs().appendTranscript(runId, {
                 actor: 'system',
-                result_digest: 'PARTIAL: a rejected fix_report draft from this run is attached to the outcome.',
+                result_digest: 'PARTIAL: a rejected fix_report draft from this run is persisted on the run record.',
             })
         }
 
@@ -1410,7 +1458,30 @@ Expected: FAIL — `res.draft` is `undefined` in the first test.
             'above is the best partial diagnosis available, not a confirmed conclusion.'
 
         this._runs().appendTranscript(runId, { actor: 'system', result_digest: flag })
-        var closeRes = this._runs().close(runId, 'complete', {})
+
+        // The STATUS is what makes the draft retrievable, not the return
+        // value: the production ScriptAction worker discards what run()
+        // returns (see this file's ~line 1428), and PaRestHandlers exposes
+        // `fix_report_rejected` only when status !== 'complete' AND
+        // fix_report is non-empty. Closing 'complete' with {} — what this
+        // did before — fails both conditions, so a draft attached only to
+        // the return value reaches nobody, including the benchmark that
+        // scores rejected rows through that REST path.
+        //
+        // 'failed' is also the honest status: the run did not produce a
+        // validated report. And the draft must NOT go into `fix_report`
+        // under a 'complete' close — that is the field a PASSED report
+        // occupies, and presenting a rejected draft as a validated one is
+        // strictly worse than losing it.
+        var closeRes
+        if (stashed) {
+            closeRes = this._runs().close(runId, 'failed', {
+                fixReport: stashed.report,
+                error: 'fix_report rejected and never resubmitted: ' + this._joinProblems(stashed.problems),
+            })
+        } else {
+            closeRes = this._runs().close(runId, 'complete', {})
+        }
 
         var out = {
             success: !!(closeRes && closeRes.success === true),
@@ -1425,6 +1496,21 @@ Expected: FAIL — `res.draft` is `undefined` in the first test.
         return out
     },
 ```
+
+Then, in `_finishFailedLlm`, pass the stashed draft into its existing `close(runId, 'failed', {...})` call — it already closes `'failed'`, so the existing REST gate fires with no further change:
+
+```js
+        // #81: same reason as `_finishPartial` above — an evidence return
+        // whose next LLM call died still produced a draft, and this is the
+        // only place it can be persisted.
+        var stashed = this._isPlainObject(this._rejectedDraft) ? this._rejectedDraft : null
+        var closeOpts = { error: errText }
+        if (stashed) closeOpts.fixReport = stashed.report
+```
+
+Read the real body of `_finishFailedLlm` and thread `closeOpts` into its existing `close()` call without changing anything else about it — its return shape stays exactly as it is.
+
+`_finishAnswer` is deliberately NOT covered: a run that pivoted to a plain `answer` has the answer as its outcome, and a stale rejected draft there is noise.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
