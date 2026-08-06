@@ -2151,3 +2151,165 @@ in six runs.
 **Unchanged: native remains the recommended path on this instance, and the Phase 1b milestone is
 not met.** §H8's acceptance test is one gate among several, and meeting it moves the depth
 blocker — it does not by itself make the custom harness competitive.
+
+---
+
+## R. The gate stopped aiming at cheap layers, and a prompt fix was refuted by its own test (`2026.08.0503`, #116)
+
+§Q7's queued precondition — "before that pass, decide what the declared path should do when the
+model names a cheap layer" — run 2026-08-05. The ruling: **cap the declared path's precedence so it
+cannot select a gap whose fan-out exceeds the best available.** A second change rode along, aimed
+at the argument-quality defect the v7 A/B found in the hold block, and **was reverted when its own
+pre-registered test refuted it.**
+
+Design: `docs/superpowers/specs/2026-08-05-declared-path-fanout-cap-design.md`. Plan:
+`docs/superpowers/plans/2026-08-05-declared-path-fanout-cap.md`. Measurements:
+`benchmark/raw-evidence-v8-hold-item1-ab.md`. Predictions S1–S7 were filed on issue #116 **before
+any code was written**.
+
+### R1. What was run
+
+**No e2e smoke and no scored pass.** Two things only:
+
+1. **A unit-level retro-application** of the new selection rule to the verbatim hold records of
+   the v6 smoke, read out of `x_snc_troubleshoot_run.transcript` on gpinst01 rather than out of
+   the benchmark markdown — the `_holdNote` strings for TR1000152 (`layer(s) 2, 3, 4, 5, 7`) and
+   TR1000153 (`layer(s) 2, 3, 4, 5, 6, 7`), both with `layer 3 (declared)`.
+2. **A twelve-trial paired A/B** on the hold block's item 1, through the `pa llm reason` NASK seam.
+   No tool executed, so `x_snc_troubleshoot_audit` took **zero rows** and the trail a scored pass
+   reads is uncontaminated (verified).
+
+The rule change is therefore **measured only against replayed v6 records** — it has never run
+live. S2, S3 and S4 are forward predictions for the next e2e smoke and are **unscored here**.
+
+### R2. The predictions
+
+| | Prediction, as filed | Outcome | Measured |
+|---|---|---|---|
+| S1 | Replaying the v6 hold records changes the target on exactly 2, both seed-04, layer 3 → 4, `declared` → `ranked` | **HELD** | Both, exactly; regression-tested on the verbatim gap sets |
+| S2 | `declared` fires on a minority of holds in the next e2e smoke | **UNSCORED** | No smoke was run |
+| S3 | `genai_log` and `log_analysis` remain uninvoked | **UNSCORED** | No smoke was run. R4 shows the gate cannot target layer 6 within the cap; whether the model volunteers those tools unprompted is unmeasured |
+| S4 | Seed 04 still misses its layer-6 answer; holds release on `schema_lookup` not `agent_config` | **UNSCORED** | No smoke was run |
+| S5 | The control arm reproduces ≥ 1 table-omitted argument, else the run licenses no claim | **HELD** | 1 of 6 (s3). The fail-safe passes |
+| S6 | The treatment arm emits 0 table-omitted arguments | **REFUTED** | 1 of 6 — same scenario, byte-identical to control |
+| S7 | Both arms stay scalar; the change moves content, not form | **HELD** | 12 of 12 bare strings, 0 objects, both arms |
+
+**Three held, one refuted, three unscored — and S6's refutation is the result of the round.**
+
+### R3. The cap flips exactly two holds, and nothing else
+
+`_selectTarget` now draws the target from the minimal-fan-out class of open gaps, with
+`would_confirm` deciding only *which member* of that class wins. Applied to the seven v6 holds:
+
+- Runs 3 and 4 declared layers 5 and 4, both already at fan-out 1 — the floor. **No cap can
+  displace them**, so they stand unchanged, source still `declared`.
+- Runs 1 and 2 took the ranked path, which the change does not touch.
+- **Both seed-04 holds flip.** The model named layer 3 (`agent_config`, fan-out 3) while layers 4
+  and 5 sat open at fan-out 1. Layer 3 is off-floor, so the declaration is refused and structure
+  selects layer 4.
+
+Zero regressions. This is arithmetic, not evidence of benefit: that the rule flips the two holds
+the evidence identifies is a property of the rule. **Whether flipping them improves a report is
+unmeasured.**
+
+The `matched` flag retired with the change. It was set by any named open gap, scorable or not, and
+blocked the ranked fallback — so a gap whose tools were missing from the map produced narrow
+enforcement behind wording that directed at no layer. Unreachable in production; a degraded-path
+improvement only.
+
+### R4. `genai_log` stays unreached, by construction, and that was pre-registered
+
+**This is the most misreadable result in this section.** §Q5 headlined that `genai_log` and
+`log_analysis` had never been invoked in 57 runs, and the natural expectation is that a cap on
+cheap compliance ends that. **It does not, and cannot.**
+
+Fan-out: `agent_trace`, `schema_lookup` and `query_table` score 1; `genai_log` scores 2;
+`agent_config` and `log_analysis` score 3. Layers 4 and 5 therefore tie at the floor and the
+tie-break takes the lowest layer number — layer 4. **Layer 6 is targeted only once layers 4 and 5
+are both closed**, and layer 1 always closes on the opening `agent_trace`. With `MAX_HOLDS` at 2
+there is no budget to close 4 and 5 first. Both seed-04 flips land on `schema_lookup`.
+
+So seed 04 still misses its answer — via a different tool. S3 and S4 exist so this is read as the
+change working as specified rather than failing.
+
+Two alternatives were considered and rejected. **Dynamic fan-out** — scoring tools by how many
+*currently open* gaps they close — is principled and promotes layer 6 into the floor class, but the
+lowest-layer tie-break still selects layer 4, so it changes no v6 outcome: cost without effect.
+**A tie-break that prefers layer 6** is the only route to `genai_log`, and no structural argument
+picks it over layer 4 other than "that is where the unreached tool is". That forfeits §H8 item 3's
+non-vacuity condition and would make 57 runs of evidence unreadable.
+
+### R5. The declared/ranked split inverts by construction
+
+Retro-applied, v6's 4 declared / 2 ranked becomes 2 / 4. **The next smoke's split is not
+comparable to §Q2's** and must not be read as a trend against it. Q7's refutation stands as a
+finding about the old rule; it is not a baseline for the new one.
+
+### R6. The hold-block fix was refuted by its own test, and reverted
+
+v7 §4 measured the hold pushing `schema_lookup` arguments onto bare scalars, two of which dropped
+the table entirely. The design's §5 named a mechanism: item 1 said "Quote the specific **field** or
+value you are relying on", offering a bare field name as a quotable unit, three lines above "Call a
+tool that reaches layer N", in a block that renders **last** in the prompt. The fix made the value
+and its table co-salient.
+
+**Six scenarios, twelve trials, every pair byte-identical between arms.** Including s3, which
+reproduced the exact v7 C5 defect — `"assignment_group"`, table dropped — under both wordings. The
+contract change corrected the defect on 3 of 3 scenarios where it reproduced in v7; item 1's
+rewording corrected it on **0 of 1**.
+
+The wording was **reverted rather than shipped**. A prompt change to the hold block — load-bearing
+text with 57 runs of history behind it — does not ship on a mechanism its own pre-registered test
+declined to confirm; keeping it would have added an unattributed variable to every future run. What
+the round produced is kept: the A/B instrument, now inverted so the deployed wording is the control,
+with both constants anchored to ground truth; and a unit test pinning item 1's deployed text, which
+did not exist before.
+
+**One reproducing scenario is a weak positive control**, so a small effect would not have been
+visible. This is evidence against the hypothesis, not a proven null — but it is enough to decline
+to ship on it.
+
+**It also refines v7 §7.** That entry reported the corrected contract supplying the remedy for the
+table-omitted residual (C5's `"assignment_group"` became `task.assignment_group`). Here, with that
+contract deployed, an s3-shaped prompt still returns `"assignment_group"`. **The contract fix is
+not a general remedy for the table-omitted class**; v7's 3-of-3 was measured on v7's ad-hoc hold
+arms, which the repo could not reproduce. That residual is still live and its mechanism is
+**unknown**.
+
+### R7. What this does not establish
+
+- **Nothing about correctness.** Neither change touches whether a diagnosis is right.
+- **Nothing live about the cap.** It has run only against replayed records. S2–S4 are open.
+- **No rate for the A/B**, and no null. Six pairs, one reproducing, one model, one day, one reduced
+  instrument. The full 16.7K prompt remains untested, unchanged from v7 §8.
+- **Nothing about native**, which has not moved on this line of work.
+- **Nothing about seeds 02 and 05**, unchanged from §Q6.
+
+### R8. What the round found that was not being looked for
+
+- **A deactivated NASK skill executed normally, twelve times.** `servicenow_skill_list` reports
+  `pa llm reason` as `[OFF]` on gpinst01, yet every `servicenow_skill_execute` call returned
+  normally. Build Rule #40 states a deactivated skill fails with a permission-flavoured error.
+  Either the OneExtend REST path does not consult the same toggle, or `[OFF]` there is a different
+  flag. **Rule #40's failure signature is not universal across invocation paths** — a future run
+  that trusts `[OFF]` to mean "will fail" would misdiagnose.
+- **The v7 hold arms were never reproducible from the repo.** The committed A/B script had no hold
+  block at all; those three control trials were composed ad hoc. Both arms are now generated from
+  the real `_holdBlock`.
+- **A guarded constant can still lie.** The A/B's "arms differ only in the variable under test"
+  check re-used the same constants it composed the arms from, so a wrong claim about the historical
+  wording would have passed silently. Both constants are now anchored — one to the live source, one
+  to published v5 evidence.
+
+### R9. Recommendation
+
+**Fire the scored pass §Q7 asked for**, on seeds 01, 03 and 04, with independent per-row scorers.
+The declared-path question it wanted settled first is settled. Read the cap's live behaviour as a
+by-product of that pass — S2, S3 and S4 are waiting on exactly the runs it will produce.
+
+**Do not pursue item-1 wording further** without a scenario set where the table-omitted argument
+reproduces more than once. The mechanism behind that residual is unknown, and v7 §7's remedy claim
+should now be read as scoped to v7's arms.
+
+**Unchanged: native remains the recommended path on this instance, and the Phase 1b milestone is
+not met.**

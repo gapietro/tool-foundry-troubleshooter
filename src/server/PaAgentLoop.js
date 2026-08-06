@@ -865,22 +865,32 @@ PaAgentLoop.prototype = {
      * zero times. Force was sufficient to make the model act and insufficient
      * to make it act on the right layer.
      *
-     * PRECEDENCE. The model's OWN `would_confirm` layer wins when it names an
-     * open gap — §P4 recorded a run naming layer 4 correctly and still not
-     * calling the tool that closes it, so the model can identify the missing
-     * layer and this binds it to its own naming. Otherwise the structural
-     * rank: lowest fan-out, ties to the lowest layer number. When
-     * `would_confirm` names more than one open gap, THE SAME RANK PICKS
-     * AMONG THEM — lowest fan-out, ties to the lowest layer number — rather
-     * than the lowest-numbered named layer winning regardless of fan-out. A
-     * draft naming layers 2 and 4 must not land on layer 2's `agent_config`
-     * (fan-out 3, the cheap incidental compliance this whole gate exists to
-     * remove) just because 2 sorts first, when layer 4's `schema_lookup`
-     * (fan-out 1) was also named. Naming ANY open gap still strictly
-     * outranks the ranked path below — the target is chosen from the named
-     * subset only, even when nothing in that subset can be scored (that
-     * falls through to the union fallback, same as an unscorable ranked set
-     * does).
+     * PRECEDENCE, CAPPED AT THE FLOOR (#116). The target is always drawn from
+     * the minimal-fan-out class of open gaps; the model's own `would_confirm`
+     * decides WHICH MEMBER of that class, and nothing else. Ties inside the
+     * class break on the lowest layer number.
+     *
+     * #109 let a named open gap win outright, and DECISION.md §Q4 measured the
+     * cost: `would_confirm` carried 4 of 6 runs, and twice it steered the run
+     * to a cheap layer — both seed-04 runs named layer 3 (agent_config,
+     * fan-out 3) while layers 4 and 5 sat open at fan-out 1, and agent_config
+     * legitimately discharged the hold. That was pre-registered as a design
+     * property rather than a defect, on the grounds that binding the gate to
+     * the model's own stated gap is the purest direction available. The cap
+     * keeps that — the model still chooses among EQUALS — while removing its
+     * power to nominate a layer cheaper than the run has available.
+     *
+     * WHAT THE CAP DOES NOT DO, stated so its absence is not read as failure:
+     * it does not make layer 6 reachable. Layers 1, 4 and 5 score 1 and layer
+     * 6 scores 2, so layer 6 is targeted only once 4 and 5 are both closed —
+     * and layer 1 always closes on the opening `agent_trace`. With MAX_HOLDS
+     * at 2 there is no budget for that. The gate cannot TARGET layer 6 within
+     * the cap; whether the model reaches `genai_log`/`log_analysis`
+     * unprompted is unmeasured — issue #116 files this as S3/S4. The
+     * alternative — a tie-break that prefers layer 6 — was rejected because
+     * no structural argument picks it over layer 4 other than "that is where
+     * the unreached tool is", which forfeits §H8 item 3's non-vacuity
+     * condition.
      *
      * THE RANK NEVER MENTIONS A TOOL NAME, and neither does the block built
      * from it (`_holdBlock`). §H8 item 3's non-vacuity condition is that the
@@ -917,92 +927,92 @@ PaAgentLoop.prototype = {
         var fanOut = this._safeFanOut()
         var report = this._isPlainObject(action) ? action.report : null
         var declared = this._safeDeclaredLayers(report)
-        var chosen = null
-        var source = ''
-        var matched = false
-        var best = -1
         var i
 
-        // 1. Declared. `declaredLayers` is documented to return ascending,
-        //    de-duplicated layers, but this loop does not trust that order —
-        //    it scans every declared entry against every open gap rather
-        //    than assuming either arrives sorted. A named layer that is not
-        //    an open gap is ignored, same as today.
-        //
-        //    Among the named layers that DO match an open gap, this applies
-        //    the SAME rule as the ranked path below — reusing `_gapFanOut`
-        //    rather than a second scorer — lowest fan-out wins, ties break
-        //    on the lowest layer number.
-        //
-        //    `matched` tracks whether ANYTHING in `would_confirm` named an
-        //    open gap, independently of whether that gap could be scored.
-        //    A named gap that cannot be scored still sets `matched` and
-        //    therefore still blocks the ranked fallback below — declared
-        //    strictly outranks ranked, so a `would_confirm` hit never lets
-        //    the wider gap set back in — and `chosen` stays null, which
-        //    falls through to the null return at the bottom exactly as an
-        //    all-unscorable declared set does today.
-        for (var d = 0; d < declared.length; d++) {
-            for (i = 0; i < open.length; i++) {
-                if (open[i].layer === declared[d]) {
-                    matched = true
-                    var dScore = this._gapFanOut(open[i], fanOut)
-                    if (dScore !== -1 && (chosen === null || dScore < best || (dScore === best && open[i].layer < chosen.layer))) {
-                        best = dScore
-                        chosen = open[i]
-                        source = 'declared'
-                    }
-                    break
-                }
+        // 1. THE FLOOR — the best fan-out any open gap offers. Unscorable gaps
+        //    (-1: an unknown tool, or a degraded map) contribute nothing, the
+        //    same treatment both #109 ranking loops gave them.
+        var floor = -1
+        for (i = 0; i < open.length; i++) {
+            var score = this._gapFanOut(open[i], fanOut)
+            if (score === -1) continue
+            if (floor === -1 || score < floor) floor = score
+        }
+        if (floor === -1) return null
+
+        // 2. DECLARED GETS FIRST REFUSAL, BUT ONLY WITHIN THE FLOOR CLASS
+        //    (#116). Under #109 a named open gap won outright, and DECISION.md
+        //    §Q4 measured what that buys: on both seed-04 runs the model named
+        //    layer 3, whose agent_config has fan-out 3, while layers 4 and 5
+        //    sat open at fan-out 1 — the model selecting its own cheap
+        //    compliance through text it authors. Restricting candidacy to the
+        //    floor keeps the model's declaration deciding between EQUALS,
+        //    which is what makes this gate direction rather than force, and
+        //    removes its power to nominate a cheaper layer than the run has
+        //    available.
+        var chosen = null
+        var source = 'ranked'
+        for (i = 0; i < open.length; i++) {
+            if (this._gapFanOut(open[i], fanOut) !== floor) continue
+            if (!this._namesLayer(declared, open[i].layer)) continue
+            if (chosen === null || open[i].layer < chosen.layer) {
+                chosen = open[i]
+                source = 'declared'
             }
         }
 
-        // 2. Ranked. Only reached when NOTHING in `would_confirm` named an
-        //    open gap (`matched` is false) — see the declared-outranks-
-        //    ranked note above. Ties break on the lowest layer number via an
-        //    explicit comparison against `chosen.layer` — not by relying on
-        //    `open` arriving in ascending order, so a differently-ordered
-        //    `open` (e.g. from an `unsweptGaps` that does not sort) cannot
-        //    change the result. Same defensive posture as the declared loop
-        //    above.
-        if (!matched) {
-            best = -1
+        // 3. STRUCTURE DECIDES WHEN THE DECLARATION DECLINES. Every member of
+        //    the floor class scores identically by construction, so the only
+        //    live comparison is the tie-break: lowest layer number, by an
+        //    explicit comparison rather than by trusting `open`'s order.
+        //
+        //    #116 also RETIRES #109's `matched` flag. It was set by any named
+        //    open gap, scorable or not, and blocked this fallback — so a gap
+        //    whose tools are missing from the map produced the undirected
+        //    union hold. An unscorable gap simply is not in the floor class
+        //    now, so this path runs and the hold stays directed. Unreachable
+        //    in production (every tool in `_layerToolMap` is scorable and
+        //    `_openGaps` drops malformed gaps); it is a degraded-path
+        //    improvement, not a measured one.
+        if (chosen === null) {
             for (i = 0; i < open.length; i++) {
-                var score = this._gapFanOut(open[i], fanOut)
-                if (score === -1) continue
-                if (best === -1 || score < best || (score === best && open[i].layer < chosen.layer)) {
-                    best = score
-                    chosen = open[i]
-                }
+                if (this._gapFanOut(open[i], fanOut) !== floor) continue
+                if (chosen === null || open[i].layer < chosen.layer) chosen = open[i]
             }
-            source = 'ranked'
         }
 
         if (chosen === null) return null
 
-        // I2 (final whole-branch review): selection and rendering must agree
-        // on what a usable target is. `_holdBlock`/`_holdNote` both require
-        // `typeof target.layer === 'number'` and fall back to the UNDIRECTED
-        // wording otherwise — but this method used to accept a `chosen.layer`
-        // of ANY type, so a contract-violating collaborator (a gap whose
-        // `layer` is a string, or NaN from a bad parse) produced narrow
-        // enforcement — `_heldTools` cut to one dedicated tool — behind a
-        // vague instruction that directs at no layer at all. That is the
-        // worst combination available. Reject it at the SOURCE instead, so
-        // the gate takes the union fallback and enforcement matches wording.
-        // This also closes the separately-filed NaN concern: `NaN` is
+        // I2 (#109, unchanged): selection and rendering must agree on what a
+        // usable target is. `_holdBlock`/`_holdNote` require a numeric layer
+        // and fall back to the UNDIRECTED wording otherwise, so a
+        // contract-violating layer is rejected HERE — otherwise the gate
+        // enforces narrowly behind wording that directs at nothing. `NaN` is
         // `typeof 'number'` and every `<` comparison against it is false, so
-        // it survives both ranking loops — `isFinite` is what excludes it.
+        // it survives the loops above; `isFinite` is what excludes it.
         if (typeof chosen.layer !== 'number' || !isFinite(chosen.layer)) return null
 
         var tools = this._dedicatedTools(chosen, fanOut)
         if (tools.length === 0) return null
 
-        // I3: the target's own fan-out travels WITH the target. `_holdBlock`
-        // needs it to choose between the "no other line of investigation
-        // reaches" claim (true only at fan-out 1) and the neutral variant,
-        // and the renderer must not re-derive it from a map it does not hold.
-        return { layer: chosen.layer, source: source, tools: tools, fanOut: this._gapFanOut(chosen, fanOut) }
+        // I3 (#109, unchanged): the fan-out travels WITH the target so
+        // `_holdBlock` can choose its item-2 wording without re-deriving it.
+        // `floor` IS the chosen gap's own score — the chosen gap is a floor
+        // member by construction.
+        return { layer: chosen.layer, source: source, tools: tools, fanOut: floor }
+    },
+
+    /**
+     * Whether `would_confirm` named this layer. `_safeDeclaredLayers` already
+     * guarantees an array, but this applies the same per-call guard as every
+     * other list walker in this file rather than trusting a collaborator.
+     */
+    _namesLayer: function (declared, layer) {
+        var list = this._isArray(declared) ? declared : []
+        for (var i = 0; i < list.length; i++) {
+            if (list[i] === layer) return true
+        }
+        return false
     },
 
     /**
@@ -1066,6 +1076,22 @@ PaAgentLoop.prototype = {
      * read a raw payload in the same generation in which it had to emit a
      * finished artifact, so it SUMMARISED instead of INTERROGATING. Demanding
      * a quoted field buys one generation whose job is reading.
+     *
+     * ITEM 1'S WORDING WAS TESTED AND LEFT ALONE (#116). v7 §4 measured the
+     * hold pushing `schema_lookup` arguments onto bare scalars, two of which
+     * dropped the table entirely (`"priority"`, `"assignment_group"` — both
+     * lexically valid table names, so `_normalizeArgs` cannot tell them from
+     * a real one). The hypothesis was that "the specific FIELD or value"
+     * below offers a bare field name as a quotable unit, three lines above
+     * "Call a tool that reaches layer N", in a block that renders LAST in the
+     * prompt. A paired A/B against a rewording that named the value and its
+     * table together moved NOTHING: six scenarios, twelve trials, every pair
+     * byte-identical, including the one scenario that reproduced the
+     * table-omitted argument (`benchmark/raw-evidence-v8-hold-item1-ab.md`,
+     * S6 REFUTED). The rewording was reverted rather than shipped. The
+     * mechanism behind that residual is UNKNOWN — do not re-litigate this
+     * wording without a scenario set where the defect reproduces more than
+     * once.
      *
      * IT DEFERS, IT DOES NOT PENALISE. #88 raised the cost of stopping and
      * the model paid in the only currency it controls. Here the draft is

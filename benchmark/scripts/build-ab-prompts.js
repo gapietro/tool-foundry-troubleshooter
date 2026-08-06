@@ -1,12 +1,16 @@
 /**
- * #111 A/B — compose the two prompts that differ ONLY in schema_lookup's
- * input contract sentence.
- *
- * REDUCED INSTRUMENT. The faithful version of this experiment sends the real
+ * Two independent A/B modes, selected by the `--hold` flag. Both are REDUCED
+ * INSTRUMENTS: the faithful version of either experiment sends the real
  * 16.7K-char prompt (full playbook, all seven tool descriptions, the real
- * _buildPrompt composition). That needs a server-side loop, which needs an
- * execution surface the app does not have. This build keeps the elements with
- * a plausible causal role in the measured malformation and drops the rest:
+ * _buildPrompt composition), which needs a server-side loop the app does not
+ * have. Each mode keeps the elements with a plausible causal role in what it
+ * measures and drops the rest; each mode's cost is stated in its own
+ * pre-registration: if the CONTROL arm does not reproduce the defect it is
+ * testing for, the instrument is too reduced to test anything and the run is
+ * uninformative — it does NOT license a claim about the fix.
+ *
+ * DEFAULT MODE — #111 A/B — compose the two prompts that differ ONLY in
+ * schema_lookup's input contract sentence.
  *
  *   KEPT  schema_lookup's full description        the variable under test
  *   KEPT  the `execution: <sys_id>` request block  _renderRequest emits literal
@@ -21,11 +25,16 @@
  *         -> schema_lookup" routing line           makes the lookup the right move
  *   DROPPED  the other six tool descriptions, the rest of the playbook
  *
- * The cost is stated in the pre-registration: if the CONTROL arm does not
- * reproduce the malformation, this instrument is too reduced to test anything
- * and the run is uninformative — it does NOT license a claim about the fix.
+ * --hold MODE — #116's hold-item-1 A/B — compose the two prompts that differ
+ * ONLY in the hold block's item 1 (the DEPLOYED wording vs. the CANDIDATE
+ * rewording), across six paired scenarios. Both arms carry the corrected
+ * (#111) contract, so the free variable is isolated to item 1. The candidate
+ * was REFUTED (S6, `benchmark/raw-evidence-v8-hold-item1-ab.md`) and the
+ * wording was reverted — this mode is kept, unreverted, so the A/B stays
+ * reproducible from the repo rather than only living in that evidence file.
  *
  * Run: node benchmark/scripts/build-ab-prompts.js <out-dir>
+ * Run: node benchmark/scripts/build-ab-prompts.js <out-dir> --hold
  */
 const fs = require('fs')
 const path = require('path')
@@ -44,16 +53,39 @@ const OLD_CONTRACT =
 
 const EXECUTION = 'b07dc9082baa4314f243fed2ce91bf4b'
 
-// The table and field are both named in the trace result, so WHICH table to ask
-// about is not under test — only how the model spells the argument.
-const TRACE_RESULT = [
-    'status: completed. 1 tool call, no error raised.',
-    '',
-    'tool_calls:',
-    '  #1 lookup_routing_rule (sn_aia_tool) status=success',
-    '     the script read field u_routing_key off table sn_aia_tool, got back an empty',
-    '     string, branched on it and returned no rows.',
-].join('\n')
+// The hold-block variable under test (#116). DEPLOYED_ITEM1 is what
+// `_holdBlock` emits; CANDIDATE_ITEM1 is the rewording that was tested and
+// reverted, and is substituted in to build the treatment arm. Composing the
+// treatment by substitution rather than by hand is what makes the arms
+// provably identical everywhere else.
+const DEPLOYED_ITEM1 =
+    '  1. What did the last tool result actually establish? Quote the specific field\n' +
+    '     or value you are relying on.'
+
+const CANDIDATE_ITEM1 =
+    '  1. What did the last tool result actually establish? Quote the specific value you\n' +
+    '     are relying on, and the table and field it came from.'
+
+// The gap set and target handed to `_holdBlock`. Layer 4 at fan-out 1 is the
+// shape that directs a run at schema_lookup, which is the tool whose contract
+// permits a bare scalar and therefore the one where the degradation shows.
+const HOLD_GAPS = [
+    { layer: 4, name: 'Data schemas', reason: 'no schema read was needed', tools: ['schema_lookup'] },
+]
+const HOLD_TARGET = { layer: 4, source: 'ranked', tools: ['schema_lookup'], fanOut: 1 }
+
+// Six paired scenarios. The model is deterministic at production temperature
+// (v7 §2), so N is the number of SCENARIOS — repeats of one prompt carry the
+// information of one. `tableInEvidence: false` means the trace names the field
+// but never its table, which is the C4/C5 shape where the table was dropped.
+const SCENARIOS = [
+    { id: 's1', table: 'sn_aia_tool', field: 'u_routing_key', tableInEvidence: true },   // = v7 C6
+    { id: 's2', table: 'incident', field: 'priority', tableInEvidence: false },          // = v7 C4
+    { id: 's3', table: 'task', field: 'assignment_group', tableInEvidence: false },      // = v7 C5
+    { id: 's4', table: 'cmdb_ci_server', field: 'u_owner_group', tableInEvidence: true },
+    { id: 's5', table: 'sc_req_item', field: 'u_fulfilment_stage', tableInEvidence: true },
+    { id: 's6', table: 'change_request', field: 'u_risk_band', tableInEvidence: false },
+]
 
 function schemaLookupDescription(contract) {
     const ctx = loadScriptInclude('PaToolRegistry.js', {})
@@ -69,9 +101,21 @@ function schemaLookupDescription(contract) {
     throw new Error('schema_lookup description carried neither known contract sentence')
 }
 
-function buildPrompt(contract) {
-    const tool = schemaLookupDescription(contract)
+function traceResult(scenario) {
+    const where = scenario.tableInEvidence ? ' off table ' + scenario.table : ''
     return [
+        'status: completed. 1 tool call, no error raised.',
+        '',
+        'tool_calls:',
+        '  #1 lookup_routing_rule (' + scenario.table + ') status=success',
+        '     the script read field ' + scenario.field + where + ', got back an empty',
+        '     string, branched on it and returned no rows.',
+    ].join('\n')
+}
+
+function buildPrompt(contract, scenario, holdBlock) {
+    const tool = schemaLookupDescription(contract)
+    const lines = [
         'You are Agent Doctor. You diagnose failing ServiceNow AI Agent executions.',
         '',
         'A field that read back blank is a layer-4 question: confirm the column exists before',
@@ -89,7 +133,7 @@ function buildPrompt(contract) {
         '',
         '#1 [tool:agent_trace] args={"execution":"' + EXECUTION + '"}',
         'result:',
-        TRACE_RESULT,
+        traceResult(scenario),
         '',
         '## Response format',
         '',
@@ -98,18 +142,75 @@ function buildPrompt(contract) {
         '  {"action":"tool_call","tool":"<tool name>","args":{...}}',
         '  {"action":"answer","text":"<final answer, once no further tool call is needed>"}',
         '  {"action":"fix_report","report":{...}}',
-    ].join('\n')
+    ]
+    if (holdBlock) {
+        lines.push('')
+        lines.push(holdBlock)
+    }
+    return lines.join('\n')
+}
+
+// The CONTROL arm's hold is the DEPLOYED text, read out of PaAgentLoop rather
+// than retyped — the v7 hold arms were composed ad hoc and are not
+// reproducible from the repo, which is what this closes. The TREATMENT arm is
+// the candidate rewording #116 tested and reverted (S6 REFUTED,
+// raw-evidence-v8-hold-item1-ab.md); it is kept so the run stays reproducible.
+//
+// TWO anchors, because one is not enough. DEPLOYED_ITEM1 is checked against
+// _holdBlock's live output below — that catches a drift in the source. It is
+// ALSO checked against raw-evidence-v5-depth-smoke.md, published evidence
+// recording the hold block as it was actually rendered in the v5 smoke, which
+// catches the case where the source and this constant drift TOGETHER. Without
+// the second anchor the per-scenario "differs ONLY in item 1" check would keep
+// passing against a wrong claim about what the gate emits, because the
+// substitution and the invariant re-use the same constant.
+const DEPLOYED_ITEM1_EVIDENCE_FILE = path.join(__dirname, '..', 'raw-evidence-v5-depth-smoke.md')
+
+function holdArms() {
+    const ctx = loadScriptInclude('PaAgentLoop.js', { JSON: JSON })
+    const control = new ctx.PaAgentLoop({})._holdBlock(HOLD_GAPS, 'gaps', HOLD_TARGET)
+    if (control.indexOf(DEPLOYED_ITEM1) === -1) {
+        throw new Error('_holdBlock does not carry DEPLOYED_ITEM1 — the deployed wording drifted')
+    }
+    const evidence = fs.readFileSync(DEPLOYED_ITEM1_EVIDENCE_FILE, 'utf8')
+    if (evidence.indexOf(DEPLOYED_ITEM1) === -1) {
+        throw new Error('DEPLOYED_ITEM1 does not match ' + DEPLOYED_ITEM1_EVIDENCE_FILE + ' — the wording drifted')
+    }
+    return { control: control, treatment: control.split(DEPLOYED_ITEM1).join(CANDIDATE_ITEM1) }
 }
 
 const outDir = process.argv[2]
-const arms = { control: OLD_CONTRACT, treatment: NEW_CONTRACT }
-const written = {}
-for (const [arm, contract] of Object.entries(arms)) {
-    written[arm] = buildPrompt(contract)
-    fs.writeFileSync(path.join(outDir, arm + '.prompt.txt'), written[arm])
-    console.log(arm, written[arm].length, 'chars')
+const holdMode = process.argv.indexOf('--hold') !== -1
+
+function write(name, text) {
+    fs.writeFileSync(path.join(outDir, name + '.prompt.txt'), text)
+    console.log(name, text.length, 'chars')
 }
 
-const same = written.control.split(OLD_CONTRACT).join('@@') === written.treatment.split(NEW_CONTRACT).join('@@')
-console.log('arms differ ONLY in the contract sentence:', same)
-if (!same) process.exit(1)
+if (!holdMode) {
+    // #111's contract A/B, unchanged.
+    const arms = { control: OLD_CONTRACT, treatment: NEW_CONTRACT }
+    const written = {}
+    for (const [arm, contract] of Object.entries(arms)) {
+        written[arm] = buildPrompt(contract, SCENARIOS[0], null)
+        write(arm, written[arm])
+    }
+    const same = written.control.split(OLD_CONTRACT).join('@@') === written.treatment.split(NEW_CONTRACT).join('@@')
+    console.log('arms differ ONLY in the contract sentence:', same)
+    if (!same) process.exit(1)
+} else {
+    // #116's hold-item-1 A/B. BOTH arms carry the DEPLOYED contract, so the
+    // only free variable is item 1.
+    const hold = holdArms()
+    let allSame = true
+    for (const scenario of SCENARIOS) {
+        const control = buildPrompt(NEW_CONTRACT, scenario, hold.control)
+        const treatment = buildPrompt(NEW_CONTRACT, scenario, hold.treatment)
+        write(scenario.id + '.control', control)
+        write(scenario.id + '.treatment', treatment)
+        const same = control.split(DEPLOYED_ITEM1).join('@@') === treatment.split(CANDIDATE_ITEM1).join('@@')
+        console.log(scenario.id, 'differs ONLY in item 1:', same)
+        if (!same) allSame = false
+    }
+    if (!allSame) process.exit(1)
+}

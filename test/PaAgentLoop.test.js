@@ -1192,12 +1192,72 @@ describe('directed depth gate (#109) — target selection', () => {
         expect(loop._depthGate('RUN1', FIX).hold).toBe(false)
     })
 
-    test('DECLARED: would_confirm beats the ranking when it names an open gap', () => {
-        // Ranking alone would pick layer 4; the model named layer 2.
+    test('CAPPED (#116): would_confirm naming an above-floor layer no longer wins', () => {
+        // The v6 defect in miniature. Layer 2's only tool (agent_config) has
+        // fan-out 3; layer 4's schema_lookup has fan-out 1. The model named
+        // layer 2, and under #109 that selected layer 2 outright — letting the
+        // model choose its own cheap compliance through text it authors. The
+        // floor rule makes the named layer a candidate only when it is AT the
+        // floor, so structure decides here.
         const gate = gateLoop(['agent_trace'], [GAP2, GAP4], [2])._depthGate('RUN1', FIX)
-        expect(gate.target.layer).toBe(2)
+        expect(gate.target.layer).toBe(4)
+        expect(gate.target.source).toBe('ranked')
+        expect(gate.target.tools).toEqual(['schema_lookup'])
+    })
+
+    test('CAPPED (#116): an unscorable named gap no longer blocks the ranked path', () => {
+        // `matched` used to be set by ANY named open gap, scorable or not, so a
+        // gap whose tools are absent from the fan-out map forced the undirected
+        // union hold — narrow enforcement behind wording that directs at no
+        // layer. An unscorable gap is not in the floor class, so ranked runs.
+        const GAP_UNKNOWN = { layer: 3, name: 'Tool definitions', reason: 'r3', tools: ['no_such_tool'] }
+        const gate = gateLoop(['agent_trace'], [GAP_UNKNOWN, GAP4], [3])._depthGate('RUN1', FIX)
+        expect(gate.target).not.toBe(null)
+        expect(gate.target.layer).toBe(4)
+        expect(gate.target.source).toBe('ranked')
+    })
+
+    test('CAPPED (#116): a named layer AT the floor still wins, and is still sourced declared', () => {
+        // Direction survives the cap: layers 4 and 5 both sit at fan-out 1, so
+        // the model's naming of layer 5 decides between equals even though the
+        // ranked tie-break alone would take layer 4.
+        const gate = gateLoop(['agent_trace'], [GAP4, GAP5], [5])._depthGate('RUN1', FIX)
+        expect(gate.target.layer).toBe(5)
         expect(gate.target.source).toBe('declared')
-        expect(gate.target.tools).toEqual(['agent_config'])
+        expect(gate.target.tools).toEqual(['query_table'])
+    })
+
+    test('CAPPED (#116): when every open gap is cheap, the cap does nothing', () => {
+        // Floor 3, and the model named a floor member. There is no better layer
+        // to insist on, so declared stands.
+        const GAP3 = { layer: 3, name: 'Tool definitions', reason: 'r3', tools: ['agent_config'] }
+        const gate = gateLoop(['agent_trace'], [GAP2, GAP3], [3])._depthGate('RUN1', FIX)
+        expect(gate.target.layer).toBe(3)
+        expect(gate.target.source).toBe('declared')
+        expect(gate.target.fanOut).toBe(3)
+    })
+
+    test('#116 REGRESSION on verbatim v6 data: both seed-04 holds flip to layer 4', () => {
+        // The gap sets and the declared layer are read from the verbatim
+        // _holdNote strings in x_snc_troubleshoot_run on gpinst01:
+        //   TR1000152 "layer 3 (declared) must be reached; layer(s) 2, 3, 4, 5, 7 ..."
+        //   TR1000153 "layer 3 (declared) must be reached; layer(s) 2, 3, 4, 5, 6, 7 ..."
+        // Both released on agent_config under #109. Seed 04's answer sits
+        // behind layer 6 and this does NOT reach it (S3/S4) — layers 4 and 5
+        // tie at the floor and the tie breaks low. What changes is that the
+        // model can no longer nominate layer 3's agent_config.
+        const GAP3 = { layer: 3, name: 'Tool definitions', reason: 'r3', tools: ['agent_config'] }
+        const GAP7 = { layer: 7, name: 'Trigger and wiring', reason: 'r7', tools: ['agent_config'] }
+
+        const tr152 = gateLoop(['agent_trace', 'read_artifact'], [GAP2, GAP3, GAP4, GAP5, GAP7], [3])._depthGate('RUN1', FIX)
+        expect(tr152.target.layer).toBe(4)
+        expect(tr152.target.source).toBe('ranked')
+        expect(tr152.target.tools).toEqual(['schema_lookup'])
+
+        const tr153 = gateLoop(['agent_trace'], [GAP2, GAP3, GAP4, GAP5, GAP6, GAP7], [3])._depthGate('RUN1', FIX)
+        expect(tr153.target.layer).toBe(4)
+        expect(tr153.target.source).toBe('ranked')
+        expect(tr153.target.tools).toEqual(['schema_lookup'])
     })
 
     test('DECLARED: among several named open gaps, the lowest-fan-out one wins — not the lowest layer number', () => {
@@ -1232,17 +1292,6 @@ describe('directed depth gate (#109) — target selection', () => {
         expect(gate.target.layer).toBe(4)
         expect(gate.target.source).toBe('declared')
         expect(gate.target.tools).toEqual(['schema_lookup'])
-    })
-
-    test('DECLARED: still strictly outranks ranked — only the named subset is a candidate', () => {
-        // Layer 4 is open and would win on fan-out alone (schema_lookup, 1,
-        // versus layer 2's agent_config, 3) — but the model only named layer 2,
-        // so layer 2 is the ONLY candidate. The wider open-gap set never enters
-        // the comparison once `would_confirm` names anything.
-        const gate = gateLoop(['agent_trace'], [GAP2, GAP4], [2])._depthGate('RUN1', FIX)
-        expect(gate.target.layer).toBe(2)
-        expect(gate.target.source).toBe('declared')
-        expect(gate.target.tools).toEqual(['agent_config'])
     })
 
     test('DECLARED: a named layer that is NOT an open gap falls through to ranked', () => {
@@ -1860,6 +1909,21 @@ describe('depth gate (#103) — _holdBlock', () => {
         // Well-formed entries still appear.
         expect(block).toContain('layer 2 (Instructions)')
         expect(block).toContain('layer 4 (Data schemas)')
+    })
+
+    test('#116: item 1 renders the wording the A/B instrument anchors on', () => {
+        // The rewording tested in benchmark/raw-evidence-v8-hold-item1-ab.md
+        // moved nothing (S6 REFUTED) and was reverted. This pins what the
+        // block actually emits, because build-ab-prompts.js --hold composes
+        // its control arm from exactly these two lines and its treatment arm
+        // by substituting them out. A silent drift here would make that
+        // instrument compose two arms that differ somewhere other than where
+        // it claims.
+        const block = load()._holdBlock(GAPS, 'gaps')
+        expect(block).toContain(
+            '  1. What did the last tool result actually establish? Quote the specific field\n' +
+            '     or value you are relying on.'
+        )
     })
 })
 
