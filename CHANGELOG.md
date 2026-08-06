@@ -17,6 +17,74 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0505 — 2026-08-06
+
+### Measured
+
+- **The v9 scored pass: native 36/36 and 6/6 on the gate, custom 9/36 and 0/6 (#119).** Twelve
+  scored rows — 6 native + 6 custom, seeds 01/03/04, two reps each, **both arms the same day** on
+  gpinst01 at app version `2026.08.0504`, scored blind with one independent scorer per packet. Zero
+  void rows, zero retries. Predictions T1–T11 were all filed before any run: **six held, five
+  refuted, none unscored.** No product code changed; this pass measures the build §S shipped.
+
+- **Every custom row scored 0 on `root_cause_layer_correct`, and that is the finding.** The depth
+  gate aimed all six custom runs at layer 4 and all six went there — and all six then filed their
+  root cause at **layer 1** (five literally; the sixth at layer 4 on `sn_tsbench_bench_ticket`, a
+  table that does not exist). Seeded layers were 3, 3, 5, 5, 6, 6. **Reaching a layer and
+  diagnosing at it are different things**, which bounds what §Q2's "the gate can aim the model at a
+  layer" was ever worth. DECISION.md §T3, with a dated pointer at §Q3.
+
+- **The hold is satisfiable cosmetically, and the gate counts a call rather than a reach.** All six
+  holds cited "layer 4 (ranked)" and all six were answered by a `schema_lookup`; **not one pointed
+  at the table the seeded defect lives in** (five OOB/platform tables, one nonexistent). Row 07's
+  lookup returned `table_does_not_exist` and released the hold anyway — confirmed empirically and
+  in `_depthGate`, whose release test reads tool **names** out of the audit trail and never
+  inspects what the tool returned. DECISION.md §T4.
+
+### Found in the instrument
+
+- **T8 refuted badly, and it undermines confidence in every score in the pass — including the
+  favourable ones.** **9 of 12 rows flagged `ambiguous = yes`** against a prediction of ≤2. Rows 03,
+  04, 05 and 06 flag the identical gap: a fix naming the right target but omitting a value no
+  diagnosis could recover. `fix_usable_unedited` does not determine that case and it is one of the
+  gate's two terms; rows 01 and 02 record a second under-determination in the same column. **All
+  six native rows carry a recorded alternative reading yielding 0** — which leaves native at 30/36
+  on totals (direction intact) but **0/6 on the gate**. **The direction is robust; the precise
+  totals are not, and must not be quoted as stable.** Custom's 0/6 has no such sensitivity —
+  `root_cause_layer_correct = 0` was flagged ambiguous on no custom row. §O5 filed this defect three
+  passes ago and it was never closed. DECISION.md §T5.
+
+- **The blind-rule test passed green while two one-hop paths to the answer key existed** in packet
+  framing — `(verbatim from benchmark/scorecard-template.md)`, which cites "§O5 of `DECISION.md`",
+  and `(verbatim, benchmark/seeds/seed-0N-….md)`, the parent of `seeds/history/`. **The gate was
+  working as written and blind to the real hole:** its `answer-key-pointer` pattern only matches a
+  literal `DECISION.md`, and it scans specs, not packets. Both were removed by hand before scoring.
+  Recommendation on the record: widen the pattern to any repository path and run it over packets.
+  DECISION.md §T7.
+
+- **The native arm never writes a terminal status onto its `x_snc_troubleshoot_run` anchor.** All
+  six native anchors sat at `status: running` after their executions reached `completed`. A scorer
+  or tool reading `status` off a native anchor would misread it. Recorded, not fixed.
+
+- **`continuous_tool_execution_limit` was not read during the pass**, which template §D requires per
+  run. Recorded as *not read* rather than carried forward from §O1's `25` as if measured.
+
+### Added
+
+- `benchmark/raw-evidence-v9-scored-pass.md` — protocol, pre-flight, all 12 rows with
+  audit-derived measurements, per-row scorer verdicts and the ambiguity each flagged, the
+  sensitivity analysis, and the complete packet-deviation record.
+- `benchmark/scorecard-v9.md` — the scorecard proper, §A2's gate expression applied per row. **No
+  Task 12 band verdict is stamped**: §A3.4 sets the evaluability floor at 8 valid runs and each arm
+  has 6, so the proportions are recorded and the band lookup is not performed.
+- `benchmark/scoring-v9/row-01…row-12` — the twelve blind packets exactly as scored, now tracked.
+  That directory holds **the packets and nothing else**, so it is a clean record of what each scorer
+  saw; v4's equivalent of `scoring-v4/results*/` is `docs/superpowers/v9-pass/` instead.
+- `docs/superpowers/v9-pass/` — trigger report, full run evidence (every Fix Report and transcript
+  HOLD verbatim), the packet-build report with its complete deviation record, and the twelve
+  scorers' individual reasoning files.
+- DECISION.md §T, plus a dated pointer at §Q3.
+
 ## 2026.08.0504 — 2026-08-05
 
 ### Documented
