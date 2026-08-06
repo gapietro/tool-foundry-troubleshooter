@@ -2274,3 +2274,108 @@ describe('evidenceProblems classification — evidence rule (#81)', () => {
         expect(res.normalized).toBeDefined()
     })
 })
+
+describe('evidenceProblems classification — audit-backed checks (#81)', () => {
+    const CTX = { auditAvailable: true, invokedTools: ['agent_trace'] }
+
+    it('classifies an unsupported citation as an evidence problem', () => {
+        const fr = load()
+        const res = fr.validate(
+            {
+                failure_summary: 'the agent returned nothing',
+                layers_swept: {
+                    1: { status: 'SWEPT' },
+                    2: { status: 'NOT_SWEPT', reason: 'not needed' },
+                    3: { status: 'NOT_SWEPT', reason: 'not needed' },
+                    4: { status: 'NOT_SWEPT', reason: 'not needed' },
+                    5: { status: 'NOT_SWEPT', reason: 'not needed' },
+                    6: { status: 'NOT_SWEPT', reason: 'not needed' },
+                    7: { status: 'NOT_SWEPT', reason: 'not needed' },
+                },
+                root_causes: [
+                    {
+                        layer: '5',
+                        component: 'x_snc_tsbench_ticket',
+                        finding: 'the table is empty',
+                        evidence: [
+                            { source: 'trace', detail: 'rows_returned: 0' },
+                            { source: 'data', detail: 'x_snc_tsbench_ticket has 0 rows' },
+                        ],
+                    },
+                ],
+                fixes: [
+                    {
+                        target_type: 'data',
+                        target: 'x_snc_tsbench_ticket',
+                        current: '0 rows',
+                        proposed: 'seed the table',
+                        rationale: 'the query has nothing to match',
+                    },
+                ],
+                verification: 're-run the agent and confirm rows come back',
+                data_markers: [],
+            },
+            CTX
+        )
+
+        expect(res.valid).toBe(false)
+        const unsupported = res.evidenceProblems.filter(function (p) {
+            return p.indexOf('unsupported citation') !== -1
+        })
+        expect(unsupported.length).toBe(1)
+        expect(res.problems).toEqual(expect.arrayContaining(res.evidenceProblems))
+    })
+
+    it('classifies an unsupported sweep claim as an evidence problem', () => {
+        const fr = load()
+        const res = fr.validate(
+            {
+                failure_summary: 'the agent returned nothing',
+                layers_swept: {
+                    1: { status: 'SWEPT' },
+                    2: { status: 'NOT_SWEPT', reason: 'not needed' },
+                    3: { status: 'NOT_SWEPT', reason: 'not needed' },
+                    4: { status: 'SWEPT' },
+                    5: { status: 'NOT_SWEPT', reason: 'not needed' },
+                    6: { status: 'NOT_SWEPT', reason: 'not needed' },
+                    7: { status: 'NOT_SWEPT', reason: 'not needed' },
+                },
+                root_causes: [
+                    {
+                        layer: '1',
+                        component: 'x_snc_tsbench_ticket',
+                        finding: 'the tool returned no rows',
+                        evidence: [{ source: 'trace', detail: 'rows_returned: 0' }],
+                    },
+                ],
+                fixes: [
+                    {
+                        target_type: 'data',
+                        target: 'x_snc_tsbench_ticket',
+                        current: '0 rows',
+                        proposed: 'seed the table',
+                        rationale: 'the query has nothing to match',
+                    },
+                ],
+                verification: 're-run the agent and confirm rows come back',
+                data_markers: [],
+            },
+            CTX
+        )
+
+        expect(res.valid).toBe(false)
+        const sweep = res.evidenceProblems.filter(function (p) {
+            return p.indexOf('unsupported sweep claim') !== -1
+        })
+        expect(sweep.length).toBe(1)
+    })
+
+    it('leaves plain shape problems out of evidenceProblems', () => {
+        const fr = load()
+        const res = fr.validate({ layers_swept: {}, root_causes: [], fixes: [], data_markers: [] }, CTX)
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.length).toBeGreaterThan(0)
+        expect(res.evidenceProblems).toEqual([])
+    })
+})

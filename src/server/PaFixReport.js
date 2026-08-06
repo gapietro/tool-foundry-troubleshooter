@@ -373,7 +373,11 @@ PaFixReport.prototype = {
 
         if (unsupported.length === 0) return
 
-        problems.push(
+        // #81: evidence class. "Call a tool that reads that layer" is a
+        // legal fix and only the loop can offer it. Downgrading the claim to
+        // NOT_SWEPT stays available on the resubmission either way.
+        this._pushEvidenceProblem(
+            problems,
             'layers_swept: unsupported sweep claim — ' + unsupported.length + ' layer(s) are marked SWEPT ' +
                 'but this run never invoked a tool that reads them. ' + unsupported.join('. ') + '. Tools ' +
                 'invoked this run: ' + this._invokedList(ctx) + '. Mark a layer you did not actually sweep ' +
@@ -599,7 +603,13 @@ PaFixReport.prototype = {
         if (!supporting) return
         if (this._anyInvoked(supporting, ctx)) return
 
-        problems.push(
+        // #81: evidence class. This message already names the tools that
+        // would support the citation, and v9 row 08 received exactly that
+        // text and still failed — because the repair turn that read it had
+        // no way to call any of them. Routing it back to the loop is what
+        // makes the instruction actionable.
+        this._pushEvidenceProblem(
+            problems,
             entryLabel + ': unsupported citation — cites "' + source + '" but this run never invoked a ' +
                 'tool that reads it (' + supporting.join(', ') + '). Either call one of those tools and ' +
                 'cite what it actually returned, or drop the claim. Tools invoked this run: ' +
