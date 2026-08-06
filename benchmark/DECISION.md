@@ -2906,3 +2906,96 @@ back off the instance**; the raw-evidence file reconstructs it from `_citationTo
 **Unrelated but load-bearing for the next operator:** `now-sdk install` does **not** stamp
 `sys_updated_on` on the records it installs — the deployed script includes read 2026-08-02 hours
 after this install. **`sys_updated_on` is not a deploy check.** A `scriptLIKE<marker>` probe is.
+
+### U8. §U3 was defective, so it yielded no verdict — the clause is fixed and re-run (round 2)
+
+**Written and committed before any round-2 run fired. §U1–§U6 and §U7 are unmodified** — the same
+discipline §U7 followed, and `git log -p benchmark/DECISION.md` is the check.
+
+#### U8.1 Why §U3 is being amended, and what was known when it changed
+
+**State the compromise first.** This amendment is being written **with the v10 results already
+known** (§U7). That is not the position a pre-registration should ever be written from, and no
+reader should have to infer it. What was known: 2 of 2 seed-01 runs fired an `EVIDENCE RETURN`; 1
+of those 2 was followed by an intervening tool call; 0 of 4 runs terminated `partial`.
+
+**The defect.** §U3's preamble reads *"Either of these, on the seed-01 pair"*, which is ambiguous
+between *on either run of the pair* and *on the pair as a whole*. §U2's U-a is quantified per-pair
+("≥1 of 2"). Under the per-run reading of §U3, **U-a and §U3.1 are both satisfied by the same two
+runs** — the prediction holds and its own refutation fires, simultaneously. A test that can return
+both answers at once returns neither.
+
+**The ruling (human, 2026-08-06): §U3 yields no verdict and neither branch of it may be picked.**
+`MAX_EVIDENCE_RETURNS` stays at `2` **pending this round's result** — not because the trigger was
+argued away in §U7, and not because the change was ratified. §U7's three arguments for standing
+pat are recorded there and are **not** load-bearing here; this round decides on its own terms.
+
+#### U8.2 §U3, amended — per-run, explicitly
+
+Replacing the ambiguous preamble for round 2 onward. **Each clause below is evaluated PER RUN, and
+the round's verdict is a COUNT over runs, fixed in §U8.3.** A clause firing on one run is a fact
+about that run, never by itself a verdict about the round.
+
+| | Amended clause, per run |
+|---|---|
+| §U3.1′ | A run fires at least one `EVIDENCE RETURN` note and makes **no tool call after it** |
+| §U3.2′ | A run terminates `partial` |
+
+**"After it" is defined structurally, not by clock.** A tool call counts as intervening iff the
+run's `x_snc_troubleshoot_run.transcript` contains an entry with `actor: 'tool'` at a **higher
+`seq`** than the first `EVIDENCE RETURN` entry. Sequence, not timestamp — two transcript entries
+can share a second (v10-2's note and its `fix_report` both read 23:13:59), and a second-resolution
+comparison would be undecidable there. Arguments and outputs for any such call are then read from
+`x_snc_troubleshoot_audit` (`action_type=intent` carries `input`; `action_type=result` carries
+`output`), per §E1–E2.
+
+#### U8.3 The decision rule for round 2, as a number, filed before the runs
+
+**Protocol.** ~4 more seed-01 runs — **2 runs against each of the two v9 seed-01 execution plans**
+(`4a5bb19d2b66cf54f243fed2ce91bf57`, `45bbfd112ba6cf54f243fed2ce91bfcb`), custom arm only,
+strictly sequential, same request body, no new executions triggered, no fixture touched. The
+deployed build is unchanged from v10 (§U7); it is re-probed with `scriptLIKE` rather than trusted,
+because `now-sdk install` does not stamp `sys_updated_on`.
+
+**The metric.**
+
+- **Denominator `D`** = round-2 runs that fire at least one `EVIDENCE RETURN`.
+- **Numerator `N`** = of those `D`, how many satisfy the negation of §U3.1′ — at least one
+  `actor: 'tool'` transcript entry at a higher `seq` than the first note.
+
+**The rule, decided on the mechanism's merits and not on v10's 1-of-2:**
+
+| Condition | Verdict |
+|---|---|
+| **`N / D ≥ 1/2`** (a boundary case of exactly one half **stands**) | The return stands. `MAX_EVIDENCE_RETURNS` remains `2` |
+| **`N / D < 1/2`** | **REVERT.** `MAX_EVIDENCE_RETURNS` → `0` at `src/server/PaAgentLoop.js:163`, in the same PR |
+| **Any run terminates `partial`** (§U3.2′, at a count of **1**) | **REVERT**, overriding the row above. A `partial` destroys a scorable row, which is strictly worse than the defect being fixed |
+| **`D < 3`** | **UNDER-POWERED. No verdict.** Do not revert and do not ratify — record it and say so |
+
+**Why one half, and why the boundary stands.** The tool-less repair turn already offers two of the
+three moves an evidence-class rejection permits — weaken the claim, or go `inconclusive`. The one
+move it cannot offer, *by construction*, is going and reading the missing source (§H7-5). So the
+return earns its machinery — a classifier, a cap, a headroom guard, a state block, a draft stash
+and a new terminal path — only if the move that is otherwise impossible actually happens at a rate
+that is not marginal. **Below half, the model is predominantly choosing a move it could already
+have made for free, and the mechanism is mostly a more expensive repair turn.** At or above half,
+the return is doing something the repair turn structurally cannot, and its costs fail safe: every
+guard falls through to today's behaviour, and the cap bounds the spend at 2 iterations.
+
+**Why `D < 3` is a stop rather than a lenient pass.** A round that fires twice and splits 1–1
+reproduces §U3's ambiguity exactly, and resolving a coin flip by picking the branch that suits the
+change is the failure this amendment exists to prevent.
+
+**Recorded as secondary and explicitly NOT deciding:** the pooled figure across v10's seed-01 runs
+and round 2's will also be reported, because a reader will compute it anyway and should not have
+to. **The verdict is round 2's `N / D` alone**, per the ruling that this round decides on its own
+terms.
+
+#### U8.4 What round 2 still cannot establish
+
+Everything in §U5 stands unchanged, and one thing is sharpened: this round is **one seed, one arm,
+~4 runs**. It measures whether the model uses a move that has been made available to it. It
+measures nothing about rate beyond this seed, nothing about seed 03 (unchanged since §U7's 2 of 2
+`complete` with no return fired), and **nothing about diagnostic correctness** — §U7 measured four
+of four reports concluding at layer 1 or at nothing against seeded layers 3 and 5, and no result
+below can move that.
