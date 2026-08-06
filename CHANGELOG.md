@@ -77,12 +77,15 @@ two-digit daily counter. Incremented on every merge to `main`.
 - `benchmark/scorecard-v9.md` — the scorecard proper, §A2's gate expression applied per row. **No
   Task 12 band verdict is stamped**: §A3.4 sets the evaluability floor at 8 valid runs and each arm
   has 6, so the proportions are recorded and the band lookup is not performed.
-- `benchmark/scoring-v9/row-01…row-12` — the twelve blind packets exactly as scored, now tracked.
-  That directory holds **the packets and nothing else**, so it is a clean record of what each scorer
-  saw; v4's equivalent of `scoring-v4/results*/` is `docs/superpowers/v9-pass/` instead.
-- `docs/superpowers/v9-pass/` — trigger report, full run evidence (every Fix Report and transcript
-  HOLD verbatim), the packet-build report with its complete deviation record, and the twelve
-  scorers' individual reasoning files.
+- `benchmark/scoring-v9/row-01…row-12` — the twelve blind packets exactly as scored, now tracked,
+  byte-identical to what each scorer saw and unedited after scoring.
+- `benchmark/scoring-v9/results/row-01-result.md…row-12-result.md` — the twelve scorers' full
+  reasoning, following v4's `scoring-v4/results/row-NN-result.md` naming so the two passes read
+  side by side.
+- `benchmark/scoring-v9/trigger-report.md`, `run-evidence.md`, `packet-build-report.md` — how the
+  six seeded executions were produced, all 12 rows verbatim (every Fix Report and transcript HOLD),
+  and the packet-build report carrying §7's complete deviation record. Placed beside the packets,
+  matching how `scoring-v4/` carries its own process subdirectories.
 - DECISION.md §T, plus a dated pointer at §Q3.
 
 ## 2026.08.0504 — 2026-08-05

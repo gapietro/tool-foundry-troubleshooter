@@ -12,18 +12,19 @@ Companion artifacts, all produced before this file and none rewritten by it:
 
 | Artifact | What it holds |
 |---|---|
-| `docs/superpowers/v9-pass/trigger-report.md` | how the six seeded failing executions were produced |
-| `docs/superpowers/v9-pass/run-evidence.md` | all 12 rows verbatim, including every Fix Report in full and every transcript HOLD |
-| `docs/superpowers/v9-pass/packet-build-report.md` | packet construction, the blind-rule gate, and §7's complete deviation record |
-| `docs/superpowers/v9-pass/scores/row-01.md` … `row-12.md` | each blind scorer's full reasoning |
+| `benchmark/scoring-v9/trigger-report.md` | how the six seeded failing executions were produced |
+| `benchmark/scoring-v9/run-evidence.md` | all 12 rows verbatim, including every Fix Report in full and every transcript HOLD |
+| `benchmark/scoring-v9/packet-build-report.md` | packet construction, the blind-rule gate, and §7's complete deviation record |
+| `benchmark/scoring-v9/results/row-01-result.md` … `row-12-result.md` | each blind scorer's full reasoning |
 | `benchmark/scoring-v9/row-01…row-12` | the twelve blind packets exactly as scored |
 | `benchmark/scorecard-v9.md` | the scorecard proper, §A2 gate expression applied |
 
-> **Note on where the process artifacts live.** The v4 pass kept scorer outputs under
-> `benchmark/scoring-v4/results*/`. This pass keeps `benchmark/scoring-v9/` holding **exactly the
-> twelve packets as scored and nothing else**, so that directory is a clean record of what each
-> scorer saw, and puts the four process artifacts under `docs/superpowers/v9-pass/`. A future
-> reader looking for v9's equivalent of `scoring-v4/results/` should look there.
+> **Note on layout.** This pass follows v4's shape so the two can be read side by side: the twelve
+> blind packets sit at `benchmark/scoring-v9/` root, the twelve scorers' verdicts under
+> `benchmark/scoring-v9/results/` as `row-NN-result.md` — the same names v4 uses — and the three
+> process artifacts (trigger, run evidence, packet build) beside the packets, matching how
+> `scoring-v4/` carries its own process subdirectories. The packets themselves are byte-identical
+> to what each scorer saw; nothing in this directory was edited after scoring.
 
 **Result in one line: native 36/36 and 6/6 on the gate; custom 9/36 and 0/6. Twelve rows, three
 seeds, one instance, one day — a direction, not a rate.** The qualifications that bound it are in

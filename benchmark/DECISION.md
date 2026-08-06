@@ -2491,8 +2491,9 @@ two reps each, both arms the same day** on gpinst01 (Zurich P10 HF3) at app vers
 Scored blind, one independent scorer per packet, §O5's topology.
 
 Measurements: `benchmark/raw-evidence-v9-scored-pass.md`. Rows: `benchmark/scorecard-v9.md`.
-Packets exactly as scored: `benchmark/scoring-v9/`. Trigger, execution, packet-build and the twelve
-scorers' full reasoning: `docs/superpowers/v9-pass/`. Predictions T1–T9 were
+Packets exactly as scored: `benchmark/scoring-v9/`. Trigger, execution and packet-build reports sit
+beside them; the twelve scorers' full reasoning is at `benchmark/scoring-v9/results/`, following
+v4's naming. Predictions T1–T9 were
 filed on issue #119 **before any run fired**; T10 and T11 in that issue's first comment, after the
 smoke gate and **still before any scored run**.
 
