@@ -23,7 +23,7 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 - **The depth gate's declared path let the model select its own cheap compliance (#116).**
   `_selectTarget` gave the model's own `would_confirm` layer precedence whenever it named an open
-  gap. DECISION.md §Q4 measured the cost: that path carried 4 of 6 holds, and twice it steered the
+  gap. DECISION.md §Q4 measured the cost: that path carried 4 of 6 runs, and twice it steered the
   run to a cheap layer — both seed-04 runs named layer 3, whose `agent_config` has fan-out 3, while
   layers 4 and 5 sat open at fan-out 1, and `agent_config` legitimately discharged the hold. The
   target is now always drawn from the **minimal-fan-out class** of open gaps, with the declaration
@@ -35,7 +35,8 @@ two-digit daily counter. Incremented on every merge to `main`.
 
   **It does not make layer 6 reachable, and that was pre-registered (S3/S4).** Layers 1, 4 and 5
   score fan-out 1 and layer 6 scores 2, so layer 6 is targeted only once 4 and 5 are closed —
-  and `MAX_HOLDS` is 2. `genai_log` and `log_analysis` stay unreached. A tie-break that preferred
+  and `MAX_HOLDS` is 2. The gate cannot **target** layer 6 within the cap; whether the model
+  reaches `genai_log`/`log_analysis` unprompted is unmeasured. A tie-break that preferred
   layer 6 was rejected: no structural argument picks it over layer 4 other than "that is where the
   unreached tool is", which forfeits §H8 item 3's non-vacuity condition.
 

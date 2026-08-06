@@ -1920,8 +1920,10 @@ describe('depth gate (#103) — _holdBlock', () => {
         // instrument compose two arms that differ somewhere other than where
         // it claims.
         const block = load()._holdBlock(GAPS, 'gaps')
-        expect(block).toContain('Quote the specific field')
-        expect(block).toContain('or value you are relying on.')
+        expect(block).toContain(
+            '  1. What did the last tool result actually establish? Quote the specific field\n' +
+            '     or value you are relying on.'
+        )
     })
 })
 

@@ -871,7 +871,7 @@ PaAgentLoop.prototype = {
      * class break on the lowest layer number.
      *
      * #109 let a named open gap win outright, and DECISION.md §Q4 measured the
-     * cost: `would_confirm` carried 4 of 6 holds, and twice it steered the run
+     * cost: `would_confirm` carried 4 of 6 runs, and twice it steered the run
      * to a cheap layer — both seed-04 runs named layer 3 (agent_config,
      * fan-out 3) while layers 4 and 5 sat open at fan-out 1, and agent_config
      * legitimately discharged the hold. That was pre-registered as a design
@@ -884,11 +884,13 @@ PaAgentLoop.prototype = {
      * it does not make layer 6 reachable. Layers 1, 4 and 5 score 1 and layer
      * 6 scores 2, so layer 6 is targeted only once 4 and 5 are both closed —
      * and layer 1 always closes on the opening `agent_trace`. With MAX_HOLDS
-     * at 2 there is no budget for that. `genai_log` and `log_analysis` stay
-     * unreached; issue #116 files this as S3/S4. The alternative — a tie-break
-     * that prefers layer 6 — was rejected because no structural argument picks
-     * it over layer 4 other than "that is where the unreached tool is", which
-     * forfeits §H8 item 3's non-vacuity condition.
+     * at 2 there is no budget for that. The gate cannot TARGET layer 6 within
+     * the cap; whether the model reaches `genai_log`/`log_analysis`
+     * unprompted is unmeasured — issue #116 files this as S3/S4. The
+     * alternative — a tie-break that prefers layer 6 — was rejected because
+     * no structural argument picks it over layer 4 other than "that is where
+     * the unreached tool is", which forfeits §H8 item 3's non-vacuity
+     * condition.
      *
      * THE RANK NEVER MENTIONS A TOOL NAME, and neither does the block built
      * from it (`_holdBlock`). §H8 item 3's non-vacuity condition is that the

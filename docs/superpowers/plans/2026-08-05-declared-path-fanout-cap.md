@@ -2,6 +2,12 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **OUTCOME: Task 2 was REVERTED, not shipped.** The A/B in Task 4 refuted its hypothesis — six
+> scenarios, twelve trials, every pair byte-identical between arms, including the one that
+> reproduced the defect (S6 REFUTED). Task 4b (added during execution, not in this plan) reverted
+> the wording and inverted the A/B instrument to match. **Do not re-apply Task 2.** Task 1 shipped
+> as written. See `benchmark/raw-evidence-v8-hold-item1-ab.md` and DECISION.md §R6.
+
 **Goal:** Stop the depth gate's declared path from selecting a cheap layer, and stop its hold block from offering a bare field name as a quotable unit.
 
 **Architecture:** Two edits inside `src/server/PaAgentLoop.js`. `_selectTarget` is rewritten so the target is always drawn from the minimal-fan-out ("floor") class of open gaps, with the model's `would_confirm` declaration deciding only which member of that class wins. `_holdBlock`'s item 1 is reworded so table and field are co-salient. The hold-text edit is measured on its own by a paired A/B on the reduced instrument before the PR is opened.
@@ -306,6 +312,12 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ---
 
 ### Task 2: `_holdBlock` item 1 stops offering a bare field
+
+> **OUTCOME: Task 2 was REVERTED, not shipped.** The A/B in Task 4 refuted its hypothesis — six
+> scenarios, twelve trials, every pair byte-identical between arms, including the one that
+> reproduced the defect (S6 REFUTED). Task 4b (added during execution, not in this plan) reverted
+> the wording and inverted the A/B instrument to match. **Do not re-apply Task 2.** Task 1 shipped
+> as written. See `benchmark/raw-evidence-v8-hold-item1-ab.md` and DECISION.md §R6.
 
 **Files:**
 - Modify: `src/server/PaAgentLoop.js:1110-1111` (item 1 inside `_holdBlock`), plus its doc header

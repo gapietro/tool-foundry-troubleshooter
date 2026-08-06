@@ -2188,7 +2188,7 @@ live. S2, S3 and S4 are forward predictions for the next e2e smoke and are **uns
 |---|---|---|---|
 | S1 | Replaying the v6 hold records changes the target on exactly 2, both seed-04, layer 3 → 4, `declared` → `ranked` | **HELD** | Both, exactly; regression-tested on the verbatim gap sets |
 | S2 | `declared` fires on a minority of holds in the next e2e smoke | **UNSCORED** | No smoke was run |
-| S3 | `genai_log` and `log_analysis` remain uninvoked | **UNSCORED** | No smoke was run. Structurally guaranteed — see R4 |
+| S3 | `genai_log` and `log_analysis` remain uninvoked | **UNSCORED** | No smoke was run. R4 shows the gate cannot target layer 6 within the cap; whether the model volunteers those tools unprompted is unmeasured |
 | S4 | Seed 04 still misses its layer-6 answer; holds release on `schema_lookup` not `agent_config` | **UNSCORED** | No smoke was run |
 | S5 | The control arm reproduces ≥ 1 table-omitted argument, else the run licenses no claim | **HELD** | 1 of 6 (s3). The fail-safe passes |
 | S6 | The treatment arm emits 0 table-omitted arguments | **REFUTED** | 1 of 6 — same scenario, byte-identical to control |

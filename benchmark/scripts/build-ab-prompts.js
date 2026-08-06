@@ -1,12 +1,16 @@
 /**
- * #111 A/B — compose the two prompts that differ ONLY in schema_lookup's
- * input contract sentence.
- *
- * REDUCED INSTRUMENT. The faithful version of this experiment sends the real
+ * Two independent A/B modes, selected by the `--hold` flag. Both are REDUCED
+ * INSTRUMENTS: the faithful version of either experiment sends the real
  * 16.7K-char prompt (full playbook, all seven tool descriptions, the real
- * _buildPrompt composition). That needs a server-side loop, which needs an
- * execution surface the app does not have. This build keeps the elements with
- * a plausible causal role in the measured malformation and drops the rest:
+ * _buildPrompt composition), which needs a server-side loop the app does not
+ * have. Each mode keeps the elements with a plausible causal role in what it
+ * measures and drops the rest; each mode's cost is stated in its own
+ * pre-registration: if the CONTROL arm does not reproduce the defect it is
+ * testing for, the instrument is too reduced to test anything and the run is
+ * uninformative — it does NOT license a claim about the fix.
+ *
+ * DEFAULT MODE — #111 A/B — compose the two prompts that differ ONLY in
+ * schema_lookup's input contract sentence.
  *
  *   KEPT  schema_lookup's full description        the variable under test
  *   KEPT  the `execution: <sys_id>` request block  _renderRequest emits literal
@@ -21,11 +25,16 @@
  *         -> schema_lookup" routing line           makes the lookup the right move
  *   DROPPED  the other six tool descriptions, the rest of the playbook
  *
- * The cost is stated in the pre-registration: if the CONTROL arm does not
- * reproduce the malformation, this instrument is too reduced to test anything
- * and the run is uninformative — it does NOT license a claim about the fix.
+ * --hold MODE — #116's hold-item-1 A/B — compose the two prompts that differ
+ * ONLY in the hold block's item 1 (the DEPLOYED wording vs. the CANDIDATE
+ * rewording), across six paired scenarios. Both arms carry the corrected
+ * (#111) contract, so the free variable is isolated to item 1. The candidate
+ * was REFUTED (S6, `benchmark/raw-evidence-v8-hold-item1-ab.md`) and the
+ * wording was reverted — this mode is kept, unreverted, so the A/B stays
+ * reproducible from the repo rather than only living in that evidence file.
  *
  * Run: node benchmark/scripts/build-ab-prompts.js <out-dir>
+ * Run: node benchmark/scripts/build-ab-prompts.js <out-dir> --hold
  */
 const fs = require('fs')
 const path = require('path')

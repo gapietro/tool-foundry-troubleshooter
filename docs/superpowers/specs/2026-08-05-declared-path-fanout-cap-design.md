@@ -7,7 +7,7 @@
 `benchmark/raw-evidence-v6-directed-depth.md`); v7 contract A/B, `2026.08.0501`
 (`benchmark/raw-evidence-v7-contract-ab.md`)
 **Deployed main:** `2026.08.0502`
-**Status:** design approved, not yet implemented
+**Status:** Change A shipped in `2026.08.0503`; Change B reverted after its A/B refuted it (DECISION.md §R6)
 
 ---
 
@@ -19,7 +19,7 @@ smoke *because* it arrived alongside another change without disjoint observables
 these two stay attributable.
 
 **Problem 1 — the declared path is model-steerable (§Q4).** `_selectTarget` prefers the model's
-own `would_confirm` layer whenever it names an open gap. That path carried 4 of 6 holds — not the
+own `would_confirm` layer whenever it names an open gap. That path carried 4 of 6 runs — not the
 minority Q7 predicted — and twice it steered the run to a cheap layer. It was pre-registered as a
 design property, not a defect, on the grounds that binding the gate to the model's own stated gap
 is the purest form of direction available. The v6 smoke measured the cost: two of six runs lost
@@ -224,7 +224,7 @@ that root-caused #111.
 
 | File | Change |
 |---|---|
-| `src/server/PaAgentLoop.js` | `_selectTarget` rewritten to the floor rule; `_holdBlock` item 1 reworded; headers updated |
+| `src/server/PaAgentLoop.js` | `_selectTarget` rewritten to the floor rule (shipped); `_holdBlock` item 1 rewording **reverted** — only an explanatory header comment remains, the emitted wording is unchanged; headers updated |
 | `test/…PaAgentLoop…` | new selection tests (§10), item-1 wording test, existing no-tool-names guard unchanged |
 | `benchmark/scripts/build-ab-prompts.js` | hold mode; arms from the real `_holdBlock`; differ-only invariant extended |
 | `benchmark/raw-evidence-v8-hold-item1-ab.md` | new — every trial verbatim, S5–S7 scored |
@@ -252,7 +252,8 @@ Unit, on `_selectTarget`:
 
 On `_holdBlock`:
 
-9. Item 1 contains no standalone field-quoting phrasing; the new wording is present.
+9. Item 1 pins the **deployed** wording (the rewording in §5 was reverted) as an exact two-line
+   string, because `build-ab-prompts.js --hold` composes its control arm from exactly that text.
 10. The existing guard — the block names no measured tool — passes unchanged.
 
 ## 11. What this cannot establish
