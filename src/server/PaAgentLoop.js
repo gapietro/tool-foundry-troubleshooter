@@ -897,12 +897,12 @@ PaAgentLoop.prototype = {
      * the unreached tool is", which forfeits §H8 item 3's non-vacuity
      * condition.
      *
-     * THE RANK NEVER MENTIONS A TOOL NAME, and neither does the block built
-     * from it (`_holdBlock`). §H8 item 3's non-vacuity condition is that the
-     * harness does not name the measured tools to the model; the rank is
-     * stated over the map's structure and would produce its ordering under a
-     * different map. The spec's §8 records the qualification this still
-     * carries, and issue #110 records the one that predates it.
+     * THE RANK IS STATED OVER THE MAP'S STRUCTURE, NOT OVER WHERE A MEASURED
+     * TOOL SITS — it would produce its ordering under a different map — and
+     * neither it nor `_holdBlock` names a tool. THAT PAIR survives; §H8 item
+     * 3's condition AS WORDED (the harness does not name the measured tools)
+     * is STRUCK — the prompt names all seven and always has (#110, §S). This
+     * rejection spends the structural half; spec §8's qualification stands.
      *
      * COST IS AT MOST TWO FORCED BEATS, NOT ONE (C1, final whole-branch
      * review). Narrowing the release set to the DEDICATED tools is exactly

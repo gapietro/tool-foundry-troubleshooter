@@ -2255,9 +2255,11 @@ non-vacuity condition and would make 57 runs of evidence unreadable.
 
 > **Restated 2026-08-05 (#110, §S).** §H8 item 3's non-vacuity condition as originally worded — that
 > the harness never names the measured tools — was never true. This argument does not depend on it.
-> It depends on the narrower claim that survives: the depth gate's *direction* names no tool. A
-> tie-break selecting for layer 6 because that is where the unreached tool sits would forfeit that
-> claim, and the rejection stands unchanged.
+> It depends on the narrower claim §S4 states second: that the gate's *target selection* is derived
+> from the map's structure, not from where a measured tool sits. A tie-break selecting layer 6
+> because that is where the unreached tool sits forfeits exactly that structural derivation — while
+> still naming no tool in the direction it emits, so §S4's first claim would not catch it — and the
+> rejection stands unchanged.
 
 ### R5. The declared/ranked split inverts by construction
 
@@ -2382,15 +2384,25 @@ grounds alone.
 
 **Struck:** *the harness never names to the model the tools the test measures.*
 
-**Replaces it:** *the depth gate's direction names no tool.*
+**Replaces it — two claims, not one.** Both are true and both are enforced, and they are not the
+same claim:
 
-True, enforced, and the claim the arguments actually rest on: `_holdBlock` states gaps as layer
-numbers and names; `_scrubToolNames` (`PaAgentLoop.js:1781-1798`) replaces every `_ALL_TOOL_NAMES`
-entry with `[tool]` in the model's own quoted-back reasons; the fan-out rank is stated over the
-map's structure and would produce its ordering under a different map.
+1. **The gate's *direction* names no tool.** This is about surface text. `_holdBlock` renders gaps
+   as layer numbers and layer names; `_scrubToolNames` (`PaAgentLoop.js:1781-1798`) replaces every
+   `_ALL_TOOL_NAMES` entry with `[tool]` in the model's own quoted-back reasons, so a tool name
+   cannot re-enter the direction through the model's own words.
+2. **The gate's *target selection* is derived from the map's structure, not from where a measured
+   tool sits.** The fan-out rank is stated over the map's structure and would produce its ordering
+   under a different map.
 
-**§R4 survives intact.** Its rejection of a layer-6 tie-break turns on the *gate* selecting for a
-measured tool, not on the catalogue mentioning one.
+**Claim 2 is the one §R4 spends, and claim 1 cannot stand in for it.** A tie-break preferring layer
+6 *because that is where the unreached tool is* would emit "Call a tool that reaches layer 6" —
+naming no tool, so claim 1 survives it untouched — while forfeiting claim 2 outright. Stating the
+replacement as the slogan alone would therefore point §R4's rejection at a claim its own
+counterexample does not violate.
+
+**§R4 survives intact** on claim 2. Its rejection turns on the *gate* selecting for a measured tool,
+not on the catalogue mentioning one.
 
 ### S5. The measurement, per tool — and a correction
 
@@ -2399,7 +2411,7 @@ Issue #110 said the three tools "were invoked in 0 of 51 runs". **Stale as a pre
 
 | Tool | Status |
 |---|---|
-| `schema_lookup` | Invoked — v6 smoke, seed 01 runs 1–2. Run 1's call was malformed (`table:incident`, #111) and retrieved nothing; run 2's returned evidence |
+| `schema_lookup` | Invoked — v6 smoke, seed 01 runs 1–2 **and seed 03 run 4**. Runs 1 and 4 made the same malformed call (`table:incident`, #111) and retrieved nothing — §Q3's "twice across two seeds"; only run 2's returned evidence |
 | `query_table` | Invoked — v6 smoke, seed 03 run 3; a well-formed query returning 0 rows, which *is* the finding |
 | `genai_log` | **Zero**, now 57 runs (§Q5) |
 | `log_analysis` | **Zero**, now 57 runs (§Q5) |
@@ -2433,8 +2445,10 @@ stays open on #110, to be read against that pass's S2–S4 evidence.
 
 ### S7. What shipped
 
-DECISION.md §S plus dated pointers at §H8 item 3, §P, §Q3 and §R4; a corrected comment at
-`PaAgentLoop.js:568`; and one test pinning what site 2 advertises — each layer's tool list checked
+DECISION.md §S plus dated pointers at §H8 item 3, §P, §Q3 and §R4; corrected comments at
+`PaAgentLoop.js:568` and `:900-905` — the second being the *definitional* statement of the struck
+premise, sitting three lines below §R4's argument, and caught only by the final review; and one
+test pinning what site 2 advertises — each layer's tool list checked
 *positionally* against a hardcoded snapshot of `_layerToolMap()`, plus that the map cannot introduce a tool
 `_scrubToolNames` does not strip. Positional matters: all seven tools are named in the citation
 clause too, so a whole-text scan would not notice a layer losing its tool. The snapshot is a literal
@@ -2449,6 +2463,13 @@ tool mentions would fire on every description edit.
 - **Nothing about correctness**, and nothing about native.
 - **No claim that the naming did or did not affect any prior score.** The 0-of-51 window is
   consistent with "no effect" but does not prove it.
+- **No arm isolates the gate.** S5's "fifty-one runs of naming did nothing; one structural change
+  did it" compares harness *versions*, not arms of one experiment. Those 51 runs were produced by
+  v4, v5 and the prompt-contract rounds before them, so more than the directed gate differs between
+  them and v6, and nothing ran v6 with the gate removed and the rest held fixed. The nearest thing
+  to a control is v5 → v6 alone — §Q1 records byte-identical request bodies across that pair — and
+  that is six runs, not fifty-one. S5's "strongest available evidence" is the right strength for
+  the claim; it is not an attribution.
 - **No prompt change**, deliberately — the scored pass §R9 asks for must stay comparable to §O's
   baseline.
 - **No fix for the #109 collision** (S6).

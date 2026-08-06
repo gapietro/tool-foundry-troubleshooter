@@ -1399,9 +1399,24 @@ describe('schemaText contract additions', () => {
             7: ['agent_config'],
         }
 
+        // The literal is a SNAPSHOT, so the loop below iterates ITS keys — a
+        // layer added to both _layerDefs() and _layerToolMap() would be
+        // advertised in this clause and checked by nothing. Pin the key SET
+        // against the live map so a new (or removed) layer fails loudly here
+        // and has to be added to the snapshot deliberately. This is not the
+        // tautology the per-layer comparison would be: the values still come
+        // from the literal, only the layer roster is read live.
+        expect(Object.keys(expectedLayerToolMap).sort()).toEqual(Object.keys(map).sort())
+
+        // Bound the slice at the next clause, exactly as the _citationToolMap
+        // test above does — `text.slice(start)` would run to end-of-text and
+        // let a layer clause that migrated out of the SWEPT paragraph still
+        // satisfy the regex from wherever it landed.
         const start = text.indexOf('A LAYER MARKED SWEPT')
+        const end = text.indexOf('IF NOTHING EVER RAN, SAY SO')
         expect(start).not.toBe(-1)
-        const clause = text.slice(start)
+        expect(end).not.toBe(-1)
+        const clause = text.slice(start, end)
 
         Object.keys(expectedLayerToolMap).forEach((layer) => {
             // "4 (Schema) needs one of: schema_lookup" — capture the tool

@@ -63,7 +63,7 @@ against the tools the run actually invoked (#79, §H8 item 2, verified working i
 cannot comply with a rule it is not told, so the mapping — `trace` from
 `agent_trace`/`genai_log`/`log_analysis`, `config` from `agent_config`/`genai_log`, `schema` from
 `schema_lookup`, `data` from `query_table`/`log_analysis` — has to be stated. It is contract-tested
-at `PaFixReport.test.js:1316`.
+at `PaFixReport.test.js:1308`.
 
 Issue option 3 ("replace passage 1's per-layer clause list with layer names only") was scoped to
 site 2 and did not account for site 1. De-naming site 1 would break a shipped feature. This is
@@ -83,6 +83,13 @@ This one is true, is enforced, and is the claim the arguments actually rest on:
   the model's own words. Guarded by unit tests in `PaAgentLoop.test.js`.
 - The fan-out rank is stated over the map's structure and would produce its ordering under a
   different map (§R, `PaAgentLoop.js:900-905`).
+
+> **Corrected in what shipped (final review).** Stated as the one slogan above, the replacement is
+> narrower than §R4 needs: it is a claim about *surface text*, and a layer-6 tie-break would emit
+> "Call a tool that reaches layer 6" — naming no tool, satisfying the slogan, and being precisely
+> what §R4 rejects. §S4 therefore ships **two** claims: (1) the gate's direction names no tool, and
+> (2) the gate's target selection is derived from the map's structure, not from where a measured
+> tool sits. **Claim 2 is the one §R4 spends.** Read the third bullet above as the load-bearing one.
 
 **This is the claim §R4 spends**, and it survives intact. §R4 rejects a tie-break preferring layer 6
 because no structural argument picks it over layer 4 "other than *that is where the unreached tool
@@ -141,9 +148,10 @@ release set — change what the model is told, and would confound the scored pas
 ### 7.1 DECISION.md §S
 
 A dated non-pass section, following the **Fix Round 1** precedent, appended after §R. Contents map
-to this spec: §S1 the five sites; §S2 site 0 and why the premise cannot be rescued; §S3 the
-replacement claim and that §R4 survives; §S4 the per-tool measurement and the 0-of-51 correction;
-§S5 the #109 collision as known-open; §S6 what this does not establish.
+to this spec as shipped: §S1 the five sites; §S2 site 0 and why the premise cannot be rescued; §S3
+site 1 being load-bearing, so issue option 3 is wrong as stated; §S4 the replacement claim and that
+§R4 survives; §S5 the per-tool measurement and the 0-of-51 correction; §S6 the #109 collision as
+known-open; §S7 what shipped; §S8 what this does not establish.
 
 No verified number moves. No historical text is rewritten.
 
@@ -151,13 +159,19 @@ No verified number moves. No historical text is rewritten.
 
 A short dated block quote at each site asserting the struck premise, each pointing to §S:
 
+Line numbers below are **post-insertion**, re-derived by reading the file at the shipped commit, so
+they agree with the `PaAgentLoop.js` citations elsewhere in this spec rather than sitting in a
+second coordinate system. §H8 item 3's is unchanged at 666 because the only insertion before it
+falls *after* that line; the other three moved by 4, 9 and 14 lines respectively.
+
 | File | Location | What it asserts today |
 |---|---|---|
 | `benchmark/DECISION.md` | §H8 item 3 (line 666) | The acceptance test, on which the premise rests |
-| `benchmark/DECISION.md` | §P (line 1930) | "so the harness never named a tool and §H8's test stayed non-vacuous" |
-| `benchmark/DECISION.md` | §Q3 (line 2072) | "The rule is structural and names no tool" |
-| `benchmark/DECISION.md` | §R4 (line 2239) | Spends item 3's non-vacuity condition — annotate that it survives under §4's restatement |
+| `benchmark/DECISION.md` | §P (line 1934) | "so the harness never named a tool and §H8's test stayed non-vacuous" |
+| `benchmark/DECISION.md` | §Q3 (line 2081) | "The rule is structural and names no tool" |
+| `benchmark/DECISION.md` | §R4 (line 2253) | Spends item 3's non-vacuity condition — annotate that it survives under §4's restatement |
 | `src/server/PaAgentLoop.js` | `:568` | "The harness never names a tool (see `_holdBlock`)" — true of `_holdBlock`, false as written |
+| `src/server/PaAgentLoop.js` | `:900-905` | "§H8 item 3's non-vacuity condition is that the harness does not name the measured tools" — the definitional form of the struck premise, three lines below §R4's argument |
 
 §Q3's and §P's statements are true *of the depth gate* and false as unrestricted claims; the
 annotation says which, rather than striking them.
