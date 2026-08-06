@@ -1326,7 +1326,7 @@ describe('partial preserves a rejected draft (#81)', () => {
         expect(res.problems).toBeUndefined()
     })
 
-    it('names the stashed draft in the INCOMPLETE transcript flag', () => {
+    it('writes a separate short note naming the stashed draft, inside DIGEST_CHARS', () => {
         const rm = fakeRunManager()
         const loop = load({
             llmProxy: fakeLlm([]),
@@ -1340,9 +1340,29 @@ describe('partial preserves a rejected draft (#81)', () => {
 
         loop._finishPartial('RUN1', 'reached the maximum of 15 reasoning iterations')
 
-        const flag = rm.transcript[rm.transcript.length - 1].result_digest
-        expect(flag).toContain('INCOMPLETE:')
-        expect(flag).toContain('rejected fix_report draft')
+        // Two notes: the draft marker FIRST, then the existing flag verbatim.
+        expect(rm.transcript.length).toBe(2)
+        const marker = rm.transcript[0].result_digest
+        expect(marker).toContain('rejected fix_report draft')
+        expect(marker.length).toBeLessThan(200)
+        expect(rm.transcript[1].result_digest).toContain('INCOMPLETE:')
+    })
+
+    it('writes only the INCOMPLETE flag when no draft was stashed', () => {
+        const rm = fakeRunManager()
+        const loop = load({
+            llmProxy: fakeLlm([]),
+            toolRegistry: fakeTools([]),
+            runManager: rm,
+            fixReport: fakeFixReport([]),
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            now: fakeClock([0]),
+        })
+
+        loop._finishPartial('RUN1', 'exceeded the 300000ms diagnosis time budget')
+
+        expect(rm.transcript.length).toBe(1)
+        expect(rm.transcript[0].result_digest).toContain('INCOMPLETE:')
     })
 })
 ```
@@ -1369,14 +1389,25 @@ Expected: FAIL — `res.draft` is `undefined` in the first test.
         // byte-identical to before.
         var stashed = this._isPlainObject(this._rejectedDraft) ? this._rejectedDraft : null
 
+        // The marker is its OWN note, not a clause appended to the flag
+        // below. The flag is already 218 characters — past PaRunManager's
+        // DIGEST_CHARS (200) and truncated today — so an appended clause
+        // would be cut off entirely and never reach the transcript, while
+        // still reading as present in the source. Same reason `_holdNote`
+        // and `_cappedNote` are short standalone notes rather than
+        // additions to something longer.
+        if (stashed) {
+            this._runs().appendTranscript(runId, {
+                actor: 'system',
+                result_digest: 'PARTIAL: a rejected fix_report draft from this run is attached to the outcome.',
+            })
+        }
+
         var flag =
             'INCOMPLETE: ' +
             reasonText +
             ' — the loop stopped before the model produced an answer or fix_report; the transcript ' +
             'above is the best partial diagnosis available, not a confirmed conclusion.'
-        if (stashed) {
-            flag += ' A rejected fix_report draft from this run is attached to the outcome.'
-        }
 
         this._runs().appendTranscript(runId, { actor: 'system', result_digest: flag })
         var closeRes = this._runs().close(runId, 'complete', {})
@@ -1401,7 +1432,7 @@ Expected: FAIL — `res.draft` is `undefined` in the first test.
 npx jest test/PaAgentLoop.test.js
 ```
 
-Expected: PASS. Note the `INCOMPLETE:` flag can now exceed `DIGEST_CHARS`; that is pre-existing behaviour for this particular note and truncation of its tail is acceptable — the machine-readable copy is on the return value. Do **not** shorten the existing wording to make room.
+Expected: PASS. The existing `INCOMPLETE:` flag is left byte-identical — it is already 218 characters and already truncated, and shortening it is out of scope. The draft marker is a separate note precisely so it survives.
 
 - [ ] **Step 5: Run the full suite and commit**
 
