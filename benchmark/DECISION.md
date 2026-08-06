@@ -2999,3 +2999,61 @@ measures nothing about rate beyond this seed, nothing about seed 03 (unchanged s
 `complete` with no return fired), and **nothing about diagnostic correctness** — §U7 measured four
 of four reports concluding at layer 1 or at nothing against seeded layers 3 and 5, and no result
 below can move that.
+
+#### U8.5 Round 2's verdict — UNDER-POWERED, by §U8.3's own stop rule (added after the runs)
+
+Added by a later commit; **§U8.1–§U8.4 unmodified**, same discipline as §U7. Measurements:
+`benchmark/raw-evidence-v10-evidence-return-smoke.md`, "Round 2".
+
+Four runs, 2026-08-06 23:25–23:29, strictly sequential, custom arm, two runs against each of the
+two v9 seed-01 plans. Build unchanged and re-probed, not rebuilt.
+
+| run | target | run_id | terminal | tools | EVIDENCE RETURN | tool call after the note? |
+|---|---|---|---|---|---|---|
+| r2-1 | A | `1b71eee52b628794f243fed2ce91bf90` | complete | 3 | none | n/a |
+| r2-2 | B | `9b91aa692b6ecb5817a6ffbeee91bfdf` | **failed** | 4 | **1/2 and 2/2** | **YES** — `genai_log`, seq 12 > seq 10 |
+| r2-3 | A | `d4f1aae92b6ecb5817a6ffbeee91bf0c` | **failed** | 4 | **1/2** | **NO** — tools at seq 2/6/8/10, note at seq 12 |
+| r2-4 | B | `5432222d2b628794f243fed2ce91bfc0` | complete | 2 | none | n/a |
+
+**`D` = 2, `N` = 1, `N/D` = 1/2 — exactly the boundary — and `D < 3`, so §U8.3 returns
+UNDER-POWERED: no verdict.** §U3.2′ clean at 0 `partial` against a threshold of 1.
+
+**`MAX_EVIDENCE_RETURNS` stays at `2`, and this is neither a pass nor a ratification.** The change
+is **still undecided**. Pooled across both rounds' seed-01 runs, `D = 4` and `N = 2` — **2/4, also
+exactly the boundary. Eight runs have not moved this off a coin flip.**
+
+**The round was deliberately not extended to reach `D ≥ 3`.** At `N/D = 1/2`, one more run in the
+denominator decides everything — 2/3 stands, 1/3 reverts. Continuing *because* the split is tied is
+optional stopping at the most result-sensitive moment there is, which is what the stop rule exists
+to block. It was filed before the runs and it binds now that it is inconvenient.
+
+**Round 2's substantive findings all cut against the change:**
+
+- **`N` counts a call, not a retrieval, and the one call in `N` retrieved nothing.** r2-2's
+  `genai_log` args were `execution:45bbfd112ba6cf54f243fed2ce91bfcb` — a bare string with the
+  `<param>:<value>` prefix. The tool answered *"Unknown mode … Returning the default (llm)"* and
+  returned `entries: []`, `llm_call_rows: 0`. **Under a numerator requiring the call to return
+  something, round 2's `N` is 0 and the pooled figure is 1 of 4.** This is §T4's finding — "counts
+  a call, not a reach" — reproduced on §U8.3's own metric, and the rule as filed is generous to the
+  change.
+- **The `<param>:<value>` malformation has recurred.** T6 recorded it in 0 of 6 v9 runs after
+  #111/#113/#115. It is back, on `genai_log` — **a tool those fixes never exercised, because no
+  custom run had ever called one.** The fixes were validated against the tools the harness happened
+  to use.
+- **The cap was hit for the first time** (r2-2, 2/2). The second return produced no tool call, and
+  the run still died on *"evidence cites only the trace"* — the same evidence-class problem
+  surviving two returns **and** the repair turn.
+- **Variance on a fixed input is close to a coin flip.** Both targets received two byte-identical
+  requests and both split — `complete`-no-return vs `failed`-with-return. This is why `D` came in
+  at 2 from 4 runs, and any future round must size `n` against that rather than against patience.
+- **`query_table` fired for the first time on seed 01** (r2-4), with **no** evidence return in the
+  run — not attributable to this change, recorded so the "custom never reaches layer-5 tools"
+  premise is not carried forward unqualified.
+
+**Recommendation.** Do not spend another 4-run round on this question; §R2.4's variance figures say
+it would land on the boundary again. Two things would actually decide it, in order: **(a) tighten
+the numerator** so a gathering call counts only when it returns something — the same correction
+§T9 recommended for the depth gate's release rule, and it would make both metrics honest at once;
+**(b) then** run a round whose `n` is sized for a fire rate near one half, with the stopping rule
+fixed in advance. Until one of those happens, `MAX_EVIDENCE_RETURNS: 2` is carried as **undecided,
+not endorsed**, and nothing downstream should cite this change as validated.

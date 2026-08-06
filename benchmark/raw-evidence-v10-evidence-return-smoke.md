@@ -350,3 +350,150 @@ modified or deleted. No bench ticket was inserted.
 assigned in the follow-on task. The build measured here is branch `fix/81-evidence-return-to-loop`
 at commit `1657a92`, whose `package.json` still reads `2026.08.0505`. Whoever assigns the version
 should replace `06xx` in this file and in `DECISION.md` §U.
+
+---
+
+# Round 2 — the fixed §U3 clause, re-run (`DECISION.md` §U8)
+
+**Why this is appended here rather than filed as a sibling.** Same mechanism, same seed, same two
+execution plans, same protocol, same arm — and the deciding numbers are a *pooled* view of eight
+seed-01 runs. Splitting that across two files would make a reader reassemble it, and the round-1
+rows above are the comparison set. It is fenced as its own round with its own heading so nothing
+here can be mistaken for round-1 evidence.
+
+**Round 1's verdict was withdrawn, not upheld.** §U3 was ruled defective (its preamble let U-a and
+its own refutation clause both fire on the same two runs), so it **yields no verdict** and neither
+branch of it was picked. `MAX_EVIDENCE_RETURNS` stayed at `2` *pending this round*. The amended
+clause and the round-2 decision rule are `DECISION.md` §U8, committed as `9b45ff1` **before any
+round-2 run fired**, with zero deletions against the prior commit.
+
+> ## STILL NOT A SCORED PASS
+> Four more runs, **one seed**, custom arm only. No control, no scorers, no rubric, no scorecard
+> row. Eight seed-01 runs in total across both rounds.
+
+---
+
+## R2.1 Protocol
+
+Identical to §1: custom arm, `POST /analyze` with `{"execution": "<plan>", "mode": "diagnose"}`,
+**strictly sequential** (each confirmed terminal before the next was posted), no new executions
+triggered, no fixture touched. **Two runs against each of the two v9 seed-01 plans.**
+
+**No rebuild.** The deployed build is unchanged from round 1, re-probed rather than trusted:
+`sys_script_include` where `name=PaAgentLoop^scriptLIKEEVIDENCE RETURN` → 1 row. Both target plans
+re-read as `state: completed`. (`sys_updated_on` remains useless as a deploy check — §2.)
+
+## R2.2 The four runs
+
+| run | target | run_id | number | terminal | tool calls | HOLD | EVIDENCE RETURN | tool call after the note? | wall |
+|---|---|---|---|---|---|---|---|---|---|
+| r2-1 | A `4a5bb19d…bf57` | `1b71eee52b628794f243fed2ce91bf90` | TR1000172 | complete | 3 | 1 | **none** | n/a | 19 s |
+| r2-2 | B `45bbfd11…bfcb` | `9b91aa692b6ecb5817a6ffbeee91bfdf` | TR1000173 | **failed** | 4 | 1 | **1/2 and 2/2** | **YES** (`genai_log`, seq 12 > seq 10) | 40 s |
+| r2-3 | A `4a5bb19d…bf57` | `d4f1aae92b6ecb5817a6ffbeee91bf0c` | TR1000174 | **failed** | 4 | 1 | **1/2** | **NO** (tool entries at seq 2, 6, 8, 10; note at seq 12) | 26 s |
+| r2-4 | B `45bbfd11…bfcb` | `5432222d2b628794f243fed2ce91bfc0` | TR1000175 | complete | 2 | 1 | **none** | n/a | 18 s |
+
+**0 of 4 terminated `partial`** — §U3.2′ clean at a count of 0 against a trigger threshold of 1.
+
+Tool calls with arguments, audit-derived (`action_type=intent`):
+
+- **r2-1**: `agent_trace` `{"execution":"4a5bb19d…bf57"}`; `agent_config`
+  `{"agent":"914db68f…","section":"tools"}`; `schema_lookup` `incident.priority`.
+- **r2-2**: `agent_trace` `{"execution":"45bbfd11…bfcb"}`; `read_artifact` `{…,"offset":0}`;
+  `schema_lookup` `sn_aia_tools_execution`; **`genai_log` `execution:45bbfd112ba6cf54f243fed2ce91bfcb`**.
+- **r2-3**: `agent_trace`; `read_artifact` `{…,"offset":4000}`; `agent_config` `section: tools`;
+  `schema_lookup` `sn_aia_tool`.
+- **r2-4**: `agent_trace`; **`query_table` `{"table":"task","query":"sys_id=a64b795d…bf11","fields":"priority"}`**.
+
+## R2.3 The verdict: **UNDER-POWERED — no verdict, by the pre-registered stop rule**
+
+Applying §U8.3 exactly as filed:
+
+| | | |
+|---|---|---|
+| **`D`** = round-2 runs that fired at least one `EVIDENCE RETURN` | **2** | r2-2, r2-3 |
+| **`N`** = of those, how many made a tool call at a higher `seq` than the first note | **1** | r2-2 only |
+| **`N / D`** | **1 / 2** | exactly the boundary |
+| **`D < 3`?** | **YES** | → **UNDER-POWERED. No verdict.** |
+| §U3.2′ (`partial`, threshold 1) | **0** | no override |
+
+**`MAX_EVIDENCE_RETURNS` is left at `2`. That is NOT a pass and NOT a ratification.** The
+pre-registered rule says a round with `D < 3` decides nothing, and this round has `D = 2`. The
+change remains **undecided** — the same status it had before this round, now with more evidence
+behind the uncertainty rather than less.
+
+**Why the round was not extended to reach `D ≥ 3`, which it easily could have been.** `N/D` sits
+at exactly `1/2`, the boundary. **One more run entering the denominator decides everything**: 2/3
+stands, 1/3 reverts. Choosing to continue *because* the current split is a tie is optional stopping
+at the single most result-sensitive moment available, and it is precisely what the `D < 3` stop
+rule was written to block. The rule was filed before the runs; it binds now that it is inconvenient.
+
+**Secondary, explicitly not deciding** (§U8.3 pre-committed to reporting it): pooled across both
+rounds' seed-01 runs, `D = 4` (v10-1, v10-2, r2-2, r2-3) and `N = 2` (v10-2, r2-2) — **2/4, still
+exactly the boundary.** Eight seed-01 runs have not moved this off a coin flip.
+
+## R2.4 What round 2 found that the metric does not capture — and it cuts against the change
+
+**`N` counts a call, not a retrieval, and r2-2's call retrieved nothing.**
+
+r2-2's `genai_log` arguments were **`execution:45bbfd112ba6cf54f243fed2ce91bfcb`** — a bare string
+carrying the `<param>:<value>` prefix. The tool answered:
+
+> `Unknown mode "execution:45bbfd112ba6cf54f243fed2ce91bfcb". Valid modes are: usage, llm,
+> for_execution, check_config. Returning the default (llm) rather than nothing.`
+
+…and returned `entries: []`, `read_status: "empty"`, `llm_call_rows: 0`. **The one run in this
+round's numerator gathered no evidence at all.** Compare v10-2, whose `genai_log` call was
+well-formed (`{"execution":"…","mode":"for_execution"}`) and returned three LLM-call rows.
+
+Two consequences, both against the change:
+
+1. **This is §T4's finding, reproduced on my own metric.** §T4 established that the depth gate
+   "counts a layer-4 tool being *called*, not layer 4 being *reached*." §U8.3's `N` has the
+   identical defect — it was defined on the call, not the result. Under a stricter numerator that
+   required the call to *return something*, **round 2's `N` would be 0 and the pooled figure would
+   be 1 of 4.** The rule as filed governs, and it is recorded here that the rule as filed is
+   generous to the change.
+2. **The `<param>:<value>` malformation has recurred.** §T2's prediction T6 recorded it in **0 of
+   6** v9 custom runs after the #111 / #113 / #115 fixes. It is back, on `genai_log` — a tool those
+   fixes never exercised, because no custom run had ever called it. **The fixes were validated
+   against the tools the harness happened to use.** Filed as an observation; not fixed here.
+
+**Variance across identical inputs is very high, and that bounds every small round including this
+one.** Both targets received two runs with a byte-identical request body, and both split:
+
+| target | run | outcome |
+|---|---|---|
+| A | r2-1 | `complete`, 3 tools, **no return** |
+| A | r2-3 | `failed`, 4 tools, **return, no tool call after it** |
+| B | r2-2 | `failed`, 4 tools, **two returns**, tool call after the first |
+| B | r2-4 | `complete`, 2 tools, **no return** |
+
+Across both rounds, target A has now produced `failed`-with-return twice and `complete`-no-return
+once; target B has produced `complete`-with-return once, `failed`-with-two-returns once, and
+`complete`-no-return once. **Whether the mechanism even fires is close to a coin flip on a fixed
+input**, which is why `D` came in at 2 from 4 runs and why any future round needs its `n` sized for
+that rather than for the number of runs someone is willing to wait for.
+
+**One tool first: `query_table`.** r2-4 called `query_table` against `task` for the bench ticket's
+`priority` — the first `query_table` call by the custom harness on seed 01. §T2's T7 was refuted
+because seed 03's runs never reached it. **It fired with no evidence return in the run**, so it is
+not attributable to this change and is recorded only so the "custom never calls layer-5 tools"
+premise is not carried forward unqualified.
+
+**The cap was reached for the first time.** r2-2 spent both returns (`1/2` at seq 10, `2/2` at seq
+14). The second one produced **no** tool call — seq 15 is a `fix_report` directly. So even inside
+the one run that counts toward `N`, one of two returns bought a tool call and the other did not,
+and the run still ended `failed` on *"evidence cites only the trace"* — the same evidence-class
+problem, surviving two returns and the repair turn.
+
+## R2.5 What round 2 does not establish
+
+Everything in §5 stands. Added:
+
+- **It does not decide the change.** `D < 3` was pre-registered as a stop, and it stopped.
+- **It says nothing about seed 03**, not re-run here.
+- **It says nothing about correctness.** No round-2 report was examined for root-cause layer, and
+  §5's finding — four of four round-1 reports concluding at layer 1 or at nothing — is not improved
+  by anything above.
+- **`N = 1` is generous to the change** (§R2.4) and should be quoted with that qualification or not
+  at all.
