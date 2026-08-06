@@ -2088,6 +2088,14 @@ investigates".
 > always has. The sentence is left standing because its subject is the ranking rule, which is
 > exactly the scope §S preserves.
 
+> **Bounded 2026-08-06 (#119, §T).** "The gate can aim the model at a layer" survives — the v9
+> scored pass aimed all six custom runs at layer 4 and all six went there. What it is worth is now
+> measured: **all six then filed their root cause at layer 1 anyway** (five literally; the sixth at
+> layer 4 on a table that does not exist), scoring 0 on `root_cause_layer_correct` across the board.
+> **Reaching a layer and diagnosing at it are different things** — §T3. §T4 adds that the release
+> is discharged by a layer-4 tool being *called*, not by layer 4 being reached: a `schema_lookup`
+> returning `table_does_not_exist` released the hold.
+
 ### Q4. Q7's refutation is the finding, not a footnote
 
 **The declared path carried 4 of 6 holds, not the minority predicted.** `would_confirm` was
@@ -2473,3 +2481,245 @@ tool mentions would fire on every description edit.
 - **No prompt change**, deliberately — the scored pass §R9 asks for must stay comparable to §O's
   baseline.
 - **No fix for the #109 collision** (S6).
+
+---
+
+## T. The scored pass — reaching a layer is not diagnosing at it (`2026.08.0505`, #119)
+
+§R9's queued pass, run 2026-08-06. **Twelve scored rows — 6 native + 6 custom, seeds 01 / 03 / 04,
+two reps each, both arms the same day** on gpinst01 (Zurich P10 HF3) at app version `2026.08.0504`.
+Scored blind, one independent scorer per packet, §O5's topology.
+
+Measurements: `benchmark/raw-evidence-v9-scored-pass.md`. Rows: `benchmark/scorecard-v9.md`.
+Packets exactly as scored: `benchmark/scoring-v9/`. Trigger, execution and packet-build reports sit
+beside them; the twelve scorers' full reasoning is at `benchmark/scoring-v9/results/`, following
+v4's naming. Predictions T1–T9 were
+filed on issue #119 **before any run fired**; T10 and T11 in that issue's first comment, after the
+smoke gate and **still before any scored run**.
+
+**Native 36/36 and 6/6 on the gate. Custom 9/36 and 0/6.** Read §T5 before quoting either.
+
+### T1. What was run
+
+Six pre-seeded failing executions (3 seeds × 2 reps), each diagnosed twice — once by the native
+Agent Doctor and once by the custom harness — giving 12 rows against 6 targets. Same day, one hour,
+one deployed version, closing the §H7-4 cross-day drift confound the way §O's protocol requires.
+Strictly sequential, no overlap: every native run received its own anchor with a distinct
+`conversation_ref` (TR1000156–161), so `PaRunAnchor`'s 30-min-per-user fallback never engaged.
+**Zero retries and zero void rows** — seed 04's capability sys_id was verified matching pre-flight,
+so its one applicable void condition did not fire.
+
+Two custom runs reached the terminal state `failed` on validator rejection; both are scored from
+`fix_report_rejected.report`, exactly as §O's v4 pass scored its rejected rows.
+
+**One §D requirement was not met:** `continuous_tool_execution_limit` was never read during this
+pass. The last published measurement is `25` (§O1). It is recorded as *not read* in the scorecard
+and is quoted nowhere as a measurement of this pass.
+
+### T2. The scored predictions
+
+| | Prediction, as filed | Outcome | Measured |
+|---|---|---|---|
+| T1 | The `declared` path carries a **minority** of holds across the 6 custom runs | **HELD** | 0 of 6. All six holds read "layer 4 (**ranked**)"; `declared` fired zero times. Six holds fired, so the fail-safe did not engage |
+| T2 | `genai_log` and `log_analysis` invoked in **0 of 6** custom runs | **HELD** | 0 of 6. The four distinct tools across all six custom rows are `agent_trace`, `agent_config`, `read_artifact`, `schema_lookup` |
+| T3 | Seed 04's two custom runs score **0** on `root_cause_layer_correct`, and their holds release on `schema_lookup`, not `agent_config` | **HELD** | Both scored 0; both holds were answered by `schema_lookup` (`incident`, `sn_aia_tools_execution`) |
+| T4 | Native's total across its 6 rows **exceeds** custom's | **HELD** | 36 vs 9. See §T5 on how far that number travels |
+| T5 | Neither revert trigger fires on the custom arm: **0** runs terminate `partial`, **0** fabricated citations | **REFUTED** (second clause) | `partial` = 0 of 6 — held. But row 08 was rejected with **three `unsupported citation` findings** — #79's cross-check firing. Mitigation on the record: all three were caught, and no unsupported citation survived into a `complete` report |
+| T6 | The `table:incident` parameter-prefix malformation recurs in **0** custom runs | **HELD** | 0 of 6. Recorded args: `sn_tsbench_bench_ticket`, `incident.priority`, `incident.assignment_group` ×2, `incident`, `sn_aia_tools_execution` — no `<param>:<value>` prefix anywhere. #113/#115 hold |
+| T7 | Seed 01's custom runs reach `schema_lookup` **and** seed 03's reach `query_table`, in ≥1 of 2 runs each | **REFUTED** | Seed 01: both rows reached `schema_lookup`. Seed 03: **neither** row called `query_table`. The conjunction fails on its second half |
+| T8 | **≥10 of 12** rows produce an unambiguous `passes_gate` from the packet alone | **REFUTED** | **9 of 12 flagged `ambiguous = yes`** — 3 unambiguous. On the narrower reading the prediction's own words invite (rows whose *gate* was under-determined) the count is 4, all native. Both readings are far below 10 |
+| T9 | Custom's audit-derived sweep breadth is **at or below** native's | **HELD** | Every custom row 2/7 except row 07 at 5/7; every native row 7/7. Tool calls: custom 2–3, native 13–18. LLM calls: custom 4–6, native 6–9 |
+| T10 | **≥3 of 6** custom rows terminate `status:"failed"` on a citation-shortfall rejection | **REFUTED** | **2 of 6** (rows 07, 08). Both errors do name an evidence/citation shortfall, so the two that fired are correctly classified — there were simply fewer of them |
+| T11 | Rejection **correlates with the gate firing**: every custom row where a hold fired *and* the surviving root cause is `UNCONFIRMED` is rejected | **REFUTED** | The antecedent holds on rows 09, 10 and 11 — hold fired, surviving cause `UNCONFIRMED`. **All three terminated `complete` with a validated `fix_report`. 0 of 3 rejected.** Rows 07 and 12 carry `CONFIRMED` causes; row 08 carries no `confidence` field at all |
+
+**Six held, five refuted, none unscored.**
+
+T11's refutation is the useful one, and the trigger report pre-registered why: **rejection is
+independent of the gate firing**, so #81 can be addressed without touching the depth mechanism.
+The alternative — that the depth gate was manufacturing its own rejections — is not supported.
+
+### T3. Every custom row scored 0 on `root_cause_layer_correct`, and that is the finding
+
+**Six of six.** The seeded layers were 3, 3, 5, 5, 6, 6. Five rows filed their primary root cause
+at **layer 1**. The sixth (row 07) filed at layer 4 — on `sn_tsbench_bench_ticket`, **a table that
+does not exist on the instance**, appearing nowhere in the seed.
+
+Set that against §Q2, which this project has been carrying since 2026-08-05: *"the gate can aim the
+model at a layer."* It still can. The gate aimed all six runs at layer 4 and all six went there.
+**And all six wrote their conclusion at layer 1 anyway.**
+
+**Reaching a layer and diagnosing at it are different things.** That distinction was not available
+before this pass, because §Q and §R measured tool reach on unscored smokes and could not see what
+the reports concluded. It bounds what §Q2 was ever worth: meeting §H8's acceptance test moved the
+*depth* blocker, and this pass shows that moving it did not move correctness at all.
+
+Two rows came close enough to sharpen the point rather than blunt it. Row 09's `would_confirm`
+names layer 5 — the seed's own layer — with `query_table` attached, active, and never called. Row
+10's fix lands on exactly the right target (`target_type: "data"`) while its cause sits at layer 1.
+That scorer's line is the right summary: *"The run was one `query_table` call from a correct
+diagnosis. It did not make that call, and 'almost reached layer 5' is not 'named layer 5'."*
+
+### T4. The hold is satisfiable cosmetically, and the gate counts a call rather than a reach
+
+Every custom run received exactly one hold; all six cited "layer 4 (ranked)"; all six were answered
+by a `schema_lookup`. **Not one pointed at the table the seeded defect lives in.** Five targeted a
+platform or OOB table — `incident.priority`, `incident.assignment_group` ×2, `incident`,
+`sn_aia_tools_execution` — and row 07 targeted `sn_tsbench_bench_ticket`, which does not exist.
+
+**Row 07 settles what the gate is counting.** Its lookup retrieved nothing: the tool correctly
+answered `table_exists: false`, finding `table_does_not_exist`. The gate released anyway. Confirmed
+two ways — empirically (row 07 recorded exactly one hold; its next terminal action reached the
+citation validator rather than a second hold), and mechanically (`_depthGate` releases on
+`_anyOf(this._heldTools, trail.tools)`, where `trail.tools` is the set of tool **names** from
+`x_snc_troubleshoot_audit`; nothing in the release path inspects what the tool returned).
+
+**So the gate counts a layer-4 tool being *called*, not layer 4 being *reached*.** State it that
+way from here on. `action_type=result` does mean the call returned, so the test is stronger than
+counting intent — but a lookup that establishes nothing discharges the hold exactly as well as one
+that establishes the answer.
+
+This is not a defect discovered late; it is what a name-based release rule does, and it was
+serviceable while the question was "can the gate move the model off layer 1's tools". The question
+is now whether the run learned anything, and a name-based rule cannot answer it.
+
+### T5. T8's refutation undermines confidence in every score here, including the favourable ones
+
+**Nine of twelve rows flagged `ambiguous = yes`, against a prediction of at most two.** T8 was filed
+to measure whether the rubric is reproducible, "which every score in this project rests on". The
+answer is that it is not, and the failure lands on the same column §O5 named.
+
+Rows 03, 05 and 06 flag the identical gap: a fix that names the right target but omits a value **no
+diagnosis could recover** — a group name, a replacement sys_id. Row 04 flags it as its third
+ambiguity. `fix_usable_unedited` does not determine that case, and it is one of the gate's two
+terms. Rows 01 and 02 record a second under-determination in the same column — whether naming the
+runtime `sn_aia_tool` record rather than the Fluent source counts as applicable without editing —
+and resolve it as *not a rubric gap*, each scorer noting the other reading would flip the gate.
+
+**Taken together, all six native rows carry a recorded alternative reading of `fix_usable_unedited`
+that yields 0.**
+
+| | totals | gate |
+|---|---|---|
+| As scored | native 36/36, custom 9/36 | native 6/6, custom 0/6 |
+| Every native `fix_usable_unedited` resolved to 0 | native **30/36**, custom 9/36 | native **0/6**, custom 0/6 |
+
+**The direction is robust and the precise totals are not.** 30 vs 9 still separates the arms by a
+wide margin, and 30/36 is the *mild* end of the adverse band — row 03's first ambiguity alone would
+take that row to 1/6. **The totals should not be quoted as stable numbers.** The gate is worse: one
+under-determined column moves native between 100% and 0%.
+
+What is *not* sensitive is custom's side. `root_cause_layer_correct = 0` was flagged ambiguous on
+**no** custom row; one scorer listed it explicitly under "Not ambiguous, for the record", and row
+07's scorer considered a literal reading that would award 2 for the bare layer string `"4"` and
+rejected it from the seed spec's own text. **Custom's 0/6 stands under every resolution recorded in
+the twelve score files.** The asymmetry is why the direction survives while the numbers do not.
+
+**§O5 recorded this defect and it was never closed.** That entry found the same column scored
+inconsistently on the same `assignment_group` placeholder text across two v4 native rows and filed
+it "for whoever next revises §A". Nobody did. Rows 03–06 are that finding recurring, in a pass whose
+headline depends on it.
+
+### T6. Native's sweep was deep and uniform
+
+13–18 tool calls, 6–9 LLM calls, 2m47s–5m38s per row. **Every native run touched all seven tools**,
+including `genai_log` and `log_analysis`. Its audit trail lost nothing — tool-call count matched the
+plan's `type=tool` task count exactly on all six rows.
+
+Two qualifications, neither optional. **First, `layers_swept` is unadjudicated here.** Every figure
+is the mechanical §E2 map; the qualifier that `agent_config` earns L2/L3/L7 only for the layers the
+diagnosis used was handed to the scorers and no scorer resolved it — all twelve treated sweep as a
+non-rubric column. §O5 records that same qualifier correcting two native rows 5/7 → 4/7 in v4, so
+7/7 is a mechanical maximum, not a finding. **Second, breadth is not depth** — §Q5's warning, still
+live. Native scored well because its root causes were right, not because it swept widely.
+
+`genai_log` and `log_analysis` remain uninvoked by the custom harness. The last published count was
+57 runs (§Q5, restated in §S); this pass's six custom rows take it to **63**. The pre-pass
+smoke-gate run also invoked neither, and whether it belongs in that count is unresolved upstream —
+the arithmetic is stated so a future reader can re-derive it rather than inherit a number.
+
+### T7. Two defects in the pass's own machinery, which the next pass inherits
+
+**The blind-rule gate was green and blind to the real hole.** `npx jest
+test/scorerPacketBlindRule.test.js` passed 11/11 while **two one-hop paths to the answer key**
+existed in packet framing: `(verbatim from benchmark/scorecard-template.md)`, and that template
+cites "§O5 of `DECISION.md`"; and `(verbatim, benchmark/seeds/seed-0N-….md)`, and `benchmark/seeds/`
+is the parent of `seeds/history/`. Both were written by the packet builder, and both are *shorter*
+routes to prior grades than the two-hop `IMPLEMENTATION_PLAN.md → DECISION.md` path the builder had
+already flagged.
+
+**The gate was working exactly as written.** Its `answer-key-pointer` pattern matches a literal
+`DECISION.md` and nothing else, and it scans the five seed specs — one of the rule's three channels
+— not the packets. Both paths were removed by hand before scoring, along with every other
+repository path in every packet. **Recommendation: widen `answer-key-pointer` from a literal
+`DECISION.md` to any repository path, and run it over the packets, not only the specs.** The uniform
+rule is what the builder adopted by hand, and it is auditable by a single regex; the selective rule
+forces every future reader to re-derive which paths were judged safe.
+
+**The shipped packets deviate from `scorecard-template.md` and from the seed specs**, by mechanical
+path redaction in three sets — four substitutions in the rubric, two in the builder's framing, and
+two to sixteen per seed spec. The complete list is reproduced in
+`raw-evidence-v9-scored-pass.md` §6.2 so a future reader diffing a packet against either source
+finds every difference explained; anything not on that list is a defect, not a deviation. The
+redaction was **verified lossless**: reversing only the declared substitutions restores each source
+spec byte-for-byte, with line, heading, table-row, bullet and fence counts independently confirmed
+identical. Source files on disk were never written.
+
+**And one harness observation worth recording:** the native arm never writes a terminal status onto
+its `x_snc_troubleshoot_run` anchor. All six native anchors sat at `status: running` after their
+executions reached `completed`. **A scorer or tool reading `status` off a native anchor would
+misread it.** Terminal state was read from `sn_aia_execution_plan.state` for every native row here;
+nothing downstream should assume the next operator will know to do that.
+
+### T8. What this does not establish
+
+- **No rate.** Twelve rows, three seeds, one instance, one day, one model, one app version. Two reps
+  per seed per arm measures a flip, not a frequency. **36 vs 9 is a direction.**
+- **No Task 12 band verdict.** §A3.4 sets the gate's evaluability floor at 8 valid runs and each arm
+  has 6. That clause is written about voids eroding a 10-row denominator rather than about a pass
+  designed with 6 rows per arm, so a permissive reading exists — but taking it would mean the
+  instrument's one stated floor never binds whenever a pass is designed under it. The proportions
+  are recorded; the band lookup is not performed.
+- **The totals are not stable** (§T5). Neither the /6 totals nor the gate proportions should be
+  quoted as measurements of the same order as the tool counts.
+- **No comparison to any prior pass.** Different seed set from §O's, and §R5 records how easily a
+  construction change makes a split non-comparable. **Nothing here says the custom harness got
+  better or worse than v4** — that comparison was not run and is not licensed by these rows.
+- **Nothing about whether layer 6 is reachable.** No custom run called `genai_log`. §R4 established
+  the gate cannot target layer 6 within `MAX_HOLDS: 2`; this pass confirms the consequence and does
+  not test the premise. T2 and T3 predicted the failure and it arrived as predicted.
+- **Nothing about seeds 02 and 05**, unchanged since §Q6. Seed 05 remains untested live.
+- **Nothing about whether the two rejected reports would have been right.** Rows 07 and 08 were
+  scored from `fix_report_rejected.report`; both scored 0 on root cause, so the question does not
+  arise here, but the validator's contribution to those two rows is not separable from the model's.
+- **`layers_swept` is unadjudicated** and `continuous_tool_execution_limit` was not read (§T1).
+
+### T9. Recommendation
+
+**Fix the rubric before spending another scored pass.** T8 is the result that makes the others hard
+to bank: nine of twelve rows required a judgment the rubric does not supply, four of them on the
+gate itself, and §O5 filed the same defect three passes ago. The specific gap is one clause —
+whether a fix that names its target and operation exactly, but leaves a value no diagnosis could
+recover, is "applicable without manual editing". Row 03's scorer even drafted it: *"a placeholder
+for a value not recoverable from the instance does not make a fix unusable, provided the target and
+operation are fully specified."* Adopt that or its negation; either makes the column mechanical.
+Leaving it open means the next pass's headline is again decided by a coin the scorers are being
+asked to flip.
+
+**Stop reading the depth gate's release as evidence of depth.** §T4 shows it counts a call, not a
+reach, and §T3 shows that even a genuine reach did not move the diagnosis off layer 1. A release
+rule that inspected what the tool returned — non-empty result, or a result about the entity under
+diagnosis — is the obvious next candidate, and it is a change to the *gate*, not to the prompt, so
+it stays inside the boundary §R6 was burned for crossing. Whether it helps is unmeasured; §T3 is
+reason to doubt that any release rule alone is sufficient, since the model reached layer 4 six times
+and concluded at layer 1 six times.
+
+**Widen the blind-rule test to any repository path** (§T7). It is a one-pattern change, and this
+pass is the second consecutive round in which the leak was caught by hand rather than by the gate.
+
+**Do not re-run this pass to get a firmer number.** Two more reps per cell would not resolve §T5 —
+the instability is in the rubric, not in the sample size.
+
+**Unchanged: native remains the recommended path on this instance, and the Phase 1b milestone is
+not met.** This pass is the first that measures *correctness* since §O, and it measures the custom
+harness at 0 of 6 on the gate with no ambiguity on the column that decides it. Native's 6 of 6
+carries the caveat in §T5 and should be quoted with it.
