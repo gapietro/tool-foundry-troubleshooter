@@ -1339,6 +1339,118 @@ describe('schemaText contract additions', () => {
         })
     })
 
+    // -----------------------------------------------------------------
+    // #110 — the tool-name set schemaText() emits is PINNED, not empty.
+    //
+    // §H8 item 3 rested on "the harness never names the measured tools to
+    // the model". That premise was never true: PaToolRegistry.promptBlock()
+    // puts ~8-9KB of descriptions for all seven tools into every prompt by
+    // design, because a tool-calling agent has to be told what tools it has.
+    // schemaText() names them too — in the citation clause (load-bearing for
+    // #79) and in the per-layer clause list generated from _layerToolMap().
+    //
+    // This test does NOT forbid that, and must not be "fixed" by removing
+    // names. It pins WHICH tools appear so the set cannot drift silently:
+    // a change to what the model is told then fails CI and has to go through
+    // DECISION.md §S rather than arriving as a side effect of a map edit.
+    // -----------------------------------------------------------------
+
+    test('the SWEPT clause advertises exactly _layerToolMap per layer, and introduces no tool _scrubToolNames cannot strip (#110)', () => {
+        const fx = load()
+        const text = fx.schemaText()
+        const map = fx._layerToolMap()
+
+        // _ALL_TOOL_NAMES is the list PaAgentLoop._scrubToolNames strips out
+        // of the hold block. Read it from the source rather than retyping it,
+        // so this test and the scrubber cannot disagree.
+        const loopCtx = loadScriptInclude('PaAgentLoop.js', { JSON: JSON })
+        const allTools = new loopCtx.PaAgentLoop({})._ALL_TOOL_NAMES
+        expect(allTools.length).toBe(7)
+
+        // (1) Per-layer correspondence, checked POSITIONALLY inside the SWEPT
+        // clause, against a PINNED literal snapshot of _layerToolMap() — NOT
+        // a live call to it. Unlike the citation clause (hardcoded prose,
+        // independent of _citationToolMap()), the SWEPT clause is
+        // PROGRAMMATICALLY GENERATED from _layerToolMap() itself (schemaText()
+        // calls `this._layerToolMap()` to build the "N (Name) needs one of:
+        // ..." list). Comparing the rendered text to a live `fx._layerToolMap()`
+        // call is therefore a tautology — both sides read the same (possibly
+        // edited) function within the same run and can never disagree.
+        // Confirmed empirically: perturbing _layerToolMap()'s layer 4 entry
+        // from ['schema_lookup'] to ['agent_config'] produced NO test failure
+        // against a live comparison (see task-1-report.md). Pinning to a
+        // literal is what gives this assertion teeth against a silent
+        // _layerToolMap() edit — the exact class of regression #110 exists to
+        // catch, and the exact failure mode this file's own history (52a0798)
+        // warns about: a guard weaker than the thing it guards.
+        //
+        // A whole-text scan would not catch a layer-map narrowing either way:
+        // all seven tools are also named in the citation clause above, so "is
+        // schema_lookup mentioned somewhere?" stays true even if layer 4 stops
+        // advertising it. Same clause-isolation technique as the
+        // _citationToolMap test above.
+        const expectedLayerToolMap = {
+            1: ['agent_trace', 'genai_log', 'log_analysis'],
+            2: ['agent_config'],
+            3: ['agent_config'],
+            4: ['schema_lookup'],
+            5: ['query_table', 'log_analysis'],
+            6: ['genai_log', 'log_analysis'],
+            7: ['agent_config'],
+        }
+
+        // The literal is a SNAPSHOT, so the loop below iterates ITS keys — a
+        // layer added to both _layerDefs() and _layerToolMap() would be
+        // advertised in this clause and checked by nothing. Pin the key SET
+        // against the live map so a new (or removed) layer fails loudly here
+        // and has to be added to the snapshot deliberately. This is not the
+        // tautology the per-layer comparison would be: the values still come
+        // from the literal, only the layer roster is read live.
+        expect(Object.keys(expectedLayerToolMap).sort()).toEqual(Object.keys(map).sort())
+
+        // Bound the slice at the next clause, exactly as the _citationToolMap
+        // test above does — `text.slice(start)` would run to end-of-text and
+        // let a layer clause that migrated out of the SWEPT paragraph still
+        // satisfy the regex from wherever it landed.
+        const start = text.indexOf('A LAYER MARKED SWEPT')
+        const end = text.indexOf('IF NOTHING EVER RAN, SAY SO')
+        expect(start).not.toBe(-1)
+        expect(end).not.toBe(-1)
+        const clause = text.slice(start, end)
+
+        Object.keys(expectedLayerToolMap).forEach((layer) => {
+            // "4 (Schema) needs one of: schema_lookup" — capture the tool
+            // list between "needs one of: " and the clause separator.
+            const re = new RegExp('\\b' + layer + ' \\([^)]*\\) needs one of: ([^;.]+)')
+            const m = clause.match(re)
+            expect(m).not.toBeNull()
+
+            const advertised = m[1]
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean)
+                .sort()
+            expect(advertised).toEqual(expectedLayerToolMap[layer].slice().sort())
+        })
+
+        // (2) Registered-set membership — widening, where it bites. A tool
+        // entering _layerToolMap() without entering _ALL_TOOL_NAMES would be
+        // rendered into every prompt here AND survive _scrubToolNames in the
+        // hold block, breaking the one claim §S says still holds: that the
+        // depth gate's DIRECTION names no tool.
+        Object.keys(map).forEach((layer) => {
+            map[layer].forEach((t) => {
+                expect(allTools).toContain(t)
+            })
+        })
+
+        // (3) Whole-set presence — a coarse backstop recording that the leak
+        // is total. This is the assertion that fails if someone "fixes" #110
+        // by deleting names instead of going through DECISION.md §S.
+        const named = allTools.filter((t) => text.indexOf(t) !== -1).sort()
+        expect(named).toEqual(allTools.slice().sort())
+    })
+
     test('states read_artifact does NOT count as evidence on its own (the negation, not just the token)', () => {
         const text = load().schemaText()
 
