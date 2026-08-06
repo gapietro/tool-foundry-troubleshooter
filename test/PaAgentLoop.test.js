@@ -890,6 +890,103 @@ describe('_handleFixReport returns a step result (#81)', () => {
 })
 
 // ===========================================================================
+// evidence-return bounds (#81)
+// ===========================================================================
+
+describe('evidence-return bounds (#81)', () => {
+    function bare(opts) {
+        const o = Object.assign(
+            {
+                llmProxy: fakeLlm([]),
+                toolRegistry: fakeTools([]),
+                runManager: fakeRunManager(),
+                fixReport: fakeFixReport([]),
+                auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+                now: fakeClock([0]),
+            },
+            opts || {}
+        )
+        return load(o)
+    }
+
+    it('defaults MAX_EVIDENCE_RETURNS to 2 and EVIDENCE_HEADROOM_MS to 30000', () => {
+        const loop = bare()
+        expect(loop.MAX_EVIDENCE_RETURNS).toBe(2)
+        expect(loop.EVIDENCE_HEADROOM_MS).toBe(30000)
+    })
+
+    it('accepts overrides through initialize', () => {
+        const loop = bare({ maxEvidenceReturns: 1, evidenceHeadroomMs: 5 })
+        expect(loop.MAX_EVIDENCE_RETURNS).toBe(1)
+        expect(loop.EVIDENCE_HEADROOM_MS).toBe(5)
+    })
+
+    it('_resetGate clears all three evidence fields', () => {
+        const loop = bare()
+        loop._evidenceReturns = 2
+        loop._evidenceBlock = 'BLOCK'
+        loop._rejectedDraft = { report: {}, problems: [] }
+
+        loop._resetGate()
+
+        expect(loop._evidenceReturns).toBe(0)
+        expect(loop._evidenceBlock).toBe(null)
+        expect(loop._rejectedDraft).toBe(null)
+    })
+
+    it('_hasEvidenceHeadroom is true with two iterations and time to spare', () => {
+        const loop = bare({ now: fakeClock([1000]) })
+        loop.MAX_ITERATIONS = 15
+        loop.BUDGET_MS = 300000
+        loop._iteration = 5
+        loop._startMs = 0
+
+        expect(loop._hasEvidenceHeadroom()).toBe(true)
+    })
+
+    it('_hasEvidenceHeadroom is false with fewer than two iterations left', () => {
+        const loop = bare({ now: fakeClock([1000]) })
+        loop.MAX_ITERATIONS = 15
+        loop.BUDGET_MS = 300000
+        loop._iteration = 14
+        loop._startMs = 0
+
+        expect(loop._hasEvidenceHeadroom()).toBe(false)
+    })
+
+    it('_hasEvidenceHeadroom is false inside the time margin', () => {
+        const loop = bare({ now: fakeClock([280000]) })
+        loop.MAX_ITERATIONS = 15
+        loop.BUDGET_MS = 300000
+        loop.EVIDENCE_HEADROOM_MS = 30000
+        loop._iteration = 2
+        loop._startMs = 0
+
+        expect(loop._hasEvidenceHeadroom()).toBe(false)
+    })
+
+    it('run() maintains _iteration and _startMs', () => {
+        // A readable trail (bare()'s default auditLogger) makes the #103
+        // depth gate hold a bare `answer` once for `no_layer_report` before
+        // it terminates — unrelated to this test's concern, which is only
+        // the _iteration/_startMs bookkeeping. An unreadable trail bypasses
+        // the gate (`_trailTools().readable === false`), same as the
+        // "genuinely degraded trail" tests above, so the single stubbed
+        // `answer` terminates on the first iteration.
+        const loop = bare({
+            llmProxy: fakeLlm([{ success: true, raw: 'r', action: { action: 'answer', text: 'done' } }]),
+            auditLogger: fakeAuditLogger({ available: false, degraded: 'glide_unavailable', tools: [] }),
+            now: fakeClock([500, 500, 500]),
+        })
+
+        loop.run('RUN1', {})
+
+        expect(loop._iteration).toBe(1)
+        expect(loop._startMs).toBe(500)
+    })
+})
+
+// ===========================================================================
 // depth gate (#103) — _trailTools
 // ===========================================================================
 

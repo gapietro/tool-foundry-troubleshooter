@@ -153,6 +153,23 @@ PaAgentLoop.prototype = {
      *  set is narrowed to a target layer's DEDICATED tools. */
     MAX_HOLDS: 2,
 
+    /** #81 — how many times a run may be handed BACK to the loop because its
+     *  fix_report's EVIDENCE (not its shape) was insufficient. Separate from
+     *  `MAX_HOLDS` on purpose: a shared pool would give a run that spent both
+     *  beats on depth holds zero evidence returns, which is precisely v9 rows
+     *  07 and 08 — the two runs this exists for. Worst case is 2 holds + 2
+     *  returns = 4 forced beats against MAX_ITERATIONS of 15; the deepest
+     *  custom run in the v9 pass used 6 iterations in total. */
+    MAX_EVIDENCE_RETURNS: 2,
+
+    /** #81 — the time margin `_hasEvidenceHeadroom` requires before handing a
+     *  run back. Returning to the loop with a second left trips `run()`'s
+     *  budget guard on the very next iteration and downgrades a rejection
+     *  (which carries a draft) into a `partial` (which, before this change,
+     *  did not) — so the margin is what keeps the change from costing the
+     *  benchmark a scored row. */
+    EVIDENCE_HEADROOM_MS: 30000,
+
     /** The installed native agent this class reads its default playbook
      *  from — see `_defaultPlaybook()`. */
     AGENT_NAME: 'Agent Doctor',
@@ -169,7 +186,7 @@ PaAgentLoop.prototype = {
     /**
      * @param {Object} [options] {llmProxy, toolRegistry, runManager,
      *        fixReport, auditLogger, now, playbook, maxIterations,
-     *        budgetMs} — every
+     *        budgetMs, maxEvidenceReturns, evidenceHeadroomMs} — every
      *        collaborator is an injection point; tests inject all of them
      *        and touch no Glide API. `now` is a zero-arg clock function —
      *        the Rhino default is `new GlideDateTime().getNumericValue()`
@@ -200,6 +217,11 @@ PaAgentLoop.prototype = {
 
         if (o.maxIterations > 0) this.MAX_ITERATIONS = o.maxIterations
         if (o.budgetMs > 0) this.BUDGET_MS = o.budgetMs
+        // #81: `>= 0`, not `> 0` — a test (and the revert trigger recorded
+        // in benchmark/DECISION.md) must be able to set `maxEvidenceReturns:
+        // 0` to disable the evidence-return path entirely.
+        if (o.maxEvidenceReturns >= 0) this.MAX_EVIDENCE_RETURNS = o.maxEvidenceReturns
+        if (o.evidenceHeadroomMs >= 0) this.EVIDENCE_HEADROOM_MS = o.evidenceHeadroomMs
     },
 
     // =======================================================================
@@ -227,26 +249,27 @@ PaAgentLoop.prototype = {
         var req = this._normRequest(request)
         var playbook = this._loadPlaybook()
         var promptBlock = this._safePromptBlock()
-        var startMs = this._now()
+        this._startMs = this._now()
+        this._iteration = 0
 
-        var iteration = 0
         while (true) {
-            iteration += 1
+            this._iteration += 1
 
             // BOUNDS FIRST — see the file header's BOUNDS ARE A FLOOR note.
             // Neither check ever fires mid-reasoning; both fire only before
             // the next iteration would otherwise begin.
-            if (iteration > this.MAX_ITERATIONS) {
+            if (this._iteration > this.MAX_ITERATIONS) {
                 return this._finishPartial(rid, 'reached the maximum of ' + this.MAX_ITERATIONS + ' reasoning iterations')
             }
-            if (this._now() - startMs >= this.BUDGET_MS) {
+            if (this._now() - this._startMs >= this.BUDGET_MS) {
                 return this._finishPartial(rid, 'exceeded the ' + this.BUDGET_MS + 'ms diagnosis time budget')
             }
 
             var stepResult = this._step(rid, playbook, promptBlock, req)
             if (stepResult.terminal) return stepResult.outcome
-            // else: a non-terminal tool_call was dispatched and observed —
-            // loop again with the enlarged transcript.
+            // else: a non-terminal tool_call was dispatched and observed, or
+            // #81 handed an evidence-shortfall rejection back — loop again
+            // with the enlarged transcript.
         }
     },
 
@@ -550,6 +573,41 @@ PaAgentLoop.prototype = {
         this._holdActive = null
         // C1: how many holds this run has issued, across every hold path.
         this._holdCount = 0
+
+        // #81 — evidence-return state. Deliberately NOT part of the depth
+        // gate's own fields above: that gate holds on sweep breadth BEFORE
+        // validation, this one on evidence quality AFTER it, and entangling
+        // the two would put `_holdActive`'s release logic (`_heldTools`, and
+        // the clear at gate release) in charge of a block it knows nothing
+        // about. Reset here because this is the one place a run's per-run
+        // state has a single definition a test can assert.
+        this._evidenceReturns = 0
+        this._evidenceBlock = null
+        this._rejectedDraft = null
+
+        // #81 — mirrors `run()`'s per-run bookkeeping so `_hasEvidenceHeadroom`
+        // is safe to call on a fresh instance that has never run.
+        this._iteration = 0
+        this._startMs = 0
+    },
+
+    /**
+     * #81 — is there room to hand this run back to the loop and still let it
+     * finish properly?
+     *
+     * TWO iterations, not one: the model needs one to call a tool and one to
+     * resubmit. Handing back with a single iteration left guarantees the
+     * bounds check fires first and the run finishes `partial`.
+     *
+     * And a TIME margin, because the same thing happens on the clock: a
+     * return granted with a second left is a `partial` in disguise. Both
+     * checks fail toward NOT returning — the fall-through is the existing
+     * repair turn, which is exactly today's behaviour, so a wrong answer here
+     * costs nothing that was not already being lost.
+     */
+    _hasEvidenceHeadroom: function () {
+        if (this.MAX_ITERATIONS - this._iteration < 2) return false
+        return this.BUDGET_MS - (this._now() - this._startMs) >= this.EVIDENCE_HEADROOM_MS
     },
 
     /**
