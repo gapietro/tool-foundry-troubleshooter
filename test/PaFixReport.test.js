@@ -2094,3 +2094,288 @@ describe('directed depth gate (#109) — declaredLayers', () => {
         expect(load().declaredLayers(report)).toEqual([])
     })
 })
+
+describe('evidenceProblems classification — evidence rule (#81)', () => {
+    function baseReport(overrides) {
+        const report = {
+            failure_summary: 'the agent returned nothing',
+            layers_swept: {
+                1: { status: 'SWEPT' },
+                2: { status: 'NOT_SWEPT', reason: 'not needed' },
+                3: { status: 'NOT_SWEPT', reason: 'not needed' },
+                4: { status: 'NOT_SWEPT', reason: 'not needed' },
+                5: { status: 'NOT_SWEPT', reason: 'not needed' },
+                6: { status: 'NOT_SWEPT', reason: 'not needed' },
+                7: { status: 'NOT_SWEPT', reason: 'not needed' },
+            },
+            root_causes: [
+                {
+                    layer: '1',
+                    component: 'x_snc_tsbench_ticket',
+                    finding: 'the tool returned no rows',
+                    evidence: [{ source: 'trace', detail: 'rows_returned: 0' }],
+                },
+            ],
+            fixes: [
+                {
+                    target_type: 'data',
+                    target: 'x_snc_tsbench_ticket',
+                    current: '0 rows',
+                    proposed: 'seed the table',
+                    rationale: 'the query has nothing to match',
+                },
+            ],
+            verification: 're-run the agent and confirm rows come back',
+            data_markers: [],
+        }
+        return Object.assign(report, overrides || {})
+    }
+
+    it('classifies a trace-only evidence rule violation as an evidence problem', () => {
+        const fr = load()
+        const res = fr.validate(baseReport())
+
+        expect(res.valid).toBe(false)
+        expect(res.evidenceProblems.length).toBe(1)
+        expect(res.evidenceProblems[0]).toContain('evidence cites only the trace')
+        // subset invariant
+        expect(res.problems).toEqual(expect.arrayContaining(res.evidenceProblems))
+    })
+
+    it('classifies a missing-trace evidence rule violation as an evidence problem', () => {
+        const fr = load()
+        const res = fr.validate(
+            baseReport({
+                root_causes: [
+                    {
+                        layer: '4',
+                        component: 'incident.assignment_group',
+                        finding: 'the field is missing',
+                        evidence: [{ source: 'schema', detail: 'no such column' }],
+                    },
+                ],
+            })
+        )
+
+        expect(res.valid).toBe(false)
+        expect(res.evidenceProblems.length).toBe(1)
+        expect(res.evidenceProblems[0]).toContain('no trace citation found')
+    })
+
+    it('classifies the absence-path shortfall as an evidence problem', () => {
+        const fr = load()
+        const report = baseReport({
+            layers_swept: {
+                1: { status: 'UNAVAILABLE', reason: 'nothing ever ran' },
+                2: { status: 'NOT_SWEPT', reason: 'not needed' },
+                3: { status: 'NOT_SWEPT', reason: 'not needed' },
+                4: { status: 'NOT_SWEPT', reason: 'not needed' },
+                5: { status: 'NOT_SWEPT', reason: 'not needed' },
+                6: { status: 'NOT_SWEPT', reason: 'not needed' },
+                7: { status: 'NOT_SWEPT', reason: 'not needed' },
+            },
+            root_causes: [
+                {
+                    layer: '7',
+                    component: 'sn_aia_trigger_configuration',
+                    finding: 'the trigger is inactive',
+                    evidence: [{ source: 'config', detail: 'active=false' }],
+                },
+            ],
+        })
+        const res = fr.validate(report)
+
+        expect(res.valid).toBe(false)
+        expect(res.evidenceProblems.length).toBe(1)
+        expect(res.evidenceProblems[0]).toContain('TWO DISTINCT sources')
+    })
+
+    it('classifies would_confirm shape problems as SHAPE, not evidence', () => {
+        const fr = load()
+        const res = fr.validate(
+            baseReport({
+                root_causes: [
+                    {
+                        layer: '1',
+                        component: 'x_snc_tsbench_ticket',
+                        finding: 'the tool returned no rows',
+                        evidence: [{ source: 'trace', detail: 'rows_returned: 0' }],
+                        confidence: 'UNCONFIRMED',
+                    },
+                ],
+            })
+        )
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.length).toBe(1)
+        expect(res.problems[0]).toContain('would_confirm')
+        expect(res.evidenceProblems).toEqual([])
+    })
+
+    it('classifies the UNCONFIRMED evidence-per-swept-layer shortfall as an evidence problem', () => {
+        const fr = load()
+        const res = fr.validate(
+            baseReport({
+                layers_swept: {
+                    1: { status: 'SWEPT' },
+                    2: { status: 'SWEPT' },
+                    3: { status: 'SWEPT' },
+                    4: { status: 'NOT_SWEPT', reason: 'not needed' },
+                    5: { status: 'NOT_SWEPT', reason: 'not needed' },
+                    6: { status: 'NOT_SWEPT', reason: 'not needed' },
+                    7: { status: 'NOT_SWEPT', reason: 'not needed' },
+                },
+                root_causes: [
+                    {
+                        layer: '1',
+                        component: 'x_snc_tsbench_ticket',
+                        finding: 'the tool returned no rows',
+                        evidence: [{ source: 'trace', detail: 'rows_returned: 0' }],
+                        confidence: 'UNCONFIRMED',
+                        would_confirm: 'layer 5',
+                    },
+                ],
+            })
+        )
+
+        expect(res.valid).toBe(false)
+        expect(res.evidenceProblems.length).toBe(1)
+        expect(res.evidenceProblems[0]).toContain('at least one piece of evidence per layer')
+    })
+
+    it('returns an empty evidenceProblems array for a non-object report (R-9)', () => {
+        const fr = load()
+        const res = fr.validate(null)
+
+        expect(res.valid).toBe(false)
+        expect(res.problems).toEqual(['fix report must be a JSON object'])
+        expect(res.evidenceProblems).toEqual([])
+    })
+
+    it('returns no evidenceProblems key requirement on a valid report', () => {
+        const fr = load()
+        const res = fr.validate(
+            baseReport({
+                root_causes: [
+                    {
+                        layer: '1',
+                        component: 'x_snc_tsbench_ticket',
+                        finding: 'the tool returned no rows',
+                        evidence: [
+                            { source: 'trace', detail: 'rows_returned: 0' },
+                            { source: 'data', detail: 'x_snc_tsbench_ticket has 0 rows' },
+                        ],
+                    },
+                ],
+            })
+        )
+
+        expect(res.valid).toBe(true)
+        expect(res.normalized).toBeDefined()
+    })
+})
+
+describe('evidenceProblems classification — audit-backed checks (#81)', () => {
+    const CTX = { auditAvailable: true, invokedTools: ['agent_trace'] }
+
+    it('classifies an unsupported citation as an evidence problem', () => {
+        const fr = load()
+        const res = fr.validate(
+            {
+                failure_summary: 'the agent returned nothing',
+                layers_swept: {
+                    1: { status: 'SWEPT' },
+                    2: { status: 'NOT_SWEPT', reason: 'not needed' },
+                    3: { status: 'NOT_SWEPT', reason: 'not needed' },
+                    4: { status: 'NOT_SWEPT', reason: 'not needed' },
+                    5: { status: 'NOT_SWEPT', reason: 'not needed' },
+                    6: { status: 'NOT_SWEPT', reason: 'not needed' },
+                    7: { status: 'NOT_SWEPT', reason: 'not needed' },
+                },
+                root_causes: [
+                    {
+                        layer: '5',
+                        component: 'x_snc_tsbench_ticket',
+                        finding: 'the table is empty',
+                        evidence: [
+                            { source: 'trace', detail: 'rows_returned: 0' },
+                            { source: 'data', detail: 'x_snc_tsbench_ticket has 0 rows' },
+                        ],
+                    },
+                ],
+                fixes: [
+                    {
+                        target_type: 'data',
+                        target: 'x_snc_tsbench_ticket',
+                        current: '0 rows',
+                        proposed: 'seed the table',
+                        rationale: 'the query has nothing to match',
+                    },
+                ],
+                verification: 're-run the agent and confirm rows come back',
+                data_markers: [],
+            },
+            CTX
+        )
+
+        expect(res.valid).toBe(false)
+        const unsupported = res.evidenceProblems.filter(function (p) {
+            return p.indexOf('unsupported citation') !== -1
+        })
+        expect(unsupported.length).toBe(1)
+        expect(res.problems).toEqual(expect.arrayContaining(res.evidenceProblems))
+    })
+
+    it('classifies an unsupported sweep claim as an evidence problem', () => {
+        const fr = load()
+        const res = fr.validate(
+            {
+                failure_summary: 'the agent returned nothing',
+                layers_swept: {
+                    1: { status: 'SWEPT' },
+                    2: { status: 'NOT_SWEPT', reason: 'not needed' },
+                    3: { status: 'NOT_SWEPT', reason: 'not needed' },
+                    4: { status: 'SWEPT' },
+                    5: { status: 'NOT_SWEPT', reason: 'not needed' },
+                    6: { status: 'NOT_SWEPT', reason: 'not needed' },
+                    7: { status: 'NOT_SWEPT', reason: 'not needed' },
+                },
+                root_causes: [
+                    {
+                        layer: '1',
+                        component: 'x_snc_tsbench_ticket',
+                        finding: 'the tool returned no rows',
+                        evidence: [{ source: 'trace', detail: 'rows_returned: 0' }],
+                    },
+                ],
+                fixes: [
+                    {
+                        target_type: 'data',
+                        target: 'x_snc_tsbench_ticket',
+                        current: '0 rows',
+                        proposed: 'seed the table',
+                        rationale: 'the query has nothing to match',
+                    },
+                ],
+                verification: 're-run the agent and confirm rows come back',
+                data_markers: [],
+            },
+            CTX
+        )
+
+        expect(res.valid).toBe(false)
+        const sweep = res.evidenceProblems.filter(function (p) {
+            return p.indexOf('unsupported sweep claim') !== -1
+        })
+        expect(sweep.length).toBe(1)
+    })
+
+    it('leaves plain shape problems out of evidenceProblems', () => {
+        const fr = load()
+        const res = fr.validate({ layers_swept: {}, root_causes: [], fixes: [], data_markers: [] }, CTX)
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.length).toBeGreaterThan(0)
+        expect(res.evidenceProblems).toEqual([])
+    })
+})

@@ -17,6 +17,81 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0601 — 2026-08-06
+
+### Added — but SHIPPED DORMANT, read this first
+
+- **The evidence return (#81) ships DISABLED at `MAX_EVIDENCE_RETURNS: 0`.** The mechanism is
+  built, tested and deployed, and it is **inert** unless a caller passes `maxEvidenceReturns`
+  through `PaAgentLoop.initialize()`. **Do not read this entry as "the harness now returns
+  evidence rejections to the loop" — by default it does not.** Two pre-registered smoke rounds
+  over eight seed-01 runs returned **no verdict**, and no verdict is not the same as proven, so
+  the default is off. Full reasoning: `benchmark/DECISION.md` §U8/§U9.
+
+- **What the mechanism does when enabled.** `PaFixReport.validate` now classifies its rejection
+  problems into a **shape** class (fixable by rewriting) and an **evidence** class (fixable only
+  by calling a tool and reading another source), returning the latter as `evidenceProblems`.
+  `PaAgentLoop._handleFixReport` hands an evidence-class rejection **back to the main loop**
+  (`{terminal:false}`), where tools are live, instead of into the tool-less repair turn that
+  cannot fix it. Shape rejections keep the repair turn, which #64/#65 established works for them.
+  Bounded by `MAX_EVIDENCE_RETURNS` (2 when enabled, separate from `MAX_HOLDS` — a shared pool
+  would have given v9 rows 07/08 zero returns) and `EVIDENCE_HEADROOM_MS` (30 s, plus two
+  iterations of headroom). Every guard fails toward the pre-existing behaviour.
+
+### Fixed
+
+- **A rejected `fix_report` draft now survives to the terminal record — via two paths, and only
+  one of them has live evidence.** The **pre-existing** `_finishFailedFixReport` close path
+  (unchanged by this branch) is **live-verified in production**: smoke run TR1000168 (v10-1)
+  closed `failed` with its draft intact — its transcript note is that path's own error text, not
+  Task 6's. §T scored v9 rows 07 and 08 from exactly that field, so this pre-existing behaviour
+  closes a hole that would otherwise have destroyed scorable rows. **Task 6's new addition** — a
+  run that rides an evidence return out to `MAX_ITERATIONS`/`BUDGET_MS` without resubmitting now
+  also closes `failed` with its draft attached, via `_finishPartial`/`_finishFailedLlm` stashing
+  `_rejectedDraft` — is **tests-only**: 0 of 8 v10 smoke runs (both rounds) terminated `partial`,
+  so this path has never run in production. See `benchmark/DECISION.md` §U9.2.
+
+- **`_handleFixReport` now returns `_step`'s result shape** — a pure refactor removing a divergent
+  return contract.
+
+### Measured
+
+- **Two pre-registered smoke rounds, eight seed-01 runs, NO VERDICT.** Round 1 (n=4, seeds 01 and
+  03) and round 2 (n=4, seed 01) are recorded in
+  `benchmark/raw-evidence-v10-evidence-return-smoke.md`. Neither is a scored pass — custom arm
+  only, no native control, no scorers, no rubric, no scorecard row, per §T9's call to fix the
+  rubric clause before spending another scored round. Round 1's prediction was committed before
+  any run fired (`1657a92`); round 2's amended clause and decision rule likewise (`9b45ff1`).
+
+- **Round 1's §U3 clause was defective and yielded no verdict.** Its preamble allowed the
+  prediction and its own refutation clause to fire on the same two runs. It was amended to
+  per-run and re-run rather than resolved in the change's favour.
+
+- **Round 2 returned UNDER-POWERED by its own pre-registered stop rule** — `D`=2 runs fired a
+  return, `N`=1 made a tool call, `N/D` = exactly 1/2, and `D < 3` stops. The round was
+  deliberately **not** extended to break the tie, because at the boundary one more run decides
+  everything and choosing to continue at that moment is optional stopping.
+
+- **The honest pooled rate is 1 of 4, not 2 of 4.** Across all eight seed-01 runs, four fired a
+  return, **two** made a tool call after it, and **one** call actually retrieved anything — the
+  other was malformed (`execution:<sys_id>` as a bare string) and returned zero rows. The
+  pre-registered numerator counted a *call*, not a *retrieval*, which is the identical defect §T4
+  found in the depth gate's release rule. **Quote 1 of 4.**
+
+- **One genuine first: the custom harness called `genai_log`,** after 63 runs that never did
+  (§T6), three seconds after an evidence return. It is the single unambiguous instance of the
+  mechanism doing what it was built to do.
+
+- **No diagnostic-correctness claim is made.** All four round-1 reports concluded at layer 1 or at
+  nothing against seeded layers 3 and 5 — the same result §T3 measured six times. The change
+  targets evidence *gathering*; it did not move a diagnosis.
+
+- **A fixed defect regressed:** the `<param>:<value>` argument malformation T6 recorded at 0 of 6
+  in v9 is back, on `genai_log` — a tool the #111/#113/#115 fixes never exercised because no
+  custom run had ever called one. Filed, not fixed.
+
+---
+
 ## 2026.08.0505 — 2026-08-06
 
 ### Measured

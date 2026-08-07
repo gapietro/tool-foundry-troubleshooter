@@ -116,12 +116,22 @@ PaFixReport.prototype = {
      */
     validate: function (report, context) {
         if (!this._isPlainObject(report)) {
-            return { valid: false, problems: ['fix report must be a JSON object'] }
+            return { valid: false, problems: ['fix report must be a JSON object'], evidenceProblems: [] }
         }
 
         var ctx = this._buildCheckContext(report, context)
 
+        // #81: `problems` stays EXACTLY what it has always been — same
+        // strings, same order, same consumers (`repairPrompt`, the
+        // transcript, the audit trail). `evidenceProblems` is a SUBSET of
+        // those same string instances, marking the ones a tool-less repair
+        // turn cannot fix without either weakening the diagnosis or
+        // fabricating a citation. The classification is authored at the push
+        // site — never by matching the message text afterwards, which would
+        // silently reclassify every problem the day someone rewords one.
         var problems = []
+        problems.evidence = []
+
         this._checkFailureSummary(report, problems)
         this._checkLayersSwept(report, problems)
         this._checkSweptClaims(report, problems, ctx)
@@ -131,12 +141,32 @@ PaFixReport.prototype = {
         this._checkDataMarkers(report, problems)
 
         if (problems.length > 0) {
-            return { valid: false, problems: problems }
+            return { valid: false, problems: problems, evidenceProblems: problems.evidence }
         }
 
         var normalized = this._clone(report)
         this._normalizeRootCauseLayers(normalized)
         return { valid: true, normalized: normalized }
+    },
+
+    /**
+     * #81: push a problem AND mark it evidence-gathering-fixable.
+     *
+     * The one test that decides which helper a push site uses: can this
+     * problem be satisfied without either weakening the diagnosis or
+     * fabricating a citation? If NO, it is an evidence problem — only a run
+     * that can still call a tool can fix it, and `PaAgentLoop` routes those
+     * back into the loop rather than into the tool-less repair turn (see
+     * that class's `_handleFixReport`).
+     *
+     * `problems.evidence` is an expando array on `problems` so that every
+     * check keeps its existing `(report, problems, ctx)` signature. R-9: a
+     * `problems` array arriving without the expando (a caller that built one
+     * by hand) degrades to a plain push rather than throwing.
+     */
+    _pushEvidenceProblem: function (problems, message) {
+        problems.push(message)
+        if (this._isArray(problems.evidence)) problems.evidence.push(message)
     },
 
     /**
@@ -343,7 +373,11 @@ PaFixReport.prototype = {
 
         if (unsupported.length === 0) return
 
-        problems.push(
+        // #81: evidence class. "Call a tool that reads that layer" is a
+        // legal fix and only the loop can offer it. Downgrading the claim to
+        // NOT_SWEPT stays available on the resubmission either way.
+        this._pushEvidenceProblem(
+            problems,
             'layers_swept: unsupported sweep claim — ' + unsupported.length + ' layer(s) are marked SWEPT ' +
                 'but this run never invoked a tool that reads them. ' + unsupported.join('. ') + '. Tools ' +
                 'invoked this run: ' + this._invokedList(ctx) + '. Mark a layer you did not actually sweep ' +
@@ -569,7 +603,13 @@ PaFixReport.prototype = {
         if (!supporting) return
         if (this._anyInvoked(supporting, ctx)) return
 
-        problems.push(
+        // #81: evidence class. This message already names the tools that
+        // would support the citation, and v9 row 08 received exactly that
+        // text and still failed — because the repair turn that read it had
+        // no way to call any of them. Routing it back to the loop is what
+        // makes the instruction actionable.
+        this._pushEvidenceProblem(
+            problems,
             entryLabel + ': unsupported citation — cites "' + source + '" but this run never invoked a ' +
                 'tool that reads it (' + supporting.join(', ') + '). Either call one of those tools and ' +
                 'cite what it actually returned, or drop the claim. Tools invoked this run: ' +
@@ -647,7 +687,8 @@ PaFixReport.prototype = {
         // (B) — the absence-diagnosis path.
         if (ctx.traceUnavailable) {
             if (tally.distinctOther >= 2) return
-            problems.push(
+            this._pushEvidenceProblem(
+                problems,
                 label + ' (' + causeName + '): evidence rule violation — layer 1 is UNAVAILABLE, so no ' +
                     'trace citation is required, but a diagnosis of an absence still needs corroboration. ' +
                     'Cite at least TWO DISTINCT sources from ' + this._nonTraceEvidenceSources().join('/') +
@@ -657,7 +698,8 @@ PaFixReport.prototype = {
         }
 
         if (!tally.hasTrace) {
-            problems.push(
+            this._pushEvidenceProblem(
+                problems,
                 label + ' (' + causeName + '): evidence rule violation — no trace citation found; ' +
                     'a candidate resting on config/schema/data alone is not a confirmed root cause. If no ' +
                     'execution trace EXISTS for this target — nothing ever ran — mark layer 1 UNAVAILABLE ' +
@@ -675,7 +717,8 @@ PaFixReport.prototype = {
             return
         }
 
-        problems.push(
+        this._pushEvidenceProblem(
+            problems,
             label + ' (' + causeName + '): evidence rule violation — evidence cites only the trace; ' +
                 'at least one config, schema, or data citation is required. If the trace alone genuinely ' +
                 'settles it and you cannot reach a second layer, set confidence to UNCONFIRMED and name the ' +
@@ -763,7 +806,8 @@ PaFixReport.prototype = {
 
         var swept = this._countSweptLayers(report)
         if (evidence.length < swept) {
-            problems.push(
+            this._pushEvidenceProblem(
+                problems,
                 prefix + 'an UNCONFIRMED trace-only root cause cites ' + evidence.length + ' piece(s) of ' +
                     'evidence but layers_swept marks ' + swept + ' layer(s) SWEPT — cite at least one piece of ' +
                     'evidence per layer you claim to have swept. If you did not actually sweep a layer, mark it ' +

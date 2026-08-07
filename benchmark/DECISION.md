@@ -2723,3 +2723,414 @@ the instability is in the rubric, not in the sample size.
 not met.** This pass is the first that measures *correctness* since §O, and it measures the custom
 harness at 0 of 6 on the gate with no ambiguity on the column that decides it. Native's 6 of 6
 carries the caveat in §T5 and should be quoted with it.
+
+---
+
+## U. Pre-registration — the evidence return (`2026.08.0601`, #81)
+
+**This section was written and committed before a single run fired.** Nothing below was authored
+with knowledge of an outcome; the git history of this file is the proof. §U7 records round 1's
+outcome, but that verdict was subsequently withdrawn (§U8) — the disposition that stands is §U9,
+added by later commits that do not touch §U1–§U6.
+
+Design: `docs/superpowers/specs/2026-08-06-fixreport-evidence-return-design.md`. Plan:
+`docs/superpowers/plans/2026-08-06-fixreport-evidence-return.md`. Measurements, once they exist:
+`benchmark/raw-evidence-v10-evidence-return-smoke.md`.
+
+### U1. What is under test
+
+`2026.08.0601` — the **evidence return** (#81), against `2026.08.0505` (§T).
+
+§H7-5 filed the structural finding this change answers, and §T's rows 07 and 08 are it happening in
+a scored pass: *"the repair turn has no tool access, so a 'cite two distinct sources — found 0'
+problem is **unfixable in repair by construction**."* Both v9 custom rows on seed 01 terminated
+`failed` on a citation shortfall and, per `raw-evidence-v9-scored-pass.md:202`, **"both survived the
+harness's repair attempts."** A tool-less turn was spent on a problem no rewrite can fix.
+
+The change, in one sentence: `PaFixReport.validate` now separates its rejection problems into a
+**shape** class (fixable by rewriting) and an **evidence** class (fixable only by calling a tool and
+reading another source), and `PaAgentLoop._handleFixReport` hands an evidence-class rejection back
+into the main loop — where tools are live — instead of into the tool-less repair turn. Capped at
+`MAX_EVIDENCE_RETURNS` (2), gated on `_hasEvidenceHeadroom()` (2 iterations and 30s of budget
+remaining). A run that returns and never resubmits closes `'failed'` carrying the rejected draft, so
+it stays retrievable as `fix_report_rejected` and stays scorable. Every guard fails toward today's
+behaviour.
+
+**Targets.** The four v9 custom targets on seeds 01 and 03, re-diagnosed by the custom arm — the same
+execution plans, so the only thing that changed between the two measurements is the harness:
+
+| seed / rep | execution plan sys_id | v9 row | v9 terminal |
+|---|---|---|---|
+| 01 / 1 | `4a5bb19d2b66cf54f243fed2ce91bf57` | 07 | **failed** — evidence/citation shortfall |
+| 01 / 2 | `45bbfd112ba6cf54f243fed2ce91bfcb` | 08 | **failed** — three `unsupported citation` findings |
+| 03 / 1 | `3afbf1192baa475817a6ffbeee91bf10` | 09 | complete |
+| 03 / 2 | `1a1c71152ba6cf54f243fed2ce91bf31` | 10 | complete |
+
+Seed 01 is the pair the change exists for; seed 03 is the pair it must not break.
+
+### U2. The prediction
+
+Per seed, filed before the runs:
+
+| | Prediction, as filed |
+|---|---|
+| U-a | **Seed 01.** In **≥1 of 2** runs, a `fix_report` rejected on the evidence class produces at least one `EVIDENCE RETURN <n>/2` transcript note, **and** the next tool call that run makes reads a source named in the rejection. "Names a source" resolves through `PaFixReport._citationToolMap()`: `config` → `agent_config` or `genai_log`; `schema` → `schema_lookup`; `data` → `query_table` or `log_analysis`. An `unsupported citation` rejection names one source, so the call must be one of that source's tools; the *cites-only-the-trace* rejection names `config`, `schema` and `data` collectively, so any of their five tools satisfies it. `agent_trace` and `read_artifact` satisfy neither — `read_artifact` supports no source at all, by that map's own construction. **Both halves must hold in the same run** for U-a to hold |
+| U-b | **Seed 03.** Neither run regresses: **0 of 2** terminate `partial`, and neither loses a `complete` terminal it held in v9 *for a reason attributable to the evidence return* — i.e. if a seed-03 run does not produce an `EVIDENCE RETURN` note, its terminal state is not evidence for or against this change |
+| U-c | **Both seeds.** No run terminates `partial`. §T's revert trigger on `partial` is re-armed here because `_hasEvidenceHeadroom` is exactly the guard that keeps a return from becoming one |
+
+**The conditional is stated now, not later.** U-a's antecedent is *a rejection on the evidence
+class*. If no run in either seed is rejected on that class, **U-a is UNSCORED, not held** — the
+mechanism was never reached, and a smoke that never triggers the path measures nothing about it.
+That is a live possibility: v9's seed-03 rows both validated first time, and even seed 01's two
+rejections are 2 of 6, not 6 of 6. Recording it in advance removes the temptation to read a
+no-rejection run as a pass.
+
+**Measurement method.** Tool calls, their arguments and their outputs come from
+`x_snc_troubleshoot_audit` (`run=<run sys_id>^action_type=result`), per §E1–E2 — **not** from
+transcript prose, and not from what a report claims it did. The `EVIDENCE RETURN` note is a
+`x_snc_troubleshoot_run.transcript` entry with `actor: 'system'`; "the next tool call" means the
+first `action_type=result` audit row whose timestamp follows that note.
+
+### U3. What would refute it
+
+Either of these, on the seed-01 pair:
+
+1. **The return is spent, and nothing is gathered.** An `EVIDENCE RETURN` note appears and the model
+   resubmits an identical or weaker report **without an intervening tool call**. This is the failure
+   mode that matters: it would mean the return relocated the tool-less repair turn rather than
+   replacing it, and bought two extra iterations for the same unfixable move.
+2. **A rejection is downgraded into a `partial`.** A run that under `2026.08.0505` ended `failed`
+   carrying a draft now ends `partial`. §T scored rows 07 and 08 from `fix_report_rejected.report`;
+   a `partial` that carries no draft is a scored row destroyed, which is a strictly worse outcome
+   than the defect being fixed.
+
+### U4. The revert trigger, as a value
+
+**If either refutation in §U3 holds, `MAX_EVIDENCE_RETURNS` goes to `0` in the same pull request.**
+Not "the code is kept and the result is explained", not "the cap is lowered to 1 and re-measured" —
+`0`, which restores `2026.08.0505`'s behaviour exactly, because every guard on the return path falls
+through to the existing repair turn when the cap is spent. `PaAgentLoop.initialize` accepts
+`maxEvidenceReturns: 0` by explicit `>= 0` test for this reason; the constant at
+`src/server/PaAgentLoop.js:163` is the one edit.
+
+This is recorded as a value rather than as a judgment because §R6 is the precedent: a change on this
+branch family was reverted when its own pre-registered test refuted it, and that only worked because
+the trigger was written down before the number was known.
+
+### U5. What this cannot establish
+
+- **Nothing about diagnostic correctness.** §T3 is the governing result: six custom rows reached
+  layer 4 and **all six wrote their conclusion at layer 1**, scoring 0 of 6 on
+  `root_cause_layer_correct`. Gathering a citation is not diagnosing. The most this smoke can claim
+  is that a rejection fixable *solely* by reading another source stops being unfixable by
+  construction. It cannot claim the source read was the right one, that the citation supports a true
+  cause, or that any score would move.
+- **Nothing about the depth gate.** The evidence return fires *after* validation; the gate fires
+  *before* it. §T4's finding — the gate counts a layer-4 tool being *called*, not layer 4 being
+  *reached* — is untouched by this change and is not tested by this smoke.
+- **No rate.** See §U6.
+- **Nothing about seeds 02, 04 and 05**, none of which is run here.
+- **No comparison of scores to v9.** The four targets are shared with v9 rows 07–10, which makes the
+  *terminal states* and *tool trails* comparable and nothing else. No packet is built, no scorer is
+  engaged, and no row here may be entered on a scorecard.
+
+### U6. This is not a scored pass, and it is not being run as one
+
+**n = 4. Two seeds (01, 03), two runs each, custom arm only.** No native control, no blind packets,
+no independent scorers, no rubric applied — therefore no `passes_gate`, no /6 total, and no entry in
+any scorecard. Terminal states and audit-derived tool trails only.
+
+That is a deliberate choice, taken under **§T9**: *"Fix the rubric before spending another scored
+pass … Two more reps per cell would not resolve §T5 — the instability is in the rubric, not in the
+sample size."* Nine of twelve v9 rows required a judgment the rubric does not supply, four of them
+on the gate itself. Spending a scored round before that clause is fixed would produce a headline
+decided by a coin the scorers are being asked to flip. So this round buys one thing only: whether
+the mechanism fires and what the run does with it.
+
+### U7. Outcome — the mechanism fires; one of two runs used it (added after the smoke)
+
+Added by a later commit. **§U1–§U6 above are unmodified** — `git log -p benchmark/DECISION.md` is
+the check. Measurements: `benchmark/raw-evidence-v10-evidence-return-smoke.md`.
+
+Four runs, 2026-08-06 23:12–23:16, strictly sequential, custom arm only, against v9's own rows
+07–10 targets.
+
+| run | seed/rep | run_id | terminal | tools | EVIDENCE RETURN | next tool after it |
+|---|---|---|---|---|---|---|
+| v10-1 | 01/1 | `ae7e16252b228794f243fed2ce91bf24` | **failed** | 4 | 1/2 @ 23:13:01 | **none** |
+| v10-2 | 01/2 | `a3be12a52b228794f243fed2ce91bfae` | complete | 4 | 1/2 @ 23:13:59 | **`genai_log`** @ 23:14:02 |
+| v10-3 | 03/1 | `c81f5ee52b228794f243fed2ce91bfb0` | complete | 2 | none | — |
+| v10-4 | 03/2 | `653f52292b228794f243fed2ce91bfb7` | complete | 2 | none | — |
+
+| | Outcome | Measured |
+|---|---|---|
+| U-a | **HELD** | 1 of 2. v10-2 fired the note and called `genai_log` three seconds later, then validated. v10-1 fired the note and made no tool call |
+| U-b | **HELD** | 0 `partial`; both seed-03 runs `complete` as in v9. Neither fired a return, so per U-b's own clause neither is evidence either way |
+| U-c | **HELD** | 0 of 4 `partial`. `_hasEvidenceHeadroom` never bound |
+| §U3.1 refutation | **OBSERVED on v10-1**, not on v10-2 | v10-1 resubmitted a weaker report with no intervening tool call |
+| §U3.2 refutation | **not observed** | v10-1 closed `failed` with its draft preserved in `fix_report_rejected` — Task 6 working |
+
+**`MAX_EVIDENCE_RETURNS` stays at `2`; the revert trigger did not fire — and the reasoning is
+contestable, so it is spelled out.** U-a is quantified "≥1 of 2" and held. §U3's preamble
+("either of these, on the seed-01 pair") is **ambiguous** between per-run and per-pair, and under
+the per-run reading U-a and §U3.1 are *both* satisfied — a contradiction §U3 permitted and should
+not have. **That is a defect in this pre-registration.** Three things argue against reverting:
+§U3.1's own stated rationale — *"bought two extra iterations for the same unfixable move"* — was
+**not** met, since v10-1's resubmission actually *cleared* the evidence problem (its final
+rejection is pure shape: `fixes` and `verification` missing) by taking option 2 of the two the
+return block offers; v10-2 is unexplainable any other way; and nothing regressed.
+**This call should be ratified or overruled by a human before the PR merges.**
+
+**The finding worth keeping: `genai_log` was called.** §T6 put the custom harness at **63 runs with
+zero `genai_log` and zero `log_analysis`**, a streak §Q5, §R3, §S and §T all carry, with the tool
+attached and active throughout. It broke three seconds after an evidence return, on the run whose
+v9 counterpart (row 08) died on three `unsupported citation` findings.
+
+**And the finding that cuts the other way.** On the one target where v9 and v10 can be compared
+directly and the return produced no tool call, **the draft got emptier**: v9 row 07 ended `failed`
+with a `CONFIRMED` (wrong) cause at layer 4, scored 1/6; v10-1 ends `failed` with `root_causes: []`
+plus a shape defect. n=1, confounded by nondeterminism and a different pre-return tool path, and
+recorded because it is what would most change the verdict if it repeated.
+
+**§U5 stands, unsoftened.** All four reports still conclude at layer 1 or at nothing, against
+seeded layers 3 and 5 — **four of four would score 0 on `root_cause_layer_correct`**, exactly as
+§T3 measured six of six. v10-2's own report names layer 5 and `query_table` in `would_confirm`: the
+call it still did not make. The return moved evidence *gathering*. It did not move the diagnosis
+one layer, and nothing here licenses a claim that it would.
+
+**One harness defect found, filed not fixed.** The evidence-problem TEXT is not persisted for a run
+that later validates — `_evidenceNote` carries only a count, the full text goes to the prompt, and
+`fix_report_rejected` is written only on `failed`. So **the reason v10-2 returned cannot be read
+back off the instance**; the raw-evidence file reconstructs it from `_citationToolMap` /
+`_layerToolMap` and labels the reconstruction as one. Every future pass hits this.
+
+**Unrelated but load-bearing for the next operator:** `now-sdk install` does **not** stamp
+`sys_updated_on` on the records it installs — the deployed script includes read 2026-08-02 hours
+after this install. **`sys_updated_on` is not a deploy check.** A `scriptLIKE<marker>` probe is.
+
+### U8. §U3 was defective, so it yielded no verdict — the clause is fixed and re-run (round 2)
+
+**Written and committed before any round-2 run fired. §U1–§U6 and §U7 are unmodified** — the same
+discipline §U7 followed, and `git log -p benchmark/DECISION.md` is the check.
+
+#### U8.1 Why §U3 is being amended, and what was known when it changed
+
+**State the compromise first.** This amendment is being written **with the v10 results already
+known** (§U7). That is not the position a pre-registration should ever be written from, and no
+reader should have to infer it. What was known: 2 of 2 seed-01 runs fired an `EVIDENCE RETURN`; 1
+of those 2 was followed by an intervening tool call; 0 of 4 runs terminated `partial`.
+
+**The defect.** §U3's preamble reads *"Either of these, on the seed-01 pair"*, which is ambiguous
+between *on either run of the pair* and *on the pair as a whole*. §U2's U-a is quantified per-pair
+("≥1 of 2"). Under the per-run reading of §U3, **U-a and §U3.1 are both satisfied by the same two
+runs** — the prediction holds and its own refutation fires, simultaneously. A test that can return
+both answers at once returns neither.
+
+**The ruling (human, 2026-08-06): §U3 yields no verdict and neither branch of it may be picked.**
+`MAX_EVIDENCE_RETURNS` stays at `2` **pending this round's result** — not because the trigger was
+argued away in §U7, and not because the change was ratified. §U7's three arguments for standing
+pat are recorded there and are **not** load-bearing here; this round decides on its own terms.
+
+#### U8.2 §U3, amended — per-run, explicitly
+
+Replacing the ambiguous preamble for round 2 onward. **Each clause below is evaluated PER RUN, and
+the round's verdict is a COUNT over runs, fixed in §U8.3.** A clause firing on one run is a fact
+about that run, never by itself a verdict about the round.
+
+| | Amended clause, per run |
+|---|---|
+| §U3.1′ | A run fires at least one `EVIDENCE RETURN` note and makes **no tool call after it** |
+| §U3.2′ | A run terminates `partial` |
+
+**"After it" is defined structurally, not by clock.** A tool call counts as intervening iff the
+run's `x_snc_troubleshoot_run.transcript` contains an entry with `actor: 'tool'` at a **higher
+`seq`** than the first `EVIDENCE RETURN` entry. Sequence, not timestamp — two transcript entries
+can share a second (v10-2's note and its `fix_report` both read 23:13:59), and a second-resolution
+comparison would be undecidable there. Arguments and outputs for any such call are then read from
+`x_snc_troubleshoot_audit` (`action_type=intent` carries `input`; `action_type=result` carries
+`output`), per §E1–E2.
+
+#### U8.3 The decision rule for round 2, as a number, filed before the runs
+
+**Protocol.** ~4 more seed-01 runs — **2 runs against each of the two v9 seed-01 execution plans**
+(`4a5bb19d2b66cf54f243fed2ce91bf57`, `45bbfd112ba6cf54f243fed2ce91bfcb`), custom arm only,
+strictly sequential, same request body, no new executions triggered, no fixture touched. The
+deployed build is unchanged from v10 (§U7); it is re-probed with `scriptLIKE` rather than trusted,
+because `now-sdk install` does not stamp `sys_updated_on`.
+
+**The metric.**
+
+- **Denominator `D`** = round-2 runs that fire at least one `EVIDENCE RETURN`.
+- **Numerator `N`** = of those `D`, how many satisfy the negation of §U3.1′ — at least one
+  `actor: 'tool'` transcript entry at a higher `seq` than the first note.
+
+**The rule, decided on the mechanism's merits and not on v10's 1-of-2:**
+
+| Condition | Verdict |
+|---|---|
+| **`N / D ≥ 1/2`** (a boundary case of exactly one half **stands**) | The return stands. `MAX_EVIDENCE_RETURNS` remains `2` |
+| **`N / D < 1/2`** | **REVERT.** `MAX_EVIDENCE_RETURNS` → `0` at `src/server/PaAgentLoop.js:163`, in the same PR |
+| **Any run terminates `partial`** (§U3.2′, at a count of **1**) | **REVERT**, overriding the row above. A `partial` destroys a scorable row, which is strictly worse than the defect being fixed |
+| **`D < 3`** | **UNDER-POWERED. No verdict.** Do not revert and do not ratify — record it and say so |
+
+**Why one half, and why the boundary stands.** The tool-less repair turn already offers two of the
+three moves an evidence-class rejection permits — weaken the claim, or go `inconclusive`. The one
+move it cannot offer, *by construction*, is going and reading the missing source (§H7-5). So the
+return earns its machinery — a classifier, a cap, a headroom guard, a state block, a draft stash
+and a new terminal path — only if the move that is otherwise impossible actually happens at a rate
+that is not marginal. **Below half, the model is predominantly choosing a move it could already
+have made for free, and the mechanism is mostly a more expensive repair turn.** At or above half,
+the return is doing something the repair turn structurally cannot, and its costs fail safe: every
+guard falls through to today's behaviour, and the cap bounds the spend at 2 iterations.
+
+**Why `D < 3` is a stop rather than a lenient pass.** A round that fires twice and splits 1–1
+reproduces §U3's ambiguity exactly, and resolving a coin flip by picking the branch that suits the
+change is the failure this amendment exists to prevent.
+
+**Recorded as secondary and explicitly NOT deciding:** the pooled figure across v10's seed-01 runs
+and round 2's will also be reported, because a reader will compute it anyway and should not have
+to. **The verdict is round 2's `N / D` alone**, per the ruling that this round decides on its own
+terms.
+
+#### U8.4 What round 2 still cannot establish
+
+Everything in §U5 stands unchanged, and one thing is sharpened: this round is **one seed, one arm,
+~4 runs**. It measures whether the model uses a move that has been made available to it. It
+measures nothing about rate beyond this seed, nothing about seed 03 (unchanged since §U7's 2 of 2
+`complete` with no return fired), and **nothing about diagnostic correctness** — §U7 measured four
+of four reports concluding at layer 1 or at nothing against seeded layers 3 and 5, and no result
+below can move that.
+
+#### U8.5 Round 2's verdict — UNDER-POWERED, by §U8.3's own stop rule (added after the runs)
+
+Added by a later commit; **§U8.1–§U8.4 unmodified**, same discipline as §U7. Measurements:
+`benchmark/raw-evidence-v10-evidence-return-smoke.md`, "Round 2".
+
+Four runs, 2026-08-06 23:25–23:29, strictly sequential, custom arm, two runs against each of the
+two v9 seed-01 plans. Build unchanged and re-probed, not rebuilt.
+
+| run | target | run_id | terminal | tools | EVIDENCE RETURN | tool call after the note? |
+|---|---|---|---|---|---|---|
+| r2-1 | A | `1b71eee52b628794f243fed2ce91bf90` | complete | 3 | none | n/a |
+| r2-2 | B | `9b91aa692b6ecb5817a6ffbeee91bfdf` | **failed** | 4 | **1/2 and 2/2** | **YES** — `genai_log`, seq 12 > seq 10 |
+| r2-3 | A | `d4f1aae92b6ecb5817a6ffbeee91bf0c` | **failed** | 4 | **1/2** | **NO** — tools at seq 2/6/8/10, note at seq 12 |
+| r2-4 | B | `5432222d2b628794f243fed2ce91bfc0` | complete | 2 | none | n/a |
+
+**`D` = 2, `N` = 1, `N/D` = 1/2 — exactly the boundary — and `D < 3`, so §U8.3 returns
+UNDER-POWERED: no verdict.** §U3.2′ clean at 0 `partial` against a threshold of 1.
+
+**`MAX_EVIDENCE_RETURNS` stays at `2`, and this is neither a pass nor a ratification.** The change
+is **still undecided**. Pooled across both rounds' seed-01 runs, `D = 4` and `N = 2` — **2/4, also
+exactly the boundary. Eight runs have not moved this off a coin flip.**
+
+**The round was deliberately not extended to reach `D ≥ 3`.** At `N/D = 1/2`, one more run in the
+denominator decides everything — 2/3 stands, 1/3 reverts. Continuing *because* the split is tied is
+optional stopping at the most result-sensitive moment there is, which is what the stop rule exists
+to block. It was filed before the runs and it binds now that it is inconvenient.
+
+**Round 2's substantive findings all cut against the change:**
+
+- **`N` counts a call, not a retrieval, and the one call in `N` retrieved nothing.** r2-2's
+  `genai_log` args were `execution:45bbfd112ba6cf54f243fed2ce91bfcb` — a bare string with the
+  `<param>:<value>` prefix. The tool answered *"Unknown mode … Returning the default (llm)"* and
+  returned `entries: []`, `llm_call_rows: 0`. **Under a numerator requiring the call to return
+  something, round 2's `N` is 0 and the pooled figure is 1 of 4.** This is §T4's finding — "counts
+  a call, not a reach" — reproduced on §U8.3's own metric, and the rule as filed is generous to the
+  change.
+- **The `<param>:<value>` malformation has recurred.** T6 recorded it in 0 of 6 v9 runs after
+  #111/#113/#115. It is back, on `genai_log` — **a tool those fixes never exercised, because no
+  custom run had ever called one.** The fixes were validated against the tools the harness happened
+  to use.
+- **The cap was hit for the first time** (r2-2, 2/2). The second return produced no tool call, and
+  the run still died on *"evidence cites only the trace"* — the same evidence-class problem
+  surviving two returns **and** the repair turn.
+- **Variance on a fixed input is close to a coin flip.** Both targets received two byte-identical
+  requests and both split — `complete`-no-return vs `failed`-with-return. This is why `D` came in
+  at 2 from 4 runs, and any future round must size `n` against that rather than against patience.
+- **`query_table` fired for the first time on seed 01** (r2-4), with **no** evidence return in the
+  run — not attributable to this change, recorded so the "custom never reaches layer-5 tools"
+  premise is not carried forward unqualified.
+
+**Recommendation.** Do not spend another 4-run round on this question; §R2.4's variance figures say
+it would land on the boundary again. Two things would actually decide it, in order: **(a) tighten
+the numerator** so a gathering call counts only when it returns something — the same correction
+§T9 recommended for the depth gate's release rule, and it would make both metrics honest at once;
+**(b) then** run a round whose `n` is sized for a fire rate near one half, with the stopping rule
+fixed in advance. Until one of those happens, `MAX_EVIDENCE_RETURNS: 2` is carried as **undecided,
+not endorsed**, and nothing downstream should cite this change as validated.
+
+### U9. Disposition — the evidence return ships DORMANT at `0` (`2026.08.0601`, #81)
+
+§U1–§U8 unmodified; append-only, as throughout §U.
+
+**The ruling.** The fixed test (§U8.3) returned **no verdict**. *No verdict is not the same as
+proven*, so the default is **off**: `MAX_EVIDENCE_RETURNS: 0` at `src/server/PaAgentLoop.js`. The
+code ships — classifier, cap, headroom guard, prompt block, transcript note, draft stash — and is
+**inert** until someone passes `maxEvidenceReturns` through `initialize()`.
+
+**The question is OPEN, not closed.** Nothing here says the evidence return does not work. It says
+two pre-registered rounds did not establish that it does, and that shipping an unproven behaviour
+enabled-by-default is the wrong direction to fail in.
+
+**Behavioural equivalence to `2026.08.0505` is confirmed, not asserted.** At `0` the guard in
+`_handleFixReport` falls straight through to the existing repair turn. A test constructs the loop
+with **no** `maxEvidenceReturns` option and drives an evidence-class rejection through it, asserting
+the run goes terminal via the repair turn with `_evidenceReturns`, `_evidenceBlock` and
+`_rejectedDraft` all untouched (`test/PaAgentLoop.test.js`, *"ships dormant: at the shipped default
+an evidence rejection takes the repair turn"*). Full suite: **1160 passing, 26 suites.** The six
+tests that failed on the flip all assumed the old default; each was fixed by declaring
+`maxEvidenceReturns: 2` at the fixture, never by moving the production default back.
+
+#### U9.1 The number a future round has to beat is 1 of 4, not 2 of 4
+
+Pooled across **all eight seed-01 runs** in both rounds:
+
+| | count | runs |
+|---|---|---|
+| Runs that fired at least one `EVIDENCE RETURN` | **4** | v10-1, v10-2, r2-2, r2-3 |
+| …of those, runs that made a tool call after the note (`N`, as pre-registered) | **2** | v10-2, r2-2 |
+| …of those, runs whose call actually **retrieved anything** | **1** | **v10-2 only** |
+
+**v10-2's `genai_log` call was well-formed** — `{"execution":"…","mode":"for_execution"}` — and
+returned 5,176 chars with `llm_call_rows: 3`. **r2-2's was malformed** —
+`execution:45bbfd112ba6cf54f243fed2ce91bfcb`, a bare string carrying the `<param>:<value>` prefix —
+and the tool answered *"Unknown mode … Returning the default (llm)"* with `entries: []` and
+`llm_call_rows: 0`. **One gathering call in eight runs gathered anything.**
+
+**So `2 of 4` is an artefact of a numerator that counts a call rather than a retrieval** — §U8.3's
+metric carrying the identical defect §T4 found in the depth gate's release rule. **The honest rate
+is 1 of 4, and that is the figure any future round must improve on.** Do not quote 2 of 4.
+
+#### U9.2 What ships that is NOT in doubt
+
+The disposition above is about **one constant**. Three parts of this change are unconditional
+improvements and are enabled:
+
+1. **`PaFixReport.validate` returns `evidenceProblems`** — the rejection problems are now
+   *classified* into shape (fixable by rewriting) and evidence (fixable only by reading another
+   source). The classification is correct independently of what any consumer does with it, and it
+   is what makes §U9.1's question askable at all.
+2. **`_handleFixReport` returns `_step`'s result shape** — a pure refactor that removed a
+   divergent return contract.
+3. **A rejected `fix_report` draft now survives to the terminal record** — via two paths, and only
+   one has live evidence. The **pre-existing** `_finishFailedFixReport` close path (unchanged by
+   this branch) is **live-verified in production**: v10-1 closed `failed` with its draft intact
+   and retrievable as `fix_report_rejected.report` — its §3.4 transcript note is that path's own
+   error text (`'fix_report failed validation and could not be repaired: …'`), confirming the run
+   took the OLD path, not Task 6's new one. §T's pass scored rows 07 and 08 from that field, so the
+   pre-existing behaviour closes a hole that would have destroyed scorable rows. **Task 6's new
+   addition** — `_finishPartial`/`_finishFailedLlm` stashing `_rejectedDraft` for a run that rides
+   an evidence return out to the bounds without resubmitting — is **tests-only**: 0 of 8 v10 runs
+   across both rounds terminated `partial` (§U7, §U8.5), so it has never been exercised live.
+
+#### U9.3 Queued
+
+- **Tighten the numerator, then run a sized round.** A gathering call should count only when it
+  returns something — the same correction §T9 asks for on the depth gate's release rule, so one fix
+  serves both metrics. Then size `n` against the observed fire rate (roughly half of runs, §R2.4)
+  with the stopping rule fixed in advance. A second 4-run round would land on the boundary again.
+- **The `<param>:<value>` malformation has regressed on `genai_log`.** T6 recorded it at 0 of 6 in
+  v9 after #111/#113/#115 — **those fixes were only ever exercised against the tools the harness
+  happened to call, and no custom run had ever called `genai_log`.**
+- **Unfixed and filed:** the evidence-problem text is not persisted for a run that later validates
+  (§U7), so the reason a return fired cannot be recovered afterwards.

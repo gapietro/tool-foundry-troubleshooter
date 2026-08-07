@@ -852,6 +852,472 @@ describe('audit context plumbing', () => {
 })
 
 // ===========================================================================
+// #81 — _handleFixReport returns _step's result shape
+// ===========================================================================
+
+describe('_handleFixReport returns a step result (#81)', () => {
+    it('wraps a completed fix_report in {terminal:true, outcome}', () => {
+        const loop = load({
+            llmProxy: fakeLlm([]),
+            toolRegistry: fakeTools([]),
+            runManager: fakeRunManager(),
+            fixReport: fakeFixReport([{ valid: true, normalized: { failure_summary: 'ok' } }]),
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            now: fakeClock([0]),
+        })
+
+        const res = loop._handleFixReport('RUN1', { failure_summary: 'ok' })
+
+        expect(res.terminal).toBe(true)
+        expect(res.outcome.outcome).toBe('fix_report')
+    })
+
+    it('wraps a failed fix_report in {terminal:true, outcome}', () => {
+        const loop = load({
+            llmProxy: fakeLlm([{ success: false, error: 'llm down' }]),
+            toolRegistry: fakeTools([]),
+            runManager: fakeRunManager(),
+            fixReport: fakeFixReport([{ valid: false, problems: ['failure_summary is required and must be a non-empty string'], evidenceProblems: [] }]),
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            now: fakeClock([0]),
+        })
+
+        const res = loop._handleFixReport('RUN1', {})
+
+        expect(res.terminal).toBe(true)
+        expect(res.outcome.outcome).toBe('failed')
+    })
+})
+
+// ===========================================================================
+// evidence-return bounds (#81)
+// ===========================================================================
+
+describe('evidence-return bounds (#81)', () => {
+    function bare(opts) {
+        const o = Object.assign(
+            {
+                llmProxy: fakeLlm([]),
+                toolRegistry: fakeTools([]),
+                runManager: fakeRunManager(),
+                fixReport: fakeFixReport([]),
+                auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+                now: fakeClock([0]),
+            },
+            opts || {}
+        )
+        return load(o)
+    }
+
+    // #81 SHIPS DORMANT. Two pre-registered smoke rounds over eight seed-01
+    // runs returned NO VERDICT (DECISION.md §U8/§U9), so the default is off.
+    // This assertion is the guard against it being switched on by accident.
+    it('defaults MAX_EVIDENCE_RETURNS to 0 (dormant) and EVIDENCE_HEADROOM_MS to 30000', () => {
+        const loop = bare()
+        expect(loop.MAX_EVIDENCE_RETURNS).toBe(0)
+        expect(loop.EVIDENCE_HEADROOM_MS).toBe(30000)
+    })
+
+    it('accepts overrides through initialize', () => {
+        const loop = bare({ maxEvidenceReturns: 1, evidenceHeadroomMs: 5 })
+        expect(loop.MAX_EVIDENCE_RETURNS).toBe(1)
+        expect(loop.EVIDENCE_HEADROOM_MS).toBe(5)
+    })
+
+    it('_resetGate clears all three evidence fields', () => {
+        const loop = bare()
+        loop._evidenceReturns = 2
+        loop._evidenceBlock = 'BLOCK'
+        loop._rejectedDraft = { report: {}, problems: [] }
+
+        loop._resetGate()
+
+        expect(loop._evidenceReturns).toBe(0)
+        expect(loop._evidenceBlock).toBe(null)
+        expect(loop._rejectedDraft).toBe(null)
+    })
+
+    it('_hasEvidenceHeadroom is true with two iterations and time to spare', () => {
+        const loop = bare({ now: fakeClock([1000]) })
+        loop.MAX_ITERATIONS = 15
+        loop.BUDGET_MS = 300000
+        loop._iteration = 5
+        loop._startMs = 0
+
+        expect(loop._hasEvidenceHeadroom()).toBe(true)
+    })
+
+    it('_hasEvidenceHeadroom is false with fewer than two iterations left', () => {
+        const loop = bare({ now: fakeClock([1000]) })
+        loop.MAX_ITERATIONS = 15
+        loop.BUDGET_MS = 300000
+        loop._iteration = 14
+        loop._startMs = 0
+
+        expect(loop._hasEvidenceHeadroom()).toBe(false)
+    })
+
+    it('_hasEvidenceHeadroom is false inside the time margin', () => {
+        const loop = bare({ now: fakeClock([280000]) })
+        loop.MAX_ITERATIONS = 15
+        loop.BUDGET_MS = 300000
+        loop.EVIDENCE_HEADROOM_MS = 30000
+        loop._iteration = 2
+        loop._startMs = 0
+
+        expect(loop._hasEvidenceHeadroom()).toBe(false)
+    })
+
+    it('run() maintains _iteration and _startMs', () => {
+        // A readable trail (bare()'s default auditLogger) makes the #103
+        // depth gate hold a bare `answer` once for `no_layer_report` before
+        // it terminates — unrelated to this test's concern, which is only
+        // the _iteration/_startMs bookkeeping. An unreadable trail bypasses
+        // the gate (`_trailTools().readable === false`), same as the
+        // "genuinely degraded trail" tests above, so the single stubbed
+        // `answer` terminates on the first iteration.
+        const loop = bare({
+            llmProxy: fakeLlm([{ success: true, raw: 'r', action: { action: 'answer', text: 'done' } }]),
+            auditLogger: fakeAuditLogger({ available: false, degraded: 'glide_unavailable', tools: [] }),
+            now: fakeClock([500, 500, 500]),
+        })
+
+        loop.run('RUN1', {})
+
+        expect(loop._iteration).toBe(1)
+        expect(loop._startMs).toBe(500)
+    })
+})
+
+// ===========================================================================
+// evidence return routing (#81)
+// ===========================================================================
+
+describe('evidence return routing (#81)', () => {
+    const EVIDENCE_PROBLEM =
+        'root_causes[0] (x_snc_tsbench_ticket): evidence rule violation — evidence cites only the trace; ' +
+        'at least one config, schema, or data citation is required.'
+    const SHAPE_PROBLEM = 'failure_summary is required and must be a non-empty string'
+
+    function loopWith(validations, opts) {
+        const o = Object.assign(
+            {
+                llmProxy: fakeLlm([]),
+                toolRegistry: fakeTools([]),
+                runManager: fakeRunManager(),
+                fixReport: fakeFixReport(validations),
+                auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+                now: fakeClock([0, 0, 0, 0, 0, 0]),
+                // #81: the mechanism SHIPS DORMANT (MAX_EVIDENCE_RETURNS: 0 —
+                // see DECISION.md §U9), so this block enables it explicitly.
+                // These tests describe what the return does WHEN ENABLED; the
+                // shipped default is asserted in the 'evidence-return bounds'
+                // block, and the dormant-by-default behaviour in
+                // 'ships dormant' below.
+                maxEvidenceReturns: 2,
+            },
+            opts || {}
+        )
+        const loop = load(o)
+        loop._iteration = 3
+        loop._startMs = 0
+        loop._fakes = o
+        return loop
+    }
+
+    it('returns {terminal:false} on an evidence-only rejection', () => {
+        const loop = loopWith([{ valid: false, problems: [EVIDENCE_PROBLEM], evidenceProblems: [EVIDENCE_PROBLEM] }])
+
+        const res = loop._handleFixReport('RUN1', { failure_summary: 'x' })
+
+        expect(res.terminal).toBe(false)
+        expect(loop._evidenceReturns).toBe(1)
+        expect(loop._fakes.llmProxy.calls.length).toBe(0)
+    })
+
+    it('sets an evidence block carrying the problems verbatim', () => {
+        const loop = loopWith([{ valid: false, problems: [EVIDENCE_PROBLEM], evidenceProblems: [EVIDENCE_PROBLEM] }])
+
+        loop._handleFixReport('RUN1', { failure_summary: 'x' })
+
+        expect(loop._evidenceBlock).toContain('EVIDENCE SHORTFALL')
+        expect(loop._evidenceBlock).toContain(EVIDENCE_PROBLEM)
+    })
+
+    it('writes a transcript note inside DIGEST_CHARS', () => {
+        const loop = loopWith([{ valid: false, problems: [EVIDENCE_PROBLEM], evidenceProblems: [EVIDENCE_PROBLEM] }])
+
+        loop._handleFixReport('RUN1', { failure_summary: 'x' })
+
+        const notes = loop._fakes.runManager.transcript.filter(function (e) {
+            return e.actor === 'system'
+        })
+        expect(notes.length).toBe(1)
+        expect(notes[0].result_digest).toContain('EVIDENCE RETURN 1/2')
+        expect(notes[0].result_digest.length).toBeLessThan(200)
+    })
+
+    it('stashes the rejected draft', () => {
+        const draft = { failure_summary: 'x' }
+        const loop = loopWith([{ valid: false, problems: [EVIDENCE_PROBLEM], evidenceProblems: [EVIDENCE_PROBLEM] }])
+
+        loop._handleFixReport('RUN1', draft)
+
+        expect(loop._rejectedDraft.report).toBe(draft)
+        expect(loop._rejectedDraft.problems).toEqual([EVIDENCE_PROBLEM])
+    })
+
+    it('routes back to the loop when evidence and shape problems are mixed', () => {
+        const loop = loopWith([
+            { valid: false, problems: [SHAPE_PROBLEM, EVIDENCE_PROBLEM], evidenceProblems: [EVIDENCE_PROBLEM] },
+        ])
+
+        const res = loop._handleFixReport('RUN1', { failure_summary: '' })
+
+        expect(res.terminal).toBe(false)
+        expect(loop._evidenceBlock).toContain(SHAPE_PROBLEM)
+    })
+
+    it('uses the repair turn for a shape-only rejection', () => {
+        const loop = loopWith(
+            [
+                { valid: false, problems: [SHAPE_PROBLEM], evidenceProblems: [] },
+                { valid: true, normalized: { failure_summary: 'fixed' } },
+            ],
+            {
+                llmProxy: fakeLlm([
+                    { success: true, raw: 'r', action: { action: 'fix_report', report: { failure_summary: 'fixed' } } },
+                ]),
+            }
+        )
+
+        const res = loop._handleFixReport('RUN1', {})
+
+        expect(res.terminal).toBe(true)
+        expect(res.outcome.outcome).toBe('fix_report')
+        expect(loop._evidenceReturns).toBe(0)
+        expect(loop._fakes.llmProxy.calls.length).toBe(1)
+    })
+
+    it('falls through to the repair turn once the cap is spent', () => {
+        const loop = loopWith(
+            [
+                { valid: false, problems: [EVIDENCE_PROBLEM], evidenceProblems: [EVIDENCE_PROBLEM] },
+                { valid: false, problems: [EVIDENCE_PROBLEM], evidenceProblems: [EVIDENCE_PROBLEM] },
+            ],
+            {
+                llmProxy: fakeLlm([{ success: false, error: 'llm down' }]),
+            }
+        )
+        loop._evidenceReturns = 2
+
+        const res = loop._handleFixReport('RUN1', { failure_summary: 'x' })
+
+        expect(res.terminal).toBe(true)
+        expect(res.outcome.outcome).toBe('failed')
+        expect(loop._fakes.llmProxy.calls.length).toBe(1)
+    })
+
+    it('falls through to the repair turn without headroom', () => {
+        const loop = loopWith([{ valid: false, problems: [EVIDENCE_PROBLEM], evidenceProblems: [EVIDENCE_PROBLEM] }], {
+            llmProxy: fakeLlm([{ success: false, error: 'llm down' }]),
+        })
+        loop._iteration = loop.MAX_ITERATIONS - 1
+
+        const res = loop._handleFixReport('RUN1', { failure_summary: 'x' })
+
+        expect(res.terminal).toBe(true)
+        expect(res.outcome.outcome).toBe('failed')
+        expect(loop._evidenceReturns).toBe(0)
+    })
+
+    it('clears a stale evidence block on the next submission', () => {
+        const loop = loopWith([{ valid: true, normalized: { failure_summary: 'ok' } }])
+        loop._evidenceBlock = 'STALE BLOCK'
+
+        loop._handleFixReport('RUN1', { failure_summary: 'ok' })
+
+        expect(loop._evidenceBlock).toBe(null)
+    })
+
+    it('renders the evidence block into the next prompt', () => {
+        const loop = loopWith([])
+        loop._evidenceBlock = '## EVIDENCE SHORTFALL — your fix_report was not accepted'
+
+        const prompt = loop._buildPrompt('PLAYBOOK', 'TOOLBLOCK', { transcript: [], context_summary: '' }, {})
+
+        expect(prompt).toContain('## EVIDENCE SHORTFALL')
+    })
+
+    // #81 SHIPS DORMANT (DECISION.md §U9). The claim made in the PR and in the
+    // constant's own comment is that at the shipped default the evidence return
+    // is INERT and an evidence-class rejection takes the `2026.08.0505` path —
+    // the tool-less repair turn. This test CONFIRMS that rather than asserting
+    // it: it constructs the loop with NO maxEvidenceReturns option at all, so
+    // the class default is what runs.
+    it('ships dormant: at the shipped default an evidence rejection takes the repair turn', () => {
+        const llmProxy = fakeLlm([{ success: false, error: 'llm down' }])
+        const loop = load({
+            llmProxy: llmProxy,
+            toolRegistry: fakeTools([]),
+            runManager: fakeRunManager(),
+            fixReport: fakeFixReport([
+                { valid: false, problems: [EVIDENCE_PROBLEM], evidenceProblems: [EVIDENCE_PROBLEM] },
+            ]),
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            now: fakeClock([0, 0, 0, 0, 0, 0]),
+        })
+        loop._iteration = 3
+        loop._startMs = 0
+
+        expect(loop.MAX_EVIDENCE_RETURNS).toBe(0)
+
+        const res = loop._handleFixReport('RUN1', { failure_summary: 'x' })
+
+        // Terminal, via the repair turn — not handed back to the loop.
+        expect(res.terminal).toBe(true)
+        expect(res.outcome.outcome).toBe('failed')
+        // The repair turn was actually taken.
+        expect(llmProxy.calls.length).toBe(1)
+        // And none of the return's state was touched.
+        expect(loop._evidenceReturns).toBe(0)
+        expect(loop._evidenceBlock).toBe(null)
+        expect(loop._rejectedDraft).toBe(null)
+    })
+
+    it('tolerates a validate() result with no evidenceProblems key (R-9)', () => {
+        const loop = loopWith([{ valid: false, problems: [EVIDENCE_PROBLEM] }], {
+            llmProxy: fakeLlm([{ success: false, error: 'llm down' }]),
+        })
+
+        const res = loop._handleFixReport('RUN1', { failure_summary: 'x' })
+
+        expect(res.terminal).toBe(true)
+        expect(loop._evidenceReturns).toBe(0)
+    })
+})
+
+// ===========================================================================
+// partial preserves a rejected draft (#81)
+// ===========================================================================
+
+describe('partial preserves a rejected draft (#81)', () => {
+    function bare(rm) {
+        return load({
+            llmProxy: fakeLlm([]),
+            toolRegistry: fakeTools([]),
+            runManager: rm || fakeRunManager(),
+            fixReport: fakeFixReport([]),
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            now: fakeClock([0]),
+        })
+    }
+
+    it('attaches the stashed draft and problems to the return value', () => {
+        const loop = bare()
+        loop._rejectedDraft = { report: { failure_summary: 'x' }, problems: ['evidence rule violation'] }
+
+        const res = loop._finishPartial('RUN1', 'reached the maximum of 15 reasoning iterations')
+
+        expect(res.outcome).toBe('partial')
+        expect(res.draft).toEqual({ failure_summary: 'x' })
+        expect(res.problems).toEqual(['evidence rule violation'])
+    })
+
+    it('PERSISTS the stashed draft by closing failed with fixReport and error', () => {
+        const rm = fakeRunManager()
+        const loop = bare(rm)
+        loop._rejectedDraft = { report: { failure_summary: 'x' }, problems: ['evidence rule violation'] }
+
+        loop._finishPartial('RUN1', 'reached the maximum of 15 reasoning iterations')
+
+        // This is the assertion that makes the draft retrievable: PaRestHandlers
+        // exposes fix_report_rejected only when status !== 'complete' AND
+        // fix_report is non-empty.
+        const call = rm.closeCalls[rm.closeCalls.length - 1]
+        expect(call.status).toBe('failed')
+        expect(call.options.fixReport).toEqual({ failure_summary: 'x' })
+        expect(call.options.error).toContain('evidence rule violation')
+    })
+
+    it('closes complete with no draft when nothing was stashed', () => {
+        const rm = fakeRunManager()
+        const loop = bare(rm)
+
+        const res = loop._finishPartial('RUN1', 'exceeded the 300000ms diagnosis time budget')
+
+        expect(res.outcome).toBe('partial')
+        expect(res.draft).toBeUndefined()
+        expect(res.problems).toBeUndefined()
+        const call = rm.closeCalls[rm.closeCalls.length - 1]
+        expect(call.status).toBe('complete')
+        expect(call.options.fixReport).toBeUndefined()
+    })
+
+    it('_finishFailedLlm persists the stashed draft too', () => {
+        const rm = fakeRunManager()
+        const loop = bare(rm)
+        loop._rejectedDraft = { report: { failure_summary: 'x' }, problems: ['evidence rule violation'] }
+
+        loop._finishFailedLlm('RUN1', { success: false, error: 'llm down' })
+
+        const call = rm.closeCalls[rm.closeCalls.length - 1]
+        expect(call.status).toBe('failed')
+        expect(call.options.fixReport).toEqual({ failure_summary: 'x' })
+    })
+
+    it('_finishFailedLlm is unchanged when nothing was stashed', () => {
+        const rm = fakeRunManager()
+        const loop = bare(rm)
+
+        loop._finishFailedLlm('RUN1', { success: false, error: 'llm down' })
+
+        const call = rm.closeCalls[rm.closeCalls.length - 1]
+        expect(call.status).toBe('failed')
+        expect(call.options.fixReport).toBeUndefined()
+    })
+
+    it('writes a separate short note naming the stashed draft, inside DIGEST_CHARS', () => {
+        const rm = fakeRunManager()
+        const loop = load({
+            llmProxy: fakeLlm([]),
+            toolRegistry: fakeTools([]),
+            runManager: rm,
+            fixReport: fakeFixReport([]),
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            now: fakeClock([0]),
+        })
+        loop._rejectedDraft = { report: { failure_summary: 'x' }, problems: ['evidence rule violation'] }
+
+        loop._finishPartial('RUN1', 'reached the maximum of 15 reasoning iterations')
+
+        // Two notes: the draft marker FIRST, then the existing flag verbatim.
+        expect(rm.transcript.length).toBe(2)
+        const marker = rm.transcript[0].result_digest
+        expect(marker).toContain('rejected fix_report draft')
+        expect(marker.length).toBeLessThan(200)
+        expect(rm.transcript[1].result_digest).toContain('INCOMPLETE:')
+    })
+
+    it('writes only the INCOMPLETE flag when no draft was stashed', () => {
+        const rm = fakeRunManager()
+        const loop = load({
+            llmProxy: fakeLlm([]),
+            toolRegistry: fakeTools([]),
+            runManager: rm,
+            fixReport: fakeFixReport([]),
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
+            now: fakeClock([0]),
+        })
+
+        loop._finishPartial('RUN1', 'exceeded the 300000ms diagnosis time budget')
+
+        expect(rm.transcript.length).toBe(1)
+        expect(rm.transcript[0].result_digest).toContain('INCOMPLETE:')
+    })
+})
+
+// ===========================================================================
 // depth gate (#103) — _trailTools
 // ===========================================================================
 
