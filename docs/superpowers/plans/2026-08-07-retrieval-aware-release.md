@@ -763,7 +763,15 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `test/PaToolRegistry.test.js`. The file's existing `load(opts)` helper passes `cores`, `auditLogger` and `artifactStore`; add `readKit` to the object it constructs (Step 3 covers the production side, but the helper change belongs with the tests):
+Append to `test/PaToolRegistry.test.js`. The file's existing `load(opts)` helper passes `cores`, `auditLogger` and `artifactStore`; add `readKit` to the object it constructs (Step 3 covers the production side, but the helper change belongs with the tests).
+
+> **CORRECTION (found during execution).** The `cores` fixtures below are written as bare factory
+> functions — `agent_trace: () => ({ execute: … })`. That is **wrong**: `dispatch` resolves
+> `reg[toolName]` and checks `typeof entry.factory !== 'function'`, so a bare function returns
+> "Unknown tool" and short-circuits *before* the audit logger is ever called — the tests would pass
+> for the wrong reason and the failing-first step would show the wrong failure. Wrap every `cores`
+> entry in the file's own `fakeEntry({ factory: … })` helper, which is the only registry-entry shape
+> that file uses and whose defaults include the `destructive: false` the dispatch gate requires.
 
 ```js
 // ---------------------------------------------------------------------------
