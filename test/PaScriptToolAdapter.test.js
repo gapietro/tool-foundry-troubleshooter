@@ -450,6 +450,31 @@ describe('retrieval verdict (#121)', () => {
         return audit.calls.filter((c) => c[0] === 'logResult')[0][1]
     }
 
+    /**
+     * A store stub that replaces anything over `limit` chars with a
+     * `reads`-free envelope, as the real PaArtifactStore.applyThreshold does
+     * once a result crosses the threshold. Mirrors
+     * test/PaToolRegistry.test.js's `thresholdingStore` (Task 4's "THE
+     * ORDERING CLAIM" test) — kept local rather than shared, same as the
+     * components under test.
+     */
+    function thresholdingStore(limit) {
+        return {
+            applyThreshold: function (runId, result, toolName) {
+                if (JSON.stringify(result).length <= limit) return result
+                return {
+                    success: true,
+                    truncated: true,
+                    tool: toolName,
+                    total_length: JSON.stringify(result).length,
+                    artifact_id: 'art1',
+                    excerpt: '{"success":true,…',
+                    note: 'truncated',
+                }
+            },
+        }
+    }
+
     test('the verdict reaches logResult', () => {
         const audit = auditSpy()
         const adapter = load({
@@ -463,20 +488,63 @@ describe('retrieval verdict (#121)', () => {
         expect(resultCall(audit).retrieval).toBe('ok')
     })
 
-    test('the verdict is taken on the core result, before thresholding AND before _attachRunState', () => {
+    test('THE ORDERING CLAIM (thresholding): a productive result too big to survive thresholding still logs ok', () => {
+        // Discriminating version of the ordering claim, thresholding half.
+        // applyThreshold here actually REPLACES an oversized result with a
+        // reads-free excerpt envelope (unlike the default fakeStore(), which
+        // is an identity passthrough and can't tell early verdict-taking from
+        // late). If the verdict line moved to after applyThreshold, kit.seen[0]
+        // would be the excerpt envelope, not `big`, and this would fail.
         const audit = auditSpy()
         const kit = fakeKit('ok')
-        const core = { success: true, data: { reads: { sys_generative_ai_log: 'ok' } } }
+        const big = { success: true, data: { reads: { sys_generative_ai_log: 'ok' }, blob: 'x'.repeat(5000) } }
         const adapter = load({
-            tools: { genai_log: () => ({ execute: () => core }) },
+            tools: { genai_log: () => ({ execute: () => big }) },
             auditLogger: audit,
+            artifactStore: thresholdingStore(4000),
             readKit: kit,
         })
 
         adapter.invoke('genai_log', '{}', { execution: 'e1' })
 
+        const logged = resultCall(audit)
+        // The verdict was taken on the core's own result...
+        expect(kit.seen[0]).toBe(big)
+        expect(logged.retrieval).toBe('ok')
+        // ...and what was LOGGED is the excerpt envelope, which has no reads.
+        expect(logged.output.truncated).toBe(true)
+        expect(logged.output.data).toBeUndefined()
+    })
+
+    test('THE ORDERING CLAIM (_attachRunState): the verdict is taken before run-state metadata is attached on a degraded run', () => {
+        // Discriminating version of the ordering claim, _attachRunState half.
+        // The default fakeAnchor() run has no `degraded` field, so
+        // _attachRunState is a no-op and returns the SAME reference either
+        // way — that's exactly why the old combined test couldn't tell early
+        // from late. Here the run IS degraded, so _attachRunState clones the
+        // result and adds a `run` key onto a NEW object. If the verdict line
+        // moved to after _attachRunState, kit.seen[0] would be that new
+        // object, not `core`, and this would fail.
+        const audit = auditSpy()
+        const kit = fakeKit('ok')
+        const core = { success: true, data: { reads: { sys_generative_ai_log: 'ok' } } }
+        const degradedRun = { run_id: 'run1', degraded: true, note: 'anchor fallback' }
+        const adapter = load({
+            tools: { genai_log: () => ({ execute: () => core }) },
+            auditLogger: audit,
+            run: degradedRun,
+            readKit: kit,
+        })
+
+        adapter.invoke('genai_log', '{}', { execution: 'e1' })
+
+        const logged = resultCall(audit)
         expect(kit.seen[0]).toBe(core)
-        expect(resultCall(audit).retrieval).toBe('ok')
+        expect(logged.retrieval).toBe('ok')
+        // ...and what was LOGGED is the post-_attachRunState clone, carrying
+        // run metadata the core result never had.
+        expect(logged.output).not.toBe(core)
+        expect(logged.output.run).toEqual({ degraded: true, note: 'anchor fallback' })
     })
 
     test('a throwing read kit degrades to unknown and the tool still answers', () => {
