@@ -17,6 +17,65 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0703 — 2026-08-07
+
+### Fixed — the five `PaAgentLoop` prerequisites blocking #121's sized round
+
+`DECISION.md` §V6 condition 3 names a list filed on #121's first comment as blocking the
+`MAX_EVIDENCE_RETURNS` flip off `0`. All five live in `src/server/PaAgentLoop.js` and are the
+state the round is about to turn on, so they are cleared before it rather than during it (#130).
+
+- **`run()` now resets per-run gate state.** `_resetGate()` was called from `initialize()` alone,
+  which made every field it clears per-**instance** rather than per-**run**. Production news up a
+  fresh loop per event (the async ScriptAction worker), so nothing could observe the leak — but
+  the fields are not equally harmless if one ever did. A carried `_holdCount` costs the next run
+  some hold budget; a carried `_rejectedDraft` makes `_finishPartial` persist run N's report onto
+  run N+1's row *and* write a transcript note asserting the draft came "from this run". The reset
+  covers the depth gate too, deliberately: holds are a per-run budget, so a per-run reset is the
+  correct semantic rather than a side effect of where the call was put.
+- **A `null` no longer overwrites the evidence-return defaults.** `null >= 0` is `true` in JS, so
+  the two guards at `initialize` admitted `null`, `''`, `[]`, `true` and numeric strings — and
+  then assigned the value verbatim, so `evidenceHeadroomMs: null` did not fall back to `30000`,
+  it made the time margin `null`. `undefined` and `{}` were the only junk the old shape caught,
+  because they coerce to `NaN`. Now `typeof … === 'number' && … >= 0`, which keeps `0` settable —
+  #81's revert trigger disables the path that way, so a naive `> 0` repair would have been worse
+  than the bug. `REQUIRE_RETRIEVAL_TO_RELEASE`'s own guard already cited this defect in its
+  comment; these two never got the same treatment.
+- **The allowed second evidence return (1 → 2) is covered.** The first return and the cap-spent
+  boundary were both tested; the transition between them was the only untested step on the path
+  the round enables.
+- **`_finishAnswer`'s dropped draft is re-decided, and stays a drop.** `_finishPartial` and
+  `_finishFailedLlm` both persist a stashed draft; this path does not, and the asymmetry is the
+  decision. Reaching `answer` after an evidence return means the model was handed its draft back,
+  went and gathered, and then chose prose over resubmitting — an abandonment, and persisting a
+  report the model declined to stand behind would misrepresent it as the run's diagnosis. The two
+  paths that keep a draft never got that choice: a `partial` ran out of iterations or clock
+  mid-flight, a failed LLM call died before the model could act. Behaviour unchanged; the bare
+  omission is now a stated rationale plus a test that locks it.
+- **`_buildPrompt`'s comment claimed `_holdActive` and `_evidenceBlock` are never both set.**
+  False, and verified false by reading the paths rather than on the strength of the filing:
+  `_depthGate`'s unreadable-trail short-circuit allows *without* setting `_gateReleased`, so a run
+  can pass on a degraded trail, fire an evidence return, then be held on a later iteration once
+  the trail recovers — and because `_handleFixReport` is never reached on the iteration that
+  holds, the block is not cleared. The rendering already handled it; only the claim was wrong.
+
+**Neither dormant switch is touched.** `MAX_EVIDENCE_RETURNS` stays `0` and
+`REQUIRE_RETRIEVAL_TO_RELEASE` stays `false`. This release clears a precondition for the round; it
+does not start it, and it measures nothing.
+
+**Still open on #121 before the cap can leave `0`:** §V6 conditions 1 and 2 — size `n` against the
+observed ~50% fire rate for the *denominator*, and fix the stopping rule before the first run
+(§U8.3's `D < 3` stop fired at exactly the boundary and could not be extended without optional
+stopping). Also deferred, and blocking the separate `REQUIRE_RETRIEVAL_TO_RELEASE` round rather
+than this one: §V3's ruling on `reads: 'DENIED'` scoring `retrieval=none`, which by R-26 is a
+permission gap rather than an absence. The sixth item on #121's comment — the
+`_checkUnconfirmed` / `_checkInconclusive` classification asymmetry in `PaFixReport.js` — is
+spec-conformant and stays on #121.
+
+Suite: **1340 passed, 27 suites** (was 1320/27). `now-sdk build` clean on SDK 4.9.2.
+
+---
+
 ## 2026.08.0702 — 2026-08-07
 
 ### Fixed — the argument-shape layer, ahead of #121's sized round
