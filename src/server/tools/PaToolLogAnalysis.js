@@ -164,11 +164,15 @@ PaToolLogAnalysis.prototype = {
                     'message-contains. Missing: ' +
                     scope.missing.join('; ') +
                     '.'
+                // #122: this used to say `execution=<...>`, `source=<...>`,
+                // `message=<...>` — the parameter-prefixed shape the guard in
+                // _normalizeArgs exists to repair, taught on the refusal path,
+                // which is precisely the moment before the model retries.
                 data.how_to_scope =
-                    'Supply execution=<execution plan sys_id> — the window is then taken from the plan ' +
+                    'Supply the execution plan sys_id on its own — the window is then taken from the plan ' +
                     'start and end plus or minus 2 minutes and the message is matched on the plan sys_id — ' +
-                    'or supply source=<scope or Script Include name> and/or message=<error keyword>, with ' +
-                    'minutes_ago for the window.'
+                    'or a JSON object naming source as a scope or Script Include name and/or message as an ' +
+                    'error keyword, with minutes_ago for the window.'
                 data.evidence_basis = this._evidenceBasis(data)
                 return { success: true, data: data }
             }
@@ -395,8 +399,11 @@ PaToolLogAnalysis.prototype = {
 
         if (!scope.source_contains && !scope.message_contains) {
             missing.push(
-                'a source-contains or message-contains filter (supply source=<scope or Script Include ' +
-                    'name>, message=<error keyword>, or execution=<plan sys_id> which supplies both)'
+                // #122: named the value rather than the parameter-equals-value
+                // shape. See the how_to_scope note above.
+                'a source-contains or message-contains filter (supply a JSON object naming source as a ' +
+                    'scope or Script Include name and/or message as an error keyword, or an execution ' +
+                    'plan sys_id on its own, which supplies both)'
             )
         }
 

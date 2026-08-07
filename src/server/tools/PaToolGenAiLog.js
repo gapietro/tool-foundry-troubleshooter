@@ -497,7 +497,7 @@ PaToolGenAiLog.prototype = {
             data.notes.push(
                 'usage mode counts ASSIST CONSUMPTION, not LLM calls. A run that failed before reaching ' +
                     'the provider consumes no assists and leaves no row here — an empty result is not ' +
-                    'evidence the LLM was never invoked. Use mode=llm for the call detail.'
+                    'evidence the LLM was never invoked. Use the llm mode for the call detail.'
             )
         }
     },
@@ -566,7 +566,7 @@ PaToolGenAiLog.prototype = {
 
         if (!wantPayload && out.length && data.notes.join(' ').indexOf('were NOT fetched') === -1) {
             data.notes.push(
-                'Prompt and response payloads were NOT fetched. Re-call with include_payload=true to ' +
+                'Prompt and response payloads were NOT fetched. Re-call with include_payload set to true to ' +
                     'attempt them — they live on sys_generative_ai_log, a separate role-gated table, so ' +
                     'they are fetched only on request rather than failing every ordinary call.'
             )
@@ -650,7 +650,7 @@ PaToolGenAiLog.prototype = {
             data.llm_calls = []
             data.notes.push(
                 'for_execution needs an execution plan sys_id and none was supplied. Call agent_trace ' +
-                    'first to get one, or use mode=llm for a time-windowed view. This is not an error — a ' +
+                    'first to get one, or use the llm mode for a time-windowed view. This is not an error — a ' +
                     'missing argument is expected (DESIGN.md R-9).'
             )
             return

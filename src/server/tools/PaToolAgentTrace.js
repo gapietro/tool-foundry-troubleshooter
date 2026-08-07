@@ -898,7 +898,7 @@ PaToolAgentTrace.prototype = {
                     "workflow's User Access or Data Access check.",
                 evidence: ['sn_aia_execution_plan.state_reason = security_violation'],
                 next_step:
-                    'Call agent_config with section=triggers: compare the trigger run_as/run_as_user roles ' +
+                    'Call agent_config for the triggers section: compare the trigger run_as/run_as_user roles ' +
                     'against the User Access AND Data Access role sets (sys_agent_access_role_configuration, ' +
                     'keyed by agent + agent_table). Both lists must independently cover the invoking role.',
             })
@@ -921,7 +921,7 @@ PaToolAgentTrace.prototype = {
                     'the access check itself is the failing step.',
                 evidence: this._taskEvidence(av),
                 next_step:
-                    'Call agent_config with section=triggers and compare run-as roles against the ' +
+                    'Call agent_config for the triggers section and compare run-as roles against the ' +
                     'User Access / Data Access role sets.',
             })
         }
@@ -963,7 +963,7 @@ PaToolAgentTrace.prototype = {
                     'message body — this is the root cause, not a symptom.',
                 evidence: ev,
                 next_step:
-                    'Call agent_config with section=instructions to read the offending script source ' +
+                    'Call agent_config for the instructions section to read the offending script source ' +
                     '(context_processing_script and applicability_script are auto-populated by the platform ' +
                     'and are a verified failure vector — see DESIGN.md R-7).',
             })
@@ -1505,7 +1505,7 @@ PaToolAgentTrace.prototype = {
                 '. Read status for sn_aia_execution_plan: ' +
                 planRead.status +
                 '. An agent that never triggered leaves NO plan — that absence is itself the diagnosis; ' +
-                'check trigger wiring via agent_config section=triggers.'
+                'check trigger wiring via agent_config, triggers section.'
             return out
         }
 
@@ -1515,7 +1515,9 @@ PaToolAgentTrace.prototype = {
             plans.length +
             ' matching execution plan(s). LLD §4.1 specifies a pick-list when more than one matches; the ' +
             'full list is in resolution.candidates, and the newest is traced as well so a single call ' +
-            'returns usable evidence. Re-call with execution=<sys_id> to trace a different one.'
+            // #122: `execution=<sys_id>` here taught the exact malformation
+            // the guard in _normalizeArgs repairs. Name the value instead.
+            'returns usable evidence. Re-call with another plan sys_id on its own to trace a different one.'
         return out
     },
 
@@ -1549,8 +1551,12 @@ PaToolAgentTrace.prototype = {
                 (since ? ' from the last ' + since + ' minutes' : '') +
                 ' are listed above (read status: ' +
                 read.status +
-                '). Re-call with execution=<sys_id> for one of them, or agent=<name> to search by agent or ' +
-                'use case name. This is not an error — a missing argument is expected (DESIGN.md R-9).',
+                // #122: was `execution=<sys_id> ... agent=<name>`, on the
+                // pick-list path — the first thing a model sees when it calls
+                // this tool with nothing, and the moment before it retries.
+                '). Re-call with one of those plan sys_ids on its own, or a JSON object with agent set ' +
+                'to an agent or use case name. This is not an error — a missing argument is expected ' +
+                '(DESIGN.md R-9).',
         }
     },
 

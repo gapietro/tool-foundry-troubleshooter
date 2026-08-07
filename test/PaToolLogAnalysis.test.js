@@ -64,7 +64,15 @@ describe('mandatory scoping', () => {
         const { result } = run({ minutes_ago: 30 }, world())
 
         expect(result.data.status).toBe('refused_unscoped')
-        expect(result.data.how_to_scope).toMatch(/execution=|source=|message=/)
+        // #122 review F1: this used to assert /execution=|source=|message=/,
+        // which PINNED the refusal path to the exact parameter-prefixed shape
+        // the guard in _normalizeArgs exists to repair — a test enforcing the
+        // defect, on the one path a model reads immediately before it retries.
+        // It now asserts the scoping options are named without that shape.
+        expect(result.data.how_to_scope).toMatch(/execution plan sys_id/)
+        expect(result.data.how_to_scope).toMatch(/source/)
+        expect(result.data.how_to_scope).toMatch(/message/)
+        expect(result.data.how_to_scope).not.toMatch(/\b(execution|source|message)\s*=/)
     })
 
     it('accepts a source filter', () => {

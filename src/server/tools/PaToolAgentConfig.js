@@ -542,8 +542,13 @@ PaToolAgentConfig.prototype = {
                 list.rows.length +
                 ' agent(s) readable from this scope are listed above (read status: ' +
                 list.status +
-                '). Re-call with agent=<name or sys_id>, optionally with section=' +
-                this.SECTIONS.join('|') +
+                // #122: was `agent=<name or sys_id>, optionally with
+                // section=<a|b|c>` — the parameter-prefixed shape the guard in
+                // _normalizeArgs repairs, on the pick-list path a model reads
+                // immediately before it retries.
+                '). Re-call with the agent name or sys_id on its own, or a JSON object with agent and ' +
+                'optionally section set to one of ' +
+                this.SECTIONS.join(', ') +
                 '. This is not an error — a missing argument is expected (DESIGN.md R-9).'
             return out
         }
@@ -612,7 +617,8 @@ PaToolAgentConfig.prototype = {
                 (agentFind.rows.length > 1
                     ? agentFind.rows.length +
                       ' agents matched; the first is inspected and the full list is in ' +
-                      'resolution.matched_agents. Re-call with agent=<sys_id> to inspect a different one.'
+                      'resolution.matched_agents. Re-call with one of those agent sys_ids on its own to ' +
+                      'inspect a different one.'
                     : 'One agent matched.') +
                 (out.name_collision_usecases
                     ? ' NOTE: ' +

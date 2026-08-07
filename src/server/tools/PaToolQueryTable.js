@@ -120,8 +120,13 @@ PaToolQueryTable.prototype = {
                 data.status = 'no_table'
                 data.rows = []
                 data.notes.push(
-                    'No table was supplied, so there is nothing to query. Call with table=<name>, ' +
-                        'optionally query=<encoded query>, fields=<comma-separated list> and limit (default ' +
+                    // #122: this note used to say `table=<name>`, modelling the
+                    // very parameter-prefixed shape the guard above exists to
+                    // repair — on the no-args path, which is the last thing a
+                    // model reads before it retries. It now names the value.
+                    'No table was supplied, so there is nothing to query. Call with the table name by ' +
+                        'itself, or a JSON object with table and optionally query as an encoded query, ' +
+                        'fields as a comma-separated list, and limit (default ' +
                         this.DEFAULT_LIMIT +
                         ', max ' +
                         this.MAX_LIMIT +
