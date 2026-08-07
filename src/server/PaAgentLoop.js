@@ -251,10 +251,23 @@ PaAgentLoop.prototype = {
         // #81: `>= 0`, not `> 0` — a test (and the revert trigger recorded
         // in benchmark/DECISION.md) must be able to set `maxEvidenceReturns:
         // 0` to disable the evidence-return path entirely.
-        if (o.maxEvidenceReturns >= 0) this.MAX_EVIDENCE_RETURNS = o.maxEvidenceReturns
-        if (o.evidenceHeadroomMs >= 0) this.EVIDENCE_HEADROOM_MS = o.evidenceHeadroomMs
-        // `=== true`, deliberately NOT the `>= 0` shape used above: `null >= 0`
-        // is true in JS, so that form silently accepts a null (filed on #121).
+        //
+        // #130: the `typeof` test is load-bearing, not belt-and-braces. JS
+        // relational operators coerce, so a bare `>= 0` admits `null` (`null
+        // >= 0` is true), `''`, `[]`, `true` and numeric strings — and the
+        // guard then assigns that value verbatim, so `evidenceHeadroomMs:
+        // null` did not fall back to the default, it made the time margin
+        // null. `undefined` and `{}` were the only junk the old shape caught,
+        // because they coerce to NaN. NaN itself still fails `>= 0`.
+        if (typeof o.maxEvidenceReturns === 'number' && o.maxEvidenceReturns >= 0) {
+            this.MAX_EVIDENCE_RETURNS = o.maxEvidenceReturns
+        }
+        if (typeof o.evidenceHeadroomMs === 'number' && o.evidenceHeadroomMs >= 0) {
+            this.EVIDENCE_HEADROOM_MS = o.evidenceHeadroomMs
+        }
+        // `=== true`, deliberately NOT the bare `>= 0` shape: `null >= 0` is
+        // true in JS, so that form silently accepts a null (filed on #121,
+        // fixed for the two guards above in #130).
         if (o.requireRetrievalToRelease === true) this.REQUIRE_RETRIEVAL_TO_RELEASE = true
     },
 
@@ -279,6 +292,18 @@ PaAgentLoop.prototype = {
         if (!rid) {
             return { success: false, outcome: 'failed', error: 'run id is required' }
         }
+
+        // #130: per-run state is reset HERE, not only in `initialize()`.
+        // Production news up a fresh loop per run (the async ScriptAction
+        // worker), so the leak was unreachable — but the fields are not
+        // equally harmless: a carried `_holdCount` costs the next run some
+        // hold budget, while a carried `_rejectedDraft` makes `_finishPartial`
+        // persist run N's report onto run N+1's row and write a transcript
+        // note claiming the draft came "from this run". This resets the depth
+        // gate too, deliberately: holds are a per-run budget, so a per-run
+        // reset is the correct semantic rather than a side effect of putting
+        // the call here.
+        this._resetGate()
 
         var req = this._normRequest(request)
         var playbook = this._loadPlaybook()
@@ -425,6 +450,21 @@ PaAgentLoop.prototype = {
     // Terminal outcomes
     // =======================================================================
 
+    /**
+     * #130 — this path DROPS a stashed `_rejectedDraft`, deliberately.
+     * `_finishPartial` and `_finishFailedLlm` both persist one; the asymmetry
+     * is the decision, not an oversight, and it was re-decided before #121's
+     * round rather than left as a bare omission.
+     *
+     * Reaching `answer` after an evidence return means the model was handed
+     * its rejected draft back, went and gathered, and then chose prose over
+     * resubmitting a fix_report. That is an abandonment, and persisting the
+     * draft would present a report the model itself declined to stand behind
+     * as the run's diagnosis. The two paths that DO keep it never got that
+     * choice: a `partial` ran out of iterations or clock mid-flight, and a
+     * failed LLM call died before the model could act at all, so there the
+     * draft is the only artifact of the diagnosis that was under way.
+     */
     _finishAnswer: function (runId, text) {
         this._runs().appendTranscript(runId, { actor: 'system', result_digest: 'answer: ' + this._str(text) })
         var closeRes = this._runs().close(runId, 'complete', {})
@@ -635,16 +675,24 @@ PaAgentLoop.prototype = {
     },
 
     /**
-     * Per-run gate state, cleared from `initialize()`. Lifted out of the
-     * body when #109 added `_heldTarget`, so the reset has exactly one
-     * definition and a test can assert it.
+     * Per-run gate state, cleared from `initialize()` AND from the top of
+     * `run()`. Lifted out of the body when #109 added `_heldTarget`, so the
+     * reset has exactly one definition and a test can assert it.
      *
-     * I5 (final whole-branch review): this docblock used to say "cleared at
-     * the top of `run()`", which was never true — `initialize()` is the only
-     * caller and `run()` never resets. The behaviour is correct because
-     * production constructs a fresh loop per run (the async ScriptAction
-     * worker news up a `PaAgentLoop` for each event); the claim about WHERE
-     * it happened was the only defect, so only the claim is fixed here.
+     * I5 (final whole-branch review) recorded that an earlier version of this
+     * docblock claimed the reset happened "at the top of `run()`" when
+     * `initialize()` was in fact the only caller, and corrected the claim
+     * rather than the code — correct at the time, because production
+     * constructs a fresh loop per run (the async ScriptAction worker news up
+     * a `PaAgentLoop` for each event), so nothing could observe the
+     * difference.
+     *
+     * #130 closed it the other way instead, before #121's round turns on the
+     * evidence-return path: `run()` now calls this, so the claim is true and
+     * the state is per-RUN rather than per-INSTANCE. The reason for the
+     * change is that the fields are not equally harmless when they leak — a
+     * carried `_holdCount` costs the next run some hold budget, but a carried
+     * `_rejectedDraft` writes one run's report onto another run's row.
      */
     _resetGate: function () {
         this._gateReleased = false
@@ -1697,10 +1745,16 @@ PaAgentLoop.prototype = {
 
         // #81 — its own slot, after the hold, for M3's reason: the last
         // thing the model reads should be what to go do, not a spec for
-        // producing the terminal action it was just refused. The two are
-        // never both set in practice (`_depthGate` clears `_holdActive` on
-        // release, which is the only way `_handleFixReport` is reached), but
-        // rendering both is correct if they ever are.
+        // producing the terminal action it was just refused.
+        //
+        // #130: this comment used to claim the two are "never both set in
+        // practice", on the grounds that reaching `_handleFixReport` requires
+        // a gate release. That is wrong — `_depthGate`'s unreadable-trail
+        // short-circuit allows WITHOUT setting `_gateReleased`, so a run can
+        // pass on a degraded trail, fire an evidence return, and then be held
+        // on a later iteration once the trail recovers. Both blocks are set at
+        // that point. The rendering below already handles it; only the claim
+        // was false, so only the claim is corrected here.
         if (this._nonEmptyString(this._evidenceBlock)) {
             lines.push('')
             lines.push(this._evidenceBlock)
