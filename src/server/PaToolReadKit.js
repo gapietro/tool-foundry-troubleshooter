@@ -376,6 +376,79 @@ PaToolReadKit.prototype = {
     },
 
     /**
+     * Did this call RETRIEVE anything, or did it merely run? (#121)
+     *
+     * WHY THIS BELONGS HERE. `noteRead` above already computes the answer and
+     * this project already throws it away twice. DECISION.md §T4: the depth
+     * gate "counts a layer-4 tool being *called*, not layer 4 being
+     * *reached*" — v9 row 07's `schema_lookup` answered `table_exists: false`,
+     * retrieved nothing, and released the gate. §U9.1: the evidence-return
+     * numerator counted r2-2's `genai_log` call, which returned `entries: []`
+     * and `llm_call_rows: 0`. Both counted a tool NAME. This turns the
+     * `reads` map into the verdict both of them needed.
+     *
+     * `'ok'` in `reads` is the right signal and not merely a convenient one:
+     * R-25 (see `noteRead`) permits a success status ONLY from a path that
+     * passed `fromRowRead`, which is `readRows` and `readOne` and nothing
+     * else. A schema probe cannot assert it; a field-presence check cannot
+     * assert it. So an `'ok'` here means rows were fetched.
+     *
+     * THREE VALUES, NOT A BOOLEAN, and the third is the point. A row that was
+     * never classified must stay distinguishable from a row classified as
+     * barren — collapsing `unknown` into `false` is the R-6 failure shape (a
+     * blank read as a fact) aimed at the very instrument this exists to make
+     * honest. `x_snc_troubleshoot_audit.retrieval` therefore has no default,
+     * and every pre-#121 row reads blank rather than `none`.
+     *
+     * `success === false` is `'none'` rather than `'unknown'`: an error
+     * envelope is a definite statement that nothing came back.
+     *
+     * KNOWN FALSE NEGATIVE, ACCEPTED. `PaToolQueryTable`'s
+     * `rows_exist_but_are_not_visible` finding — a GlideAggregate count above
+     * zero against a GlideRecordSecure read of zero — establishes a real ACL
+     * fact with `reads` at `'empty'`, and scores `'none'` here. This predicate
+     * UNDER-counts retrieval. That is the safe direction for a release gate (a
+     * false negative costs one hold, bounded by `MAX_HOLDS`) and the safe
+     * direction for a numerator that has twice flattered the change it
+     * measures.
+     *
+     * PURE: no Glide, no audit query, no mutation of `result`.
+     *
+     * @param {*} result a tool core's result, PRE-THRESHOLD. Passing the
+     *        post-`applyThreshold` envelope is a defect at the call site, not
+     *        here: that envelope carries no `reads` map and would score
+     *        `'unknown'` for every large — i.e. every likely productive —
+     *        result. See the design doc §3.1.
+     * @returns {String} 'ok' | 'none' | 'unknown'
+     */
+    retrievalVerdict: function (result) {
+        if (!this._isPlainObject(result)) return 'unknown'
+        if (result.success === false) return 'none'
+        if (result.success !== true) return 'unknown'
+        if (!this._isPlainObject(result.data)) return 'unknown'
+
+        var reads = result.data.reads
+        if (!this._isPlainObject(reads)) return 'unknown'
+
+        for (var table in reads) {
+            // Own properties only: an inherited 'ok' is not this call's read.
+            if (!Object.prototype.hasOwnProperty.call(reads, table)) continue
+            if (reads[table] === 'ok') return 'ok'
+        }
+        return 'none'
+    },
+
+    /** ES5/Rhino: arrays are objects, and `reads` must be a map. */
+    _isPlainObject: function (value) {
+        return !!value && typeof value === 'object' && !this._isArray(value)
+    },
+
+    /** ES5: no `Array.isArray` assumptions on Rhino. */
+    _isArray: function (value) {
+        return Object.prototype.toString.call(value) === '[object Array]'
+    },
+
+    /**
      * Records that a read hit its ceiling, keeping the LARGEST bound seen for a
      * table so a later smaller read cannot mask a bigger truncation.
      *
