@@ -114,8 +114,11 @@ describe('malformed table names (#111)', () => {
     })
 
     it('accepts the = form as well as the : form', () => {
-        // The tool's own no-table note tells the model `table=<name>`, so the
-        // `=` spelling is one this contract actively invites.
+        // The `=` spelling was invited by this tool's own no-table note until
+        // #111 rewrote it to show the value alone. The note no longer models
+        // that shape, but a model can still reach for it — assignment is the
+        // more natural way to write a named argument — so the guard covers
+        // both delimiters.
         expect(run('table=sn_aia_agent', world()).result.data.requested.table).toBe('sn_aia_agent')
     })
 
@@ -180,6 +183,94 @@ describe('malformed table names (#111)', () => {
         const { result } = run('sn_aia_agnet', world())
 
         expect(result.data.findings.map((f) => f.finding)).toContain('table_does_not_exist')
+    })
+})
+
+/**
+ * Issue #125. The #111/#114 guard above covers `table` and `table_name` only,
+ * while the tool accepts three more parameter names — `_normalizeArgs`'s object
+ * branch reads `raw.field || raw.element || raw.column` — and the tool's own
+ * description tells the model that "table AND field are parameter names, never
+ * part of a value". So the contract names a word the guard does not cover.
+ *
+ * The routing is the whole point, and it is why this is not a one-line
+ * widening of PARAM_PREFIX_PATTERN. Stripping `field:` and then dropping the
+ * remainder into the TABLE slot — which is what line 360's no-dot branch does
+ * by default — turns `field:channel` into a real sys_db_object read on a table
+ * called `channel`, reported as `table_does_not_exist`: "a genuine absence —
+ * the table name is wrong". That is a confident claim about the INSTANCE, and
+ * it is the precise false diagnosis the #111 guard exists to prevent. A naive
+ * widening would reintroduce it through a new door, converting a call that
+ * currently fails SAFE (table_name_malformed, no read, settles nothing) into
+ * one that fails DANGEROUSLY.
+ */
+describe('field-name parameter prefixes (#125)', () => {
+    it('routes a stripped field prefix to field, leaving table unset', () => {
+        const { result } = run('field:channel', world())
+
+        expect(result.data.requested.field).toBe('channel')
+        expect(result.data.requested.table).toBe(null)
+    })
+
+    it('does not let a bare field prefix become a claim about a table', () => {
+        const { result } = run('field:channel', world())
+
+        expect(result.data.mode).toBe('no_table')
+        expect((result.data.findings || []).map((f) => f.finding)).not.toContain('table_does_not_exist')
+    })
+
+    it('attempts no existence read at all for a field-only call', () => {
+        // The strongest form of the assertion above: not merely that the wrong
+        // finding is absent, but that nothing was looked up to base one on.
+        const { queries } = run('field:channel', world())
+
+        expect(queries.filter((q) => q.table === 'sys_db_object')).toHaveLength(0)
+    })
+
+    it('covers element, the second of the tool\'s three field aliases', () => {
+        const { result } = run('element:channel', world())
+
+        expect(result.data.requested.field).toBe('channel')
+        expect(result.data.requested.table).toBe(null)
+    })
+
+    it('covers column, the third', () => {
+        const { result } = run('column:channel', world())
+
+        expect(result.data.requested.field).toBe('channel')
+        expect(result.data.requested.table).toBe(null)
+    })
+
+    it('accepts the = form for field prefixes, as it does for table', () => {
+        expect(run('field=channel', world()).result.data.requested.field).toBe('channel')
+    })
+
+    it('records the field repair, reporting what it was actually read as', () => {
+        // The #111 note hardcoded `a.table`, so a field-only strip would
+        // report `It was read as ""` — announcing a repair while withholding
+        // its result, which is worse than not announcing it.
+        const { result } = run('field:channel', world())
+        const notes = result.data.notes.join(' ')
+
+        expect(notes).toMatch(/field:channel/)
+        expect(notes).toMatch(/parameter name/i)
+        expect(notes).toMatch(/"channel"/)
+    })
+
+    it('still splits a shorthand carried behind a field prefix', () => {
+        const { result } = run('field:sn_aia_agent.channel', world())
+
+        expect(result.data.requested.table).toBe('sn_aia_agent')
+        expect(result.data.requested.field).toBe('channel')
+        expect(result.data.mode).toBe('field')
+    })
+
+    it('leaves a table prefix routed to table, exactly as before', () => {
+        // The routing change must not cost the measured #111 behaviour.
+        const { result } = run('table:sn_aia_agent', world())
+
+        expect(result.data.requested.table).toBe('sn_aia_agent')
+        expect(result.data.requested.field).toBe(null)
     })
 })
 
