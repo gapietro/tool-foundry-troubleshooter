@@ -526,6 +526,45 @@ describe('PaToolRegistry — promptBlock()', () => {
             expect(e.description).toContain(EXPECTED[e.name])
         })
     })
+
+    it('repeats that sentence VERBATIM on the per-input description (#122 review finding 3)', () => {
+        // src/fluent/agent-doctor.now.ts carries a SECOND description per tool,
+        // on inputs[0], and AIA surfaces both strings to the model.
+        // PaToolRegistry.js has no input schema, so the parity test above
+        // cannot see these — six of the seven were left saying nothing about
+        // parameter prefixes while their own tool-level sentence said the
+        // opposite, and nothing in the suite covered them.
+        //
+        // The expectation is derived FROM the tool-level sentence rather than
+        // restated, so the two strings cannot drift into saying different
+        // things and no third copy of the wording exists to maintain.
+        const fluentSrc = fs.readFileSync(
+            path.join(__dirname, '..', 'src', 'fluent', 'agent-doctor.now.ts'),
+            'utf8'
+        )
+        const re =
+            /name: '(\w+)',\s*\n\s*type: 'script',[\s\S]*?inputs: \[\s*\n\s*\{\s*\n\s*name: '\w+',\s*\n\s*description: `([\s\S]*?)`,\s*\n\s*mandatory/g
+        const inputDescriptions = {}
+        let m
+        while ((m = re.exec(fluentSrc)) !== null) {
+            inputDescriptions[m[1]] = m[2]
+        }
+        expect(Object.keys(inputDescriptions)).toHaveLength(7)
+
+        const entries = load({}).list()
+        expect(entries).toHaveLength(7)
+
+        entries.forEach((e) => {
+            const sentence = e.description.match(
+                /The words [^.]+ are parameter names, never part of a value:[^.]+\./
+            )
+            // Also pins the punctuation: schema_lookup's input description used
+            // a dash where every tool-level sentence uses a colon.
+            expect(sentence).not.toBeNull()
+            expect(inputDescriptions[e.name]).toBeDefined()
+            expect(inputDescriptions[e.name]).toContain(sentence[0])
+        })
+    })
 })
 
 // ---------------------------------------------------------------------------

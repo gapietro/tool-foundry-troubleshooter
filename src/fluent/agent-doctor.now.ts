@@ -227,7 +227,7 @@ Fixes reference configuration only - instruction text, schemas, field names, wir
             inputs: [
                 {
                     name: 'request',
-                    description: `An execution plan sys_id, an agent name, or a JSON object {execution, agent, step, since, detail}. May be omitted entirely - with no argument the tool returns a pick-list of recent execution plans to choose from.`,
+                    description: `An execution plan sys_id, an agent name, or a JSON object {execution, agent, step, since, detail}. The words execution, agent, since and step are parameter names, never part of a value: send the sys_id alone, not execution:<sys_id>. May be omitted entirely - with no argument the tool returns a pick-list of recent execution plans to choose from.`,
                     mandatory: false,
                 },
             ],
@@ -245,7 +245,7 @@ Fixes reference configuration only - instruction text, schemas, field names, wir
             inputs: [
                 {
                     name: 'request',
-                    description: `An agent name or sys_id, or a JSON object {agent, section}. Section is one of overview, instructions, tools, triggers - omit it for all four. May be omitted entirely - with no argument the tool returns a pick-list of agents.`,
+                    description: `An agent name or sys_id, or a JSON object {agent, section}. The words agent and section are parameter names, never part of a value: send the agent name alone, not agent:<name>. Section is one of overview, instructions, tools, triggers - omit it for all four. May be omitted entirely - with no argument the tool returns a pick-list of agents.`,
                     mandatory: false,
                 },
             ],
@@ -263,7 +263,7 @@ Fixes reference configuration only - instruction text, schemas, field names, wir
             inputs: [
                 {
                     name: 'request',
-                    description: `The table name by itself, the dotted shorthand with the real names substituted such as incident.priority, or a JSON object {table, field}. The words table and field are parameter names, never part of a value - send incident, not table:incident. Field is optional - omit it for the whole column list, supply it for one column plus its choice values.`,
+                    description: `The table name by itself, the dotted shorthand with the real names substituted such as incident.priority, or a JSON object {table, field}. The words table and field are parameter names, never part of a value: send incident, not table:incident. Field is optional - omit it for the whole column list, supply it for one column plus its choice values.`,
                     mandatory: false,
                 },
             ],
@@ -281,7 +281,7 @@ Fixes reference configuration only - instruction text, schemas, field names, wir
             inputs: [
                 {
                     name: 'request',
-                    description: `A table name, or a JSON object {table, query, fields, limit}. Query is an encoded query string, fields a list or comma-separated string, limit defaults to 20 and is capped at 100.`,
+                    description: `A table name, or a JSON object {table, query, fields, limit}. The words table, query, fields and limit are parameter names, never part of a value: send incident, not table:incident. Query is an encoded query string, fields a list or comma-separated string, limit defaults to 20 and is capped at 100.`,
                     mandatory: false,
                 },
             ],
@@ -299,7 +299,7 @@ Fixes reference configuration only - instruction text, schemas, field names, wir
             inputs: [
                 {
                     name: 'request',
-                    description: `A mode name, an execution plan sys_id, or a JSON object {mode, execution, minutes_ago, errors_only, include_payload, capability}. Mode is one of usage, llm, for_execution, check_config. In check_config, capability (a sys_id or name substring) narrows the audit to one capability instead of a 100-row sample. May be omitted - the default is llm, errors only, last 60 minutes.`,
+                    description: `A mode name, an execution plan sys_id, or a JSON object {mode, execution, minutes_ago, errors_only, include_payload, capability}. The words mode, execution, minutes_ago, errors_only, include_payload and capability are parameter names, never part of a value: send the sys_id alone, not execution:<sys_id>. Mode is one of usage, llm, for_execution, check_config. In check_config, capability (a sys_id or name substring) narrows the audit to one capability instead of a 100-row sample. May be omitted - the default is llm, errors only, last 60 minutes.`,
                     mandatory: false,
                 },
             ],
@@ -317,7 +317,7 @@ Fixes reference configuration only - instruction text, schemas, field names, wir
             inputs: [
                 {
                     name: 'request',
-                    description: `An execution plan sys_id, or a JSON object {execution, source, message, level, minutes_ago, limit}. Every query needs a time window plus at least one of source or message - an execution sys_id supplies both on its own.`,
+                    description: `An execution plan sys_id, or a JSON object {execution, source, message, level, minutes_ago, limit}. The words execution, source, message, level, minutes_ago and limit are parameter names, never part of a value: send the sys_id alone, not execution:<sys_id>. Every query needs a time window plus at least one of source or message - an execution sys_id supplies both on its own.`,
                     mandatory: false,
                 },
             ],
@@ -335,7 +335,7 @@ Fixes reference configuration only - instruction text, schemas, field names, wir
             inputs: [
                 {
                     name: 'request',
-                    description: `An artifact sys_id, or a JSON object {artifact_id, offset, length}. Offset defaults to 0 and length is capped at 4,000 characters; the response reports the total length and whether more pages remain.`,
+                    description: `An artifact sys_id, or a JSON object {artifact_id, offset, length}. The words artifact_id, offset and length are parameter names, never part of a value: send the sys_id alone, not artifact_id:<sys_id>. Offset defaults to 0 and length is capped at 4,000 characters; the response reports the total length and whether more pages remain.`,
                     mandatory: false,
                 },
             ],
