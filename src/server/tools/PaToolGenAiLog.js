@@ -130,6 +130,22 @@ PaToolGenAiLog.prototype = {
                 )
             }
 
+            if (a._prefix_stripped) {
+                // LOUDLY (issues #111, #122). Repairing this silently would
+                // make the call work and erase the only evidence that the
+                // model is malforming arguments — which is how it went
+                // unnoticed for a whole smoke: every measure counted which
+                // tools were invoked, and this one was.
+                data.notes.push(
+                    'The argument arrived as "' +
+                        a._prefix_stripped +
+                        '" — the parameter name prefixed onto its own value. It was read as ' +
+                        'the value alone. Send the value on its own, or a JSON object, and note ' +
+                        'that this call is recorded in the audit trail as it was sent, not as it ' +
+                        'was repaired.'
+                )
+            }
+
             phase = 'resolve_mode'
             data.mode = this._resolveMode(a, data)
             data.requested = {
@@ -254,9 +270,29 @@ PaToolGenAiLog.prototype = {
     // Arguments (R-9)
     // =======================================================================
 
+    /**
+     * Every key the object branch below reads, aliases included. Derived from
+     * that branch rather than from the docs, so a parameter this tool does not
+     * accept cannot appear here. Consumed by splitParamPrefix (#122).
+     */
+    PARAM_NAMES: [
+        'mode',
+        'execution',
+        'execution_plan',
+        'plan',
+        'minutes_ago',
+        'minutes',
+        'since',
+        'errors_only',
+        'include_payload',
+        'capability',
+        'capability_name',
+    ],
+
     _normalizeArgs: function (args) {
         var k = this._k()
         var raw = args
+        var prefixStripped = ''
 
         if (raw === null || raw === undefined) return {}
 
@@ -269,11 +305,22 @@ PaToolGenAiLog.prototype = {
                 raw = parsed
             } else if (s.charAt(0) === '{' || s.charAt(0) === '[') {
                 return { _parse_error: true }
-            } else if (k.isSysId(s)) {
-                // A bare sys_id can only sensibly mean an execution plan.
-                return { execution: s, mode: 'for_execution' }
             } else {
-                return { mode: k.lower(s) }
+                // #122: the parameter name prefixed onto its own value. The
+                // repair synthesizes a one-key object and lets it fall through
+                // the object branch below, so every alias and coercion there
+                // applies without being restated.
+                var split = k.splitParamPrefix(s, this.PARAM_NAMES)
+                if (split) {
+                    raw = {}
+                    raw[split.param] = split.value
+                    prefixStripped = split.raw
+                } else if (k.isSysId(s)) {
+                    // A bare sys_id can only sensibly mean an execution plan.
+                    return { execution: s, mode: 'for_execution' }
+                } else {
+                    return { mode: k.lower(s) }
+                }
             }
         }
 
@@ -301,6 +348,8 @@ PaToolGenAiLog.prototype = {
         // narrow an audit the caller meant to be whole-table.
         var capability = k.str(raw.capability || raw.capability_name)
         if (capability) out.capability = capability
+
+        if (prefixStripped) out._prefix_stripped = prefixStripped
 
         return out
     },

@@ -1063,3 +1063,51 @@ describe('reference statistics are labelled (issue #85)', () => {
         expect(finding.why).toContain('2026')
     })
 })
+
+// ---------------------------------------------------------------------------
+// The parameter name prefixed onto its own value (#122)
+//
+// Measured live: smoke run r2-2 (x_snc_troubleshoot_run
+// 9b91aa692b6ecb5817a6ffbeee91bfdf, gpinst01, 2026-08-06 23:26:43) called this
+// tool with the bare string below. It fails isSysId BECAUSE of the prefix, so
+// it was read as a mode; _resolveMode found no such mode and no execution,
+// fell back to llm, and the call returned entries: [] with llm_call_rows: 0.
+// ---------------------------------------------------------------------------
+describe('argument prefix guard (#122)', () => {
+    const PLAN_ID = '45bbfd112ba6cf54f243fed2ce91bfcb'
+
+    it('reads execution:<sys_id> as the execution, not as a mode', () => {
+        const { result } = run(`execution:${PLAN_ID}`, world())
+
+        expect(result.success).toBe(true)
+        expect(result.data.mode).toBe('for_execution')
+        expect(result.data.requested.execution).toBe(PLAN_ID)
+    })
+
+    it('routes a prefixed value to the NAMED slot, not to the bare-string default', () => {
+        // Fall-through would strip to "foo" and hand it to the bare-string
+        // branch, which reads a non-sys_id as a MODE. The named slot is the
+        // whole point: the model said capability, so it means capability.
+        const { result } = run('capability:foo', world())
+
+        expect(result.data.requested.capability).toBe('foo')
+        expect(result.data.requested.mode).toBeNull()
+    })
+
+    it('says so LOUDLY rather than repairing in silence', () => {
+        // Repairing silently makes the call work and erases the only evidence
+        // that the model is malforming arguments — which is exactly how this
+        // survived a whole smoke: every measure counted which tools were
+        // INVOKED, and this one was.
+        const { result } = run(`execution:${PLAN_ID}`, world())
+        const note = result.data.notes.join(' ')
+
+        expect(note).toContain(`execution:${PLAN_ID}`)
+        expect(note).toContain('audit trail')
+    })
+
+    it('leaves a bare mode name and a bare sys_id alone', () => {
+        expect(run('usage', world()).result.data.mode).toBe('usage')
+        expect(run(PLAN_ID, world()).result.data.mode).toBe('for_execution')
+    })
+})
