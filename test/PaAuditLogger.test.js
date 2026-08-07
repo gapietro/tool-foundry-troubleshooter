@@ -611,6 +611,125 @@ describe('invokedTools', () => {
 
         expect(logger.invokedTools(RUN).tools).toEqual(['agent_trace'])
     })
+
+    // -----------------------------------------------------------------------
+    // retrievingTools (#121) — the subset that actually fetched rows
+    // -----------------------------------------------------------------------
+
+    /** An audit row carrying a #121 retrieval verdict. */
+    function retrievalRow(run, tool, verdict) {
+        return {
+            sys_id: 'a' + tool + verdict,
+            run: run,
+            tool_name: tool,
+            action_type: 'result',
+            retrieval: verdict,
+        }
+    }
+
+    test('retrievingTools carries only the tools whose call retrieved rows', () => {
+        const { logger } = load({
+            world: {
+                rows: {
+                    [AUDIT_TABLE]: [
+                        retrievalRow(RUN, 'genai_log', 'ok'),
+                        retrievalRow(RUN, 'schema_lookup', 'none'),
+                        retrievalRow(RUN, 'agent_config', 'unknown'),
+                    ],
+                },
+            },
+        })
+
+        const res = logger.invokedTools(RUN)
+
+        expect(res.tools.sort()).toEqual(['agent_config', 'genai_log', 'schema_lookup'])
+        expect(res.retrievingTools).toEqual(['genai_log'])
+    })
+
+    test('a tool that called twice — once barren, once productive — retrieves', () => {
+        // The question is "did this run establish anything through that tool",
+        // not "was every call through it productive".
+        const { logger } = load({
+            world: {
+                rows: {
+                    [AUDIT_TABLE]: [
+                        { sys_id: 'a1', run: RUN, tool_name: 'genai_log', action_type: 'result', retrieval: 'none' },
+                        { sys_id: 'a2', run: RUN, tool_name: 'genai_log', action_type: 'result', retrieval: 'ok' },
+                    ],
+                },
+            },
+        })
+
+        expect(logger.invokedTools(RUN).retrievingTools).toEqual(['genai_log'])
+    })
+
+    test('a productive tool appears in retrievingTools ONCE, however many ok rows it has', () => {
+        const { logger } = load({
+            world: {
+                rows: {
+                    [AUDIT_TABLE]: [
+                        { sys_id: 'a1', run: RUN, tool_name: 'genai_log', action_type: 'result', retrieval: 'ok' },
+                        { sys_id: 'a2', run: RUN, tool_name: 'genai_log', action_type: 'result', retrieval: 'ok' },
+                    ],
+                },
+            },
+        })
+
+        expect(logger.invokedTools(RUN).retrievingTools).toEqual(['genai_log'])
+    })
+
+    test('a BLANK retrieval column never counts as ok — pre-#121 rows are not retroactive evidence', () => {
+        // DECISION.md §U9.1's 1-of-4 was hand-derived from two payloads. Rows
+        // written before this column existed must not read back as a verdict
+        // in either direction.
+        const { logger } = load({
+            world: { rows: { [AUDIT_TABLE]: [auditRow(RUN, 'genai_log', 'result')] } },
+        })
+
+        const res = logger.invokedTools(RUN)
+
+        expect(res.tools).toEqual(['genai_log'])
+        expect(res.retrievingTools).toEqual([])
+    })
+
+    test('retrievingTools is [] on every degraded path (no audit rows)', () => {
+        const { logger } = load({ world: { rows: { [AUDIT_TABLE]: [] } } })
+
+        expect(logger.invokedTools(RUN).retrievingTools).toEqual([])
+    })
+
+    test.each(['no_run_id', 'query_failed', 'glide_unavailable'])(
+        'retrievingTools is [] when the query degrades (%s)',
+        (reason) => {
+            const opts =
+                reason === 'glide_unavailable'
+                    ? { noGlide: true }
+                    : reason === 'query_failed'
+                      ? { world: { throwOnQuery: hostileException() } }
+                      : { world: { rows: { [AUDIT_TABLE]: [auditRow(RUN, 'agent_trace', 'intent')] } } }
+            const { logger } = load(opts)
+
+            const res = logger.invokedTools(reason === 'no_run_id' ? undefined : RUN)
+
+            expect(res.degraded).toBe(reason)
+            expect(res.retrievingTools).toEqual([])
+        }
+    )
+
+    test('an ok verdict on a row with a blank tool_name is skipped, not credited to an empty name', () => {
+        const { logger } = load({
+            world: {
+                rows: {
+                    [AUDIT_TABLE]: [
+                        { sys_id: 'a1', run: RUN, tool_name: '', action_type: 'result', retrieval: 'ok' },
+                        retrievalRow(RUN, 'genai_log', 'ok'),
+                    ],
+                },
+            },
+        })
+
+        expect(logger.invokedTools(RUN).retrievingTools).toEqual(['genai_log'])
+    })
 })
 
 // =========================================================================
@@ -802,6 +921,10 @@ describe('toolCalls', () => {
             },
         })
 
-        expect(logger.invokedTools(RUN)).toEqual({ available: true, tools: ['agent_config'] })
+        expect(logger.invokedTools(RUN)).toEqual({
+            available: true,
+            tools: ['agent_config'],
+            retrievingTools: [],
+        })
     })
 })

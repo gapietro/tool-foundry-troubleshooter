@@ -154,9 +154,21 @@ PaAuditLogger.prototype = {
      * Build Rule #42: plain GlideRecord — the table has no ACLs, so
      * GlideRecordSecure would deny this app read access to its own trail.
      *
+     * `retrievingTools` (#121) is the subset of `tools` with at least one
+     * `result` row at `retrieval = 'ok'` — the tools that actually fetched
+     * rows, as opposed to the tools that merely ran. A BLANK column is never
+     * `ok`: rows written before #121 carry no verdict and must not read back
+     * as one in either direction.
+     *
+     * `tools` is unchanged and stays the answer to "was this tool ever
+     * invoked in this run", which is the question fabrication fails (#79). A
+     * citation to a tool that ran and returned nothing is a WEAK citation, not
+     * a fabricated one, and `_auditContext` must keep convicting on the right
+     * charge.
+     *
      * @param {*} runId sys_id of the run row; may be absent or non-string (R-9)
-     * @returns {Object} {available:true, tools:[String]}
-     *                 | {available:false, degraded:String, tools:[]}
+     * @returns {Object} {available:true, tools:[String], retrievingTools:[String]}
+     *                 | {available:false, degraded:String, tools:[], retrievingTools:[]}
      */
     invokedTools: function (runId) {
         try {
@@ -171,13 +183,26 @@ PaAuditLogger.prototype = {
             gr.query()
 
             var tools = []
+            var retrieving = []
             while (gr.next()) {
                 var name = this._normToolName(gr.getValue('tool_name'))
-                if (name && this._indexOfTool(tools, name) === -1) tools.push(name)
+                if (!name) continue
+                if (this._indexOfTool(tools, name) === -1) tools.push(name)
+
+                // #121: the SAME pass, deliberately. This method is on the
+                // fix-report path and runs again per depth-gate check; a
+                // second query for one column would double its cost for
+                // nothing.
+                if (
+                    this._norm(gr.getValue('retrieval')) === 'ok' &&
+                    this._indexOfTool(retrieving, name) === -1
+                ) {
+                    retrieving.push(name)
+                }
             }
 
             if (tools.length === 0) return this._noTools('no_audit_rows')
-            return { available: true, tools: tools }
+            return { available: true, tools: tools, retrievingTools: retrieving }
         } catch (e) {
             // R-1: `e` is deliberately not inspected.
             return this._noTools('query_failed')
@@ -185,7 +210,7 @@ PaAuditLogger.prototype = {
     },
 
     _noTools: function (reason) {
-        return { available: false, degraded: reason, tools: [] }
+        return { available: false, degraded: reason, tools: [], retrievingTools: [] }
     },
 
     /**
