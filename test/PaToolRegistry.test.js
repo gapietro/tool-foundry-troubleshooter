@@ -113,6 +113,7 @@ function load(opts) {
         cores: o.cores,
         auditLogger: o.auditLogger || fakeAudit(),
         artifactStore: o.artifactStore || fakeStore(),
+        readKit: o.readKit,
     })
 }
 
@@ -600,5 +601,187 @@ describe('excerptPriority (#91)', () => {
             .agent_trace.excerptPriority.forEach((section) => {
                 expect(src).toMatch(new RegExp('data\\.' + section + '\\s*=|' + section + ':'))
             })
+    })
+})
+
+// ---------------------------------------------------------------------------
+// retrieval (#121) — the verdict is taken BEFORE applyThreshold
+// ---------------------------------------------------------------------------
+
+describe('retrieval verdict (#121)', () => {
+    /** A read kit stub that records what it was asked to judge. */
+    function fakeKit(verdictByShape) {
+        const seen = []
+        return {
+            seen: seen,
+            retrievalVerdict: function (result) {
+                seen.push(result)
+                if (verdictByShape instanceof Error) throw verdictByShape
+                return verdictByShape || 'unknown'
+            },
+        }
+    }
+
+    /** A store stub that replaces anything over `limit` chars, as the real one does. */
+    function thresholdingStore(limit) {
+        return {
+            applyThreshold: function (runId, result, toolName) {
+                if (JSON.stringify(result).length <= limit) return result
+                return {
+                    success: true,
+                    truncated: true,
+                    tool: toolName,
+                    total_length: JSON.stringify(result).length,
+                    artifact_id: 'art1',
+                    excerpt: '{"success":true,…',
+                    note: 'truncated',
+                }
+            },
+        }
+    }
+
+    function auditSpy() {
+        const calls = []
+        return {
+            calls: calls,
+            logIntent: function (p) {
+                calls.push(['logIntent', p])
+            },
+            logResult: function (p) {
+                calls.push(['logResult', p])
+            },
+            logError: function (p) {
+                calls.push(['logError', p])
+            },
+        }
+    }
+
+    function resultCall(audit) {
+        return audit.calls.filter((c) => c[0] === 'logResult')[0][1]
+    }
+
+    test('the verdict reaches logResult', () => {
+        const audit = auditSpy()
+        const kit = fakeKit('ok')
+        const registry = load({
+            cores: {
+                agent_trace: fakeEntry({
+                    factory: () => ({ execute: () => ({ success: true, data: { reads: { x: 'ok' } } }) }),
+                }),
+            },
+            auditLogger: audit,
+            readKit: kit,
+        })
+
+        registry.dispatch('agent_trace', {}, { run_id: 'run1' })
+
+        expect(resultCall(audit).retrieval).toBe('ok')
+    })
+
+    test('THE ORDERING CLAIM: a productive result too big to survive thresholding still logs ok', () => {
+        // This is the test the whole design turns on. applyThreshold replaces
+        // the object with an excerpt envelope carrying no `reads` map, so a
+        // verdict taken after it would be 'unknown' for exactly the results
+        // most likely to be productive. See design §3.1.
+        const audit = auditSpy()
+        const kit = fakeKit('ok')
+        const big = { success: true, data: { reads: { sys_generative_ai_log: 'ok' }, blob: 'x'.repeat(5000) } }
+        const registry = load({
+            cores: { genai_log: fakeEntry({ factory: () => ({ execute: () => big }) }) },
+            auditLogger: audit,
+            artifactStore: thresholdingStore(4000),
+            readKit: kit,
+        })
+
+        registry.dispatch('genai_log', {}, { run_id: 'run1' })
+
+        const logged = resultCall(audit)
+        // The verdict was taken on the core's own result...
+        expect(kit.seen[0]).toBe(big)
+        expect(logged.retrieval).toBe('ok')
+        // ...and what was LOGGED is the excerpt envelope, which has no reads.
+        expect(logged.output.truncated).toBe(true)
+        expect(logged.output.data).toBeUndefined()
+    })
+
+    test('a barren result logs none', () => {
+        const audit = auditSpy()
+        const registry = load({
+            cores: {
+                schema_lookup: fakeEntry({
+                    factory: () => ({
+                        execute: () => ({ success: true, data: { table_exists: false, reads: { sys_db_object: 'empty' } } }),
+                    }),
+                }),
+            },
+            auditLogger: audit,
+            readKit: fakeKit('none'),
+        })
+
+        registry.dispatch('schema_lookup', {}, { run_id: 'run1' })
+
+        expect(resultCall(audit).retrieval).toBe('none')
+    })
+
+    test('a throwing read kit degrades to unknown and does NOT fail the tool call', () => {
+        // R-1 / totality: a verdict that cannot be taken is never a reason to
+        // fail the call that produced it.
+        const audit = auditSpy()
+        const registry = load({
+            cores: {
+                agent_trace: fakeEntry({
+                    factory: () => ({ execute: () => ({ success: true, data: { reads: { x: 'ok' } } }) }),
+                }),
+            },
+            auditLogger: audit,
+            readKit: fakeKit(new Error('boom')),
+        })
+
+        const res = registry.dispatch('agent_trace', {}, { run_id: 'run1' })
+
+        expect(res.success).toBe(true)
+        expect(resultCall(audit).retrieval).toBe('unknown')
+    })
+
+    test('a PAGED_OUTPUT core skips thresholding and still gets a verdict', () => {
+        const audit = auditSpy()
+        const registry = load({
+            cores: {
+                read_artifact: fakeEntry({
+                    factory: () => ({
+                        PAGED_OUTPUT: true,
+                        execute: () => ({ success: true, data: { content: 'abc' } }),
+                    }),
+                }),
+            },
+            auditLogger: audit,
+            readKit: fakeKit('unknown'),
+        })
+
+        registry.dispatch('read_artifact', {}, { run_id: 'run1' })
+
+        expect(resultCall(audit).retrieval).toBe('unknown')
+    })
+
+    test('a dispatch that throws logs an error row and no verdict', () => {
+        const audit = auditSpy()
+        const registry = load({
+            cores: {
+                agent_trace: fakeEntry({
+                    factory: () => ({
+                        execute: () => {
+                            throw new Error('inner')
+                        },
+                    }),
+                }),
+            },
+            auditLogger: audit,
+            readKit: fakeKit('ok'),
+        })
+
+        registry.dispatch('agent_trace', {}, { run_id: 'run1' })
+
+        expect(audit.calls.filter((c) => c[0] === 'logResult')).toHaveLength(0)
+        expect(audit.calls.filter((c) => c[0] === 'logError')).toHaveLength(1)
     })
 })
