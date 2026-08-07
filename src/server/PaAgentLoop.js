@@ -216,7 +216,8 @@ PaAgentLoop.prototype = {
     /**
      * @param {Object} [options] {llmProxy, toolRegistry, runManager,
      *        fixReport, auditLogger, now, playbook, maxIterations,
-     *        budgetMs, maxEvidenceReturns, evidenceHeadroomMs} — every
+     *        budgetMs, maxEvidenceReturns, evidenceHeadroomMs,
+     *        requireRetrievalToRelease} — every
      *        collaborator is an injection point; tests inject all of them
      *        and touch no Glide API. `now` is a zero-arg clock function —
      *        the Rhino default is `new GlideDateTime().getNumericValue()`

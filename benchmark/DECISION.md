@@ -3134,3 +3134,122 @@ improvements and are enabled:
   happened to call, and no custom run had ever called `genai_log`.**
 - **Unfixed and filed:** the evidence-problem text is not persisted for a run that later validates
   (§U7), so the reason a return fired cannot be recovered afterwards.
+
+---
+
+## V. The numerator counts a retrieval, not a call (`2026.08.0701`, #121)
+
+**§U1–§U9 are unmodified; append-only, as throughout §U.** `git log -p benchmark/DECISION.md` is
+the check. **This section claims no result. Nothing has been run.**
+
+Design: `docs/superpowers/specs/2026-08-07-retrieval-aware-release-design.md`. Plan:
+`docs/superpowers/plans/2026-08-07-retrieval-aware-release.md`.
+
+### V1. The defect, in both places it lives
+
+§T4 found it in the depth gate: *"the gate counts a layer-4 tool being **called**, not layer 4
+being **reached**."* §U9.1 found the same defect in §U8.3's own metric: *"`2 of 4` is an artefact
+of a numerator that counts a call rather than a retrieval … The honest rate is 1 of 4."*
+
+§U9.3 queued one fix for both, and this is it.
+
+### V2. The amended numerator, filed before any round
+
+Replacing §U8.3's `N` from here on:
+
+> **`N`** = of the `D` runs that fired at least one `EVIDENCE RETURN`, how many have at least one
+> `x_snc_troubleshoot_audit` row with `action_type=result`, `retrieval=ok`, and a `sys_created_on`
+> after the first note — equivalently, an `actor: 'tool'` transcript entry at a higher `seq` than
+> the first note **whose corresponding audit result row carries `retrieval=ok`**.
+
+`N` is now one encoded query — `run=<sys_id>^action_type=result^retrieval=ok` — rather than a
+payload read. That matters beyond convenience: the `output` column **cannot** answer the question.
+`PaArtifactStore.applyThreshold` replaces an oversized result with an excerpt envelope carrying no
+`reads` map before `PaAuditLogger` ever sees it, and the logger then digests head+tail past 4,000
+chars. The largest results are the most likely to be productive and the most likely to have lost
+the evidence, so a post-hoc payload read would systematically under-count — the same
+by-label-not-by-fact defect, relocated.
+
+§U8.3's decision rule is otherwise unchanged: `N/D ≥ 1/2` stands, `< 1/2` reverts, any `partial`
+reverts, `D < 3` is under-powered and yields no verdict.
+
+### V3. What `retrieval=ok` means, exactly
+
+`PaToolReadKit.retrievalVerdict` reads the `data.reads` map every tool core already builds, and
+returns `ok` when at least one table in it is `'ok'`. R-25 permits that status only from a path
+that passed `fromRowRead` — `readRows` and `readOne` and nothing else — so an `ok` means rows were
+fetched, not that a schema probe succeeded.
+
+Verified against the two calls §U9.1 turns on: v10-2's `genai_log` (`llm_call_rows: 3`) scores
+`ok`; r2-2's (`entries: []`, `llm_call_rows: 0`, after a `<param>:<value>` malformation) scores
+`none`. §T4 row 07's `schema_lookup` (`table_exists: false`) scores `none`.
+
+**One accepted false negative, recorded so a future reader does not discover it as a surprise.**
+`query_table`'s `rows_exist_but_are_not_visible` finding — a `GlideAggregate` count above zero
+against a `GlideRecordSecure` read of zero — establishes a real ACL fact while leaving `reads` at
+`'empty'`, and scores `none`. **The instrument under-counts retrieval.** That is the safe direction
+for a numerator that has twice flattered the change it measures.
+
+### V4. The number to beat is 1 of 4
+
+§U9.1, restated because it is the baseline this metric exists to be compared against: pooled over
+all eight seed-01 runs across both rounds, four fired a return, two made a tool call after it, and
+**one retrieved anything**. Do not quote 2 of 4.
+
+**Pre-#121 rows carry a BLANK `retrieval` column and cannot be re-scored mechanically.** The column
+has no default for exactly this reason. The 1-of-4 was hand-derived from two payloads and stays
+labelled as a hand derivation; nothing in this change makes it a queried figure retroactively.
+
+**A second honest limit, in the same spirit as §V3's accepted false negative.**
+`PaAuditLogger.invokedTools`'s `retrievingTools` is derived from the `retrieval` column alone — it
+does not check `action_type`. That is correct today only because `_write` is the sole writer of
+the column and only ever sets it on a `result` row (`if (actionType === 'result' && p.retrieval) …`
+in `_write`, checked in a different method from the one `invokedTools` reads it back in); a future
+second writer that sets `retrieval` on an `intent` or `error` row would silently corrupt
+`retrievingTools` without either method's own logic objecting.
+
+### V5. The gate change ships DORMANT
+
+`PaAgentLoop.REQUIRE_RETRIEVAL_TO_RELEASE: false`. §T9 called the retrieval-aware release rule
+*"the obvious next candidate"* and added *"whether it helps is unmeasured"*; §U9 ruled one version
+earlier that *"No verdict is not the same as proven, so the default is off."* Turning it on by
+default would move an instrument eight measured passes are calibrated against, on no evidence.
+
+**The audit column is written on every run regardless of the flag.** So the counterfactual — how
+often the strict rule would have changed a release — is measurable from runs that were happening
+anyway, before anything is switched on. That is the cheapest available route to the evidence §T9
+says is missing, and it is the reason to prefer dormancy over a coin flip.
+
+**There is no runtime path or system property that flips this flag — a future round must edit
+source and rebuild.** `src/fluent/async-wiring.now.ts` constructs the loop with
+`new PaAgentLoop().run(event.parm1, requestJson)` — no options object, so no `options.
+requireRetrievalToRelease` ever reaches `initialize`. Enabling the strict rule for a measured round
+means either changing `REQUIRE_RETRIEVAL_TO_RELEASE`'s default in `PaAgentLoop.js` or passing
+`{requireRetrievalToRelease: true}` at that call site, then `now-sdk build` and `now-sdk install`
+— exactly the same edit-rebuild-reinstall path `MAX_EVIDENCE_RETURNS` already requires, and for the
+same reason: neither constant has a wiring seam. A reader planning the round must not discover this
+gap at the instance.
+
+### V6. What is deferred, and what must be true before it runs
+
+**Not in this change:** the sized round (#121 step 3) and the `MAX_EVIDENCE_RETURNS` flip (step 4).
+
+§U8.5 is explicit that a second 4-run round would land on the boundary again — *"§R2.4's variance
+figures say it would land on the boundary again"* — so a future round must:
+
+1. Size `n` against the observed fire rate of roughly one half, **for the denominator, not for
+   patience**.
+2. Fix the stopping rule before the first run. §U8.3's `D < 3` stop fired at exactly the boundary
+   and the round could not be extended without optional stopping.
+3. Clear the five prerequisites filed on #121's first comment before the cap leaves `0` — the
+   `_resetGate` cross-run leak, `initialize`'s `>= 0` guards accepting `null`, the untested 1→2
+   evidence-return transition, `_finishAnswer`'s dropped draft, and two inaccurate comments. One
+   is answered here in passing: `requireRetrievalToRelease` is read with a strict `=== true` test
+   rather than the `>= 0` shape.
+
+### V7. What this section cannot establish
+
+Everything in §U5 stands. This change adds an instrument; it measures nothing. It does not say the
+evidence return works, does not say the depth gate's strict rule helps, and does not move
+`MAX_EVIDENCE_RETURNS` off `0`. §T3's governing result is untouched: six custom rows reached layer
+4 and all six concluded at layer 1. **Retrieving evidence is not diagnosing.**
