@@ -1324,30 +1324,30 @@ describe('partial preserves a rejected draft (#81)', () => {
 describe('depth gate (#103) — _trailTools', () => {
     test('an available trail is readable and carries its tools', () => {
         const loop = load({ auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }) })
-        expect(loop._trailTools('RUN1')).toEqual({ readable: true, tools: ['agent_trace'], degraded: '' })
+        expect(loop._trailTools('RUN1')).toEqual({ readable: true, tools: ['agent_trace'], retrieving: [], degraded: '' })
     })
 
     test('no_audit_rows is READABLE with zero tools — the trail answered', () => {
         const loop = load({ auditLogger: fakeAuditLogger({ available: false, degraded: 'no_audit_rows', tools: [] }) })
-        expect(loop._trailTools('RUN1')).toEqual({ readable: true, tools: [], degraded: 'no_audit_rows' })
+        expect(loop._trailTools('RUN1')).toEqual({ readable: true, tools: [], retrieving: [], degraded: 'no_audit_rows' })
     })
 
     test.each(['glide_unavailable', 'query_failed', 'no_run_id'])(
         'a genuine degradation (%s) is NOT readable',
         (reason) => {
             const loop = load({ auditLogger: fakeAuditLogger({ available: false, degraded: reason, tools: [] }) })
-            expect(loop._trailTools('RUN1')).toEqual({ readable: false, tools: [], degraded: reason })
+            expect(loop._trailTools('RUN1')).toEqual({ readable: false, tools: [], retrieving: [], degraded: reason })
         }
     )
 
     test('a throwing audit logger degrades rather than propagating (R-1)', () => {
         const loop = load({ auditLogger: fakeAuditLogger(new Error('boom')) })
-        expect(loop._trailTools('RUN1')).toEqual({ readable: false, tools: [], degraded: 'query_failed' })
+        expect(loop._trailTools('RUN1')).toEqual({ readable: false, tools: [], retrieving: [], degraded: 'query_failed' })
     })
 
     test('a null result degrades', () => {
         const loop = load({ auditLogger: fakeAuditLogger(null) })
-        expect(loop._trailTools('RUN1')).toEqual({ readable: false, tools: [], degraded: 'query_failed' })
+        expect(loop._trailTools('RUN1')).toEqual({ readable: false, tools: [], retrieving: [], degraded: 'query_failed' })
     })
 
     // -----------------------------------------------------------------------
@@ -1356,12 +1356,44 @@ describe('depth gate (#103) — _trailTools', () => {
 
     test('T2: available:false with degraded absent entirely degrades to not-readable', () => {
         const loop = load({ auditLogger: fakeAuditLogger({ available: false }) })
-        expect(loop._trailTools('RUN1')).toEqual({ readable: false, tools: [], degraded: 'query_failed' })
+        expect(loop._trailTools('RUN1')).toEqual({ readable: false, tools: [], retrieving: [], degraded: 'query_failed' })
     })
 
     test('T2: a non-array tools on an available:true result degrades tools to [] (the _isArray guard)', () => {
         const loop = load({ auditLogger: fakeAuditLogger({ available: true, tools: 'not-an-array' }) })
-        expect(loop._trailTools('RUN1')).toEqual({ readable: true, tools: [], degraded: '' })
+        expect(loop._trailTools('RUN1')).toEqual({ readable: true, tools: [], retrieving: [], degraded: '' })
+    })
+
+    // -----------------------------------------------------------------------
+    // #121 — the retrieving subset
+    // -----------------------------------------------------------------------
+
+    test('an available trail carries its retrieving subset (#121)', () => {
+        const loop = load({
+            auditLogger: fakeAuditLogger({
+                available: true,
+                tools: ['agent_trace', 'genai_log'],
+                retrievingTools: ['genai_log'],
+            }),
+        })
+        expect(loop._trailTools('RUN1')).toEqual({
+            readable: true,
+            tools: ['agent_trace', 'genai_log'],
+            retrieving: ['genai_log'],
+            degraded: '',
+        })
+    })
+
+    test('a non-array retrievingTools degrades to [] (#121, the _isArray guard)', () => {
+        const loop = load({
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'], retrievingTools: 'nope' }),
+        })
+        expect(loop._trailTools('RUN1').retrieving).toEqual([])
+    })
+
+    test('an absent retrievingTools degrades to [] — a pre-#121 logger still works (#121)', () => {
+        const loop = load({ auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }) })
+        expect(loop._trailTools('RUN1').retrieving).toEqual([])
     })
 })
 
@@ -3036,5 +3068,164 @@ describe('directed depth gate (#109) — _holdNote', () => {
             note = load()._holdNote({ kind: 'gaps', gaps: GAPS })
         }).not.toThrow()
         expect(note).toContain('HOLD')
+    })
+})
+
+// ===========================================================================
+// depth gate (#121) — release on RETRIEVAL, not on a tool name
+//
+// DECISION.md §T4: "the gate counts a layer-4 tool being *called*, not layer 4
+// being *reached*" — v9 row 07's schema_lookup answered `table_exists: false`,
+// retrieved nothing, and released the gate. §T9 asked for a release rule that
+// inspected what the tool returned.
+//
+// It SHIPS DORMANT, per §U9's precedent: "No verdict is not the same as
+// proven, so the default is off." The audit column records the verdict on
+// every run regardless, so the counterfactual is measurable for free before
+// anything is turned on.
+// ===========================================================================
+
+describe('depth gate (#121) — retrieval-aware release', () => {
+    const GAP4 = { layer: 4, name: 'Data schemas', reason: 'r4', tools: ['schema_lookup'] }
+    const REPORT = { failure_summary: 'x', layers_swept: [1] }
+
+    // fakeFixReport's signature is POSITIONAL: (validateResults, gaps,
+    // declared). `gaps` is what its unsweptGaps() returns — the loop tests
+    // inject the derived list directly, because derivation is PaFixReport's
+    // concern and is tested in test/PaFixReport.test.js.
+    function gateLoop(trail, opts) {
+        const o = opts || {}
+        return load({
+            runManager: fakeRunManager(),
+            auditLogger: fakeAuditLogger(trail),
+            fixReport: fakeFixReport([], o.gaps || []),
+            requireRetrievalToRelease: o.requireRetrievalToRelease,
+        })
+    }
+
+    // -----------------------------------------------------------------------
+    // Ships dormant — the §U9 pattern
+    // -----------------------------------------------------------------------
+
+    test('SHIPS DORMANT: at the shipped default a barren call still releases the gate', () => {
+        // Constructed with NO option at all. This is the assertion that makes
+        // the change safe to merge without a measured round: today's
+        // behaviour, unchanged.
+        const loop = gateLoop(
+            { available: true, tools: ['schema_lookup'], retrievingTools: [] },
+            { gaps: [GAP4] }
+        )
+        loop._heldTools = ['schema_lookup']
+        loop._heldGaps = [GAP4]
+
+        const gate = loop._depthGate('run1', { action: 'fix_report', report: REPORT })
+
+        expect(loop.REQUIRE_RETRIEVAL_TO_RELEASE).toBe(false)
+        expect(gate.hold).toBe(false)
+        expect(gate.capped).toBe(false)
+    })
+
+    // -----------------------------------------------------------------------
+    // Flag on
+    // -----------------------------------------------------------------------
+
+    test('flag on: a call that retrieved NOTHING does not discharge the hold', () => {
+        // §T4 row 07, mechanically: schema_lookup was called, and answered
+        // table_exists:false.
+        const loop = gateLoop(
+            { available: true, tools: ['schema_lookup'], retrievingTools: [] },
+            { gaps: [GAP4], requireRetrievalToRelease: true }
+        )
+        loop._heldTools = ['schema_lookup']
+        loop._heldGaps = [GAP4]
+
+        const gate = loop._depthGate('run1', { action: 'fix_report', report: REPORT })
+
+        expect(gate.hold).toBe(true)
+        expect(gate.kind).toBe('gaps')
+    })
+
+    test('flag on: a call that DID retrieve discharges the hold', () => {
+        const loop = gateLoop(
+            { available: true, tools: ['schema_lookup'], retrievingTools: ['schema_lookup'] },
+            { gaps: [GAP4], requireRetrievalToRelease: true }
+        )
+        loop._heldTools = ['schema_lookup']
+        loop._heldGaps = [GAP4]
+
+        const gate = loop._depthGate('run1', { action: 'fix_report', report: REPORT })
+
+        expect(gate.hold).toBe(false)
+        expect(gate.capped).toBe(false)
+    })
+
+    test('flag on: a barren call does not PRE-CLOSE a declared gap either', () => {
+        // Both trail consumers use the same set. Using the strict set only in
+        // the release check would let a barren call close a gap before any
+        // hold could be issued — the same defect, one step earlier.
+        const loop = gateLoop(
+            { available: true, tools: ['schema_lookup'], retrievingTools: [] },
+            { gaps: [GAP4], requireRetrievalToRelease: true }
+        )
+
+        const gate = loop._depthGate('run1', { action: 'fix_report', report: REPORT })
+
+        expect(gate.hold).toBe(true)
+        expect(gate.gaps).toEqual([GAP4])
+    })
+
+    test('flag on: MAX_HOLDS still bounds the run and still reports capped', () => {
+        const loop = gateLoop(
+            { available: true, tools: ['schema_lookup'], retrievingTools: [] },
+            { gaps: [GAP4], requireRetrievalToRelease: true }
+        )
+        loop._heldTools = ['schema_lookup']
+        loop._heldGaps = [GAP4]
+        loop._holdCount = loop.MAX_HOLDS
+
+        const gate = loop._depthGate('run1', { action: 'fix_report', report: REPORT })
+
+        expect(gate.hold).toBe(false)
+        expect(gate.capped).toBe(true)
+    })
+
+    test('flag on: an unreadable trail still fails OPEN', () => {
+        // A Glide hiccup must never trap a run in a hold it cannot escape.
+        const loop = gateLoop(
+            { available: false, degraded: 'query_failed', tools: [], retrievingTools: [] },
+            { gaps: [GAP4], requireRetrievalToRelease: true }
+        )
+        loop._heldTools = ['schema_lookup']
+
+        expect(loop._depthGate('run1', { action: 'fix_report', report: REPORT }).hold).toBe(false)
+    })
+
+    // -----------------------------------------------------------------------
+    // The option guard — deliberately NOT the `>= 0` shape
+    // -----------------------------------------------------------------------
+
+    test.each([null, undefined, 0, '', 'true', 1])(
+        'requireRetrievalToRelease: %p leaves the default at false',
+        (value) => {
+            // maxEvidenceReturns uses `>= 0`, which accepts null (null >= 0 is
+            // true) — filed on #121's own comment thread. This is `=== true`.
+            const loop = load({ requireRetrievalToRelease: value })
+            expect(loop.REQUIRE_RETRIEVAL_TO_RELEASE).toBe(false)
+        }
+    )
+
+    test('requireRetrievalToRelease: true turns it on', () => {
+        expect(load({ requireRetrievalToRelease: true }).REQUIRE_RETRIEVAL_TO_RELEASE).toBe(true)
+    })
+
+    // -----------------------------------------------------------------------
+    // _releaseSet
+    // -----------------------------------------------------------------------
+
+    test('_releaseSet returns tools by default and retrieving when the flag is on', () => {
+        const trail = { readable: true, tools: ['a', 'b'], retrieving: ['a'], degraded: '' }
+
+        expect(load({})._releaseSet(trail)).toEqual(['a', 'b'])
+        expect(load({ requireRetrievalToRelease: true })._releaseSet(trail)).toEqual(['a'])
     })
 })

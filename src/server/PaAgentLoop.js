@@ -170,6 +170,28 @@ PaAgentLoop.prototype = {
      *  exactly. Set `maxEvidenceReturns: 2` via `initialize()` to enable it. */
     MAX_EVIDENCE_RETURNS: 0,
 
+    /**
+     * #121 — SHIPPED DORMANT. When true, the depth gate releases only on a
+     * tool that RETRIEVED something, not on one that merely ran.
+     *
+     * DECISION.md §T4 measured the defect: v9 row 07's `schema_lookup`
+     * answered `table_exists: false` — it established nothing — and the gate
+     * released, because the release path compares tool NAMES from the audit
+     * trail and never inspects what came back. §T9 asked for exactly this
+     * rule and said in the same breath that "whether it helps is unmeasured".
+     *
+     * So it ships off, on §U9's precedent one version earlier: "No verdict is
+     * not the same as proven, so the default is off." Turning it on by
+     * default would move, on no evidence, an instrument eight measured passes
+     * are calibrated against.
+     *
+     * The dormancy is not inert. `x_snc_troubleshoot_audit.retrieval` is
+     * written on EVERY run regardless of this flag, so how often the strict
+     * rule would have changed a release is measurable from runs that were
+     * happening anyway — before anything is switched on.
+     */
+    REQUIRE_RETRIEVAL_TO_RELEASE: false,
+
     /** #81 — the time margin `_hasEvidenceHeadroom` requires before handing a
      *  run back. Returning to the loop with a second left trips `run()`'s
      *  budget guard on the very next iteration and downgrades a rejection
@@ -230,6 +252,9 @@ PaAgentLoop.prototype = {
         // 0` to disable the evidence-return path entirely.
         if (o.maxEvidenceReturns >= 0) this.MAX_EVIDENCE_RETURNS = o.maxEvidenceReturns
         if (o.evidenceHeadroomMs >= 0) this.EVIDENCE_HEADROOM_MS = o.evidenceHeadroomMs
+        // `=== true`, deliberately NOT the `>= 0` shape used above: `null >= 0`
+        // is true in JS, so that form silently accepts a null (filed on #121).
+        if (o.requireRetrievalToRelease === true) this.REQUIRE_RETRIEVAL_TO_RELEASE = true
     },
 
     // =======================================================================
@@ -575,7 +600,11 @@ PaAgentLoop.prototype = {
      * hiccup must never trap a run in a hold it cannot escape.
      *
      * @param {String} runId
-     * @returns {Object} {readable:Boolean, tools:[String], degraded:String}
+     * @returns {Object} {readable:Boolean, tools:[String], retrieving:[String],
+     *          degraded:String} — `retrieving` (#121) is the subset of
+     *          `tools` that actually fetched rows, per
+     *          `PaToolReadKit.retrievalVerdict` and `PaAuditLogger`'s
+     *          `retrievingTools`.
      */
     _trailTools: function (runId) {
         var res = null
@@ -583,22 +612,25 @@ PaAgentLoop.prototype = {
             res = this._audits().invokedTools(runId)
         } catch (e) {
             // R-1: `e` is deliberately not inspected.
-            return { readable: false, tools: [], degraded: 'query_failed' }
+            return { readable: false, tools: [], retrieving: [], degraded: 'query_failed' }
         }
 
         if (res && res.available === true) {
             return {
                 readable: true,
                 tools: this._isArray(res.tools) ? res.tools : [],
+                // #121. Absent on a pre-#121 logger, which degrades to [] —
+                // the same guard `tools` has, for the same reason.
+                retrieving: this._isArray(res.retrievingTools) ? res.retrievingTools : [],
                 degraded: '',
             }
         }
 
         var reason = this._str(res && res.degraded ? res.degraded : 'query_failed')
         if (reason === 'no_audit_rows') {
-            return { readable: true, tools: [], degraded: reason }
+            return { readable: true, tools: [], retrieving: [], degraded: reason }
         }
-        return { readable: false, tools: [], degraded: reason }
+        return { readable: false, tools: [], retrieving: [], degraded: reason }
     },
 
     /**
@@ -656,6 +688,24 @@ PaAgentLoop.prototype = {
     _hasEvidenceHeadroom: function () {
         if (this.MAX_ITERATIONS - this._iteration < 2) return false
         return this.BUDGET_MS - (this._now() - this._startMs) >= this.EVIDENCE_HEADROOM_MS
+    },
+
+    /**
+     * The trail set a hold may be discharged against (#121).
+     *
+     * Under the shipped default this is every tool the run INVOKED — the
+     * §T4 rule, which releases on a `schema_lookup` that answered
+     * `table_exists: false`. Under `REQUIRE_RETRIEVAL_TO_RELEASE` it is the
+     * subset that actually fetched rows, per
+     * `PaToolReadKit.retrievalVerdict` and the `retrieval` audit column.
+     *
+     * Both of `_depthGate`'s trail consumers call this. Using the strict set
+     * for the release check while deriving open gaps from the loose one would
+     * let a barren call pre-close a declared gap before any hold could be
+     * issued — the identical defect, one step earlier.
+     */
+    _releaseSet: function (trail) {
+        return this.REQUIRE_RETRIEVAL_TO_RELEASE === true ? trail.retrieving : trail.tools
     },
 
     /**
@@ -764,6 +814,12 @@ PaAgentLoop.prototype = {
      * longer discharge a gap it never touched. See `_selectTarget`'s header
      * for the ranking and precedence rules.
      *
+     * RELEASE ON RETRIEVAL, NOT ON A NAME (#121, shipped dormant). The set a
+     * hold is discharged against comes from `_releaseSet` rather than
+     * `trail.tools` directly. See that method and
+     * `REQUIRE_RETRIEVAL_TO_RELEASE`; at the shipped default the behaviour
+     * described above is unchanged in every particular.
+     *
      * @param {String} runId
      * @param {Object} action the terminal action the model just emitted
      * @returns {Object} {hold:Boolean, gaps:Array, kind:'gaps'|'no_layer_report'|'',
@@ -786,6 +842,8 @@ PaAgentLoop.prototype = {
 
         var trail = this._trailTools(runId)
         if (!trail.readable) return { hold: false, gaps: [], kind: '', target: null, capped: false }
+
+        var release = this._releaseSet(trail)
 
         // STICKY. Once a hold has been issued, the recorded set is the ONLY
         // thing that can release the gate — later drafts never move it. The
@@ -811,7 +869,7 @@ PaAgentLoop.prototype = {
         // `capped:true`, telling the benchmark the gate had given up on the
         // one run where it worked. A trail row that discharges the recorded
         // set is a genuine release whatever the counter says.
-        if (sticky && this._anyOf(this._heldTools, trail.tools)) {
+        if (sticky && this._anyOf(this._heldTools, release)) {
             this._gateReleased = true
             return { hold: false, gaps: [], kind: '', target: null, capped: false }
         }
@@ -851,7 +909,7 @@ PaAgentLoop.prototype = {
             return { hold: true, gaps: [], kind: 'no_layer_report', target: null, capped: false }
         }
 
-        var open = this._openGaps(this._safeGaps(action.report), trail.tools)
+        var open = this._openGaps(this._safeGaps(action.report), release)
         if (open.length === 0) {
             this._gateReleased = true
             return { hold: false, gaps: [], kind: '', target: null, capped: false }
