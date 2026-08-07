@@ -3269,3 +3269,192 @@ Everything in §U5 stands. This change adds an instrument; it measures nothing. 
 evidence return works, does not say the depth gate's strict rule helps, and does not move
 `MAX_EVIDENCE_RETURNS` off `0`. §T3's governing result is untouched: six custom rows reached layer
 4 and all six concluded at layer 1. **Retrieving evidence is not diagnosing.**
+
+## W. Pre-registration — the sized round (`2026.08.0703`, #121 steps 3–4)
+
+**Written and committed before a single run fired. §U and §V are unmodified** — `git log -p
+benchmark/DECISION.md` is the check. **This section claims no result.**
+
+It discharges §V6's conditions 1 and 2, which §V deferred: *size `n` against the observed fire
+rate, for the denominator, not for patience*, and *fix the stopping rule before the first run*.
+Condition 3 (the five `PaAgentLoop` prerequisites) was closed by #130.
+
+### W1. What this round decides, and what it does not
+
+**Decides:** whether `MAX_EVIDENCE_RETURNS` leaves `0` — #121 step 4, and nothing else.
+
+**Does not decide:** anything about `REQUIRE_RETRIEVAL_TO_RELEASE`. That flag stays `false` for
+every run in this round. It is a separate question, it is blocked by §V3's unresolved `'DENIED'`
+ruling, and running both switches at once would confound the depth gate with the evidence return —
+the two mechanisms fire on opposite sides of validation (§U5).
+
+**The build under test is `2026.08.0703` with one edit: `MAX_EVIDENCE_RETURNS: 2`.** Per §V5 there
+is no runtime seam for either constant, so this is an edit-rebuild-reinstall, and the operator must
+verify by `scriptLIKE` probe rather than `sys_updated_on` (§U7).
+
+### W2. The metric is §V2's, unchanged, and it under-counts on purpose
+
+`N` and `D` are exactly as §V2 filed them; this section adds no new definition and amends none.
+
+- **`D`** = runs in this round that fire at least one `EVIDENCE RETURN` note.
+- **`N`** = of those `D`, how many have at least one `x_snc_troubleshoot_audit` row with
+  `action_type=result`, `retrieval=ok`, and `sys_created_on` after the first note.
+
+**The number to beat is 1 of 4** (§V4), hand-derived and staying labelled as one. Do not quote
+2 of 4.
+
+**The instrument is biased toward reverting, and that is the direction it should be biased.** §V3
+records two accepted false negatives: `query_table`'s `rows_exist_but_are_not_visible` finding
+establishes a real ACL fact while leaving `reads` at `'empty'`, and a `'DENIED'` scores `none`
+though by R-26 a denial is a permission gap rather than an absence. Both make `N` too small. A
+metric that has twice flattered the change it measures should err the other way, and any verdict
+that *stands* under a conservative numerator is stronger for it.
+
+### W3. Sizing — condition 1
+
+**Observed fire rate: 4 of 8 pooled seed-01 runs (§U9.1). The 95% Wilson interval on that is
+[0.215, 0.785]**, which is the whole problem: 8 runs pin the denominator's own rate almost not at
+all, and sizing `n` directly would be sizing against a number we do not have.
+
+**Target `D` = 12.** Chosen from the false-ratify rate against the observed baseline — the
+probability the round says "stands" when the true retrieval rate is really the 1-in-4 that has
+been measured:
+
+| `D` | `N` needed | false-ratify if true rate is 0.25 | if 0.35 | stands if truly 0.50 | stands if truly 0.65 |
+|---|---|---|---|---|---|
+| **3** (§U8.3's floor) | 2 | **15.6%** | 28.2% | 50.0% | 71.8% |
+| 8 | 4 | 11.4% | 29.4% | 63.7% | 89.4% |
+| **12 (chosen)** | 6 | **5.4%** | 21.3% | 61.3% | 91.5% |
+| 16 | 8 | 2.7% | 15.9% | 59.8% | 93.3% |
+
+**§U8.3's `D ≥ 3` floor would ratify a 1-in-4 mechanism 15.6% of the time.** That is the real
+defect in the old rule — not merely that it stopped at the boundary, but that clearing it proved
+very little. `D = 12` cuts that to 5.4% for 4× the runs; `D = 16` buys another 2.7 points for 33%
+more runs, and is not worth it at ~1 minute per run.
+
+**Stated against the change's own interest:** at `D = 12`, a mechanism whose true rate is *exactly*
+the 0.5 threshold still reverts 38.7% of the time. That is inherent to testing a point threshold
+and is not a defect to be fixed by re-running. If the round reverts at an `N/D` near half, the
+honest report is "not distinguishable from the threshold", not "refuted".
+
+### W4. The stopping rule — condition 2, and the reason this is not optional stopping
+
+**Sample until `D = 12`, not until `n = <some number>`.**
+
+§U8.5 declined to extend a tied round and was right to: *"Continuing because the split is tied is
+optional stopping at the most result-sensitive moment there is."* The fix is not a bigger fixed `n`
+— it is to stop on a quantity the result cannot see.
+
+**The stopping rule reads `D` only. It never reads `N`.** Whether a run fires an `EVIDENCE RETURN`
+is decided before any tool call it might make; whether that call retrieved is what `N` counts.
+Conditional on `D`, the retrieval outcomes of those `D` runs are 12 draws that the stopping decision
+never inspected, so `N/D` is unbiased under this design. This is inverse-binomial sampling, and it
+is the standard remedy for exactly the failure §U8.5 hit: a fixed `n` leaves `D` to chance (4 runs
+gave `D = 2`), while a fixed `D` leaves only the *cost* to chance.
+
+**The operator must not compute `N` mid-round.** `D` is countable from transcript notes alone; the
+audit query that produces `N` is run once, after the round closes. This is a procedural commitment,
+and it is the one thing in this section a careless operator can silently break.
+
+**Hard cap: `n_max = 60` runs (~60 minutes at the measured ~1 min/run).**
+
+| cap | P(reach `D`=12) if fire is 0.25 | 0.30 | 0.40 | 0.50 |
+|---|---|---|---|---|
+| 40 | 28.5% | 55.9% | 92.9% | 99.7% |
+| **60 (chosen)** | **85.2%** | 97.1% | 100% | 100% |
+| 72 | 96.6% | 99.7% | 100% | 100% |
+
+40 was the tempting number and it fails badly at the pessimistic end of the fire-rate interval.
+60 holds up across the whole plausible range for an hour of instance time.
+
+**All three exits are decided now:**
+
+| At the end of the round | Verdict |
+|---|---|
+| `D` reaches 12 | Apply §W6. Full pre-registered power |
+| `n` reaches 60 with `8 ≤ D < 12` | Apply §W6, **and report the reduced power explicitly** (at `D`=8 the false-ratify rate is 11.4%, not 5.4%). Not a licence to re-run |
+| `n` reaches 60 with `D < 8` | **No verdict on the return.** The finding is about the FIRE rate, not the retrieval rate — the mechanism is firing far less than the 4-of-8 baseline, and that is what gets investigated. P ≤ 1% if the true fire rate is 0.25, so this outcome is itself informative |
+
+### W5. The `partial` trigger, rescaled — and why that is not the change being flattered
+
+§U8.3 reverts on **any single** `partial`. That threshold was calibrated for a 4-run round. Carried
+onto a 60-run round unchanged it becomes a coin flip that reverts on noise:
+
+| true `partial` rate | P(≥1 in 60) | P(≥2) | P(≥3) | P(≥4) |
+|---|---|---|---|---|
+| 1% | **45.3%** | 12.1% | 2.2% | 0.3% |
+| 2% | 70.2% | 33.8% | 11.9% | 3.2% |
+| 5% | 95.4% | 80.8% | 58.3% | 35.3% |
+
+**A rate of 1% — one partial in a hundred runs, which nobody would call a regression — trips the
+count-1 trigger 45% of the time at this `n`.** The trigger would stop measuring the change and
+start measuring the round length.
+
+**Rescaled: revert on ≥3 `partial` terminations among the round's runs.** One or two are recorded,
+attributed, and reported, but do not by themselves revert.
+
+**Why this is not result-driven loosening.** §U8.1 warned that amending a pre-registration with
+results in hand is a compromise, and this amendment is being written with `0 partials in 8 runs`
+known. Three things keep it honest: the change is forced by `n` alone and would be identical had
+the observed count been 0, 1 or 2; the *rationale* for the original trigger is untouched (a
+`partial` destroys a scorable row, and §U3.2′ still defines it per run); and the observed baseline
+does not discriminate anyway — by the rule of three, 0 in 8 is consistent with a true rate as high
+as 37%, so no threshold could have been calibrated from it. At a true rate of 1% the rescaled
+trigger fires 2.2% of the time; at a genuinely bad 5% it fires 58.3%.
+
+**The attribution clause survives verbatim from §U2's U-b:** a `partial` in a run that fired no
+`EVIDENCE RETURN` is not evidence about this change, and is excluded from the count.
+
+### W6. The decision table
+
+Evaluated once, after the round closes, in this order:
+
+| Condition | Verdict |
+|---|---|
+| **≥3 `partial`** among runs that fired a return | **REVERT.** `MAX_EVIDENCE_RETURNS` stays `0`. Overrides every row below |
+| **`N / D ≥ 1/2`** (exactly one half **stands**) | **The return is enabled.** `MAX_EVIDENCE_RETURNS` → `2`, in a PR that cites this section |
+| **`N / D < 1/2`** | **`MAX_EVIDENCE_RETURNS` stays `0`**, and #81 is done — not re-measured a third time |
+| **`D < 8` at the cap** | **No verdict.** Investigate the fire rate |
+
+**Note the asymmetry with §U4, and that it is deliberate.** §U4's trigger was a *revert* — the code
+was live at `2` and the trigger switched it off. Here the code is already dormant at `0`, so the
+default on an ambiguous result is to stay dormant. §U9's ruling governs: *"No verdict is not the
+same as proven, so the default is off."* A third inconclusive round should end the question rather
+than buy a fourth.
+
+### W7. Protocol and pre-flight
+
+**Targets.** The two v9 seed-01 execution plans, alternating strictly — `4a5bb19d2b66cf54f243fed2ce91bf57`
+(A), `45bbfd112ba6cf54f243fed2ce91bfcb` (B), A/B/A/B — custom arm only, strictly sequential,
+byte-identical request bodies, no new executions triggered, no fixture touched. Alternating rather
+than blocking keeps a drift in instance behaviour from loading onto one target.
+
+**Seed 03 is a separate regression guard, not part of `n` or `D`.** 4 runs against
+`3afbf1192baa475817a6ffbeee91bf10` and `1a1c71152ba6cf54f243fed2ce91bf31` after the round closes,
+scored against §U2's U-b only. Seed-01 runs alone produce `N` and `D`.
+
+**Pre-flight, all four verified by probe before run 1 — §V5 is explicit that skipping the third
+would misread as evidence about the rule:**
+
+1. `sys_app.version` reads the round's build.
+2. `PaAgentLoop^scriptLIKEMAX_EVIDENCE_RETURNS: 2` → 1 record; `: 0` → 0 records.
+3. `sys_dictionary` `name=x_snc_troubleshoot_audit^element=retrieval` → 1 record. **Without the
+   column, `setValue` is a silent no-op (R-6), `N` is 0 for every run, and the round would read as
+   a refutation of the return rather than as a deploy-order mistake.**
+4. `PaAgentLoop^scriptLIKEREQUIRE_RETRIEVAL_TO_RELEASE: false` → 1 record. The other switch must be
+   off (§W1).
+
+**Known limitation, carried from §U7 and not fixed:** the evidence-problem TEXT is not persisted for
+a run that later validates, so *why* a given run returned cannot be read back off the instance. Any
+reconstruction in the raw-evidence file must be labelled as one.
+
+Measurements go to `benchmark/raw-evidence-v11-sized-round.md`.
+
+### W8. What this round cannot establish
+
+Everything in §U5 and §V7 stands, unsoftened. In particular §T3 remains the governing result — six
+custom rows reached layer 4 and all six concluded at layer 1 — and **nothing in this round can move
+it.** The metric counts whether a run that was told its evidence was insufficient went and
+retrieved something. It does not ask whether the right source was read, whether the citation
+supports a true cause, or whether any score would move. **Retrieving evidence is not diagnosing**,
+and a round that stands is a round that licensed one mechanism, not one that improved a diagnosis.
