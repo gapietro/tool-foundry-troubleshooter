@@ -460,9 +460,11 @@ Add the helper beside `_trim`:
      * purest form: blank is honest, junk is not.
      */
     _retrievalValue: function (value) {
-        var v = this._norm(value)
+        // NOT via `_norm`: it does `String(value)`, and `String(['ok'])` is
+        // the string 'ok' — a single-element array would pass the whitelist.
+        if (typeof value !== 'string') return ''
         for (var i = 0; i < this.RETRIEVAL_VALUES.length; i++) {
-            if (this.RETRIEVAL_VALUES[i] === v) return v
+            if (this.RETRIEVAL_VALUES[i] === value) return value
         }
         return ''
     },
@@ -496,7 +498,7 @@ Expected: 26 suites passing.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add src/fluent/tables.now.ts src/server/PaAuditLogger.js test/PaAuditLogger.test.js
+git add src/fluent/tables.now.ts src/fluent/generated/keys.ts src/server/PaAuditLogger.js test/PaAuditLogger.test.js
 git commit -m "feat(#121): audit rows record whether the call retrieved anything
 
 The verdict cannot be re-derived from the output column: applyThreshold
