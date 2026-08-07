@@ -165,10 +165,17 @@ PaAgentLoop.prototype = {
      *  rounds over eight seed-01 runs returned NO VERDICT (§U8.3's stop rule
      *  fired at D<3), and of the 4 runs that fired a return only 2 made a tool
      *  call and only 1 retrieved anything. Undecided is not proven, so the
-     *  default is off. At 0 the guard in `_handleFixReport` falls straight
-     *  through to the existing repair turn, which is `2026.08.0505` behaviour
-     *  exactly. Set `maxEvidenceReturns: 2` via `initialize()` to enable it. */
-    MAX_EVIDENCE_RETURNS: 0,
+     *  default is off. At the dormant setting the guard in `_handleFixReport`
+     *  falls straight through to the existing repair turn, which is
+     *  `2026.08.0505` behaviour exactly.
+     *
+     *  ⚠ THIS IS THE §W SIZED-ROUND BUILD — NOT A SHIPPING DEFAULT. Raised to
+     *  2 to execute the round pre-registered in DECISION.md §W (#121 steps
+     *  3–4). Per §V5 neither constant has a wiring seam, so a measured round
+     *  is an edit-rebuild-reinstall; this is that edit. Whether the value
+     *  stays at 2 is decided ONLY by §W6's table applied after the round
+     *  closes — do not merge this branch on any other basis. */
+    MAX_EVIDENCE_RETURNS: 2,
 
     /**
      * #121 — SHIPPED DORMANT. When true, the depth gate releases only on a
