@@ -1554,9 +1554,17 @@ PaToolAgentTrace.prototype = {
                 // #122: was `execution=<sys_id> ... agent=<name>`, on the
                 // pick-list path — the first thing a model sees when it calls
                 // this tool with nothing, and the moment before it retries.
-                '). Re-call with one of those plan sys_ids on its own, or a JSON object with agent set ' +
-                'to an agent or use case name. This is not an error — a missing argument is expected ' +
-                '(DESIGN.md R-9).',
+                //
+                // #127: that rewrite then offered the agent ONLY as a JSON
+                // key, though _normalizeArgs's string branch ends
+                // `return { agent: s }` and the description advertises it. The
+                // note was steering the model off a supported, simpler shape
+                // at the exact moment it retries. "on its own, or a JSON
+                // object" is PaToolAgentConfig's register for the same
+                // sentence; both halves are offered bare here.
+                '). Re-call with one of those plan sys_ids on its own, or an agent or use case name on ' +
+                'its own, or a JSON object with agent set to one. This is not an error — a missing ' +
+                'argument is expected (DESIGN.md R-9).',
         }
     },
 

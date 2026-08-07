@@ -674,6 +674,43 @@ describe('execution paths run end to end', () => {
         expect(r.data.resolution.candidates.length).toBe(1)
     })
 
+    /**
+     * Issue #127. PR #124's F1 fix rewrote this string to stop teaching
+     * `agent=<name>`, which was right, but the replacement offered ONLY the
+     * JSON-object form for the agent case. The tool accepts a bare agent name
+     * — `_normalizeArgs`'s string branch ends `return { agent: s }`, and the
+     * tool description advertises it — so the pick-list was steering the model
+     * away from a supported and simpler shape, in the message it reads
+     * immediately before it retries, while contradicting the description.
+     *
+     * `PaToolAgentConfig`'s sibling string got the same rewrite right: "the
+     * agent name or sys_id on its own, or a JSON object with agent and ...".
+     * That register is what these assertions pin.
+     */
+    test('the pick-list offers the bare agent name, not only the JSON object', () => {
+        const note = load().execute({}).data.resolution.note
+
+        expect(note).toMatch(/on its own/)
+        expect(note).toMatch(/agent/i)
+        // The failure this catches is a note that mentions an agent ONLY as a
+        // JSON key. "on its own" must attach to the agent name, not just to
+        // the plan sys_id it already covered.
+        expect(note).toMatch(/agent (name|or use case name) on its own|agent name.{0,40}on its own/i)
+    })
+
+    test('the pick-list still offers the plan sys_id on its own', () => {
+        // The other half of the same sentence, and the half #124 got right.
+        expect(load().execute({}).data.resolution.note).toMatch(/plan sys_ids? on its own/)
+    })
+
+    test('the pick-list teaches no parameter-prefixed shape', () => {
+        // What #122/#124 removed must stay removed.
+        const note = load().execute({}).data.resolution.note
+
+        expect(note).not.toMatch(/agent\s*=\s*</)
+        expect(note).not.toMatch(/execution\s*=\s*</)
+    })
+
     test('a full run wires the 7 summary steps together', () => {
         const r = load().execute({ execution: 'plan0000000000000000000000000001' })
         const d = r.data
