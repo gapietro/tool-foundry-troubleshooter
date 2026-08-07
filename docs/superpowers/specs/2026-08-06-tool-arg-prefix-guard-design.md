@@ -67,6 +67,23 @@ is deliberately left to the shorthand path. Rewriting that onto a shared abstrac
 regression on the one path we have measured, and buys nothing this issue asks for. Two
 implementations is the accepted cost.
 
+> **Resolved 2026-08-07 (#125) — the exemption was right, and it left a real gap.**
+> Exempting `schema_lookup` from the migration also left its guard covering `table` and
+> `table_name` only, while `_normalizeArgs` accepts `field`, `element` and `column` and the tool's
+> description tells the model that *table and field* are both parameter names. It was the only tool
+> whose guard did not cover its full accepted parameter list after this change.
+>
+> #125 closed it **without** migrating — the ruling above still holds, and `DOTTED_PREFIX_PATTERN`
+> is untouched. What it could not be is the one-line widening the issue proposed: `_normalizeArgs`'s
+> no-dot branch puts whatever survives the strip into the **table** slot, so stripping `field:`
+> without routing reads `field:channel` as a table called `channel`, performs a real `sys_db_object`
+> read, and reports `table_does_not_exist` — a confident claim about the instance built on a word
+> the model merely spelled out, and the exact false diagnosis §1.1's guard exists to prevent. Today
+> that call fails **safe** (`table_name_malformed`, no read attempted). So `PARAM_PREFIX_PATTERN`
+> gained a capture group and `PARAM_PREFIX_SLOT` maps each name to the slot it fills;
+> `field:channel` now reaches the `no_table` branch, which asks for the table rather than inventing
+> a verdict about one.
+
 ## 3. The mechanism
 
 ### 3.1 `PaToolReadKit.splitParamPrefix(s, paramNames)`
@@ -164,6 +181,23 @@ Six descriptions each gain one sentence in their `UNDERSTANDING TOOL INPUTS` sec
 tool's own parameters, in the register `schema_lookup` already uses. `schema_lookup`'s is already
 correct and is not touched.
 
+> **Followed up 2026-08-07 (#126) — the prompt-side half now has a guard.**
+> This section, and the 14 in-band guidance strings the whole-branch review went on to find, were
+> both corrected by reading. Nothing failed if the shape drifted back, and it had already recurred
+> once (#111 → #122). `test/paramShapeScan.test.js` closes that by construction: it scans the
+> **string literals** of `src/server/tools/**` and `src/fluent/agent-doctor.now.ts` for a tight
+> `<param>:<value>` / `<param>=<value>` shape, keyed to each tool's own `PARAM_NAMES` — the
+> per-tool lists §3.4 introduced are what make it checkable.
+>
+> Two findings from building it, both from the tree rather than from design:
+> - Restricting to string literals is what makes the scan usable at all — a naive line scan finds
+>   237 matches, of which 221 are object syntax (`table: a.table`) that never reaches a model.
+> - The **negation** is the discriminator, not a file+line allowlist: all 15 legitimate survivors
+>   are counter-examples of the form `not execution:<sys_id>`. One of them —
+>   `schema_lookup`'s `table_name_malformed` next_step — splits `not ` and `"table:incident"`
+>   across a string concatenation, so the scan bridges to the preceding literal for an occurrence
+>   within 3 characters of the start.
+
 ### 4.1 Two constraints on the edit
 
 1. **Both files, or the suite fails.** Descriptions are duplicated byte-for-byte into
@@ -195,6 +229,8 @@ Unit tests only — no benchmark round, per the agreed done-bar (§7).
    The existing parity test covers the Fluent side.
 
 Full suite must stay green: **1160 passing, 26 suites** as of `2026.08.0601`.
+*(Follow-ups #125–#127 took this to **1320 passing, 27 suites**; the new suite is
+`test/paramShapeScan.test.js`, per the §4 note.)*
 
 ## 6. What this deliberately does not cover
 
@@ -207,7 +243,9 @@ Stated as limits, not omissions:
 - **Whether the corrected wording changes model behaviour.** Nothing here measures that. The guard
   makes the malformed call work; the wording is a hypothesis about the root cause, and #111's
   identical hypothesis for `schema_lookup` was never independently isolated from its guard either.
-- **`schema_lookup`'s behaviour** — unchanged in every respect.
+- **`schema_lookup`'s behaviour** — unchanged in every respect *by this change*. **Superseded
+  2026-08-07:** #125 changed it, routing a stripped `field` / `element` / `column` prefix to the
+  field slot instead of the table slot. See the resolution note in §2.1.
 - **Issue #41** — `agent_trace` and `read_artifact` remain off `PaToolReadKit`.
 
 ## 7. Done-bar

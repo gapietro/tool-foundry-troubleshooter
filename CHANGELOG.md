@@ -17,6 +17,83 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0702 — 2026-08-07
+
+### Fixed — the argument-shape layer, ahead of #121's sized round
+
+Three follow-ups from PR #124's whole-branch review, taken together because a malformed tool
+argument is what cost #121 its numerator: §U9.1's honest evidence-return rate is **1 of 4 rather
+than 2 of 4** because one run's `genai_log` call arrived as the bare string
+`execution:45bbfd112ba6cf54f243fed2ce91bfcb`, returned `entries: []`, and counted as a call that
+retrieved nothing. Repairing this layer before the round is what stops the round measuring our own
+argument bugs.
+
+- **`schema_lookup` routes a stripped parameter prefix to the slot it names** (#125). Its guard
+  covered `table` and `table_name` only, while `_normalizeArgs` accepts `field`, `element` and
+  `column` and the tool description tells the model that *table and field* are both parameter
+  names. It was the last tool whose guard did not cover its full accepted parameter list after
+  #122.
+
+  The one-line widening the issue proposed would have made things **worse**. `_normalizeArgs`'s
+  no-dot branch puts whatever survives the strip into the **table** slot, so stripping `field:`
+  without routing reads `field:channel` as a table called `channel`, performs a real
+  `sys_db_object` read, and reports `table_does_not_exist` — "a genuine absence, the table name is
+  wrong". That is a confident claim about the instance built on a word the model merely spelled
+  out, and it is the exact false diagnosis #111's guard exists to prevent. Today that call fails
+  **safe** (`table_name_malformed`, no read attempted). So `PARAM_PREFIX_PATTERN` gained a capture
+  group and `PARAM_PREFIX_SLOT` maps each name to its slot; `field:channel` now reaches the
+  `no_table` branch, which asks for the table rather than inventing a verdict about one.
+  `DOTTED_PREFIX_PATTERN` is untouched — its three-segment discriminator is backed by #114's
+  measured behaviour and there is no field-shaped evidence for it.
+
+  Also fixes the `_prefix_stripped` note, which hardcoded `a.table` and so reported `read as ""`
+  for a field-only strip — announcing a repair while withholding its result.
+
+- **`agent_trace`'s pick-list offers the bare agent name again** (#127). PR #124's F1 fix correctly
+  stopped the string teaching `agent=<name>`, but the replacement offered the agent only as a JSON
+  key, while the tool accepts a bare agent name and its own description advertises one. It was
+  steering the model off a supported, simpler shape in the message read immediately before a retry.
+  Now matches `agent_config`'s register: "on its own, or a JSON object".
+
+### Added — a guard, so this is the last time it is found by reading
+
+- **`test/paramShapeScan.test.js`** (#126) scans the string literals of `src/server/tools/**` and
+  `src/fluent/agent-doctor.now.ts` for the tight `<param>:<value>` / `<param>=<value>` shape, keyed
+  to each tool's own `PARAM_NAMES`. The shape had been removed from tool-facing text twice (#111,
+  then #122 plus its whole-branch review) and found by reading both times; nothing failed if it
+  drifted back onto the pick-list, no-args and refusal paths.
+
+  Both rules were derived from the tree. A naive line scan finds 237 matches; restricting to string
+  literals leaves 16, because `table: a.table` is object syntax that never reaches a model. Of
+  those, 15 are deliberate counter-examples and 1 is English punctuation ("the triggers
+  section: compare the trigger run_as") — hence **tight form only**, since call syntax is written
+  tight and prose is not. And **negation exempts**, which is #126's requested opt-out in place of
+  the file+line allowlist it sketched: an allowlist is hand-maintained, goes stale when lines move,
+  and records that a line is exempt without recording why, whereas the negation is the property
+  that actually makes showing a bad shape safe.
+
+  The tree then corrected the design: `schema_lookup`'s `table_name_malformed` next_step splits
+  `not ` and `"table:incident"` across a string concatenation, so the one string #126 promised to
+  spare would have been the one flagged. The check bridges to the preceding literal, but only
+  within 3 characters of the start.
+
+  The scanner is a unit under test in its own right before being pointed at the tree — a source
+  scan's characteristic failure is matching nothing for a reason nobody notices and reporting green
+  forever. Two tests assert it can still see its inputs, and the tree guard was proven to
+  discriminate by planting a drifted string in both arms.
+
+### Notes
+
+- Full suite **1320 passing, 27 suites** (from 1287 / 26). `now-sdk build` passes on SDK 4.9.2.
+- `docs/superpowers/specs/2026-08-06-tool-arg-prefix-guard-design.md` §2.1, §4, §5 and §6 carry
+  resolution notes; §6's "`schema_lookup`'s behaviour — unchanged in every respect" is marked
+  superseded.
+- **No instance behaviour changed for #121's switches.** `REQUIRE_RETRIEVAL_TO_RELEASE` and
+  `MAX_EVIDENCE_RETURNS` remain dormant; this release only repairs the argument path the round
+  will run over.
+
+---
+
 ## 2026.08.0701 — 2026-08-07
 
 ### Added — an instrument, not a behaviour change
