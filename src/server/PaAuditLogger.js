@@ -193,7 +193,16 @@ PaAuditLogger.prototype = {
                 // fix-report path and runs again per depth-gate check; a
                 // second query for one column would double its cost for
                 // nothing.
+                //
+                // action_type must be checked here too, not left to the
+                // `_write` invariant that only ever sets `retrieval` on a
+                // `result` row (#121 review finding 2). That invariant lives
+                // in a DIFFERENT method from this read, and the docblock
+                // above promises "a `result` row at `retrieval = 'ok'`" — a
+                // promise this check now enforces directly rather than
+                // trusting the writer never to change.
                 if (
+                    this._norm(gr.getValue('action_type')) === 'result' &&
                     this._norm(gr.getValue('retrieval')) === 'ok' &&
                     this._indexOfTool(retrieving, name) === -1
                 ) {

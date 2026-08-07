@@ -3108,9 +3108,13 @@ describe('depth gate (#121) — retrieval-aware release', () => {
     // -----------------------------------------------------------------------
 
     test('SHIPS DORMANT: at the shipped default a barren call still releases the gate', () => {
-        // Constructed with NO option at all. This is the assertion that makes
-        // the change safe to merge without a measured round: today's
-        // behaviour, unchanged.
+        // `opts.requireRetrievalToRelease` is not set here, so gateLoop passes
+        // `requireRetrievalToRelease: undefined` through to `load()` — the key
+        // is present with value `undefined`, not absent. `initialize`'s
+        // `=== true` check leaves the flag at its default either way, which is
+        // the case under test: today's behaviour, unchanged, and safe to merge
+        // without a measured round. `undefined` itself is covered separately
+        // by a `test.each` below.
         const loop = gateLoop(
             { available: true, tools: ['schema_lookup'], retrievingTools: [] },
             { gaps: [GAP4] }

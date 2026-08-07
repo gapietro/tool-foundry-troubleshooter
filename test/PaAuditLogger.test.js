@@ -730,6 +730,29 @@ describe('invokedTools', () => {
 
         expect(logger.invokedTools(RUN).retrievingTools).toEqual(['genai_log'])
     })
+
+    test('a retrieval=ok column value on an intent or error row does NOT contribute to retrievingTools (#121 review finding 2)', () => {
+        // `_write` only ever sets `retrieval` on a `result` row today, but
+        // that invariant lives in a different method from this read. The
+        // docblock promises "a `result` row at `retrieval = 'ok'`" — this
+        // proves the read now enforces that itself, by checking action_type
+        // directly, rather than trusting the writer never to change.
+        const { logger } = load({
+            world: {
+                rows: {
+                    [AUDIT_TABLE]: [
+                        { sys_id: 'a1', run: RUN, tool_name: 'genai_log', action_type: 'intent', retrieval: 'ok' },
+                        { sys_id: 'a2', run: RUN, tool_name: 'schema_lookup', action_type: 'error', retrieval: 'ok' },
+                    ],
+                },
+            },
+        })
+
+        const res = logger.invokedTools(RUN)
+
+        expect(res.tools.sort()).toEqual(['genai_log', 'schema_lookup'])
+        expect(res.retrievingTools).toEqual([])
+    })
 })
 
 // =========================================================================

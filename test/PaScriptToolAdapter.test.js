@@ -570,3 +570,77 @@ describe('retrieval verdict (#121)', () => {
         expect(kit.seen).toHaveLength(0)
     })
 })
+
+// ---------------------------------------------------------------------------
+// retrieval verdict (#121 review finding 1) — THE END-TO-END LINK
+//
+// Every test above this point injects a `fakeKit` that returns a canned
+// verdict and ignores its input — those tests prove invoke() PLUMBS a verdict
+// through to logResult, nothing about whether a REAL PaToolReadKit reading a
+// REAL tool-core-shaped result produces the verdict this file assumes.
+// test/PaToolReadKit.test.js proves the predicate in isolation, but nothing
+// before this fed a core-shaped result through a real kit via a real
+// invoke() call. A shape mismatch between what the cores actually emit and
+// what the predicate reads would slip through both suites unnoticed. These
+// two tests are that missing link, built the same way
+// test/PaToolReadKit.test.js builds its kit, and using genuinely core-shaped
+// results already used elsewhere on this branch (DECISION.md §T4 row 07 /
+// §U9.1 v10-2).
+// ---------------------------------------------------------------------------
+
+describe('retrieval verdict (#121 review finding 1) — real PaToolReadKit through a real invoke', () => {
+    function realKit() {
+        return new (loadScriptInclude('PaToolReadKit.js', { JSON: JSON })).PaToolReadKit()
+    }
+
+    test("'none': a real kit reading a real schema_lookup-shaped barren result", () => {
+        const audit = fakeAudit()
+        const adapter = load({
+            tools: {
+                schema_lookup: () => ({
+                    execute: () => ({
+                        success: true,
+                        data: {
+                            table_exists: false,
+                            finding: 'table_does_not_exist',
+                            reads: { sys_db_object: 'empty' },
+                        },
+                    }),
+                }),
+            },
+            auditLogger: audit,
+            readKit: realKit(),
+        })
+
+        const out = invokeJson(adapter, 'schema_lookup', '{}', { execution: 'e1' })
+
+        expect(out.success).toBe(true)
+        const resultRow = audit.calls.filter((c) => c[0] === 'result')[0][1]
+        expect(resultRow.retrieval).toBe('none')
+    })
+
+    test("'ok': a real kit reading a real genai_log-shaped result that fetched rows", () => {
+        const audit = fakeAudit()
+        const adapter = load({
+            tools: {
+                genai_log: () => ({
+                    execute: () => ({
+                        success: true,
+                        data: {
+                            llm_call_rows: 3,
+                            reads: { sys_generative_ai_log: 'ok' },
+                        },
+                    }),
+                }),
+            },
+            auditLogger: audit,
+            readKit: realKit(),
+        })
+
+        const out = invokeJson(adapter, 'genai_log', '{}', { execution: 'e1' })
+
+        expect(out.success).toBe(true)
+        const resultRow = audit.calls.filter((c) => c[0] === 'result')[0][1]
+        expect(resultRow.retrieval).toBe('ok')
+    })
+})

@@ -3184,11 +3184,19 @@ Verified against the two calls §U9.1 turns on: v10-2's `genai_log` (`llm_call_r
 `ok`; r2-2's (`entries: []`, `llm_call_rows: 0`, after a `<param>:<value>` malformation) scores
 `none`. §T4 row 07's `schema_lookup` (`table_exists: false`) scores `none`.
 
-**One accepted false negative, recorded so a future reader does not discover it as a surprise.**
+**Two accepted false negatives, recorded so a future reader does not discover them as a surprise.**
 `query_table`'s `rows_exist_but_are_not_visible` finding — a `GlideAggregate` count above zero
 against a `GlideRecordSecure` read of zero — establishes a real ACL fact while leaving `reads` at
 `'empty'`, and scores `none`. **The instrument under-counts retrieval.** That is the safe direction
 for a numerator that has twice flattered the change it measures.
+
+**The second is `'DENIED'`, and it is arguably the more consequential of the two.** By this
+project's R-26, a denial is a permission gap, NOT an absence, and must not be reported as one — the
+tool *did* establish something, and `reads` at `'DENIED'` still scores `none` here, the same as a
+genuine absence. Under `REQUIRE_RETRIEVAL_TO_RELEASE`, a sweep whose only finding was a denial would
+be held, retry, be denied again, and burn both holds toward `MAX_HOLDS` — a capped round that would
+read as a null result rather than as the permission gap it actually found. This must be settled
+before a round enables the rule; it cannot bite the current merge because the flag ships off (§V5).
 
 ### V4. The number to beat is 1 of 4
 
@@ -3200,13 +3208,13 @@ all eight seed-01 runs across both rounds, four fired a return, two made a tool 
 has no default for exactly this reason. The 1-of-4 was hand-derived from two payloads and stays
 labelled as a hand derivation; nothing in this change makes it a queried figure retroactively.
 
-**A second honest limit, in the same spirit as §V3's accepted false negative.**
-`PaAuditLogger.invokedTools`'s `retrievingTools` is derived from the `retrieval` column alone — it
-does not check `action_type`. That is correct today only because `_write` is the sole writer of
-the column and only ever sets it on a `result` row (`if (actionType === 'result' && p.retrieval) …`
-in `_write`, checked in a different method from the one `invokedTools` reads it back in); a future
-second writer that sets `retrieval` on an `intent` or `error` row would silently corrupt
-`retrievingTools` without either method's own logic objecting.
+**`PaAuditLogger.invokedTools`'s `retrievingTools` now checks both columns, not one.** An earlier
+draft of this section noted that the read side trusted `_write`'s invariant (that `retrieval` is
+only ever set on a `result` row) without checking `action_type` itself — two methods relying on an
+invariant enforced in neither. Final review (#121 review finding 2) closed that gap directly:
+`invokedTools` now requires `action_type='result'` in the same pass it already reads `retrieval`,
+so the docblock's claim — "a `result` row at `retrieval = 'ok'`" — is enforced by the read, not
+merely true by construction of the one writer that exists today.
 
 ### V5. The gate change ships DORMANT
 
@@ -3229,6 +3237,14 @@ means either changing `REQUIRE_RETRIEVAL_TO_RELEASE`'s default in `PaAgentLoop.j
 — exactly the same edit-rebuild-reinstall path `MAX_EVIDENCE_RETURNS` already requires, and for the
 same reason: neither constant has a wiring seam. A reader planning the round must not discover this
 gap at the instance.
+
+**A round must also confirm the `retrieval` column itself is installed before flipping the flag.**
+Building and installing (above) covers the flag and the loop code, but not the Task 2 table change
+that gives `retrieval` somewhere to land. If `REQUIRE_RETRIEVAL_TO_RELEASE` is turned on against an
+instance where that column has not been deployed, `gr.setValue('retrieval', …)` on the absent field
+is a silent no-op (this project's R-6 shape), `retrievingTools` is `[]` for every run regardless of
+what was actually retrieved, and every run holds to `MAX_HOLDS` and reports `capped: true` — a
+result that would misread as evidence about the rule itself rather than as a deploy-order mistake.
 
 ### V6. What is deferred, and what must be true before it runs
 

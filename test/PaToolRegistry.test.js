@@ -153,6 +153,40 @@ describe('PaToolRegistry — roster equals the adapter roster', () => {
             'schema_lookup',
         ])
     })
+
+    // -----------------------------------------------------------------------
+    // _retrievalVerdict body parity (#121 review finding 3)
+    // -----------------------------------------------------------------------
+    //
+    // The roster-name check above is the ONLY thing that was ever cited as
+    // evidence the registry and the adapter stay parallel, but
+    // `_retrievalVerdict` is hand-duplicated verbatim in both files — a
+    // DELIBERATE decision (the two components are structurally parallel and
+    // neither imports the other; do NOT "fix" this by deleting one copy or
+    // having one call the other) — and nothing was keeping the two bodies in
+    // sync. This extracts each helper's body as text and compares it
+    // directly, so a drift between them is caught here instead of being
+    // discovered later as a behavioural difference between the two harnesses.
+    it('PaToolRegistry._retrievalVerdict and PaScriptToolAdapter._retrievalVerdict stay byte-for-byte identical', () => {
+        const registrySrc = fs.readFileSync(REGISTRY_PATH, 'utf8')
+        const adapterSrc = fs.readFileSync(ADAPTER_PATH, 'utf8')
+
+        // Method body: from the `_retrievalVerdict: function (result) {`
+        // header down to the matching `    },` that closes it at the same
+        // 4-space (prototype-member) indentation.
+        const bodyRe = /_retrievalVerdict: function \(result\) \{[\s\S]*?\n {4}\},/
+
+        const registryMatch = registrySrc.match(bodyRe)
+        const adapterMatch = adapterSrc.match(bodyRe)
+
+        expect(registryMatch).not.toBeNull()
+        expect(adapterMatch).not.toBeNull()
+
+        // If this fails, the fix is to bring the DRIFTED copy back in line
+        // with its sibling — the duplication itself is intentional and is
+        // not the thing to remove.
+        expect(registryMatch[0]).toBe(adapterMatch[0])
+    })
 })
 
 // ---------------------------------------------------------------------------
@@ -783,5 +817,83 @@ describe('retrieval verdict (#121)', () => {
 
         expect(audit.calls.filter((c) => c[0] === 'logResult')).toHaveLength(0)
         expect(audit.calls.filter((c) => c[0] === 'logError')).toHaveLength(1)
+    })
+})
+
+// ---------------------------------------------------------------------------
+// retrieval verdict (#121 review finding 1) — THE END-TO-END LINK
+//
+// Every test above this point injects a `fakeKit` that returns a canned
+// verdict and ignores its input — those tests prove dispatch() PLUMBS a
+// verdict through to logResult, nothing about whether a REAL PaToolReadKit
+// reading a REAL tool-core-shaped result produces the verdict this file
+// assumes. test/PaToolReadKit.test.js proves the predicate in isolation, but
+// nothing before this fed a core-shaped result through a real kit via a real
+// dispatch() call. A shape mismatch between what the cores actually emit and
+// what the predicate reads would slip through both suites unnoticed. These
+// two tests are that missing link, built the same way
+// test/PaToolReadKit.test.js builds its kit, and using genuinely core-shaped
+// results already used elsewhere on this branch (DECISION.md §T4 row 07 /
+// §U9.1 v10-2).
+// ---------------------------------------------------------------------------
+
+describe('retrieval verdict (#121 review finding 1) — real PaToolReadKit through a real dispatch', () => {
+    function realKit() {
+        return new (loadScriptInclude('PaToolReadKit.js', { JSON: JSON })).PaToolReadKit()
+    }
+
+    test("'none': a real kit reading a real schema_lookup-shaped barren result", () => {
+        const audit = fakeAudit()
+        const registry = load({
+            cores: {
+                schema_lookup: fakeEntry({
+                    factory: () => ({
+                        execute: () => ({
+                            success: true,
+                            data: {
+                                table_exists: false,
+                                finding: 'table_does_not_exist',
+                                reads: { sys_db_object: 'empty' },
+                            },
+                        }),
+                    }),
+                }),
+            },
+            auditLogger: audit,
+            readKit: realKit(),
+        })
+
+        const out = registry.dispatch('schema_lookup', {}, { run_id: 'run1' })
+
+        expect(out.success).toBe(true)
+        const resultRow = audit.calls.filter((c) => c[0] === 'result')[0][1]
+        expect(resultRow.retrieval).toBe('none')
+    })
+
+    test("'ok': a real kit reading a real genai_log-shaped result that fetched rows", () => {
+        const audit = fakeAudit()
+        const registry = load({
+            cores: {
+                genai_log: fakeEntry({
+                    factory: () => ({
+                        execute: () => ({
+                            success: true,
+                            data: {
+                                llm_call_rows: 3,
+                                reads: { sys_generative_ai_log: 'ok' },
+                            },
+                        }),
+                    }),
+                }),
+            },
+            auditLogger: audit,
+            readKit: realKit(),
+        })
+
+        const out = registry.dispatch('genai_log', {}, { run_id: 'run1' })
+
+        expect(out.success).toBe(true)
+        const resultRow = audit.calls.filter((c) => c[0] === 'result')[0][1]
+        expect(resultRow.retrieval).toBe('ok')
     })
 })
