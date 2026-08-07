@@ -17,6 +17,29 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0602 — 2026-08-06
+
+### Fixed — but SHIPPED WITH NO RUNTIME EVIDENCE, read this first
+
+- **The `<param>:<value>` argument-prefix guard now reaches all seven diagnostic tools, not just
+  `schema_lookup`.** `splitParamPrefix` recognises an argument arriving as its own parameter name
+  prefixed onto the value (e.g. `execution:45bbfd112ba6cf54f243fed2ce91bfcb`) and strips it before
+  the tool core reads the argument. `genai_log`, `log_analysis`, `query_table`, `agent_config`,
+  `agent_trace`, and `read_artifact` were added this round; `schema_lookup` already had the guard
+  and is **untouched** by this branch. The six corresponding tool descriptions — what the LLM reads
+  before calling each tool — gained the same anti-prefix sentence `schema_lookup`'s already carried,
+  so the contract and the runtime behaviour now agree across every tool.
+
+- **Stated plainly: this ships with no runtime evidence.** The agreed done-bar for this branch was
+  unit tests plus a clean `now-sdk build` and `now-sdk install` — not a live probe or a benchmark
+  round. `#121`'s sized evidence-return round is where this fix gets its first live exercise; until
+  then, treat "the guard reaches every tool" as tested-in-isolation, not observed-in-production.
+
+- **`#41` (migrating `agent_trace` and `read_artifact` onto `PaToolReadKit`) is still open** — this
+  branch added the prefix guard to both tools' existing cores without touching that migration.
+
+---
+
 ## 2026.08.0601 — 2026-08-06
 
 ### Added — but SHIPPED DORMANT, read this first
