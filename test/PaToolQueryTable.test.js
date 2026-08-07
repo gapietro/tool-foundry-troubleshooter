@@ -254,17 +254,46 @@ describe('argument prefix guard (#122)', () => {
         expect(result.data.requested.table).toBe('incident')
     })
 
-    it('does not mistake an encoded query for a prefix', () => {
-        // Both `=` and `:` appear inside this value and neither is a prefix.
-        const encoded = 'sys_created_on>=javascript:gs.beginningOfToday()'
-        const { result } = run({ table: 'incident', query: encoded }, world({ incident: [] }))
+    it('routes query:<encoded query> to the QUERY slot, where fall-through would say table', () => {
+        // The discriminating case. Every other bare-string test in this block
+        // names `table`, which is also what strip-and-fall-through would
+        // produce — so none of them can tell the two designs apart. This one
+        // can: fall-through yields {table: "active=true"}, a table name that
+        // does not exist, and the named slot yields the query the model meant.
+        const { result } = run('query:active=true', world({ incident: [] }))
 
-        expect(result.data.requested.query).toBe(encoded)
+        expect(result.data.requested.query).toBe('active=true')
+        expect(result.data.requested.table).toBeFalsy()
+        expect(result.data.notes.join(' ')).toContain('the "query" parameter')
     })
 
-    it('says so loudly', () => {
+    it('does not mistake an encoded query for a prefix — the anchoring guard', () => {
+        // Passed as a BARE STRING, which is the only way this reaches
+        // splitParamPrefix at all. The previous version of this test passed an
+        // object literal, so it never exercised the guard it was named for.
+        //
+        // First string: `=` and `:` both appear and neither is a prefix,
+        // because the segment before the first separator is `sys_created_on>`.
+        // Second string: a parameter name (`limit`) appears MID-VALUE followed
+        // by a colon — the shape an unanchored matcher would misroute into
+        // {limit: "exceeded"}. Anchoring is what makes it safe.
+        const encoded = 'sys_created_on>=javascript:gs.beginningOfToday()'
+        const midValue = 'short_descriptionLIKErate limit: exceeded'
+
+        const a = run(encoded, world({ incident: [] })).result
+        const b = run(midValue, world({ incident: [] })).result
+
+        expect(a.data.requested.table).toBe(encoded)
+        expect(a.data.notes.join(' ')).not.toContain('prefixed onto its own value')
+        expect(b.data.requested.table).toBe(midValue)
+        expect(b.data.requested.limit).toBeFalsy()
+        expect(b.data.notes.join(' ')).not.toContain('prefixed onto its own value')
+    })
+
+    it('says so loudly, naming the slot the value was read into', () => {
         const { result } = run('table:incident', world({ incident: [] }))
 
         expect(result.data.notes.join(' ')).toContain('table:incident')
+        expect(result.data.notes.join(' ')).toContain('the "table" parameter')
     })
 })

@@ -89,6 +89,27 @@ describe('argument prefix guard (#122)', () => {
         expect(calls[0][0]).toBe(ART)
     })
 
+    it('routes offset:<n> to the OFFSET slot, where fall-through would say artifact_id', () => {
+        // The discriminating case. The other tests here name `artifact_id`,
+        // which is also the bare-string default — strip-and-fall-through would
+        // produce identical output and they could not tell the two designs
+        // apart. Fall-through here yields the artifact id "100"; the named
+        // slot yields an offset, which is what the model asked for.
+        const calls = []
+        const store = {
+            read: function (id, offset, length) {
+                calls.push([id, offset, length])
+                return { success: true, content: 'page', total_length: 4 }
+            },
+        }
+
+        const result = load(store).execute('offset:100')
+
+        expect(calls[0][0]).toBe('')
+        expect(calls[0][1]).toBe(100)
+        expect(result.notes.join(' ')).toContain('the "offset" parameter')
+    })
+
     it('says so loudly on the returned object, which is the only channel it has', () => {
         const store = {
             read: function () {
@@ -99,6 +120,7 @@ describe('argument prefix guard (#122)', () => {
         const result = load(store).execute(`artifact_id:${ART}`)
 
         expect(result.notes.join(' ')).toContain(`artifact_id:${ART}`)
+        expect(result.notes.join(' ')).toContain('the "artifact_id" parameter')
     })
 
     it('leaves a bare artifact sys_id alone and adds no note', () => {

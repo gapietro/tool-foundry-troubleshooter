@@ -264,10 +264,24 @@ describe('argument prefix guard (#122)', () => {
         expect(result.data.requested.message).toBeFalsy()
     })
 
-    it('says so loudly', () => {
+    it('says so loudly, naming the slot the value was read into', () => {
         const { result } = run(PREFIXED, world())
 
         expect(result.data.notes.join(' ')).toContain(PREFIXED)
+        expect(result.data.notes.join(' ')).toContain('the "execution" parameter')
+    })
+
+    it('names the slot on the one shape that is plausibly a FALSE POSITIVE', () => {
+        // This is the case the note exists for. A model searching for the
+        // literal text "level: DEBUG" in a message gets rerouted from
+        // `message` to `level` — a defensible reading, but not the one it
+        // asked for. Without the slot named, the transcript gives a reader no
+        // way to see that the search it thought it ran was never run.
+        const { result } = run('level: DEBUG', world())
+
+        expect(result.data.requested.level).toBe('DEBUG')
+        expect(result.data.requested.message).toBeFalsy()
+        expect(result.data.notes.join(' ')).toContain('the "level" parameter')
     })
 
     it('leaves an unprefixed message alone', () => {

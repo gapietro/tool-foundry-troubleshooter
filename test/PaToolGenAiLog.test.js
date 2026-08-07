@@ -1076,12 +1076,57 @@ describe('reference statistics are labelled (issue #85)', () => {
 describe('argument prefix guard (#122)', () => {
     const PLAN_ID = '45bbfd112ba6cf54f243fed2ce91bfcb'
 
+    /**
+     * The plan r2-2 was actually asking about, with an LLM call hanging off
+     * it. Spec §1.1's claim is that the guard is "fully repairing here, not
+     * merely diagnostic" — and the correctly-formed call in v10-2 came back
+     * with llm_call_rows: 3. An empty world can only ever show that the
+     * argument was ROUTED; it cannot show that the routed call RETRIEVES,
+     * which is the whole claim (and #121's numerator: a gathering call counts
+     * only when it returns something).
+     */
+    function seededWorld() {
+        return world({
+            sn_aia_execution_plan: [
+                { sys_id: PLAN_ID, gen_ai_usage_log: 'usage1', state: 'COMPLETE' },
+            ],
+            sn_aia_execution_task: [{ sys_id: 'task1', execution_plan: PLAN_ID }],
+            sn_aia_gen_ai_m2m: [
+                {
+                    sys_id: 'm1',
+                    source_id: 'task1',
+                    source_table: 'sn_aia_execution_task',
+                    gen_ai_log_metadata: 'md1',
+                },
+            ],
+            sys_gen_ai_log_metadata: [{ sys_id: 'md1', model_name: 'now-llm', status: 'success' }],
+            sys_gen_ai_usage_log: [{ sys_id: 'usage1', assists: '3', status: 'success' }],
+        })
+    }
+
     it('reads execution:<sys_id> as the execution, not as a mode', () => {
         const { result } = run(`execution:${PLAN_ID}`, world())
 
         expect(result.success).toBe(true)
         expect(result.data.mode).toBe('for_execution')
         expect(result.data.requested.execution).toBe(PLAN_ID)
+    })
+
+    it('and the repaired call READS that execution — evidence, not just routing', () => {
+        // The measured malformation returned entries: [] with
+        // llm_call_rows: 0 on a call every measure counted as made. Asserting
+        // the mode resolves is not the claim; asserting the repaired call
+        // comes back carrying the run's LLM calls is.
+        const { result, queries } = run(`execution:${PLAN_ID}`, seededWorld())
+
+        expect(result.data.llm_calls).toHaveLength(1)
+        expect(result.data.llm_calls[0].model_name).toBe('now-llm')
+        expect(result.data.llm_calls[0].source_id).toBe('task1')
+        expect(result.data.usage_log.assists).toBe('3')
+        expect(result.data.plan.sys_id).toBe(PLAN_ID)
+        // And the read was scoped to the right plan, not to some other run.
+        expect(result.data.source_ids_joined).toEqual([PLAN_ID, 'task1'])
+        expect(JSON.stringify(queries)).toContain(PLAN_ID)
     })
 
     it('routes a prefixed value to the NAMED slot, not to the bare-string default', () => {
@@ -1104,6 +1149,11 @@ describe('argument prefix guard (#122)', () => {
 
         expect(note).toContain(`execution:${PLAN_ID}`)
         expect(note).toContain('audit trail')
+        // Spec §3.3 wants the SLOT named, not just the raw string. Saying
+        // "it was read as the value alone" describes strip-and-fall-through,
+        // the design §3.2 rejected — and it leaves a reader of a false
+        // positive with no way to see where the value actually went.
+        expect(note).toContain('the "execution" parameter')
     })
 
     it('leaves a bare mode name and a bare sys_id alone', () => {

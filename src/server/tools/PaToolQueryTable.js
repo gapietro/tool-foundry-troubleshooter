@@ -90,13 +90,21 @@ PaToolQueryTable.prototype = {
                 // model is malforming arguments — which is how it went
                 // unnoticed for a whole smoke: every measure counted which
                 // tools were invoked, and this one was.
+                //
+                // The SLOT is named, not just the raw string. The repair
+                // ROUTES the value to the parameter the model named rather
+                // than stripping the prefix and falling through (design
+                // §3.2), so on a false positive the value lands in a slot the
+                // caller did not ask for — naming it is the only way a reader
+                // of the transcript can see that happened.
                 data.notes.push(
                     'The argument arrived as "' +
                         a._prefix_stripped +
-                        '" — the parameter name prefixed onto its own value. It was read as ' +
-                        'the value alone. Send the value on its own, or a JSON object, and note ' +
-                        'that this call is recorded in the audit trail as it was sent, not as it ' +
-                        'was repaired.'
+                        '" — the parameter name prefixed onto its own value. It was read as the "' +
+                        a._prefix_param +
+                        '" parameter. Send the value on its own, or a JSON object, and note that ' +
+                        'this call is recorded in the audit trail as it was sent, not as it was ' +
+                        'repaired.'
                 )
             }
 
@@ -215,6 +223,7 @@ PaToolQueryTable.prototype = {
         var k = this._k()
         var raw = args
         var prefixStripped = ''
+        var prefixParam = ''
 
         if (raw === null || raw === undefined) return {}
 
@@ -233,6 +242,7 @@ PaToolQueryTable.prototype = {
                     raw = {}
                     raw[split.param] = split.value
                     prefixStripped = split.raw
+                    prefixParam = split.param
                 } else {
                     return { table: s }
                 }
@@ -254,7 +264,10 @@ PaToolQueryTable.prototype = {
         var limit = k.num(raw.limit)
         if (limit > 0) out.limit = limit
 
-        if (prefixStripped) out._prefix_stripped = prefixStripped
+        if (prefixStripped) {
+            out._prefix_stripped = prefixStripped
+            out._prefix_param = prefixParam
+        }
 
         return out
     },

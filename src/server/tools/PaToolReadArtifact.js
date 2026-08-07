@@ -42,14 +42,17 @@ PaToolReadArtifact.prototype = {
 
         if (a._prefix_stripped && result !== null && typeof result === 'object') {
             // LOUDLY (issues #111, #122), on the returned object — this tool
-            // has no data envelope to carry notes in.
+            // has no data envelope to carry notes in. The SLOT is named
+            // because the repair ROUTES to the named parameter rather than
+            // stripping and falling through (design §3.2).
             result.notes = (result.notes || []).concat([
                 'The argument arrived as "' +
                     a._prefix_stripped +
-                    '" — the parameter name prefixed onto its own value. It was read as ' +
-                    'the value alone. Send the artifact sys_id on its own, or a JSON object, ' +
-                    'and note that this call is recorded in the audit trail as it was sent, ' +
-                    'not as it was repaired.',
+                    '" — the parameter name prefixed onto its own value. It was read as the "' +
+                    a._prefix_param +
+                    '" parameter. Send the artifact sys_id on its own, or a JSON object, and ' +
+                    'note that this call is recorded in the audit trail as it was sent, not as ' +
+                    'it was repaired.',
             ])
         }
 
@@ -68,6 +71,7 @@ PaToolReadArtifact.prototype = {
     _normalizeArgs: function (args) {
         var raw = args
         var prefixStripped = ''
+        var prefixParam = ''
         if (raw === null || raw === undefined) return { artifact_id: '' }
 
         if (typeof raw === 'string') {
@@ -83,6 +87,7 @@ PaToolReadArtifact.prototype = {
                     raw = {}
                     raw[split.param] = split.value
                     prefixStripped = split.raw
+                    prefixParam = split.param
                 } else {
                     return { artifact_id: s }
                 }
@@ -96,7 +101,10 @@ PaToolReadArtifact.prototype = {
             offset: this._num(raw.offset),
             length: this._num(raw.length),
         }
-        if (prefixStripped) out._prefix_stripped = prefixStripped
+        if (prefixStripped) {
+            out._prefix_stripped = prefixStripped
+            out._prefix_param = prefixParam
+        }
         return out
     },
 

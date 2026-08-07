@@ -915,10 +915,11 @@ describe('argument prefix guard (#122)', () => {
         expect(result.data.resolution.requested.agent).toBeFalsy()
     })
 
-    it('says so loudly', () => {
+    it('says so loudly, naming the slot the value was read into', () => {
         const { result } = run(`execution:${PLAN_ID}`, world())
 
         expect(result.data.notes.join(' ')).toContain(`execution:${PLAN_ID}`)
+        expect(result.data.notes.join(' ')).toContain('the "execution" parameter')
     })
 
     it('leaves a bare agent name and a bare sys_id alone', () => {

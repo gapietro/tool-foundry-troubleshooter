@@ -1538,9 +1538,10 @@ describe('argument prefix guard (#122)', () => {
         expect(result.data.resolution.requested.agent).toBeFalsy()
     })
 
-    it('says so loudly', () => {
+    it('says so loudly, naming the slot the value was read into', () => {
         const { result } = run('agent:Foundry Troubleshooter', world())
 
         expect(result.data.notes.join(' ')).toContain('agent:Foundry Troubleshooter')
+        expect(result.data.notes.join(' ')).toContain('the "agent" parameter')
     })
 })
