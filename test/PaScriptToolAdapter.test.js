@@ -94,6 +94,7 @@ function load(opts) {
         runAnchor: o.runAnchor || fakeAnchor(o.run),
         auditLogger: o.auditLogger || fakeAudit(),
         artifactStore: o.artifactStore || fakeStore(),
+        readKit: o.readKit,
     })
     return adapter
 }
@@ -409,5 +410,95 @@ describe('PaScriptToolAdapter — pipeline', () => {
 
         expect(errorRow[1].toolName).toBe('agent_trace')
         expect(errorRow[1].runId).toBe('run1')
+    })
+})
+
+// ---------------------------------------------------------------------------
+// retrieval (#121) — same verdict, same ordering, native harness
+// ---------------------------------------------------------------------------
+
+describe('retrieval verdict (#121)', () => {
+    function fakeKit(verdict) {
+        const seen = []
+        return {
+            seen: seen,
+            retrievalVerdict: function (result) {
+                seen.push(result)
+                if (verdict instanceof Error) throw verdict
+                return verdict || 'unknown'
+            },
+        }
+    }
+
+    function auditSpy() {
+        const calls = []
+        return {
+            calls: calls,
+            logIntent: function (p) {
+                calls.push(['logIntent', p])
+            },
+            logResult: function (p) {
+                calls.push(['logResult', p])
+            },
+            logError: function (p) {
+                calls.push(['logError', p])
+            },
+        }
+    }
+
+    function resultCall(audit) {
+        return audit.calls.filter((c) => c[0] === 'logResult')[0][1]
+    }
+
+    test('the verdict reaches logResult', () => {
+        const audit = auditSpy()
+        const adapter = load({
+            tools: { agent_trace: () => ({ execute: () => ({ success: true, data: { reads: { x: 'ok' } } }) }) },
+            auditLogger: audit,
+            readKit: fakeKit('ok'),
+        })
+
+        adapter.invoke('agent_trace', '{}', { execution: 'e1' })
+
+        expect(resultCall(audit).retrieval).toBe('ok')
+    })
+
+    test('the verdict is taken on the core result, before thresholding AND before _attachRunState', () => {
+        const audit = auditSpy()
+        const kit = fakeKit('ok')
+        const core = { success: true, data: { reads: { sys_generative_ai_log: 'ok' } } }
+        const adapter = load({
+            tools: { genai_log: () => ({ execute: () => core }) },
+            auditLogger: audit,
+            readKit: kit,
+        })
+
+        adapter.invoke('genai_log', '{}', { execution: 'e1' })
+
+        expect(kit.seen[0]).toBe(core)
+        expect(resultCall(audit).retrieval).toBe('ok')
+    })
+
+    test('a throwing read kit degrades to unknown and the tool still answers', () => {
+        const audit = auditSpy()
+        const adapter = load({
+            tools: { agent_trace: () => ({ execute: () => ({ success: true, data: { reads: { x: 'ok' } } }) }) },
+            auditLogger: audit,
+            readKit: fakeKit(new Error('boom')),
+        })
+
+        const out = adapter.invoke('agent_trace', '{}', { execution: 'e1' })
+
+        expect(JSON.parse(out).success).toBe(true)
+        expect(resultCall(audit).retrieval).toBe('unknown')
+    })
+
+    test('an unknown tool short-circuits before any verdict is taken', () => {
+        const kit = fakeKit('ok')
+        const adapter = load({ tools: {}, readKit: kit })
+
+        adapter.invoke('not_a_tool', '{}', { execution: 'e1' })
+
+        expect(kit.seen).toHaveLength(0)
     })
 })
