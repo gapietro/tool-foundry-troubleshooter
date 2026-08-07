@@ -445,6 +445,17 @@ declare global {
                     },
                     {
                         table: 'sys_choice'
+                        id: '0d3cfeed467a4063a27e2564dd641795'
+                        key: {
+                            name: 'x_snc_troubleshoot_audit'
+                            element: 'retrieval'
+                            value: 'ok'
+                            language: 'en'
+                            dependent_value: 'NULL'
+                        }
+                    },
+                    {
+                        table: 'sys_choice'
                         id: '0fccd2ef201f48cc83f7c7f45e3e0d47'
                         key: {
                             name: 'x_snc_troubleshoot_run'
@@ -528,6 +539,14 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_dictionary'
+                        id: '2218759fb9e347c8b9ecfe7910b58c6e'
+                        key: {
+                            name: 'x_snc_troubleshoot_audit'
+                            element: 'retrieval'
+                        }
+                    },
+                    {
                         table: 'sys_security_acl_role'
                         id: '23796a4558eb4d2993c74f4739c5780b'
                         key: {
@@ -560,6 +579,17 @@ declare global {
                         key: {
                             name: 'x_snc_troubleshoot_run'
                             element: 'mode'
+                        }
+                    },
+                    {
+                        table: 'sys_choice'
+                        id: '2c3428e20b0941a29c3c1530edcc1389'
+                        key: {
+                            name: 'x_snc_troubleshoot_audit'
+                            element: 'retrieval'
+                            value: 'unknown'
+                            language: 'en'
+                            dependent_value: 'NULL'
                         }
                     },
                     {
@@ -723,6 +753,14 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_choice_set'
+                        id: '49a3b4ba5a7d436b8975ce20e006a589'
+                        key: {
+                            name: 'x_snc_troubleshoot_audit'
+                            element: 'retrieval'
+                        }
+                    },
+                    {
                         table: 'sys_choice'
                         id: '49d6897bf9634285b0b16b5ecc563fcb'
                         key: {
@@ -807,6 +845,17 @@ declare global {
                         key: {
                             name: 'x_snc_troubleshoot_audit'
                             element: 'confirmed_by_user'
+                        }
+                    },
+                    {
+                        table: 'sys_choice'
+                        id: '5c792099a8c444428fba1f44ef23a366'
+                        key: {
+                            name: 'x_snc_troubleshoot_audit'
+                            element: 'retrieval'
+                            value: 'none'
+                            language: 'en'
+                            dependent_value: 'NULL'
                         }
                     },
                     {
@@ -1445,6 +1494,15 @@ declare global {
                         key: {
                             name: 'x_snc_troubleshoot_audit'
                             element: 'user'
+                            language: 'en'
+                        }
+                    },
+                    {
+                        table: 'sys_documentation'
+                        id: 'f90954a6fb3d408d935cd0a2b9be6f1b'
+                        key: {
+                            name: 'x_snc_troubleshoot_audit'
+                            element: 'retrieval'
                             language: 'en'
                         }
                     },

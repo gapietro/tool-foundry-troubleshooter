@@ -603,3 +603,126 @@ describe('splitParamPrefix (#122)', () => {
         expect(kit().splitParamPrefix('45bbfd112ba6cf54f243fed2ce91bfcb', GENAI)).toBeNull()
     })
 })
+
+// ===========================================================================
+// retrievalVerdict (#121) — did this call RETRIEVE anything, or merely run?
+//
+// DECISION.md §T4 found the depth gate releasing on a `schema_lookup` that
+// answered `table_exists: false`, and §U9.1 found the evidence-return
+// numerator counting a `genai_log` call that returned `entries: []`. Both
+// counted a call by NAME. This is the predicate that makes them count a
+// retrieval instead, and it reads the `reads` map the kit already computes:
+// R-25 lets only a path that actually fetched rows write 'ok' there.
+// ===========================================================================
+
+describe('retrievalVerdict (#121)', () => {
+    // No Glide is needed — the method is pure. A bare kit is enough.
+    function kit() {
+        const ctx = loadScriptInclude('PaToolReadKit.js', { JSON: JSON })
+        return new ctx.PaToolReadKit()
+    }
+
+    test("'ok' when at least one table in `reads` came back with rows", () => {
+        expect(kit().retrievalVerdict({ success: true, data: { reads: { sys_user: 'ok' } } })).toBe('ok')
+    })
+
+    test("'ok' when one table among several read ok", () => {
+        const result = {
+            success: true,
+            data: { reads: { sys_db_object: 'empty', sys_dictionary: 'ok', syslog: 'DENIED' } },
+        }
+        expect(kit().retrievalVerdict(result)).toBe('ok')
+    })
+
+    test("'none' when every read came back empty, unknown or denied", () => {
+        const result = {
+            success: true,
+            data: { reads: { sys_db_object: 'empty', syslog: 'DENIED', sys_dictionary: 'unknown' } },
+        }
+        expect(kit().retrievalVerdict(result)).toBe('none')
+    })
+
+    test("'none' for an empty reads map — the tool ran and read nothing at all", () => {
+        expect(kit().retrievalVerdict({ success: true, data: { reads: {} } })).toBe('none')
+    })
+
+    test("'none' for a failure envelope — an error is a definite statement that nothing came back", () => {
+        expect(kit().retrievalVerdict({ success: false, error: 'denied' })).toBe('none')
+    })
+
+    test.each([undefined, null, '', 'a string', 42, []])(
+        "'unknown' for a non-object result (%p) — cannot tell, which is not the same as none",
+        (input) => {
+            expect(kit().retrievalVerdict(input)).toBe('unknown')
+        }
+    )
+
+    test("'unknown' when success is true but there is no data object", () => {
+        expect(kit().retrievalVerdict({ success: true })).toBe('unknown')
+    })
+
+    test("'unknown' when data carries no reads map — a core that does not use this kit", () => {
+        // PaToolReadArtifact's shape. It appears in no layer of
+        // _layerToolMap(), so this verdict is never load-bearing for the gate.
+        expect(kit().retrievalVerdict({ success: true, data: { content: 'abc', eof: true } })).toBe('unknown')
+    })
+
+    test("'unknown' when success is absent — the envelope is not one this predicate can read", () => {
+        expect(kit().retrievalVerdict({ data: { reads: { sys_user: 'ok' } } })).toBe('unknown')
+    })
+
+    test("'unknown' when reads is an array rather than a map", () => {
+        expect(kit().retrievalVerdict({ success: true, data: { reads: ['ok'] } })).toBe('unknown')
+    })
+
+    test('an inherited ok on the prototype chain does not count — own properties only', () => {
+        const reads = Object.create({ sys_user: 'ok' })
+        expect(kit().retrievalVerdict({ success: true, data: { reads: reads } })).toBe('none')
+    })
+
+    test('the result object is not mutated', () => {
+        const result = { success: true, data: { reads: { sys_user: 'ok' } } }
+        const before = JSON.stringify(result)
+        kit().retrievalVerdict(result)
+        expect(JSON.stringify(result)).toBe(before)
+    })
+
+    // -----------------------------------------------------------------------
+    // The three regression anchors from DECISION.md, verbatim in shape.
+    // -----------------------------------------------------------------------
+
+    test("§T4 row 07: schema_lookup answering table_exists:false is 'none'", () => {
+        const result = {
+            success: true,
+            data: {
+                table_exists: false,
+                finding: 'table_does_not_exist',
+                reads: { sys_db_object: 'empty' },
+            },
+        }
+        expect(kit().retrievalVerdict(result)).toBe('none')
+    })
+
+    test("§U9.1 r2-2: genai_log answering entries:[] with llm_call_rows:0 is 'none'", () => {
+        const result = {
+            success: true,
+            data: {
+                entries: [],
+                llm_call_rows: 0,
+                reads: { sys_generative_ai_log: 'empty' },
+            },
+        }
+        expect(kit().retrievalVerdict(result)).toBe('none')
+    })
+
+    test("§U9.1 v10-2: genai_log returning llm_call_rows:3 is 'ok'", () => {
+        const result = {
+            success: true,
+            data: {
+                llm_call_rows: 3,
+                reads: { sys_generative_ai_log: 'ok' },
+            },
+        }
+        expect(kit().retrievalVerdict(result)).toBe('ok')
+    })
+})

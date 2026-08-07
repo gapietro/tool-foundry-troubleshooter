@@ -83,6 +83,9 @@ PaAuditLogger.prototype = {
     MAX_TABLE_NAME_CHARS: 80,
     MAX_RECORD_ID_CHARS: 32,
 
+    /** The only values `retrieval` may take (#121). See `_retrievalValue`. */
+    RETRIEVAL_VALUES: ['ok', 'none', 'unknown'],
+
     /**
      * @param {Object} [options] {auditTable, maxPayloadChars} — for tests and
      *        for callers with a different budget.
@@ -151,9 +154,21 @@ PaAuditLogger.prototype = {
      * Build Rule #42: plain GlideRecord — the table has no ACLs, so
      * GlideRecordSecure would deny this app read access to its own trail.
      *
+     * `retrievingTools` (#121) is the subset of `tools` with at least one
+     * `result` row at `retrieval = 'ok'` — the tools that actually fetched
+     * rows, as opposed to the tools that merely ran. A BLANK column is never
+     * `ok`: rows written before #121 carry no verdict and must not read back
+     * as one in either direction.
+     *
+     * `tools` is unchanged and stays the answer to "was this tool ever
+     * invoked in this run", which is the question fabrication fails (#79). A
+     * citation to a tool that ran and returned nothing is a WEAK citation, not
+     * a fabricated one, and `_auditContext` must keep convicting on the right
+     * charge.
+     *
      * @param {*} runId sys_id of the run row; may be absent or non-string (R-9)
-     * @returns {Object} {available:true, tools:[String]}
-     *                 | {available:false, degraded:String, tools:[]}
+     * @returns {Object} {available:true, tools:[String], retrievingTools:[String]}
+     *                 | {available:false, degraded:String, tools:[], retrievingTools:[]}
      */
     invokedTools: function (runId) {
         try {
@@ -168,13 +183,35 @@ PaAuditLogger.prototype = {
             gr.query()
 
             var tools = []
+            var retrieving = []
             while (gr.next()) {
                 var name = this._normToolName(gr.getValue('tool_name'))
-                if (name && this._indexOfTool(tools, name) === -1) tools.push(name)
+                if (!name) continue
+                if (this._indexOfTool(tools, name) === -1) tools.push(name)
+
+                // #121: the SAME pass, deliberately. This method is on the
+                // fix-report path and runs again per depth-gate check; a
+                // second query for one column would double its cost for
+                // nothing.
+                //
+                // action_type must be checked here too, not left to the
+                // `_write` invariant that only ever sets `retrieval` on a
+                // `result` row (#121 review finding 2). That invariant lives
+                // in a DIFFERENT method from this read, and the docblock
+                // above promises "a `result` row at `retrieval = 'ok'`" — a
+                // promise this check now enforces directly rather than
+                // trusting the writer never to change.
+                if (
+                    this._norm(gr.getValue('action_type')) === 'result' &&
+                    this._norm(gr.getValue('retrieval')) === 'ok' &&
+                    this._indexOfTool(retrieving, name) === -1
+                ) {
+                    retrieving.push(name)
+                }
             }
 
             if (tools.length === 0) return this._noTools('no_audit_rows')
-            return { available: true, tools: tools }
+            return { available: true, tools: tools, retrievingTools: retrieving }
         } catch (e) {
             // R-1: `e` is deliberately not inspected.
             return this._noTools('query_failed')
@@ -182,7 +219,7 @@ PaAuditLogger.prototype = {
     },
 
     _noTools: function (reason) {
-        return { available: false, degraded: reason, tools: [] }
+        return { available: false, degraded: reason, tools: [], retrievingTools: [] }
     },
 
     /**
@@ -345,6 +382,12 @@ PaAuditLogger.prototype = {
             if (actionType === 'intent') gr.setValue('input', text)
             else gr.setValue('output', text)
 
+            // #121: RESULT rows only. An intent row has no result to classify,
+            // and an error row already carries its failure in `output` — a
+            // redundant `none` there would invite a reader to count error rows
+            // into a denominator built from result rows.
+            if (actionType === 'result' && p.retrieval) gr.setValue('retrieval', p.retrieval)
+
             var sysId = gr.insert()
             if (!sysId) return { logged: false, audit_id: null, degraded: 'insert_failed' }
 
@@ -406,6 +449,11 @@ PaAuditLogger.prototype = {
                 this._norm(raw.targetRecord || raw.target_record),
                 this.MAX_RECORD_ID_CHARS
             ),
+            // #121. Unlike `user` and `confirmed_by_user` above, this IS
+            // caller-settable: it is derived by our own dispatch code from the
+            // tool core's result, not asserted by the LLM-derived payload. It
+            // is whitelisted all the same — see `_retrievalValue`.
+            retrieval: this._retrievalValue(raw.retrieval),
         }
     },
 
@@ -485,6 +533,27 @@ PaAuditLogger.prototype = {
 
     _trim: function (value, max) {
         return value.length > max ? value.substring(0, max) : value
+    },
+
+    /**
+     * One of RETRIEVAL_VALUES, or blank (#121).
+     *
+     * A ChoiceColumn accepts an unlisted value silently, so an unrecognised
+     * verdict would sit in the audit trail looking like a fact. R-6 in its
+     * purest form: blank is honest, junk is not.
+     *
+     * Deliberately does NOT route through `_norm` (which coerces via
+     * `String(value)`): `String(['ok'])` is the JS string `'ok'`, not
+     * `'ok'`'s absence — a single-element array would silently pass the
+     * whitelist below and land in the audit column as if it were a real
+     * verdict. Requiring `typeof value === 'string'` up front closes that.
+     */
+    _retrievalValue: function (value) {
+        if (typeof value !== 'string') return ''
+        for (var i = 0; i < this.RETRIEVAL_VALUES.length; i++) {
+            if (this.RETRIEVAL_VALUES[i] === value) return value
+        }
+        return ''
     },
 
     /** The session's user, and nothing else. See `_normParams`. */

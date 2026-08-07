@@ -17,6 +17,68 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0701 — 2026-08-07
+
+### Added — an instrument, not a behaviour change
+
+- **A tool call is now recorded as having RETRIEVED something, or not.**
+  `PaToolReadKit.retrievalVerdict` reads the `data.reads` map every tool core already builds and
+  returns `ok` / `none` / `unknown`. R-25 permits an `'ok'` read status only from a path that
+  actually fetched rows, so the verdict means rows came back — not that a probe succeeded. Three
+  values rather than a boolean, so an unclassified row stays distinguishable from a barren one.
+
+- **`x_snc_troubleshoot_audit.retrieval`** carries the verdict, written by both dispatch sites
+  (`PaToolRegistry.dispatch` for the custom harness, `PaScriptToolAdapter.invoke` for the native
+  one). **No default:** blank means a row written before this version, so `DECISION.md` §U9.1's
+  eight runs never read back as a mechanical `none`.
+
+  The verdict is taken on the tool core's **pre-threshold** result, and the position is the design.
+  `PaArtifactStore.applyThreshold` replaces an oversized result with an excerpt envelope carrying
+  no `reads` map, and `PaAuditLogger` then digests head+tail past 4,000 chars — so a verdict read
+  back off `output` would score `unknown` for exactly the large results most likely to be
+  productive.
+
+- **`PaAuditLogger.invokedTools` returns `retrievingTools`**, the subset with at least one result
+  row at `retrieval=ok`, read in the same single query. `tools` is unchanged: it remains the answer
+  to "was this tool ever invoked", which is the question fabrication fails (#79), and
+  `_auditContext`'s citation cross-check still uses it. A citation to a tool that ran and returned
+  nothing is a weak citation, not a fabricated one.
+
+### Changed — behind a flag that ships OFF
+
+- **`PaAgentLoop.REQUIRE_RETRIEVAL_TO_RELEASE` (default `false`).** When enabled, the depth gate
+  discharges a hold only against a tool that retrieved something. `DECISION.md` §T4 measured why:
+  v9 row 07's `schema_lookup` answered `table_exists: false`, established nothing, and released the
+  gate, because the release path compares tool names from the audit trail and never inspects the
+  result.
+
+  **It ships dormant on §U9's precedent** — *"No verdict is not the same as proven, so the default
+  is off"* — because §T9 asked for this rule and said in the same breath that whether it helps is
+  unmeasured. At the shipped default, gate behaviour is unchanged in every particular, and a test
+  asserts exactly that. The audit column is written regardless of the flag, so the counterfactual
+  is measurable for free from runs that were happening anyway.
+
+  Both of `_depthGate`'s trail consumers use the same set — the sticky release check and
+  `_openGaps`. Strict in one and loose in the other would let a barren call pre-close a declared
+  gap before any hold could be issued.
+
+### Documented
+
+- **`DECISION.md` §V** pre-registers the amended evidence-return numerator: a gathering call counts
+  toward `N` only when its audit result row carries `retrieval=ok`. §U1–§U9 unmodified. The number
+  a future round must beat is **1 of 4**, not 2 of 4. The sized round and the
+  `MAX_EVIDENCE_RETURNS` flip are explicitly deferred, with the three conditions that must hold
+  first.
+
+### Not changed, deliberately
+
+- `MAX_EVIDENCE_RETURNS` stays at `0`. This version adds no evidence about the evidence return.
+- `_step`'s optimistic hold-clear after a dispatch still matches by tool name. It affects prompt
+  wording only; the real trail-backed check still runs at the next terminal action.
+- The five prerequisites on #121's first comment are untouched. They block the cap flip, not this.
+
+---
+
 ## 2026.08.0602 — 2026-08-06
 
 ### Fixed — but SHIPPED WITH NO RUNTIME EVIDENCE, read this first

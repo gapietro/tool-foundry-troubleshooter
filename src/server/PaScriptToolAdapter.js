@@ -24,8 +24,11 @@ var PaScriptToolAdapter = Class.create()
 
 PaScriptToolAdapter.prototype = {
     /**
-     * @param {Object} [options] {tools, runAnchor, auditLogger, artifactStore}
-     *        — injection points for tests and for the probe route.
+     * @param {Object} [options] {tools, runAnchor, auditLogger, artifactStore,
+     *        readKit} — injection points for tests and for the probe route.
+     *        `readKit` is a `PaToolReadKit` instance (#121) — injectable
+     *        because PaToolReadKit is a separate Script Include not present in
+     *        the `vm` context the tests build for this file.
      */
     initialize: function (options) {
         var o = options || {}
@@ -33,6 +36,7 @@ PaScriptToolAdapter.prototype = {
         this._runAnchor = o.runAnchor || null
         this._auditLogger = o.auditLogger || null
         this._artifactStore = o.artifactStore || null
+        this._readKit = o.readKit || null
     },
 
     // =======================================================================
@@ -130,6 +134,14 @@ PaScriptToolAdapter.prototype = {
             var core = factory()
             var result = core.execute(args)
 
+            // #121: taken HERE, before `applyThreshold` replaces an oversized
+            // result with an excerpt envelope carrying no `data.reads`, and
+            // before `_attachRunState` adds run metadata on top. Both call
+            // sites classify — an instrument fitted to one harness and not the
+            // other is the confound §I4 item 3 warns about, in a comparison
+            // §T6 reads tool-for-tool.
+            var retrieval = this._retrievalVerdict(result)
+
             phase = 'threshold'
             // DELIBERATELY no `excerptPriority` here (#91). This adapter is
             // the NATIVE harness's tool entry point — the Fluent script tools
@@ -146,7 +158,7 @@ PaScriptToolAdapter.prototype = {
 
             phase = 'result'
             result = this._attachRunState(result, run)
-            this._audit('logResult', { runId: runId, toolName: name, output: result })
+            this._audit('logResult', { runId: runId, toolName: name, output: result, retrieval: retrieval })
 
             phase = 'serialize'
             return this._stringify(result)
@@ -224,6 +236,22 @@ PaScriptToolAdapter.prototype = {
 
     _store: function () {
         return this._artifactStore || new PaArtifactStore()
+    },
+
+    /**
+     * The #121 retrieval verdict, taken on a tool core's PRE-THRESHOLD result.
+     * Guarded for the same reason `_audit` is: this adapter is the native
+     * harness's entry point for every tool call, and 'unknown' is a legitimate
+     * answer (R-10) where a throw is not.
+     */
+    _retrievalVerdict: function (result) {
+        try {
+            var kit = this._readKit || new PaToolReadKit()
+            return kit.retrievalVerdict(result)
+        } catch (e) {
+            // R-1: `e` is deliberately not inspected.
+            return 'unknown'
+        }
     },
 
     /**

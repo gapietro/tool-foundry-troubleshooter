@@ -80,17 +80,21 @@ var PaToolRegistry = Class.create()
 
 PaToolRegistry.prototype = {
     /**
-     * @param {Object} [options] {cores, auditLogger, artifactStore} —
+     * @param {Object} [options] {cores, auditLogger, artifactStore, readKit} —
      *        injection points for tests and for callers with a different
      *        collaborator set. `cores` replaces the entire default roster
      *        map wholesale, the same way PaScriptToolAdapter's `tools` option
-     *        does — it is not merged with the real seven.
+     *        does — it is not merged with the real seven. `readKit` is a
+     *        `PaToolReadKit` instance (#121) — injectable because
+     *        PaToolReadKit is a separate Script Include not present in the
+     *        `vm` context the tests build for this file.
      */
     initialize: function (options) {
         var o = options || {}
         this._cores = o.cores || null
         this._auditLogger = o.auditLogger || null
         this._artifactStore = o.artifactStore || null
+        this._readKit = o.readKit || null
     },
 
     // =======================================================================
@@ -287,6 +291,16 @@ PaToolRegistry.prototype = {
             var core = entry.factory()
             var result = core.execute(args)
 
+            // #121: THE VERDICT IS TAKEN HERE, and the position is the whole
+            // point. `applyThreshold` below replaces an oversized result with
+            // an excerpt envelope that carries no `data.reads` at all, and
+            // PaAuditLogger then digests head+tail past 4,000 chars — so a
+            // verdict read off the logged payload would score 'unknown' for
+            // exactly the large results most likely to have retrieved
+            // something. DECISION.md §T4 / §U9.1 are what this exists to make
+            // countable; see the design doc §3.1.
+            var retrieval = this._retrievalVerdict(result)
+
             // Mirrors PaScriptToolAdapter: a PAGED_OUTPUT core (read_artifact)
             // already returns paged content at the threshold ceiling — running
             // it back through applyThreshold would store every page as a fresh
@@ -295,7 +309,7 @@ PaToolRegistry.prototype = {
                 result = this._store().applyThreshold(runId, result, toolName, entry.excerptPriority)
             }
 
-            this._audit('logResult', { runId: runId, toolName: toolName, output: result })
+            this._audit('logResult', { runId: runId, toolName: toolName, output: result, retrieval: retrieval })
             return result
         } catch (e) {
             // R-1: `e` is never inspected.
@@ -340,6 +354,25 @@ PaToolRegistry.prototype = {
 
     _store: function () {
         return this._artifactStore || new PaArtifactStore()
+    },
+
+    /**
+     * The #121 retrieval verdict, taken on a tool core's PRE-THRESHOLD result.
+     *
+     * Guarded for the same reason `_audit` is: this component is in the hot
+     * path of every tool call, and a diagnosis that fails because its own
+     * instrumentation threw is strictly worse than a diagnosis with a gap in
+     * the instrument. 'unknown' is a legitimate answer (R-10); an exception
+     * escaping into the loop is not.
+     */
+    _retrievalVerdict: function (result) {
+        try {
+            var kit = this._readKit || new PaToolReadKit()
+            return kit.retrievalVerdict(result)
+        } catch (e) {
+            // R-1: `e` is deliberately not inspected.
+            return 'unknown'
+        }
     },
 
     /**
