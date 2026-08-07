@@ -924,6 +924,39 @@ describe('evidence-return bounds (#81)', () => {
         expect(loop.EVIDENCE_HEADROOM_MS).toBe(5)
     })
 
+    // -----------------------------------------------------------------------
+    // #130 item 2 — the `>= 0` guards accepted null
+    //
+    // `null >= 0` is `true` in JS, so the guard admitted a null and the
+    // default was overwritten with one. `REQUIRE_RETRIEVAL_TO_RELEASE`'s own
+    // guard already cites this defect in its comment (`=== true`, deliberately
+    // not this shape); these two never got the same treatment.
+    //
+    // The `0` case below is the constraint the fix must NOT break: #81's
+    // revert trigger sets `maxEvidenceReturns: 0` to disable the path, so a
+    // naive `> 0` repair would be worse than the bug.
+    // -----------------------------------------------------------------------
+
+    it.each([null, undefined, '', '2', [], true, {}])(
+        'maxEvidenceReturns: %p is rejected and leaves the default at 0',
+        (value) => {
+            expect(bare({ maxEvidenceReturns: value }).MAX_EVIDENCE_RETURNS).toBe(0)
+        }
+    )
+
+    it.each([null, undefined, '', '5', [], true, {}])(
+        'evidenceHeadroomMs: %p is rejected and leaves the default at 30000',
+        (value) => {
+            expect(bare({ evidenceHeadroomMs: value }).EVIDENCE_HEADROOM_MS).toBe(30000)
+        }
+    )
+
+    it('0 is still accepted for both — it is how #81 is disabled', () => {
+        const loop = bare({ maxEvidenceReturns: 0, evidenceHeadroomMs: 0 })
+        expect(loop.MAX_EVIDENCE_RETURNS).toBe(0)
+        expect(loop.EVIDENCE_HEADROOM_MS).toBe(0)
+    })
+
     it('_resetGate clears all three evidence fields', () => {
         const loop = bare()
         loop._evidenceReturns = 2
@@ -986,6 +1019,90 @@ describe('evidence-return bounds (#81)', () => {
 
         expect(loop._iteration).toBe(1)
         expect(loop._startMs).toBe(500)
+    })
+
+    // -----------------------------------------------------------------------
+    // #130 item 1 — run() resets per-run gate state
+    //
+    // `_resetGate()` used to be called from `initialize()` alone, so every
+    // field it clears was per-INSTANCE, not per-RUN. Production news up a
+    // fresh loop per run (the async ScriptAction worker), which is why this
+    // was never observed — but the harm is not symmetric across the fields:
+    // a leaked `_holdCount` only costs the next run some budget, whereas a
+    // leaked `_rejectedDraft` writes one run's report onto another run's row.
+    //
+    // The first test is that harm directly. `_finishPartial` persists a
+    // stashed draft AND writes a transcript note saying the draft came "from
+    // this run" — with residue present and no reset, both fire for a run that
+    // never produced a draft at all.
+    // -----------------------------------------------------------------------
+
+    function reusedInstance(opts) {
+        // An unreadable trail bypasses the depth gate entirely (see the
+        // `run() maintains _iteration` note above), so these tests observe
+        // reset behaviour rather than gate behaviour.
+        return bare(
+            Object.assign(
+                {
+                    llmProxy: fakeLlm([
+                        { success: true, raw: 'r', action: { action: 'tool_call', tool: 'agent_trace', args: {} } },
+                    ]),
+                    toolRegistry: fakeTools([{ success: true, data: {} }]),
+                    auditLogger: fakeAuditLogger({ available: false, degraded: 'glide_unavailable', tools: [] }),
+                    now: fakeClock([0]),
+                    maxIterations: 1,
+                },
+                opts || {}
+            )
+        )
+    }
+
+    it('run() does not persist a previous run’s rejected draft', () => {
+        const runs = fakeRunManager()
+        const loop = reusedInstance({ runManager: runs })
+        loop._rejectedDraft = { report: { failure_summary: 'RUN 1 DRAFT' }, problems: ['evidence rule violation'] }
+
+        const res = loop.run('RUN2', {})
+
+        expect(res.outcome).toBe('partial')
+        expect(runs.closeCalls[0].options.fixReport).toBeUndefined()
+        expect(
+            runs.transcript
+                .map(function (e) {
+                    return e.result_digest
+                })
+                .join('\n')
+        ).not.toContain('rejected fix_report draft from this run')
+    })
+
+    it('run() resets the evidence-return counter and block', () => {
+        const loop = reusedInstance()
+        loop._evidenceReturns = 2
+        loop._evidenceBlock = 'BLOCK FROM RUN 1'
+
+        loop.run('RUN2', {})
+
+        expect(loop._evidenceReturns).toBe(0)
+        expect(loop._evidenceBlock).toBe(null)
+    })
+
+    it('run() resets the depth gate, so a previous run cannot spend this run’s hold budget', () => {
+        const loop = reusedInstance()
+        loop._holdCount = 7
+        loop._gateReleased = true
+        loop._heldTools = ['schema_lookup']
+        loop._heldGaps = [{ layer: 4 }]
+        loop._heldTarget = { layer: 4 }
+
+        loop.run('RUN2', {})
+
+        // The unreadable trail never holds, so anything above 0 here is
+        // residue rather than this run's own accounting.
+        expect(loop._holdCount).toBe(0)
+        expect(loop._gateReleased).toBe(false)
+        expect(loop._heldTools).toBe(null)
+        expect(loop._heldGaps).toBe(null)
+        expect(loop._heldTarget).toBe(null)
     })
 })
 
@@ -1065,6 +1182,65 @@ describe('evidence return routing (#81)', () => {
 
         expect(loop._rejectedDraft.report).toBe(draft)
         expect(loop._rejectedDraft.problems).toEqual([EVIDENCE_PROBLEM])
+    })
+
+    // -----------------------------------------------------------------------
+    // #130 item 3 — the allowed SECOND return (1 -> 2)
+    //
+    // The cap-spent boundary (2 -> refuse) and the first return (0 -> 1) were
+    // both covered; the transition between them was not, and it is the only
+    // untested step on the path the #121 round turns on. A `<` that drifted to
+    // `<=`, or a counter incremented before the guard, both survive the two
+    // existing tests and die here.
+    // -----------------------------------------------------------------------
+
+    it('allows a second evidence return and counts it 2/2', () => {
+        const rejection = { valid: false, problems: [EVIDENCE_PROBLEM], evidenceProblems: [EVIDENCE_PROBLEM] }
+        const loop = loopWith([rejection, rejection])
+        const secondDraft = { failure_summary: 'second' }
+
+        const first = loop._handleFixReport('RUN1', { failure_summary: 'first' })
+        expect(first.terminal).toBe(false)
+        expect(loop._evidenceReturns).toBe(1)
+
+        const second = loop._handleFixReport('RUN1', secondDraft)
+
+        expect(second.terminal).toBe(false)
+        expect(loop._evidenceReturns).toBe(2)
+        // No repair turn was burned on either pass.
+        expect(loop._fakes.llmProxy.calls.length).toBe(0)
+        // The SECOND draft is what a later `_finishPartial` would persist —
+        // the stash is replaced, not appended to or kept at the first.
+        expect(loop._rejectedDraft.report).toBe(secondDraft)
+
+        const notes = loop._fakes.runManager.transcript.map(function (e) {
+            return e.result_digest
+        })
+        expect(notes[0]).toContain('EVIDENCE RETURN 1/2')
+        expect(notes[1]).toContain('EVIDENCE RETURN 2/2')
+    })
+
+    // -----------------------------------------------------------------------
+    // #130 item 4 — `_finishAnswer` DROPS a stashed draft, deliberately
+    //
+    // `_finishPartial` and `_finishFailedLlm` both persist it; this path does
+    // not, and the asymmetry is the decision rather than an oversight.
+    // Reaching `answer` after an evidence return means the model was handed
+    // its draft back, went and gathered, and then chose prose over
+    // resubmitting — it abandoned the draft. A `partial` never got that
+    // choice, which is why it keeps one. Locked here so the #121 round does
+    // not reopen it by accident.
+    // -----------------------------------------------------------------------
+
+    it('_finishAnswer drops a stashed draft rather than persisting it', () => {
+        const loop = loopWith([])
+        loop._rejectedDraft = { report: { failure_summary: 'abandoned' }, problems: [EVIDENCE_PROBLEM] }
+
+        const res = loop._finishAnswer('RUN1', 'prose instead')
+
+        expect(res.outcome).toBe('answer')
+        expect(loop._fakes.runManager.closeCalls[0].status).toBe('complete')
+        expect(loop._fakes.runManager.closeCalls[0].options.fixReport).toBeUndefined()
     })
 
     it('routes back to the loop when evidence and shape problems are mixed', () => {
@@ -1897,10 +2073,14 @@ describe('directed depth gate (#109) — target selection', () => {
 
     // I5 (final whole-branch review): this was named "a fresh run() resets
     // the recorded target", which described something it never asserted —
-    // it calls `_resetGate()` directly, and `run()` does not reset anything
-    // (`initialize()` is `_resetGate`'s only caller). Renamed to what it
-    // actually covers; the behaviour is unchanged and correct, because
-    // production constructs a fresh loop per run.
+    // it calls `_resetGate()` directly, and at the time `run()` did not reset
+    // anything (`initialize()` was `_resetGate`'s only caller). Renamed then
+    // to what it actually covers.
+    //
+    // #130 made `run()` a caller too, so the original name would now be
+    // accurate — but this test still exercises `_resetGate` directly and the
+    // name should keep saying so. The run-level behaviour is covered by the
+    // three `run() resets …` tests in the 'evidence-return bounds' block.
     test('_resetGate clears the recorded target', () => {
         const loop = gateLoop(['agent_trace'], [GAP2, GAP4])
         loop._depthGate('RUN1', FIX)
