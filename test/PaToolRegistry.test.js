@@ -484,6 +484,19 @@ describe('PaToolRegistry — promptBlock()', () => {
             expect(e.description).toBe(nativeDescriptions[e.name])
         })
     })
+
+    it('tells every tool that a parameter name is not part of a value (#122)', () => {
+        // #111 fixed this wording on schema_lookup only, and #122 found the
+        // malformation on genai_log the first time the harness ever called it.
+        // The fix was never scoped to the tools nobody had exercised.
+        const registry = load({})
+        const entries = registry.list()
+
+        expect(entries).toHaveLength(7)
+        entries.forEach((e) => {
+            expect(e.description).toContain('are parameter names, never part of a value')
+        })
+    })
 })
 
 // ---------------------------------------------------------------------------
