@@ -114,6 +114,30 @@ PaToolLogAnalysis.prototype = {
                 )
             }
 
+            if (a._prefix_stripped) {
+                // LOUDLY (issues #111, #122). Repairing this silently would
+                // make the call work and erase the only evidence that the
+                // model is malforming arguments — which is how it went
+                // unnoticed for a whole smoke: every measure counted which
+                // tools were invoked, and this one was.
+                //
+                // The SLOT is named, not just the raw string. The repair
+                // ROUTES the value to the parameter the model named rather
+                // than stripping the prefix and falling through (design
+                // §3.2), so on a false positive the value lands in a slot the
+                // caller did not ask for — naming it is the only way a reader
+                // of the transcript can see that happened.
+                data.notes.push(
+                    'The argument arrived as "' +
+                        a._prefix_stripped +
+                        '" — the parameter name prefixed onto its own value. It was read as the "' +
+                        a._prefix_param +
+                        '" parameter. Send the value on its own, or a JSON object, and note that ' +
+                        'this call is recorded in the audit trail as it was sent, not as it was ' +
+                        'repaired.'
+                )
+            }
+
             data.requested = {
                 execution: a.execution || null,
                 source: a.source || null,
@@ -140,11 +164,15 @@ PaToolLogAnalysis.prototype = {
                     'message-contains. Missing: ' +
                     scope.missing.join('; ') +
                     '.'
+                // #122: this used to say `execution=<...>`, `source=<...>`,
+                // `message=<...>` — the parameter-prefixed shape the guard in
+                // _normalizeArgs exists to repair, taught on the refusal path,
+                // which is precisely the moment before the model retries.
                 data.how_to_scope =
-                    'Supply execution=<execution plan sys_id> — the window is then taken from the plan ' +
+                    'Supply the execution plan sys_id on its own — the window is then taken from the plan ' +
                     'start and end plus or minus 2 minutes and the message is matched on the plan sys_id — ' +
-                    'or supply source=<scope or Script Include name> and/or message=<error keyword>, with ' +
-                    'minutes_ago for the window.'
+                    'or a JSON object naming source as a scope or Script Include name and/or message as an ' +
+                    'error keyword, with minutes_ago for the window.'
                 data.evidence_basis = this._evidenceBasis(data)
                 return { success: true, data: data }
             }
@@ -190,9 +218,27 @@ PaToolLogAnalysis.prototype = {
     // Arguments (R-9)
     // =======================================================================
 
+    /** Every key the object branch reads, aliases included (#122). */
+    PARAM_NAMES: [
+        'execution',
+        'execution_plan',
+        'plan',
+        'source',
+        'message',
+        'contains',
+        'keyword',
+        'level',
+        'minutes_ago',
+        'minutes',
+        'since',
+        'limit',
+    ],
+
     _normalizeArgs: function (args) {
         var k = this._k()
         var raw = args
+        var prefixStripped = ''
+        var prefixParam = ''
 
         if (raw === null || raw === undefined) return {}
 
@@ -205,12 +251,20 @@ PaToolLogAnalysis.prototype = {
                 raw = parsed
             } else if (s.charAt(0) === '{' || s.charAt(0) === '[') {
                 return { _parse_error: true }
-            } else if (k.isSysId(s)) {
-                // A bare sys_id is an execution — the one argument that scopes
-                // the query completely on its own.
-                return { execution: s }
             } else {
-                return { message: s }
+                var split = k.splitParamPrefix(s, this.PARAM_NAMES)
+                if (split) {
+                    raw = {}
+                    raw[split.param] = split.value
+                    prefixStripped = split.raw
+                    prefixParam = split.param
+                } else if (k.isSysId(s)) {
+                    // A bare sys_id is an execution — the one argument that
+                    // scopes the query completely on its own.
+                    return { execution: s }
+                } else {
+                    return { message: s }
+                }
             }
         }
 
@@ -239,6 +293,11 @@ PaToolLogAnalysis.prototype = {
 
         var limit = k.num(raw.limit)
         if (limit > 0) out.limit = limit
+
+        if (prefixStripped) {
+            out._prefix_stripped = prefixStripped
+            out._prefix_param = prefixParam
+        }
 
         return out
     },
@@ -340,8 +399,11 @@ PaToolLogAnalysis.prototype = {
 
         if (!scope.source_contains && !scope.message_contains) {
             missing.push(
-                'a source-contains or message-contains filter (supply source=<scope or Script Include ' +
-                    'name>, message=<error keyword>, or execution=<plan sys_id> which supplies both)'
+                // #122: named the value rather than the parameter-equals-value
+                // shape. See the how_to_scope note above.
+                'a source-contains or message-contains filter (supply a JSON object naming source as a ' +
+                    'scope or Script Include name and/or message as an error keyword, or an execution ' +
+                    'plan sys_id on its own, which supplies both)'
             )
         }
 

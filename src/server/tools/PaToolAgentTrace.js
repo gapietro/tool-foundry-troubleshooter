@@ -132,6 +132,30 @@ PaToolAgentTrace.prototype = {
                 )
             }
 
+            if (a._prefix_stripped) {
+                // LOUDLY (issues #111, #122). Repairing this silently would
+                // make the call work and erase the only evidence that the
+                // model is malforming arguments — which is how it went
+                // unnoticed for a whole smoke: every measure counted which
+                // tools were invoked, and this one was.
+                //
+                // The SLOT is named, not just the raw string. The repair
+                // ROUTES the value to the parameter the model named rather
+                // than stripping the prefix and falling through (design
+                // §3.2), so on a false positive the value lands in a slot the
+                // caller did not ask for — naming it is the only way a reader
+                // of the transcript can see that happened.
+                data.notes.push(
+                    'The argument arrived as "' +
+                        a._prefix_stripped +
+                        '" — the parameter name prefixed onto its own value. It was read as the "' +
+                        a._prefix_param +
+                        '" parameter. Send the value on its own, or a JSON object, and note that ' +
+                        'this call is recorded in the audit trail as it was sent, not as it was ' +
+                        'repaired.'
+                )
+            }
+
             phase = 'resolve_target'
             var mode = this._resolveMode(a)
             data.resolution.mode = mode
@@ -447,12 +471,17 @@ PaToolAgentTrace.prototype = {
     // Argument handling (R-9)
     // =======================================================================
 
+    /** Every key the object branch below reads, aliases included (#122). */
+    PARAM_NAMES: ['execution', 'agent', 'step', 'since', 'detail'],
+
     /**
      * Tolerant argument normalisation. Accepts an object, a JSON string, a bare
      * sys_id, a bare agent name, or nothing.
      */
     _normalizeArgs: function (args) {
         var raw = args
+        var prefixStripped = ''
+        var prefixParam = ''
 
         if (raw === null || raw === undefined) return {}
 
@@ -467,10 +496,18 @@ PaToolAgentTrace.prototype = {
                 // Meant to be structured and is not. Say so rather than
                 // treating the braces as an agent name.
                 return { _parse_error: true }
-            } else if (this._isSysId(s)) {
-                return { execution: s }
             } else {
-                return { agent: s }
+                var split = this._splitParamPrefix(s, this.PARAM_NAMES)
+                if (split) {
+                    raw = {}
+                    raw[split.param] = split.value
+                    prefixStripped = split.raw
+                    prefixParam = split.param
+                } else if (this._isSysId(s)) {
+                    return { execution: s }
+                } else {
+                    return { agent: s }
+                }
             }
         }
 
@@ -491,6 +528,11 @@ PaToolAgentTrace.prototype = {
         var detail = this._bool(raw.detail)
         if (detail !== null) out.detail = detail
 
+        if (prefixStripped) {
+            out._prefix_stripped = prefixStripped
+            out._prefix_param = prefixParam
+        }
+
         return out
     },
 
@@ -506,6 +548,37 @@ PaToolAgentTrace.prototype = {
         if (typeof v !== 'string') return false
         if (v.length !== 32) return false
         return /^[0-9a-fA-F]{32}$/.test(v)
+    },
+
+    /**
+     * A verbatim copy of PaToolReadKit.splitParamPrefix (#122). This tool does
+     * not use the kit — migrating it is issue #41, deliberately not done here.
+     * Keep the two in step: anchored at the head, the segment before the first
+     * separator must equal a parameter name in full, and the CANONICAL spelling
+     * is returned so a camelCase parameter is not lower-cased into a key
+     * nothing reads.
+     */
+    _splitParamPrefix: function (s, paramNames) {
+        var text = this._trim(s)
+        if (!text) return null
+
+        var names = paramNames || []
+        if (!names.length) return null
+
+        var cut = text.search(/[:=]/)
+        if (cut < 1) return null
+
+        var head = String(this._trim(text.substring(0, cut))).toLowerCase()
+        var value = this._trim(text.substring(cut + 1))
+        if (!value) return null
+
+        for (var i = 0; i < names.length; i++) {
+            if (String(names[i]).toLowerCase() === head) {
+                return { param: names[i], value: value, raw: text }
+            }
+        }
+
+        return null
     },
 
     // =======================================================================
@@ -825,7 +898,7 @@ PaToolAgentTrace.prototype = {
                     "workflow's User Access or Data Access check.",
                 evidence: ['sn_aia_execution_plan.state_reason = security_violation'],
                 next_step:
-                    'Call agent_config with section=triggers: compare the trigger run_as/run_as_user roles ' +
+                    'Call agent_config for the triggers section: compare the trigger run_as/run_as_user roles ' +
                     'against the User Access AND Data Access role sets (sys_agent_access_role_configuration, ' +
                     'keyed by agent + agent_table). Both lists must independently cover the invoking role.',
             })
@@ -848,7 +921,7 @@ PaToolAgentTrace.prototype = {
                     'the access check itself is the failing step.',
                 evidence: this._taskEvidence(av),
                 next_step:
-                    'Call agent_config with section=triggers and compare run-as roles against the ' +
+                    'Call agent_config for the triggers section and compare run-as roles against the ' +
                     'User Access / Data Access role sets.',
             })
         }
@@ -890,7 +963,7 @@ PaToolAgentTrace.prototype = {
                     'message body — this is the root cause, not a symptom.',
                 evidence: ev,
                 next_step:
-                    'Call agent_config with section=instructions to read the offending script source ' +
+                    'Call agent_config for the instructions section to read the offending script source ' +
                     '(context_processing_script and applicability_script are auto-populated by the platform ' +
                     'and are a verified failure vector — see DESIGN.md R-7).',
             })
@@ -1432,7 +1505,7 @@ PaToolAgentTrace.prototype = {
                 '. Read status for sn_aia_execution_plan: ' +
                 planRead.status +
                 '. An agent that never triggered leaves NO plan — that absence is itself the diagnosis; ' +
-                'check trigger wiring via agent_config section=triggers.'
+                'check trigger wiring via agent_config, triggers section.'
             return out
         }
 
@@ -1442,7 +1515,9 @@ PaToolAgentTrace.prototype = {
             plans.length +
             ' matching execution plan(s). LLD §4.1 specifies a pick-list when more than one matches; the ' +
             'full list is in resolution.candidates, and the newest is traced as well so a single call ' +
-            'returns usable evidence. Re-call with execution=<sys_id> to trace a different one.'
+            // #122: `execution=<sys_id>` here taught the exact malformation
+            // the guard in _normalizeArgs repairs. Name the value instead.
+            'returns usable evidence. Re-call with another plan sys_id on its own to trace a different one.'
         return out
     },
 
@@ -1476,8 +1551,12 @@ PaToolAgentTrace.prototype = {
                 (since ? ' from the last ' + since + ' minutes' : '') +
                 ' are listed above (read status: ' +
                 read.status +
-                '). Re-call with execution=<sys_id> for one of them, or agent=<name> to search by agent or ' +
-                'use case name. This is not an error — a missing argument is expected (DESIGN.md R-9).',
+                // #122: was `execution=<sys_id> ... agent=<name>`, on the
+                // pick-list path — the first thing a model sees when it calls
+                // this tool with nothing, and the moment before it retries.
+                '). Re-call with one of those plan sys_ids on its own, or a JSON object with agent set ' +
+                'to an agent or use case name. This is not an error — a missing argument is expected ' +
+                '(DESIGN.md R-9).',
         }
     },
 

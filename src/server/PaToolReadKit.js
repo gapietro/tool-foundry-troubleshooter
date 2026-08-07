@@ -509,6 +509,59 @@ PaToolReadKit.prototype = {
         return /^[0-9a-fA-F]{32}$/.test(v)
     },
 
+    /**
+     * The parameter name prefixed onto its own value — `execution:<sys_id>`.
+     *
+     * MEASURED, NOT ANTICIPATED (issues #111, #122). A model that is told
+     * "pass a JSON object with mode, and optionally execution" has no way to
+     * tell that `execution` is a parameter name rather than part of the value
+     * it should send, and two independent tools have now received the prefixed
+     * form live. #122's case is the sharp one: `execution:<sys_id>` fails
+     * isSysId BECAUSE of the prefix, so genai_log read it as a mode, found no
+     * such mode, fell back to the default, and returned nothing — a call that
+     * every measure counted as having been made.
+     *
+     * The match is ANCHORED at the head of the string and the segment before
+     * the first separator must equal a parameter name IN FULL. That is what
+     * keeps a `:` or `=` inside a legitimate value safe — an encoded query
+     * such as `sys_created_on>=javascript:gs.beginningOfToday()` has
+     * `sys_created_on>` in front of its first separator, which is nobody's
+     * parameter name.
+     *
+     * @param {String} s          a bare, non-JSON argument string
+     * @param {Array}  paramNames the tool's accepted parameter names, aliases
+     *                            included — take them from the keys the tool's
+     *                            own object branch reads, so a parameter the
+     *                            tool does not accept cannot appear here
+     * @returns {Object|null} {param, value, raw}, or null when nothing matched.
+     *          `param` is the CANONICAL spelling as it appears in paramNames,
+     *          never the caller's casing: `encodedQuery` and `artifactId` are
+     *          read verbatim off the raw object, so a lower-cased repair would
+     *          synthesize a key nothing reads and drop the value silently.
+     */
+    splitParamPrefix: function (s, paramNames) {
+        var text = this.trim(s)
+        if (!text) return null
+
+        var names = paramNames || []
+        if (!names.length) return null
+
+        var cut = text.search(/[:=]/)
+        if (cut < 1) return null
+
+        var head = this.lower(this.trim(text.substring(0, cut)))
+        var value = this.trim(text.substring(cut + 1))
+        if (!value) return null
+
+        for (var i = 0; i < names.length; i++) {
+            if (this.lower(names[i]) === head) {
+                return { param: names[i], value: value, raw: text }
+            }
+        }
+
+        return null
+    },
+
     trim: function (s) {
         return String(s === null || s === undefined ? '' : s).replace(/^\s+|\s+$/g, '')
     },

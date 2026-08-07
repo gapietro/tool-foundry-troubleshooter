@@ -84,6 +84,30 @@ PaToolQueryTable.prototype = {
                 )
             }
 
+            if (a._prefix_stripped) {
+                // LOUDLY (issues #111, #122). Repairing this silently would
+                // make the call work and erase the only evidence that the
+                // model is malforming arguments — which is how it went
+                // unnoticed for a whole smoke: every measure counted which
+                // tools were invoked, and this one was.
+                //
+                // The SLOT is named, not just the raw string. The repair
+                // ROUTES the value to the parameter the model named rather
+                // than stripping the prefix and falling through (design
+                // §3.2), so on a false positive the value lands in a slot the
+                // caller did not ask for — naming it is the only way a reader
+                // of the transcript can see that happened.
+                data.notes.push(
+                    'The argument arrived as "' +
+                        a._prefix_stripped +
+                        '" — the parameter name prefixed onto its own value. It was read as the "' +
+                        a._prefix_param +
+                        '" parameter. Send the value on its own, or a JSON object, and note that ' +
+                        'this call is recorded in the audit trail as it was sent, not as it was ' +
+                        'repaired.'
+                )
+            }
+
             data.requested = {
                 table: a.table || null,
                 query: a.query || null,
@@ -96,8 +120,13 @@ PaToolQueryTable.prototype = {
                 data.status = 'no_table'
                 data.rows = []
                 data.notes.push(
-                    'No table was supplied, so there is nothing to query. Call with table=<name>, ' +
-                        'optionally query=<encoded query>, fields=<comma-separated list> and limit (default ' +
+                    // #122: this note used to say `table=<name>`, modelling the
+                    // very parameter-prefixed shape the guard above exists to
+                    // repair — on the no-args path, which is the last thing a
+                    // model reads before it retries. It now names the value.
+                    'No table was supplied, so there is nothing to query. Call with the table name by ' +
+                        'itself, or a JSON object with table and optionally query as an encoded query, ' +
+                        'fields as a comma-separated list, and limit (default ' +
                         this.DEFAULT_LIMIT +
                         ', max ' +
                         this.MAX_LIMIT +
@@ -192,9 +221,14 @@ PaToolQueryTable.prototype = {
     // Arguments (R-9)
     // =======================================================================
 
+    /** Every key the object branch reads, aliases included (#122). */
+    PARAM_NAMES: ['table', 'table_name', 'query', 'encoded_query', 'encodedQuery', 'fields', 'limit'],
+
     _normalizeArgs: function (args) {
         var k = this._k()
         var raw = args
+        var prefixStripped = ''
+        var prefixParam = ''
 
         if (raw === null || raw === undefined) return {}
 
@@ -208,7 +242,15 @@ PaToolQueryTable.prototype = {
             } else if (s.charAt(0) === '{' || s.charAt(0) === '[') {
                 return { _parse_error: true }
             } else {
-                return { table: s }
+                var split = k.splitParamPrefix(s, this.PARAM_NAMES)
+                if (split) {
+                    raw = {}
+                    raw[split.param] = split.value
+                    prefixStripped = split.raw
+                    prefixParam = split.param
+                } else {
+                    return { table: s }
+                }
             }
         }
 
@@ -226,6 +268,11 @@ PaToolQueryTable.prototype = {
 
         var limit = k.num(raw.limit)
         if (limit > 0) out.limit = limit
+
+        if (prefixStripped) {
+            out._prefix_stripped = prefixStripped
+            out._prefix_param = prefixParam
+        }
 
         return out
     },

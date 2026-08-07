@@ -64,7 +64,15 @@ describe('mandatory scoping', () => {
         const { result } = run({ minutes_ago: 30 }, world())
 
         expect(result.data.status).toBe('refused_unscoped')
-        expect(result.data.how_to_scope).toMatch(/execution=|source=|message=/)
+        // #122 review F1: this used to assert /execution=|source=|message=/,
+        // which PINNED the refusal path to the exact parameter-prefixed shape
+        // the guard in _normalizeArgs exists to repair — a test enforcing the
+        // defect, on the one path a model reads immediately before it retries.
+        // It now asserts the scoping options are named without that shape.
+        expect(result.data.how_to_scope).toMatch(/execution plan sys_id/)
+        expect(result.data.how_to_scope).toMatch(/source/)
+        expect(result.data.how_to_scope).toMatch(/message/)
+        expect(result.data.how_to_scope).not.toMatch(/\b(execution|source|message)\s*=/)
     })
 
     it('accepts a source filter', () => {
@@ -244,5 +252,49 @@ describe('the R-19 degradation', () => {
 
         expect(result.data.status).toBe('empty')
         expect(result.data.availability).toBeUndefined()
+    })
+})
+
+describe('argument prefix guard (#122)', () => {
+    const PREFIXED = `execution:${PLAN}`
+
+    it('reads execution:<sys_id> as the execution, not as a message substring', () => {
+        const { result } = run(PREFIXED, world({ sn_aia_execution_plan: [] }))
+
+        expect(result.data.requested.execution).toBe(PLAN)
+        expect(result.data.requested.message).toBeFalsy()
+    })
+
+    it('routes source:<name> to the source slot, not to message', () => {
+        const { result } = run('source:MyScriptInclude', world())
+
+        expect(result.data.requested.source).toBe('MyScriptInclude')
+        expect(result.data.requested.message).toBeFalsy()
+    })
+
+    it('says so loudly, naming the slot the value was read into', () => {
+        const { result } = run(PREFIXED, world())
+
+        expect(result.data.notes.join(' ')).toContain(PREFIXED)
+        expect(result.data.notes.join(' ')).toContain('the "execution" parameter')
+    })
+
+    it('names the slot on the one shape that is plausibly a FALSE POSITIVE', () => {
+        // This is the case the note exists for. A model searching for the
+        // literal text "level: DEBUG" in a message gets rerouted from
+        // `message` to `level` — a defensible reading, but not the one it
+        // asked for. Without the slot named, the transcript gives a reader no
+        // way to see that the search it thought it ran was never run.
+        const { result } = run('level: DEBUG', world())
+
+        expect(result.data.requested.level).toBe('DEBUG')
+        expect(result.data.requested.message).toBeFalsy()
+        expect(result.data.notes.join(' ')).toContain('the "level" parameter')
+    })
+
+    it('leaves an unprefixed message alone', () => {
+        const { result } = run('disk full', world())
+
+        expect(result.data.requested.message).toBe('disk full')
     })
 })

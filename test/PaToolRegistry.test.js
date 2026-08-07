@@ -484,6 +484,87 @@ describe('PaToolRegistry — promptBlock()', () => {
             expect(e.description).toBe(nativeDescriptions[e.name])
         })
     })
+
+    it('tells every tool that a parameter name is not part of a value (#122)', () => {
+        // #111 fixed this wording on schema_lookup only, and #122 found the
+        // malformation on genai_log the first time the harness ever called it.
+        // The fix was never scoped to the tools nobody had exercised.
+        const registry = load({})
+        const entries = registry.list()
+
+        expect(entries).toHaveLength(7)
+        entries.forEach((e) => {
+            expect(e.description).toContain('are parameter names, never part of a value')
+        })
+    })
+
+    it('names the RIGHT parameters for each tool, not just the shared boilerplate (#122 review finding 1)', () => {
+        // The boilerplate check above would pass unchanged if the six new
+        // sentences were swapped between tools or copy-pasted from
+        // schema_lookup's own wording. This asserts each tool's own sentence
+        // names its own parameters — the words must match what that tool's
+        // UNDERSTANDING TOOL INPUTS clause already advertises to the model,
+        // no more and no less (agent_trace's undocumented `detail` is
+        // deliberately excluded — it's a not_implemented stub, never
+        // advertised in the INPUTS clause).
+        const EXPECTED = {
+            agent_trace: 'The words execution, agent, since and step are parameter names, never part of a value: send the sys_id alone, not execution:<sys_id>.',
+            agent_config: 'The words agent and section are parameter names, never part of a value: send the agent name alone, not agent:<name>.',
+            schema_lookup: 'The words table and field are parameter names, never part of a value: send incident, not table:incident.',
+            query_table: 'The words table, query, fields and limit are parameter names, never part of a value: send incident, not table:incident.',
+            genai_log: 'The words mode, execution, minutes_ago, errors_only, include_payload and capability are parameter names, never part of a value: send the sys_id alone, not execution:<sys_id>.',
+            log_analysis: 'The words execution, source, message, level, minutes_ago and limit are parameter names, never part of a value: send the sys_id alone, not execution:<sys_id>.',
+            read_artifact: 'The words artifact_id, offset and length are parameter names, never part of a value: send the sys_id alone, not artifact_id:<sys_id>.',
+        }
+
+        const registry = load({})
+        const entries = registry.list()
+
+        expect(entries).toHaveLength(7)
+        expect(Object.keys(EXPECTED).sort()).toEqual(entries.map((e) => e.name).sort())
+        entries.forEach((e) => {
+            expect(e.description).toContain(EXPECTED[e.name])
+        })
+    })
+
+    it('repeats that sentence VERBATIM on the per-input description (#122 review finding 3)', () => {
+        // src/fluent/agent-doctor.now.ts carries a SECOND description per tool,
+        // on inputs[0], and AIA surfaces both strings to the model.
+        // PaToolRegistry.js has no input schema, so the parity test above
+        // cannot see these — six of the seven were left saying nothing about
+        // parameter prefixes while their own tool-level sentence said the
+        // opposite, and nothing in the suite covered them.
+        //
+        // The expectation is derived FROM the tool-level sentence rather than
+        // restated, so the two strings cannot drift into saying different
+        // things and no third copy of the wording exists to maintain.
+        const fluentSrc = fs.readFileSync(
+            path.join(__dirname, '..', 'src', 'fluent', 'agent-doctor.now.ts'),
+            'utf8'
+        )
+        const re =
+            /name: '(\w+)',\s*\n\s*type: 'script',[\s\S]*?inputs: \[\s*\n\s*\{\s*\n\s*name: '\w+',\s*\n\s*description: `([\s\S]*?)`,\s*\n\s*mandatory/g
+        const inputDescriptions = {}
+        let m
+        while ((m = re.exec(fluentSrc)) !== null) {
+            inputDescriptions[m[1]] = m[2]
+        }
+        expect(Object.keys(inputDescriptions)).toHaveLength(7)
+
+        const entries = load({}).list()
+        expect(entries).toHaveLength(7)
+
+        entries.forEach((e) => {
+            const sentence = e.description.match(
+                /The words [^.]+ are parameter names, never part of a value:[^.]+\./
+            )
+            // Also pins the punctuation: schema_lookup's input description used
+            // a dash where every tool-level sentence uses a colon.
+            expect(sentence).not.toBeNull()
+            expect(inputDescriptions[e.name]).toBeDefined()
+            expect(inputDescriptions[e.name]).toContain(sentence[0])
+        })
+    })
 })
 
 // ---------------------------------------------------------------------------

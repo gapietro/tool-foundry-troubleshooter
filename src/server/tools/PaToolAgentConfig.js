@@ -128,6 +128,30 @@ PaToolAgentConfig.prototype = {
                 )
             }
 
+            if (a._prefix_stripped) {
+                // LOUDLY (issues #111, #122). Repairing this silently would
+                // make the call work and erase the only evidence that the
+                // model is malforming arguments — which is how it went
+                // unnoticed for a whole smoke: every measure counted which
+                // tools were invoked, and this one was.
+                //
+                // The SLOT is named, not just the raw string. The repair
+                // ROUTES the value to the parameter the model named rather
+                // than stripping the prefix and falling through (design
+                // §3.2), so on a false positive the value lands in a slot the
+                // caller did not ask for — naming it is the only way a reader
+                // of the transcript can see that happened.
+                data.notes.push(
+                    'The argument arrived as "' +
+                        a._prefix_stripped +
+                        '" — the parameter name prefixed onto its own value. It was read as the "' +
+                        a._prefix_param +
+                        '" parameter. Send the value on its own, or a JSON object, and note that ' +
+                        'this call is recorded in the audit trail as it was sent, not as it was ' +
+                        'repaired.'
+                )
+            }
+
             data.resolution = {
                 requested: { agent: a.agent || null, section: a.section || null },
             }
@@ -361,9 +385,14 @@ PaToolAgentConfig.prototype = {
     // Arguments (R-9)
     // =======================================================================
 
+    /** Every key the object branch reads, aliases included (#122). */
+    PARAM_NAMES: ['agent', 'agent_name', 'name', 'section'],
+
     _normalizeArgs: function (args) {
         var k = this._k()
         var raw = args
+        var prefixStripped = ''
+        var prefixParam = ''
 
         if (raw === null || raw === undefined) return {}
 
@@ -379,10 +408,18 @@ PaToolAgentConfig.prototype = {
                 // treating the braces as an agent name.
                 return { _parse_error: true }
             } else {
-                // A bare sys_id and a bare name both resolve through the same
-                // path here — unlike the trace tool, where a sys_id means a
-                // different record type entirely.
-                return { agent: s }
+                var split = k.splitParamPrefix(s, this.PARAM_NAMES)
+                if (split) {
+                    raw = {}
+                    raw[split.param] = split.value
+                    prefixStripped = split.raw
+                    prefixParam = split.param
+                } else {
+                    // A bare sys_id and a bare name both resolve through the
+                    // same path here — unlike the trace tool, where a sys_id
+                    // means a different record type entirely.
+                    return { agent: s }
+                }
             }
         }
 
@@ -394,6 +431,11 @@ PaToolAgentConfig.prototype = {
 
         if (agent) out.agent = agent
         if (section) out.section = section
+
+        if (prefixStripped) {
+            out._prefix_stripped = prefixStripped
+            out._prefix_param = prefixParam
+        }
 
         return out
     },
@@ -500,8 +542,13 @@ PaToolAgentConfig.prototype = {
                 list.rows.length +
                 ' agent(s) readable from this scope are listed above (read status: ' +
                 list.status +
-                '). Re-call with agent=<name or sys_id>, optionally with section=' +
-                this.SECTIONS.join('|') +
+                // #122: was `agent=<name or sys_id>, optionally with
+                // section=<a|b|c>` — the parameter-prefixed shape the guard in
+                // _normalizeArgs repairs, on the pick-list path a model reads
+                // immediately before it retries.
+                '). Re-call with the agent name or sys_id on its own, or a JSON object with agent and ' +
+                'optionally section set to one of ' +
+                this.SECTIONS.join(', ') +
                 '. This is not an error — a missing argument is expected (DESIGN.md R-9).'
             return out
         }
@@ -570,7 +617,8 @@ PaToolAgentConfig.prototype = {
                 (agentFind.rows.length > 1
                     ? agentFind.rows.length +
                       ' agents matched; the first is inspected and the full list is in ' +
-                      'resolution.matched_agents. Re-call with agent=<sys_id> to inspect a different one.'
+                      'resolution.matched_agents. Re-call with one of those agent sys_ids on its own to ' +
+                      'inspect a different one.'
                     : 'One agent matched.') +
                 (out.name_collision_usecases
                     ? ' NOTE: ' +

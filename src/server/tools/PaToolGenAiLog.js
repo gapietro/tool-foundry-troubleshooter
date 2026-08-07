@@ -130,6 +130,30 @@ PaToolGenAiLog.prototype = {
                 )
             }
 
+            if (a._prefix_stripped) {
+                // LOUDLY (issues #111, #122). Repairing this silently would
+                // make the call work and erase the only evidence that the
+                // model is malforming arguments — which is how it went
+                // unnoticed for a whole smoke: every measure counted which
+                // tools were invoked, and this one was.
+                //
+                // The SLOT is named, not just the raw string. The repair
+                // ROUTES the value to the parameter the model named rather
+                // than stripping the prefix and falling through (design
+                // §3.2), so on a false positive the value lands in a slot the
+                // caller did not ask for — naming it is the only way a reader
+                // of the transcript can see that happened.
+                data.notes.push(
+                    'The argument arrived as "' +
+                        a._prefix_stripped +
+                        '" — the parameter name prefixed onto its own value. It was read as the "' +
+                        a._prefix_param +
+                        '" parameter. Send the value on its own, or a JSON object, and note that ' +
+                        'this call is recorded in the audit trail as it was sent, not as it was ' +
+                        'repaired.'
+                )
+            }
+
             phase = 'resolve_mode'
             data.mode = this._resolveMode(a, data)
             data.requested = {
@@ -254,9 +278,30 @@ PaToolGenAiLog.prototype = {
     // Arguments (R-9)
     // =======================================================================
 
+    /**
+     * Every key the object branch below reads, aliases included. Derived from
+     * that branch rather than from the docs, so a parameter this tool does not
+     * accept cannot appear here. Consumed by splitParamPrefix (#122).
+     */
+    PARAM_NAMES: [
+        'mode',
+        'execution',
+        'execution_plan',
+        'plan',
+        'minutes_ago',
+        'minutes',
+        'since',
+        'errors_only',
+        'include_payload',
+        'capability',
+        'capability_name',
+    ],
+
     _normalizeArgs: function (args) {
         var k = this._k()
         var raw = args
+        var prefixStripped = ''
+        var prefixParam = ''
 
         if (raw === null || raw === undefined) return {}
 
@@ -269,11 +314,23 @@ PaToolGenAiLog.prototype = {
                 raw = parsed
             } else if (s.charAt(0) === '{' || s.charAt(0) === '[') {
                 return { _parse_error: true }
-            } else if (k.isSysId(s)) {
-                // A bare sys_id can only sensibly mean an execution plan.
-                return { execution: s, mode: 'for_execution' }
             } else {
-                return { mode: k.lower(s) }
+                // #122: the parameter name prefixed onto its own value. The
+                // repair synthesizes a one-key object and lets it fall through
+                // the object branch below, so every alias and coercion there
+                // applies without being restated.
+                var split = k.splitParamPrefix(s, this.PARAM_NAMES)
+                if (split) {
+                    raw = {}
+                    raw[split.param] = split.value
+                    prefixStripped = split.raw
+                    prefixParam = split.param
+                } else if (k.isSysId(s)) {
+                    // A bare sys_id can only sensibly mean an execution plan.
+                    return { execution: s, mode: 'for_execution' }
+                } else {
+                    return { mode: k.lower(s) }
+                }
             }
         }
 
@@ -301,6 +358,11 @@ PaToolGenAiLog.prototype = {
         // narrow an audit the caller meant to be whole-table.
         var capability = k.str(raw.capability || raw.capability_name)
         if (capability) out.capability = capability
+
+        if (prefixStripped) {
+            out._prefix_stripped = prefixStripped
+            out._prefix_param = prefixParam
+        }
 
         return out
     },
@@ -435,7 +497,7 @@ PaToolGenAiLog.prototype = {
             data.notes.push(
                 'usage mode counts ASSIST CONSUMPTION, not LLM calls. A run that failed before reaching ' +
                     'the provider consumes no assists and leaves no row here — an empty result is not ' +
-                    'evidence the LLM was never invoked. Use mode=llm for the call detail.'
+                    'evidence the LLM was never invoked. Use the llm mode for the call detail.'
             )
         }
     },
@@ -504,7 +566,7 @@ PaToolGenAiLog.prototype = {
 
         if (!wantPayload && out.length && data.notes.join(' ').indexOf('were NOT fetched') === -1) {
             data.notes.push(
-                'Prompt and response payloads were NOT fetched. Re-call with include_payload=true to ' +
+                'Prompt and response payloads were NOT fetched. Re-call with include_payload set to true to ' +
                     'attempt them — they live on sys_generative_ai_log, a separate role-gated table, so ' +
                     'they are fetched only on request rather than failing every ordinary call.'
             )
@@ -588,7 +650,7 @@ PaToolGenAiLog.prototype = {
             data.llm_calls = []
             data.notes.push(
                 'for_execution needs an execution plan sys_id and none was supplied. Call agent_trace ' +
-                    'first to get one, or use mode=llm for a time-windowed view. This is not an error — a ' +
+                    'first to get one, or use the llm mode for a time-windowed view. This is not an error — a ' +
                     'missing argument is expected (DESIGN.md R-9).'
             )
             return
