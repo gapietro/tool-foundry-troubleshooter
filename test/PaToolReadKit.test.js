@@ -525,3 +525,81 @@ describe('PaToolReadKit shaping helpers', () => {
         expect(kit.tryParse('not json')).toBeNull()
     })
 })
+
+// ---------------------------------------------------------------------------
+// splitParamPrefix — the parameter name prefixed onto its own value (#111, #122)
+// ---------------------------------------------------------------------------
+describe('splitParamPrefix (#122)', () => {
+    const kit = () => kitWith(makeGlideRecordSecure([]))
+    const GENAI = ['mode', 'execution', 'execution_plan', 'plan', 'capability']
+
+    it('splits the measured genai_log malformation on a colon', () => {
+        const r = kit().splitParamPrefix('execution:45bbfd112ba6cf54f243fed2ce91bfcb', GENAI)
+
+        expect(r).toEqual({
+            param: 'execution',
+            value: '45bbfd112ba6cf54f243fed2ce91bfcb',
+            raw: 'execution:45bbfd112ba6cf54f243fed2ce91bfcb',
+        })
+    })
+
+    it('splits on an equals sign as well as a colon', () => {
+        expect(kit().splitParamPrefix('mode=llm', GENAI)).toEqual({
+            param: 'mode',
+            value: 'llm',
+            raw: 'mode=llm',
+        })
+    })
+
+    it('tolerates whitespace around the separator', () => {
+        const r = kit().splitParamPrefix('  execution : 45bb  ', GENAI)
+
+        expect(r.param).toBe('execution')
+        expect(r.value).toBe('45bb')
+    })
+
+    it('matches the parameter name case-insensitively', () => {
+        expect(kit().splitParamPrefix('EXECUTION:45bb', GENAI).param).toBe('execution')
+    })
+
+    it('returns the CANONICAL spelling, so a camelCase parameter survives', () => {
+        // The object branches read raw.encodedQuery and raw.artifactId
+        // verbatim. Returning the caller's lower-cased spelling would
+        // synthesize {encodedquery: ...}, which nothing reads — the repair
+        // would silently drop the value.
+        const names = ['table', 'query', 'encoded_query', 'encodedQuery']
+
+        expect(kit().splitParamPrefix('encodedquery:active=true', names).param).toBe('encodedQuery')
+    })
+
+    it('requires the whole segment to be a parameter name', () => {
+        expect(kit().splitParamPrefix('executions:45bb', GENAI)).toBeNull()
+        expect(kit().splitParamPrefix('my execution:45bb', GENAI)).toBeNull()
+    })
+
+    it('does not match a separator inside a value — the anchoring guard', () => {
+        // An encoded query is the realistic hazard: it carries both `=` and
+        // `:`, and neither is a parameter prefix.
+        const names = ['table', 'query', 'limit']
+        const encoded = 'sys_created_on>=javascript:gs.beginningOfToday()'
+
+        expect(kit().splitParamPrefix(encoded, names)).toBeNull()
+    })
+
+    it('returns null rather than an empty repair when the value is missing', () => {
+        expect(kit().splitParamPrefix('execution:', GENAI)).toBeNull()
+        expect(kit().splitParamPrefix('execution:   ', GENAI)).toBeNull()
+    })
+
+    it('returns null for a leading separator, an empty string and no names', () => {
+        expect(kit().splitParamPrefix(':45bb', GENAI)).toBeNull()
+        expect(kit().splitParamPrefix('', GENAI)).toBeNull()
+        expect(kit().splitParamPrefix('execution:45bb', [])).toBeNull()
+        expect(kit().splitParamPrefix('execution:45bb', null)).toBeNull()
+    })
+
+    it('leaves an ordinary bare argument alone', () => {
+        expect(kit().splitParamPrefix('llm', GENAI)).toBeNull()
+        expect(kit().splitParamPrefix('45bbfd112ba6cf54f243fed2ce91bfcb', GENAI)).toBeNull()
+    })
+})
