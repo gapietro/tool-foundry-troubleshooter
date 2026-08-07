@@ -497,6 +497,35 @@ describe('PaToolRegistry — promptBlock()', () => {
             expect(e.description).toContain('are parameter names, never part of a value')
         })
     })
+
+    it('names the RIGHT parameters for each tool, not just the shared boilerplate (#122 review finding 1)', () => {
+        // The boilerplate check above would pass unchanged if the six new
+        // sentences were swapped between tools or copy-pasted from
+        // schema_lookup's own wording. This asserts each tool's own sentence
+        // names its own parameters — the words must match what that tool's
+        // UNDERSTANDING TOOL INPUTS clause already advertises to the model,
+        // no more and no less (agent_trace's undocumented `detail` is
+        // deliberately excluded — it's a not_implemented stub, never
+        // advertised in the INPUTS clause).
+        const EXPECTED = {
+            agent_trace: 'The words execution, agent, since and step are parameter names, never part of a value: send the sys_id alone, not execution:<sys_id>.',
+            agent_config: 'The words agent and section are parameter names, never part of a value: send the agent name alone, not agent:<name>.',
+            schema_lookup: 'The words table and field are parameter names, never part of a value: send incident, not table:incident.',
+            query_table: 'The words table, query, fields and limit are parameter names, never part of a value: send incident, not table:incident.',
+            genai_log: 'The words mode, execution, minutes_ago, errors_only, include_payload and capability are parameter names, never part of a value: send the sys_id alone, not execution:<sys_id>.',
+            log_analysis: 'The words execution, source, message, level, minutes_ago and limit are parameter names, never part of a value: send the sys_id alone, not execution:<sys_id>.',
+            read_artifact: 'The words artifact_id, offset and length are parameter names, never part of a value: send the sys_id alone, not artifact_id:<sys_id>.',
+        }
+
+        const registry = load({})
+        const entries = registry.list()
+
+        expect(entries).toHaveLength(7)
+        expect(Object.keys(EXPECTED).sort()).toEqual(entries.map((e) => e.name).sort())
+        entries.forEach((e) => {
+            expect(e.description).toContain(EXPECTED[e.name])
+        })
+    })
 })
 
 // ---------------------------------------------------------------------------
