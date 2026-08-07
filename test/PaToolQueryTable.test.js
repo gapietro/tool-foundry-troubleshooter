@@ -246,3 +246,25 @@ describe('reads', () => {
         expect(result.data.rows[0].name).toContain('more chars]')
     })
 })
+
+describe('argument prefix guard (#122)', () => {
+    it('reads table:incident as the table name', () => {
+        const { result } = run('table:incident', world({ incident: [] }))
+
+        expect(result.data.requested.table).toBe('incident')
+    })
+
+    it('does not mistake an encoded query for a prefix', () => {
+        // Both `=` and `:` appear inside this value and neither is a prefix.
+        const encoded = 'sys_created_on>=javascript:gs.beginningOfToday()'
+        const { result } = run({ table: 'incident', query: encoded }, world({ incident: [] }))
+
+        expect(result.data.requested.query).toBe(encoded)
+    })
+
+    it('says so loudly', () => {
+        const { result } = run('table:incident', world({ incident: [] }))
+
+        expect(result.data.notes.join(' ')).toContain('table:incident')
+    })
+})

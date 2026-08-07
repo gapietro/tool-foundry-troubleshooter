@@ -246,3 +246,33 @@ describe('the R-19 degradation', () => {
         expect(result.data.availability).toBeUndefined()
     })
 })
+
+describe('argument prefix guard (#122)', () => {
+    const PREFIXED = `execution:${PLAN}`
+
+    it('reads execution:<sys_id> as the execution, not as a message substring', () => {
+        const { result } = run(PREFIXED, world({ sn_aia_execution_plan: [] }))
+
+        expect(result.data.requested.execution).toBe(PLAN)
+        expect(result.data.requested.message).toBeFalsy()
+    })
+
+    it('routes source:<name> to the source slot, not to message', () => {
+        const { result } = run('source:MyScriptInclude', world())
+
+        expect(result.data.requested.source).toBe('MyScriptInclude')
+        expect(result.data.requested.message).toBeFalsy()
+    })
+
+    it('says so loudly', () => {
+        const { result } = run(PREFIXED, world())
+
+        expect(result.data.notes.join(' ')).toContain(PREFIXED)
+    })
+
+    it('leaves an unprefixed message alone', () => {
+        const { result } = run('disk full', world())
+
+        expect(result.data.requested.message).toBe('disk full')
+    })
+})

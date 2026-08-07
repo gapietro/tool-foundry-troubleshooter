@@ -128,6 +128,22 @@ PaToolAgentConfig.prototype = {
                 )
             }
 
+            if (a._prefix_stripped) {
+                // LOUDLY (issues #111, #122). Repairing this silently would
+                // make the call work and erase the only evidence that the
+                // model is malforming arguments — which is how it went
+                // unnoticed for a whole smoke: every measure counted which
+                // tools were invoked, and this one was.
+                data.notes.push(
+                    'The argument arrived as "' +
+                        a._prefix_stripped +
+                        '" — the parameter name prefixed onto its own value. It was read as ' +
+                        'the value alone. Send the value on its own, or a JSON object, and note ' +
+                        'that this call is recorded in the audit trail as it was sent, not as it ' +
+                        'was repaired.'
+                )
+            }
+
             data.resolution = {
                 requested: { agent: a.agent || null, section: a.section || null },
             }
@@ -361,9 +377,13 @@ PaToolAgentConfig.prototype = {
     // Arguments (R-9)
     // =======================================================================
 
+    /** Every key the object branch reads, aliases included (#122). */
+    PARAM_NAMES: ['agent', 'agent_name', 'name', 'section'],
+
     _normalizeArgs: function (args) {
         var k = this._k()
         var raw = args
+        var prefixStripped = ''
 
         if (raw === null || raw === undefined) return {}
 
@@ -379,10 +399,17 @@ PaToolAgentConfig.prototype = {
                 // treating the braces as an agent name.
                 return { _parse_error: true }
             } else {
-                // A bare sys_id and a bare name both resolve through the same
-                // path here — unlike the trace tool, where a sys_id means a
-                // different record type entirely.
-                return { agent: s }
+                var split = k.splitParamPrefix(s, this.PARAM_NAMES)
+                if (split) {
+                    raw = {}
+                    raw[split.param] = split.value
+                    prefixStripped = split.raw
+                } else {
+                    // A bare sys_id and a bare name both resolve through the
+                    // same path here — unlike the trace tool, where a sys_id
+                    // means a different record type entirely.
+                    return { agent: s }
+                }
             }
         }
 
@@ -394,6 +421,8 @@ PaToolAgentConfig.prototype = {
 
         if (agent) out.agent = agent
         if (section) out.section = section
+
+        if (prefixStripped) out._prefix_stripped = prefixStripped
 
         return out
     },

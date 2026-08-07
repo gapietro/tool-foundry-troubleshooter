@@ -1521,3 +1521,26 @@ describe('reference statistics are labelled, never mistakable for this agent (is
         expect(result.data.instructions.note).toMatch(/misses half the failure surface/)
     })
 })
+
+describe('argument prefix guard (#122)', () => {
+    // This tool has no top-level `data.requested` — the normalized args are
+    // recorded under `data.resolution.requested` (see execute()).
+    it('reads agent:<name> as the agent name', () => {
+        const { result } = run('agent:Foundry Troubleshooter', world())
+
+        expect(result.data.resolution.requested.agent).toBe('Foundry Troubleshooter')
+    })
+
+    it('routes section:<name> to the section slot, not to agent', () => {
+        const { result } = run('section:instructions', world())
+
+        expect(result.data.resolution.requested.section).toBe('instructions')
+        expect(result.data.resolution.requested.agent).toBeFalsy()
+    })
+
+    it('says so loudly', () => {
+        const { result } = run('agent:Foundry Troubleshooter', world())
+
+        expect(result.data.notes.join(' ')).toContain('agent:Foundry Troubleshooter')
+    })
+})

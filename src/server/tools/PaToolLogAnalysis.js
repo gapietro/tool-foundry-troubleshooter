@@ -114,6 +114,22 @@ PaToolLogAnalysis.prototype = {
                 )
             }
 
+            if (a._prefix_stripped) {
+                // LOUDLY (issues #111, #122). Repairing this silently would
+                // make the call work and erase the only evidence that the
+                // model is malforming arguments — which is how it went
+                // unnoticed for a whole smoke: every measure counted which
+                // tools were invoked, and this one was.
+                data.notes.push(
+                    'The argument arrived as "' +
+                        a._prefix_stripped +
+                        '" — the parameter name prefixed onto its own value. It was read as ' +
+                        'the value alone. Send the value on its own, or a JSON object, and note ' +
+                        'that this call is recorded in the audit trail as it was sent, not as it ' +
+                        'was repaired.'
+                )
+            }
+
             data.requested = {
                 execution: a.execution || null,
                 source: a.source || null,
@@ -190,9 +206,26 @@ PaToolLogAnalysis.prototype = {
     // Arguments (R-9)
     // =======================================================================
 
+    /** Every key the object branch reads, aliases included (#122). */
+    PARAM_NAMES: [
+        'execution',
+        'execution_plan',
+        'plan',
+        'source',
+        'message',
+        'contains',
+        'keyword',
+        'level',
+        'minutes_ago',
+        'minutes',
+        'since',
+        'limit',
+    ],
+
     _normalizeArgs: function (args) {
         var k = this._k()
         var raw = args
+        var prefixStripped = ''
 
         if (raw === null || raw === undefined) return {}
 
@@ -205,12 +238,19 @@ PaToolLogAnalysis.prototype = {
                 raw = parsed
             } else if (s.charAt(0) === '{' || s.charAt(0) === '[') {
                 return { _parse_error: true }
-            } else if (k.isSysId(s)) {
-                // A bare sys_id is an execution — the one argument that scopes
-                // the query completely on its own.
-                return { execution: s }
             } else {
-                return { message: s }
+                var split = k.splitParamPrefix(s, this.PARAM_NAMES)
+                if (split) {
+                    raw = {}
+                    raw[split.param] = split.value
+                    prefixStripped = split.raw
+                } else if (k.isSysId(s)) {
+                    // A bare sys_id is an execution — the one argument that
+                    // scopes the query completely on its own.
+                    return { execution: s }
+                } else {
+                    return { message: s }
+                }
             }
         }
 
@@ -239,6 +279,8 @@ PaToolLogAnalysis.prototype = {
 
         var limit = k.num(raw.limit)
         if (limit > 0) out.limit = limit
+
+        if (prefixStripped) out._prefix_stripped = prefixStripped
 
         return out
     },
