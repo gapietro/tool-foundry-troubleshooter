@@ -86,9 +86,12 @@ PaToolSchemaLookup.prototype = {
                     'The argument arrived as "' +
                         a._prefix_stripped +
                         '" — the parameter name prefixed onto its own value. It was read as "' +
-                        (a.table || '') +
-                        '". Pass the table name on its own, or a JSON object, and note that this ' +
-                        'call is recorded in the audit trail as it was sent, not as it was repaired.'
+                        // #125: this was `a.table` alone, which reported
+                        // `read as ""` for a field-only strip — announcing a
+                        // repair while withholding its result.
+                        (a.table || a.field || '') +
+                        '". Pass the value on its own, or a JSON object with table and field, and note ' +
+                        'that this call is recorded in the audit trail as it was sent, not as it was repaired.'
                 )
             }
 
@@ -302,10 +305,39 @@ PaToolSchemaLookup.prototype = {
      * model no way to tell that `table` is a placeholder and not literal text
      * — it is also the JSON key name, one sentence earlier. That wording is
      * fixed at the source (PaToolRegistry + agent-doctor.now.ts); this is the
-     * guard for the calls already in flight, and for any model that reads the
-     * `table=<name>` spelling in our own no-table note below.
+     * guard for the calls already in flight.
+     *
+     * #125 widened this from `table|table_name` to the tool's FULL accepted
+     * parameter list — the object branch below reads
+     * `raw.field || raw.element || raw.column` too, and the tool's description
+     * tells the model that table and field are both parameter names. The
+     * capture group is load-bearing: see PARAM_PREFIX_SLOT.
      */
-    PARAM_PREFIX_PATTERN: /^(?:table|table_name)\s*[:=]\s*/i,
+    PARAM_PREFIX_PATTERN: /^(table|table_name|field|element|column)\s*[:=]\s*/i,
+
+    /**
+     * Which slot each recognised parameter name fills once stripped (#125).
+     *
+     * This map is why widening PARAM_PREFIX_PATTERN is not a one-line change.
+     * The no-dot branch of `_normalizeArgs` puts the surviving text in the
+     * TABLE slot, so stripping `field:` without routing would read
+     * `field:channel` as a table called `channel`, attempt a real
+     * sys_db_object lookup, and report `table_does_not_exist` — "a genuine
+     * absence, the table name is wrong". That is a confident claim about the
+     * INSTANCE built on a parameter name the model merely spelled out, and it
+     * is exactly the false diagnosis the #111 malformed-name guard below
+     * exists to prevent. Un-routed, the widening would have reintroduced it
+     * through a new door, converting a call that fails SAFE today
+     * (table_name_malformed, no read attempted) into one that fails
+     * DANGEROUSLY.
+     */
+    PARAM_PREFIX_SLOT: {
+        table: 'table',
+        table_name: 'table',
+        field: 'field',
+        element: 'field',
+        column: 'field',
+    },
 
     /**
      * The same prefix carried on the shorthand's OWN delimiter —
@@ -344,16 +376,29 @@ PaToolSchemaLookup.prototype = {
             } else {
                 // Strip before the `.` split, so `table:incident.priority`
                 // still reaches the shorthand path intact.
+                var prefixMatch = s.match(this.PARAM_PREFIX_PATTERN)
+                var slot = prefixMatch ? this.PARAM_PREFIX_SLOT[k.lower(prefixMatch[1])] : null
                 var bare = k.trim(s.replace(this.PARAM_PREFIX_PATTERN, '').replace(this.DOTTED_PREFIX_PATTERN, ''))
                 var out0 = bare === s ? {} : { _prefix_stripped: s }
                 if (!bare) return out0
 
                 if (bare.indexOf('.') !== -1) {
                     // "incident.priority" is the natural way to name a field
-                    // and costs nothing to accept.
+                    // and costs nothing to accept. The shorthand names both
+                    // halves itself, so it outranks the prefix word either way.
                     var parts = bare.split('.')
                     out0.table = k.trim(parts[0])
                     out0.field = k.trim(parts[1])
+                    return out0
+                }
+
+                if (slot === 'field') {
+                    // #125: what follows `field:` names a COLUMN. Leaving it
+                    // in the table slot is the dangerous reading — see
+                    // PARAM_PREFIX_SLOT. With no table, `execute` reaches the
+                    // no_table branch, which is the honest answer: it asks for
+                    // the table rather than inventing a verdict about one.
+                    out0.field = bare
                     return out0
                 }
 
