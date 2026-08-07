@@ -83,6 +83,9 @@ PaAuditLogger.prototype = {
     MAX_TABLE_NAME_CHARS: 80,
     MAX_RECORD_ID_CHARS: 32,
 
+    /** The only values `retrieval` may take (#121). See `_retrievalValue`. */
+    RETRIEVAL_VALUES: ['ok', 'none', 'unknown'],
+
     /**
      * @param {Object} [options] {auditTable, maxPayloadChars} — for tests and
      *        for callers with a different budget.
@@ -345,6 +348,12 @@ PaAuditLogger.prototype = {
             if (actionType === 'intent') gr.setValue('input', text)
             else gr.setValue('output', text)
 
+            // #121: RESULT rows only. An intent row has no result to classify,
+            // and an error row already carries its failure in `output` — a
+            // redundant `none` there would invite a reader to count error rows
+            // into a denominator built from result rows.
+            if (actionType === 'result' && p.retrieval) gr.setValue('retrieval', p.retrieval)
+
             var sysId = gr.insert()
             if (!sysId) return { logged: false, audit_id: null, degraded: 'insert_failed' }
 
@@ -406,6 +415,11 @@ PaAuditLogger.prototype = {
                 this._norm(raw.targetRecord || raw.target_record),
                 this.MAX_RECORD_ID_CHARS
             ),
+            // #121. Unlike `user` and `confirmed_by_user` above, this IS
+            // caller-settable: it is derived by our own dispatch code from the
+            // tool core's result, not asserted by the LLM-derived payload. It
+            // is whitelisted all the same — see `_retrievalValue`.
+            retrieval: this._retrievalValue(raw.retrieval),
         }
     },
 
@@ -485,6 +499,27 @@ PaAuditLogger.prototype = {
 
     _trim: function (value, max) {
         return value.length > max ? value.substring(0, max) : value
+    },
+
+    /**
+     * One of RETRIEVAL_VALUES, or blank (#121).
+     *
+     * A ChoiceColumn accepts an unlisted value silently, so an unrecognised
+     * verdict would sit in the audit trail looking like a fact. R-6 in its
+     * purest form: blank is honest, junk is not.
+     *
+     * Deliberately does NOT route through `_norm` (which coerces via
+     * `String(value)`): `String(['ok'])` is the JS string `'ok'`, not
+     * `'ok'`'s absence — a single-element array would silently pass the
+     * whitelist below and land in the audit column as if it were a real
+     * verdict. Requiring `typeof value === 'string'` up front closes that.
+     */
+    _retrievalValue: function (value) {
+        if (typeof value !== 'string') return ''
+        for (var i = 0; i < this.RETRIEVAL_VALUES.length; i++) {
+            if (this.RETRIEVAL_VALUES[i] === value) return value
+        }
+        return ''
     },
 
     /** The session's user, and nothing else. See `_normParams`. */

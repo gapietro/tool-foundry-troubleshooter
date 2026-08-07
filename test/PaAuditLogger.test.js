@@ -434,6 +434,80 @@ describe('field hygiene', () => {
     })
 })
 
+// ---------------------------------------------------------------------------
+// retrieval (#121) — the write side
+//
+// The column exists so that "did this call retrieve anything" is a QUERY
+// (run=X^action_type=result^retrieval=ok) rather than a payload read. It
+// cannot be a payload read: applyThreshold replaces oversized results with an
+// excerpt envelope before logResult ever sees them, and _digest then eats
+// head+tail past 4,000 chars. See the design doc §3.1.
+// ---------------------------------------------------------------------------
+
+describe('retrieval (#121)', () => {
+    test('logResult writes the verdict onto the result row', () => {
+        const { logger, world } = load()
+        logger.logResult({
+            runId: RUN,
+            toolName: 'genai_log',
+            output: { success: true },
+            retrieval: 'ok',
+        })
+
+        expect(rows(world)[0].retrieval).toBe('ok')
+    })
+
+    test.each(['ok', 'none', 'unknown'])('accepts the verdict %s', (verdict) => {
+        const { logger, world } = load()
+        logger.logResult({ runId: RUN, toolName: 'genai_log', output: {}, retrieval: verdict })
+        expect(rows(world)[0].retrieval).toBe(verdict)
+    })
+
+    test('an unlisted value writes BLANK, not the raw string', () => {
+        // A ChoiceColumn accepts an unlisted value silently, so the guard has
+        // to live on this side. R-6: a junk value in an audit column is worse
+        // than an absent one, because a reader cannot tell it is junk.
+        const { logger, world } = load()
+        logger.logResult({ runId: RUN, toolName: 'genai_log', output: {}, retrieval: 'OK' })
+        expect(rows(world)[0].retrieval).toBeUndefined()
+    })
+
+    test.each([undefined, null, '', 0, {}, ['ok']])(
+        'a non-verdict param (%p) writes blank rather than throwing',
+        (value) => {
+            const { logger, world } = load()
+            const res = logger.logResult({
+                runId: RUN,
+                toolName: 'genai_log',
+                output: {},
+                retrieval: value,
+            })
+            expect(res.logged).toBe(true)
+            expect(rows(world)[0].retrieval).toBeUndefined()
+        }
+    )
+
+    test('omitting the param entirely leaves the column blank — pre-#121 callers still work', () => {
+        const { logger, world } = load()
+        logger.logResult({ runId: RUN, toolName: 'genai_log', output: { success: true } })
+        expect(rows(world)[0].retrieval).toBeUndefined()
+    })
+
+    test('an intent row never carries a verdict — there is no result to classify', () => {
+        const { logger, world } = load()
+        logger.logIntent({ runId: RUN, toolName: 'genai_log', input: {}, retrieval: 'ok' })
+        expect(rows(world)[0].retrieval).toBeUndefined()
+    })
+
+    test('an error row never carries a verdict — its failure is already in output', () => {
+        // Adding a redundant 'none' here would invite a reader to count error
+        // rows into a denominator built from result rows.
+        const { logger, world } = load()
+        logger.logError({ runId: RUN, toolName: 'genai_log', error: 'boom', retrieval: 'none' })
+        expect(rows(world)[0].retrieval).toBeUndefined()
+    })
+})
+
 // =========================================================================
 // invokedTools — the read side (#79)
 // =========================================================================

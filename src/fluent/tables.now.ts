@@ -331,6 +331,31 @@ export const x_snc_troubleshoot_audit = Table({
             maxLength: 32,
         }),
 
+        // #121 — did this call RETRIEVE anything, or did it merely run?
+        //
+        // Computed by PaToolReadKit.retrievalVerdict on the tool core's
+        // PRE-THRESHOLD result, at PaToolRegistry.dispatch and
+        // PaScriptToolAdapter.invoke. It cannot be re-derived from `output`
+        // after the fact: applyThreshold replaces an oversized result with an
+        // excerpt envelope carrying no `reads` map, and PaAuditLogger then
+        // digests head+tail past 4,000 chars — so the LARGEST, most likely
+        // productive results are precisely the ones whose evidence is gone.
+        //
+        // NO DEFAULT, deliberately. Blank means "row written before #121", and
+        // the eight seed-01 runs already on the instance (DECISION.md §U9.1)
+        // must not read back as a mechanical `none`. That 1-of-4 was derived
+        // by hand and stays labelled as one.
+        //
+        // Written on `result` rows only. Build Rule #8: `{ value_key: 'Label' }`.
+        retrieval: ChoiceColumn({
+            label: 'Retrieval',
+            choices: {
+                ok: 'Retrieved rows',
+                none: 'Retrieved nothing',
+                unknown: 'Not determinable',
+            },
+        }),
+
         // Phase 1a is read-only, so this is always false today. It exists now
         // because the confirmation gate is a Phase 2 write-path requirement and
         // an audit trail that gains the column later cannot answer the question
