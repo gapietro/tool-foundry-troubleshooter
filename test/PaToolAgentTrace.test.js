@@ -883,3 +883,48 @@ describe('task-vs-tool-call note carries this run\'s counts (issue #85)', () => 
         expect(note).not.toContain('19')
     })
 })
+
+describe('argument prefix guard (#122)', () => {
+    const { makeGlideRecordSecure, makeGlideDateTime } = require('./_glideStub')
+    const PLAN_ID = '45bbfd112ba6cf54f243fed2ce91bfcb'
+
+    function world() {
+        return { sn_aia_execution_plan: [{ sys_id: PLAN_ID }] }
+    }
+
+    function run(args, tables) {
+        const ctx = loadScriptInclude('tools/PaToolAgentTrace.js', {
+            GlideRecordSecure: makeGlideRecordSecure(tables || {}),
+            GlideDateTime: makeGlideDateTime(),
+        })
+        return { result: new ctx.PaToolAgentTrace().execute(args) }
+    }
+
+    it('reads execution:<sys_id> as the execution', () => {
+        const { result } = run(`execution:${PLAN_ID}`, world())
+
+        expect(result.data.resolution.requested.execution).toBe(PLAN_ID)
+    })
+
+    it('routes execution:<non-sys_id> to execution, where fall-through would say agent', () => {
+        // The bare-string branch reads a non-sys_id as an AGENT NAME. Only the
+        // named slot gets this right.
+        const { result } = run('execution:MyRun', world())
+
+        expect(result.data.resolution.requested.execution).toBe('MyRun')
+        expect(result.data.resolution.requested.agent).toBeFalsy()
+    })
+
+    it('says so loudly', () => {
+        const { result } = run(`execution:${PLAN_ID}`, world())
+
+        expect(result.data.notes.join(' ')).toContain(`execution:${PLAN_ID}`)
+    })
+
+    it('leaves a bare agent name and a bare sys_id alone', () => {
+        expect(run('Foundry Troubleshooter', world()).result.data.resolution.requested.agent).toBe(
+            'Foundry Troubleshooter'
+        )
+        expect(run(PLAN_ID, world()).result.data.resolution.requested.execution).toBe(PLAN_ID)
+    })
+})

@@ -38,8 +38,26 @@ PaToolReadArtifact.prototype = {
 
         // Delegated deliberately even when the id is empty: the store owns the
         // "requires an artifact_id" message, and two copies of it drift.
-        return store.read(a.artifact_id, a.offset, a.length)
+        var result = store.read(a.artifact_id, a.offset, a.length)
+
+        if (a._prefix_stripped && result !== null && typeof result === 'object') {
+            // LOUDLY (issues #111, #122), on the returned object — this tool
+            // has no data envelope to carry notes in.
+            result.notes = (result.notes || []).concat([
+                'The argument arrived as "' +
+                    a._prefix_stripped +
+                    '" — the parameter name prefixed onto its own value. It was read as ' +
+                    'the value alone. Send the artifact sys_id on its own, or a JSON object, ' +
+                    'and note that this call is recorded in the audit trail as it was sent, ' +
+                    'not as it was repaired.',
+            ])
+        }
+
+        return result
     },
+
+    /** Every key the object branch below reads, aliases included (#122). */
+    PARAM_NAMES: ['artifact_id', 'artifactId', 'artifact', 'id', 'offset', 'length'],
 
     /**
      * Tolerant, in the same shape as PaToolAgentTrace._normalizeArgs. An
@@ -49,6 +67,7 @@ PaToolReadArtifact.prototype = {
      */
     _normalizeArgs: function (args) {
         var raw = args
+        var prefixStripped = ''
         if (raw === null || raw === undefined) return { artifact_id: '' }
 
         if (typeof raw === 'string') {
@@ -59,17 +78,56 @@ PaToolReadArtifact.prototype = {
             if (parsed && typeof parsed === 'object' && !this._isArray(parsed)) {
                 raw = parsed
             } else {
-                return { artifact_id: s }
+                var split = this._splitParamPrefix(s, this.PARAM_NAMES)
+                if (split) {
+                    raw = {}
+                    raw[split.param] = split.value
+                    prefixStripped = split.raw
+                } else {
+                    return { artifact_id: s }
+                }
             }
         }
 
         if (typeof raw !== 'object' || this._isArray(raw)) return { artifact_id: '' }
 
-        return {
+        var out = {
             artifact_id: this._str(raw.artifact_id || raw.artifactId || raw.artifact || raw.id),
             offset: this._num(raw.offset),
             length: this._num(raw.length),
         }
+        if (prefixStripped) out._prefix_stripped = prefixStripped
+        return out
+    },
+
+    /**
+     * A verbatim copy of PaToolReadKit.splitParamPrefix (#122). This tool does
+     * not use the kit — migrating it is issue #41, deliberately not done here.
+     * Keep the two in step: anchored at the head, the segment before the first
+     * separator must equal a parameter name in full, and the CANONICAL spelling
+     * is returned so artifactId is not lower-cased into a key nothing reads.
+     */
+    _splitParamPrefix: function (s, paramNames) {
+        var text = this._trim(s)
+        if (!text) return null
+
+        var names = paramNames || []
+        if (!names.length) return null
+
+        var cut = text.search(/[:=]/)
+        if (cut < 1) return null
+
+        var head = String(this._trim(text.substring(0, cut))).toLowerCase()
+        var value = this._trim(text.substring(cut + 1))
+        if (!value) return null
+
+        for (var i = 0; i < names.length; i++) {
+            if (String(names[i]).toLowerCase() === head) {
+                return { param: names[i], value: value, raw: text }
+            }
+        }
+
+        return null
     },
 
     _tryParse: function (s) {
