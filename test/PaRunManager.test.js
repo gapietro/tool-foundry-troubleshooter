@@ -304,6 +304,47 @@ describe('createRun — request persistence', () => {
         expect(world.tables[RUN_TABLE][0].request_truncated).toBe('false')
     })
 
+    test('a clip landing mid-emoji drops the orphaned half rather than storing a lone surrogate (#106)', () => {
+        const anchor = fakeAnchor({ run_id: 'run1', number: 'TR0001042' })
+        const { mgr, world } = load({
+            runAnchor: anchor,
+            world: { rows: { [RUN_TABLE]: [seedRun({ status: 'running' })] } },
+        })
+        // REQUEST_CHARS - 1 units of filler, then a two-unit astral character:
+        // the naive substring(0, REQUEST_CHARS) keeps its high surrogate and
+        // leaves the low one behind. A lone surrogate is not valid UTF-16 and
+        // can break JSON encoding of GET /runs/{run_id} and XML export.
+        const emoji = '😀'
+        const straddling = new Array(mgr.REQUEST_CHARS).join('x') + emoji
+
+        mgr.createRun({ request: straddling })
+
+        const stored = world.tables[RUN_TABLE][0].request
+        const lastCode = stored.charCodeAt(stored.length - 1)
+        expect(lastCode >= 0xd800 && lastCode <= 0xdbff).toBe(false)
+        expect(stored.length).toBe(mgr.REQUEST_CHARS - 1)
+        // Still a clip, and still says so.
+        expect(world.tables[RUN_TABLE][0].request_truncated).toBe('true')
+    })
+
+    test('a clip landing just PAST an emoji keeps the whole pair — the guard trims only orphans (#106)', () => {
+        const anchor = fakeAnchor({ run_id: 'run1', number: 'TR0001042' })
+        const { mgr, world } = load({
+            runAnchor: anchor,
+            world: { rows: { [RUN_TABLE]: [seedRun({ status: 'running' })] } },
+        })
+        // The pair ends exactly ON the boundary, so both halves are inside the
+        // clip and nothing should be dropped.
+        const emoji = '😀'
+        const aligned = new Array(mgr.REQUEST_CHARS - 1).join('x') + emoji + 'zzz'
+
+        mgr.createRun({ request: aligned })
+
+        const stored = world.tables[RUN_TABLE][0].request
+        expect(stored.length).toBe(mgr.REQUEST_CHARS)
+        expect(stored.slice(-2)).toBe(emoji)
+    })
+
     test('a body that will not serialize is recorded ABSENT, not partial — the two states stay distinct', () => {
         const circular = { execution: 'plan1' }
         circular.self = circular
