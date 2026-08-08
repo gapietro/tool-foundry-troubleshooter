@@ -3777,7 +3777,13 @@ target exactly — table, record sys_id, field, current value, required semantic
 replacement `api` value unfilled. Seed 04's own spec records the healthy value as held by **422 of
 the instance's 2026 `sys_one_extend_capability_definition` rows**, which `query_table` reaches, so
 Case 1's second condition fails. Both rows carry `root_cause_layer_correct` = 2, so both flip
-`passes_gate` as well as their /6.
+`passes_gate` as well as their /6. **That value is itself a listed blind-rule token**, and row 05's
+scorer records it in the same sentence as the fact the recompute turns on — the run *"could not be
+expected to have been told it — but nothing stopped the run from discovering it, and it did not"*.
+It does not rescue either row: Case 1 condition 2 asks whether the value was **obtainable**, not
+what the run was told. Contrast row 10 below, where the withheld token is an **identifier** and the
+question is condition 1's specification test, which §A2.1 does not address at all. A withheld value
+is disposed of by the clause as written; a withheld identifier is not.
 
 Rows 05 and 06 present both shapes at once — an unfilled slot *and* a runtime-record address. Case 1
 is phrased as a **necessary** condition and governs: passing Case 2's address test does not lift Case

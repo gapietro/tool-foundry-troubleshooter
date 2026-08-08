@@ -44,6 +44,14 @@ rows is reachable by `query_table` over that table — it is one of the seven di
 Case 1 enumerates. So for a seed-04 fix that names the right record and field but leaves the
 replacement `api` value unfilled, Case 1's **second** condition fails, and the column scores 0.
 
+**The value is itself a listed blind-rule token, and that does not change the result.** Row 05's
+scorer records both halves in one sentence — the run *"could not be expected to have been told it —
+but nothing stopped the run from discovering it, and it did not"* (`row-05-result.md:120-122`).
+Case 1 condition 2 asks whether the value is **obtainable from the instance**, not what the run was
+told, so a withheld *value* is disposed of by the clause as written. A withheld *identifier* is a
+different question — condition 1's specification test, which §A2.1 does not address — and that is
+why row 10 is listed as unresolved below while these two are decided.
+
 ### How the two cases interact where both apply (rows 05 and 06)
 
 Rows 05 and 06 present both shapes at once: an unfilled value slot *and* an address expressed as a
@@ -65,7 +73,7 @@ from `scorecard-v9.md` §1. Line references are to the row's result file unless 
 | 02 | native 01 | Case 2 | "only the address is expressed in runtime rather than source terms, and the address is unambiguous (one tool, one script field)" (:133-134); target is "a runtime record (`sn_aia_tool` sys_id `8953…`, field `script`)" (:127-128) | 1 | **1** | 1 | **1** |
 | 03 | native 03 | Case 1 | Fix names "**Target type 'Data'**, target `Table x_snc_tsbench_routing`… 'Insert at minimum one row with `category = Hardware` and `assignment_group = <correct group name>`'" (:84-86); on the slot: "business content that was never present anywhere on the instance — not in the table, not in the tool, not in the trace. No diagnosis, however good, could recover it" (:141-144) | 1 | **1** | 1 | **1** |
 | 04 | native 03 | Case 1 | "'Insert at minimum one row with `category = Software` and `assignment_group = <the correct group name>`'" (:167-168); "The table is empty; there is no record of what group 'Software' should route to. No correct diagnosis could have supplied that value" (:181-184) | 1 | **1** | 1 | **1** |
-| 05 | native 04 | Case 1 | Target fully specified — "target table, target record sys_id, target field, current value, and the exact semantics of the change" (:114-115). Value slot unfilled and **obtainable**: "The seed spec's expected diagnosis names the healthy gpinst01 value (`936e514a53b3b110f028ddeeff7b128c`, used by 422 of 2026 rows); the report does not reach it… **nothing stopped the run from *discovering* it, and it did not**" (:118-122) | 1 | **0** | 1 | **0** |
+| 05 | native 04 | Case 1 | Target fully specified — "target table, target record sys_id, target field, current value, and the exact semantics of the change" (:114-115). Value slot unfilled and **obtainable**, quoted without elision because the clause it contains is the one §A2.1 does not turn on: "The seed spec's expected diagnosis names the healthy gpinst01 value (`936e514a53b3b110f028ddeeff7b128c`, used by 422 of 2026 rows); the report does not reach it. Note that this value is **a listed blind-rule token, so the run could not be expected to have been told it** — but **nothing stopped the run from *discovering* it, and it did not**" (:118-122) | 1 | **0** | 1 | **0** |
 | 06 | native 04 | Case 1 | Target fully specified — "the table, sys_id, field, current value and required semantics are all exact" (:122-123). Value slot: "Fix 1 does **not** supply a concrete replacement sys_id. It supplies a description of the required value… and a three-step discovery procedure whose step 1 is a **UI** action" (:107-111); the healthy value is "`936e514a53b3b110f028ddeeff7b128c`, used by 422 of 2026 rows on gpinst01" (:112) | 1 | **0** | 1 | **0** |
 | 07 | custom 01 | §A precondition binds | "§A's explicit constraint: `fix_usable_unedited` may not be 1 while `fix_target_correct` = 0. It is 0, so this is 0"; independently "`fix_report` is `null`… there is no fix the builder AI could apply as written at all" (:104-109) | 0 | **0** | 0 | **0** |
 | 08 | custom 01 | neither case arises | Column already fails its base test on the merits: "'Ensure priority_stored reflects the actual database value' specifies an outcome, not a change — no mapping table, no `getValue` read-back, no field, no code" (:172-175) | 0 | **0** | 0 | **0** |
