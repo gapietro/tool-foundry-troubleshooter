@@ -371,3 +371,14 @@ differs from the template only by the four path substitutions in 7.2. Each seed
 spec differs from its source only by the path substitutions in 7.4 and is provably
 reversible to it. Reports, audit measurements, per-row notes and run identities are
 exactly as described in §1–§4 and were not touched in either round.
+
+> **Forward note, 2026-08-08 (#143 + #144).** This report describes the rubric slice (§7.2) as it
+> was built on 2026-08-05, and it is left unedited on that basis — the 12 committed packets still
+> carry exactly the text this report describes. It is no longer how a NEXT build would need to work:
+> `benchmark/scorecard-template.md` was reworded at source at `2026.08.0801`, replacing the four A1–A4
+> strings this section lists as "Removed" with the substituted wording directly. Deviation set A no
+> longer applies — a future packet build copies §A/§A2/§A3 verbatim, with no substitution step and
+> nothing to assert "exactly once" against, because those four strings do not exist in the template
+> to be found. §7.7's "differs from the template only by the four path substitutions" is likewise
+> superseded: the rubric slice is now byte-identical to the template section it is copied from. See
+> `benchmark/DECISION.md` §AA2 ("deviation set A disappears from the next packet build").

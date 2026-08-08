@@ -817,7 +817,7 @@ Add to the `#143` describe block in `test/scorerPacketBlindRule.test.js`:
 
         expect(readme).toContain('scorer-facing seed specs')
         expect(readme).toContain('repository paths')
-        expect(readme).toContain('rubric')
+        expect(readme).toContain("Two of the rule's three channels are now scanned")
 
         // The three sentences that became FALSE when the rubric scan landed.
         expect(readme).not.toContain('The guard scans the seed specs — one of the three channels.')
@@ -825,6 +825,16 @@ Add to the `#143` describe block in `test/scorerPacketBlindRule.test.js`:
         expect(readme).not.toContain('does the same for the 5 seed specs')
     })
 ```
+
+> **Corrected 2026-08-08, during execution (`f729abc`).** The first draft of this step used
+> `expect(readme).toContain('rubric')`, which contributed zero discriminating power: the word
+> `rubric` appears five times in the paragraph the fix replaces, so the assertion was true on
+> both the stale and the fixed README — verified false-before/true-after directly against
+> `47e364e`, the same way the roster row assertions above were later proved to bind. Replaced
+> with `toContain("Two of the rule's three channels are now scanned")`, which is absent before
+> the fix and present after. Caught by the Task 1 review, not by running this step — recorded
+> here rather than silently swapping the code block, because a plan that still prescribes a
+> rejected assertion is the same defect class this whole change is about.
 
 - [ ] **Step 2: Run to verify it fails**
 

@@ -284,6 +284,7 @@ TDD, controls before coverage.
 | `benchmark/README.md` | Guard roster at :115/:140 gains the packet and rubric channels. The *"scans the seed specs — one of the three channels"* paragraph and the hand-check sentence both become false and are rewritten. |
 | `benchmark/DECISION.md` | **§AA appended. §Z is not modified.** §Z opens by asserting §A–§Y unmodified and §X asserted the same of §U–§W; appending is the house norm, and §Z4 remains the accurate record of what shipped at `2026.08.0709`. §AA opens with the same "no runs fired, no packet re-scored, no instance touched" framing. |
 | `docs/superpowers/specs/2026-08-07-t9-pass-blockers-design.md` | Dated forward note appended. Not rewritten — it accurately describes what was designed then. |
+| `benchmark/scoring-v9/packet-build-report.md` | Dated forward note appended (operator record, not a scorer packet — out of the blind-rule channel this work scans). §7.2's four A1–A4 substitutions and §7.7's "differs from the template only by" claim are both superseded once §3.4's template reword lands; the report itself is not rewritten, for the same reason as the T9 spec above. |
 | `CHANGELOG.md` | New version entry; the 0708 entry gets a dated forward note rather than an edit, for the same reason. |
 | `package.json` / `README.md` badge | Version bump per `CLAUDE.md`. |
 
