@@ -234,14 +234,24 @@ const PACKET_PATTERNS = [
  *     re.lastIndex++`) prevents an infinite loop if a pattern can match an
  *     empty string.
  */
-function scanWith(patterns, text, lineStarts) {
+function scanWith(patterns, text, lineStarts, indexOffset) {
+    // Offset for callers that scan a SLICE of a normalized document (the
+    // rubric channel does). Match indices are relative to the slice; line
+    // numbers must stay relative to the file, or a failure points at a line
+    // that does not exist in the source the reader opens.
+    const offset = indexOffset || 0
     const hits = []
 
     patterns.forEach((p) => {
         const re = new RegExp(p.re.source, p.re.flags.replace('g', '') + 'g')
         let m
         while ((m = re.exec(text)) !== null) {
-            hits.push({ pattern: p.name, why: p.why, line: lineAt(lineStarts, m.index), text: m[0] })
+            hits.push({
+                pattern: p.name,
+                why: p.why,
+                line: lineAt(lineStarts, m.index + offset),
+                text: m[0],
+            })
             if (m.index === re.lastIndex) re.lastIndex++
         }
     })
@@ -257,6 +267,41 @@ function scanProse(text, lineStarts) {
 /** Every hit of every packet-channel pattern. See scanWith for the matcher. */
 function scanPackets(text, lineStarts) {
     return scanWith(PACKET_PATTERNS, text, lineStarts)
+}
+
+// ---------------------------------------------------------------------------
+// THE RUBRIC CHANNEL (issue #143)
+// ---------------------------------------------------------------------------
+const TEMPLATE = path.join(SCORING, 'scorecard-template.md')
+
+/**
+ * The packet-reaching slice of the rubric, as offsets into the WHOLE
+ * normalized template.
+ *
+ * Only §A/§A2/§A3 are copied into a scorer packet, so the scanned range runs
+ * from the `## A.` heading to the `## B.` heading. Derived from the headings
+ * at scan time and never hardcoded to line numbers, which move.
+ *
+ * This pins the template's heading structure into a test, which is the
+ * objection this file previously recorded against scanning the channel at
+ * all. It is the right trade rather than a cost: the PACKET BUILD depends on
+ * the same two headings, so a rename that breaks this scan is a rename that
+ * changes what ships to twelve scorers. Failing loudly is the correct
+ * response.
+ *
+ * Returns the whole file's text and line map alongside the offsets, because
+ * line numbers reported by a scan of the slice must still name lines in the
+ * file.
+ */
+function rubricRange() {
+    const { text, lineStarts } = normalizeProse(fs.readFileSync(TEMPLATE, 'utf8'))
+
+    return {
+        text: text,
+        lineStarts: lineStarts,
+        start: text.indexOf('## A. '),
+        end: text.indexOf('## B. '),
+    }
 }
 
 /** Read a seed spec and normalize it in one step. */
@@ -548,5 +593,38 @@ describe('no repository path reaches a scorer packet (issue #140)', () => {
                 ).toEqual([])
             })
         })
+    })
+})
+
+describe('the rubric channel reaches every packet and is scanned (issue #143)', () => {
+    it('derives the packet-reaching range from its own headings', () => {
+        const { text, start, end } = rubricRange()
+
+        expect(start).toBeGreaterThan(-1)
+        expect(end).toBeGreaterThan(start)
+
+        // §A2.1 must fall inside the range. test/rubricClauses.test.js pins
+        // the same placement for a different reason -- that a clause outside
+        // §A/§A2/§A3 is a clause the scorers never see. Two tests, one
+        // invariant, independent derivations.
+        const slice = text.slice(start, end)
+        expect(slice).toContain('### A2.1')
+    })
+
+    it('states no repository path -- the range ships to twelve scorers', () => {
+        // The four paths this range used to carry were removed by hand at
+        // PACKET BUILD time (scoring-v9/packet-build-report.md §7.2, four
+        // substitutions each asserted to match exactly once). That assertion
+        // is real, but it lives in the builder rather than in the suite, and
+        // it is path-only -- it did not see the #139 prose leak at all.
+        // Reworded at source so the builder no longer has to.
+        const { text, lineStarts, start, end } = rubricRange()
+        const hits = scanWith(PACKET_PATTERNS, text.slice(start, end), lineStarts, start)
+
+        expect(
+            hits.map(
+                (h) => 'scorecard-template.md:' + h.line + '  [' + h.pattern + ']  ' + h.text
+            )
+        ).toEqual([])
     })
 })
