@@ -43,7 +43,11 @@
  *   SEED SPECS   PATTERNS         bans a prior run's OUTCOME
  *   PACKETS      PACKET_PATTERNS  bans a repository PATH
  *   RUBRIC       RUBRIC_PATTERNS  bans a prior pass's outcome or provenance,
- *                + PACKET_PATTERNS  and a repository path
+ *                + 4 patterns       a repository path, and -- via those 4
+ *                  borrowed from     borrowed patterns -- a seed-spec-shaped
+ *                  PATTERNS          leak reaching the rubric
+ *                + PACKET_PATTERNS  see RUBRIC_PATTERNS' own doc comment for
+ *                                    the exact three-source composition
  *
  * The rubric channel is benchmark/scorecard-template.md §A/§A2/§A3 -- the
  * slice copied into EVERY packet, so a leak there reaches every row of a pass
@@ -881,7 +885,7 @@ describe('the rubric channel reaches every packet and is scanned (issue #143)', 
 
         expect(readme).toContain('scorer-facing seed specs')
         expect(readme).toContain('repository paths')
-        expect(readme).toContain('rubric')
+        expect(readme).toContain("Two of the rule's three channels are now scanned")
 
         // The three sentences that became FALSE when the rubric scan landed.
         expect(readme).not.toContain('The guard scans the seed specs — one of the three channels.')
