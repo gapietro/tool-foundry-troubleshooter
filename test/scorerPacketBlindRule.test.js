@@ -105,6 +105,36 @@ const PATTERNS = [
 ]
 
 /**
+ * The packet channel's pattern list, kept SEPARATE from PATTERNS above
+ * because the two channels ban different things and scan different files.
+ * PATTERNS bans a prior run's outcome and scans the seed specs. This bans a
+ * repository path and scans the packets. Merging them would force the seed
+ * specs -- which legitimately cite 22 repository paths, because a spec that
+ * cannot say which Fluent file installs its seed is not a usable source
+ * document -- to satisfy a rule written for a different artifact.
+ */
+const PACKET_PATTERNS = [
+    {
+        name: 'repository-path',
+        // Two alternations, both deliberate:
+        //   1. a path qualified by one of this repo's top-level directories,
+        //      with optional ./ or ../ prefixes (the specs use both forms);
+        //   2. a bare root-level document name -- DESIGN.md was invisible to
+        //      the old literal DECISION.md pattern and is one hop from the
+        //      same answers.
+        // No file-extension requirement on alternation 1: "benchmark/seeds"
+        // is a route even without a filename, and seeds/history/ is what
+        // sits at the end of it.
+        re:
+            /(?:\.{0,2}\/)*(?:benchmark|docs|src|test|seed-app|node_modules|dist|\.claude)\/[A-Za-z0-9_./-]+|\b(?:DECISION|DESIGN|CHANGELOG|README|IMPLEMENTATION_PLAN|LOW_LEVEL_DESIGN|PREFLIGHT_FINDINGS|CLAUDE)\.md\b/,
+        why:
+            'a repository path a MODEL scorer can follow out of the packet and into this ' +
+            'project prior conclusions. A pointer to the answer is the same defect as the ' +
+            'answer, and the shortest routes found in v9 were one hop, not two.',
+    },
+]
+
+/**
  * Every hit of every pattern, as {pattern, line, text}. Pure -- no file I/O --
  * so the controls below exercise THE REAL MATCHER on planted prose.
  */
@@ -115,6 +145,26 @@ function scanProse(text, lineStarts) {
         // p.re.flags + 'g' would duplicate 'g' (and throw) if a future pattern
         // is ever declared with it already set -- strip it first so the 'g'
         // this scan needs is always the only one.
+        const re = new RegExp(p.re.source, p.re.flags.replace('g', '') + 'g')
+        let m
+        while ((m = re.exec(text)) !== null) {
+            hits.push({ pattern: p.name, why: p.why, line: lineAt(lineStarts, m.index), text: m[0] })
+            if (m.index === re.lastIndex) re.lastIndex++
+        }
+    })
+
+    return hits
+}
+
+/**
+ * Every hit of every PACKET pattern, in the same shape scanProse returns.
+ * Kept as a separate function rather than a parameter on scanProse so each
+ * channel's call sites read as what they are; the duplication is six lines.
+ */
+function scanPackets(text, lineStarts) {
+    const hits = []
+
+    PACKET_PATTERNS.forEach((p) => {
         const re = new RegExp(p.re.source, p.re.flags.replace('g', '') + 'g')
         let m
         while ((m = re.exec(text)) !== null) {
@@ -217,5 +267,69 @@ describe('the scanner itself works (controls)', () => {
 
         expect(text).toContain('`priority_stored` = `null`')
         expect(scanProse(text, lineStarts)).toEqual([])
+    })
+})
+
+// ---------------------------------------------------------------------------
+// THE PACKET CHANNEL (issue #140)
+// ---------------------------------------------------------------------------
+// The spec channel above bans a prior run's OUTCOME. This channel bans a
+// repository PATH, which is a different defect: not the answer, but a route a
+// MODEL scorer can walk to reach it. Issue #100's fix produced packets that
+// named their own sources -- "(verbatim from benchmark/scorecard-template.md)"
+// -- and that template cites DECISION.md, so the route was two hops from a
+// packet and one hop from the citation. The old answer-key-pointer pattern
+// matched a literal DECISION.md and saw neither.
+//
+// The rule here is deliberately UNIFORM: any repository path, no judgement
+// about which paths are "safe". §T7's reasoning -- a selective rule forces
+// every future reader to re-derive which paths were judged safe, and that
+// re-derivation is where the next leak hides.
+describe('the packet scanner itself works (controls)', () => {
+    it('POSITIVE: a directory-qualified path fires', () => {
+        const { text, lineStarts } = normalizeProse('(verbatim from benchmark/scorecard-template.md)')
+        const hits = scanPackets(text, lineStarts)
+
+        expect(hits.map((h) => h.pattern)).toEqual(['repository-path'])
+        expect(hits[0].text).toBe('benchmark/scorecard-template.md')
+    })
+
+    it('POSITIVE: a bare root-level doc name fires -- the case the old literal pattern missed', () => {
+        // The old answer-key-pointer matched /DECISION\.md/i and nothing else.
+        // DESIGN.md is a root-level answer-adjacent document and was invisible
+        // to it. Both must fire now.
+        const { text, lineStarts } = normalizeProse('see DESIGN.md and DECISION.md for the rulings')
+        const hits = scanPackets(text, lineStarts)
+
+        expect(hits.map((h) => h.text).sort()).toEqual(['DECISION.md', 'DESIGN.md'])
+    })
+
+    it('POSITIVE: a relative path fires, and reports the line it opened on', () => {
+        // Packets embed spec content, and the specs use ../ and ../../ forms.
+        // The line map matters for the same reason it does in the spec channel:
+        // a failure must point at real source.
+        const { text, lineStarts } = normalizeProse(
+            'first line with nothing\n' + 'the guard is ../../test/blindRule.test.js today\n'
+        )
+        const hits = scanPackets(text, lineStarts)
+
+        expect(hits.map((h) => h.text)).toEqual(['../../test/blindRule.test.js'])
+        expect(hits[0].line).toBe(2)
+    })
+
+    it('NEGATIVE: prose containing a slash but no repository path does not fire', () => {
+        // Row 06's real packet text. A UI breadcrumb is not a path into this
+        // repo, and a pattern that reddened on it would be untenable.
+        const { text, lineStarts } = normalizeProse('Open Now Assist / AI Skill Studio and locate the provider integration')
+
+        expect(scanPackets(text, lineStarts)).toEqual([])
+    })
+
+    it('NEGATIVE: a platform table or field name does not fire', () => {
+        const { text, lineStarts } = normalizeProse(
+            'sn_aia_execution_plan.state, x_snc_tsbench_routing, api_type=sys_hub_flow'
+        )
+
+        expect(scanPackets(text, lineStarts)).toEqual([])
     })
 })
