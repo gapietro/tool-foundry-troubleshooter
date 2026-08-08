@@ -3727,8 +3727,9 @@ survived three passes; that is the part worth generalising.
 
 §T9's third recommendation was the second blocker: **widen the blind-rule test to any repository
 path** and run it over the packets. §T7 found the gate green at 11/11 while two one-hop routes to
-the answer key sat in the v9 packet framing, both removed by hand — *"the second consecutive round
-in which the leak was caught by hand rather than by the gate."*
+the answer key sat in the v9 packet framing, both removed by hand; §T9, carrying that finding into
+its recommendations, is where the generalisation is written — *"this pass is the second consecutive
+round in which the leak was caught by hand rather than by the gate."*
 
 ### Z2. The two clauses, and why both cases and not only the one §T9 named
 
@@ -3752,11 +3753,15 @@ falls on: a value the instance does not hold — an assignment group for a table
 the builder's to choose, and demanding it would reward fabrication; a value the instance does hold
 is diagnosis the run declined to perform.
 
-**§T9 named only Case 1.** Rows 01 and 02 record a *second* under-determination in the same column —
-whether naming the runtime `sn_aia_tool` record rather than the Fluent source counts as applicable
-without editing — and each of those scorers noted the other reading would flip the gate. Deciding
-Case 1 and leaving Case 2 would have reproduced §T9's exact complaint, *"a coin the scorers are
-being asked to flip"*, on the same column of the same rubric. Both cases are subordinate to §A's
+**§T9 named only Case 1, and the evidence for Case 2 cuts both ways.** Rows 01 and 02 record a
+*second* under-determination in the same column — whether naming the runtime `sn_aia_tool` record
+rather than the Fluent source counts as applicable without editing. §T5's own sentence is that those
+rows *"resolve it as **not a rubric gap**, each scorer noting the other reading would flip the
+gate"* — so the nearest reading of the evidence is that Case 2 needed no clause, and expanding scope
+to decide it goes beyond what §T9 asked for. It is decided anyway, on the second half of that same
+sentence: a column whose alternative reading flips the gate is under-determined whatever the scorers
+concluded about it, and deciding Case 1 while leaving Case 2 would have reproduced §T9's exact
+complaint, *"a coin the scorers are being asked to flip"*, on the same column of the same rubric. Both cases are subordinate to §A's
 existing constraint — `fix_usable_unedited` may not be 1 while `fix_target_correct` is 0 — which is
 checked first.
 
@@ -3812,13 +3817,27 @@ selected to produce a result. It is **not** evidence that the clause is correct.
 
 ### Z4. The packet channel is now scanned, and v4 is declared rather than exempted
 
-`test/scorerPacketBlindRule.test.js` gains `PACKET_PATTERNS` — one uniform any-repository-path rule
+`test/scorerPacketBlindRule.test.js` gains `PACKET_PATTERNS` — a single any-repository-path rule
 bound to the packet channel — and `PACKET_SETS`, which declares every committed packet directory
-with a scanned flag and a written reason. The old `answer-key-pointer` pattern matched a literal
+with a scanned flag and a written reason. **The rule aims at uniformity without quite reaching it,
+and the shipped shape is the one to quote:** any bare `*.md` filename fires, so every document in
+this repository is covered by name, and a longer path fires when it is rooted at one of the
+enumerated directory stems (`benchmark`, `docs`, `src`, `test`, `seed-app`, `node_modules`, `dist`,
+`.claude`, `seeds`, `history`, `results`, `scoring-vN`, and the `scorecard-` / `raw-evidence-`
+stems). A non-markdown file outside those stems is not matched. The first shipped version was
+narrower still — an eight-name root-level whitelist — and the #139 review found it missing
+`scorecard-v9.md`, `seeds/history/` and `scoring-v9/results/row-NN-result.md`, each a live route to
+an answer key, and both of §T7's own leaks if written one directory segment shorter. Widened and
+re-measured: the twelve v9 packets still scan 0, so no false positive forced a tightening. The old `answer-key-pointer` pattern matched a literal
 `DECISION.md` and scanned the seed specs, one of the rule's three channels; both of §T7's one-hop
 routes were outside it.
 
-> **v9: 12 packets, 0 hits. v4: 20 packets, 164 hits, held out unedited.**
+> **v9: 12 packets, 0 hits — before and after the widening. v4: 20 packets, 164 hits, held out
+> unedited.**
+
+Three positive controls were added with the widening — `scorecard-v9.md` by bare filename, a bare
+`seeds/history/`, and `scoring-v9/results/row-NN-result.md` beside an unlisted root document — so
+the widening is proven by the suite rather than asserted here.
 
 **Why `scoring-v4` is a directory-level declaration and not a pattern-level exemption.** Its packets
 were scored before this guard existed and they are the record of what those scorers actually read;
@@ -3846,9 +3865,12 @@ harness, in either direction.**
   worse.
 - **§T8's limits stand in full and unamended.** **No rate** — twelve rows, three seeds, one instance,
   one day, one model, one app version; two reps per seed per arm measures a flip, not a frequency.
-  **No Task 12 band verdict** — §A3.4's evaluability floor of 8 valid runs per arm is still unmet at
-  6, and the band lookup is still not performed. 34/36 · 4/6 is not a rate and must not be read as
-  one.
+  **No Task 12 band verdict** — §A3.4 states the floor as *"below 8 valid runs the gate is not
+  evaluable"*, without saying whether the count is per arm or across the pass. Read per arm it is
+  unmet at 6. §T8 records that a permissive reading exists — the clause is written about voids
+  eroding a 10-row denominator, not about a pass designed with 6 rows per arm — and that reading is
+  still contested, not settled here. Either way the band lookup is not performed. 34/36 · 4/6 is not
+  a rate and must not be read as one.
 - **The derived figure is a re-reading of twelve existing rows, not a new pass.** It adds no rows, no
   seeds and no reps. It re-judges nothing outside `fix_usable_unedited`, and only where a scorer
   recorded the fact the clause turns on.
@@ -3869,7 +3891,8 @@ harness, in either direction.**
 ### Z6. Disposition
 
 **Both §T9 pass blockers are closed.** The rubric clause is written, placed inside the packet-reaching
-range and pinned by a test; the blind-rule gate scans the packet channel with a uniform rule and one
+range and pinned by a test; the blind-rule gate scans the packet channel with a single
+any-repository-path rule — every `*.md` by name, longer paths by enumerated stem, per Z4 — and one
 declared out-of-scope directory. §T9's remaining recommendation — a release rule that inspects what
 the tool returned — is not addressed here and is separately bounded by §Y4 at a 1.6% bind rate;
 `REQUIRE_RETRIEVAL_TO_RELEASE` stays `false` per §Y6.
@@ -3885,5 +3908,5 @@ narrows the published margin without moving the recommendation — custom's 0/6 
 every resolution recorded in the twelve score files, including row 10's. Quote **34/36 · 4/6** only
 with the derived file beside it, and **9/36 or 8/36** for the custom total, never a bare figure.
 
-Suite at the close of this section: **1371 passed, 28 suites.** No production code was touched by
+Suite at the close of this section: **1374 passed, 28 suites.** No production code was touched by
 either issue.

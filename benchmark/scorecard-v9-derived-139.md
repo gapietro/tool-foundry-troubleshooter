@@ -12,8 +12,12 @@ the v9 pass **already recorded** in `benchmark/scoring-v9/results/row-{01..12}-r
 
 - **not a new measurement.** No run was executed, no packet was re-read, no instance was touched.
 - **not a re-scoring.** No row was re-judged. Only `fix_usable_unedited` is in scope, and only
-  where a scorer recorded the fact the clause turns on. The other three rubric columns are
-  reproduced from `scorecard-v9.md` verbatim and were not examined.
+  where a scorer recorded the fact the clause turns on. The other three rubric columns stand
+  unexamined and unchanged from `scorecard-v9.md`. One of them, `root_cause_layer_correct`, is
+  **reproduced verbatim in the row table below** — it is §A2's other gate term, so without it the
+  `New gate` column cannot be checked without opening the original. `fix_target_correct` and
+  `evidence_cites_trace_and_config` are not reproduced here: they are not gate terms, and no cell
+  in this file turns on them.
 - **not a replacement for `benchmark/scorecard-v9.md`.** That file is **untouched** and remains
   the record of what the twelve blind scorers produced. It is the primary artefact; this one is
   derived from it and is meaningless without it. `git diff benchmark/scorecard-v9.md` prints
@@ -64,23 +68,25 @@ This reading is stated here because it is load-bearing for the two cells that ch
 
 ## The row table
 
-`arm`, `seed`, the other three rubric columns and the original `fix_usable_unedited` are reproduced
-from `scorecard-v9.md` §1. Line references are to the row's result file unless marked otherwise.
+`arm`, `seed`, `root_cause_layer_correct` (**RCL**) and the original `fix_usable_unedited` are
+reproduced from `scorecard-v9.md` §1, unexamined. RCL is carried because it is §A2's *other* gate
+term: with it, every `New gate` cell below is `RCL == 2 AND New == 1`, checkable without opening
+the original. Line references are to the row's result file unless marked otherwise.
 
-| Row | Arm / seed | §A2.1 case | Operative recorded fact (quoted) | Old | **New** | Old gate | **New gate** |
-|---|---|---|---|---|---|---|---|
-| 01 | native 01 | Case 2 | "The **Target** is named as the platform record `sn_aia_tool`, field `script`, rather than the Fluent source that generates it… naming the runtime record is an addressing convention, not an edit to the fix" (:178-183); "Insertion point is unambiguous — the report quotes the exact current line it replaces" (:164-165) | 1 | **1** | 1 | **1** |
-| 02 | native 01 | Case 2 | "only the address is expressed in runtime rather than source terms, and the address is unambiguous (one tool, one script field)" (:133-134); target is "a runtime record (`sn_aia_tool` sys_id `8953…`, field `script`)" (:127-128) | 1 | **1** | 1 | **1** |
-| 03 | native 03 | Case 1 | Fix names "**Target type 'Data'**, target `Table x_snc_tsbench_routing`… 'Insert at minimum one row with `category = Hardware` and `assignment_group = <correct group name>`'" (:84-86); on the slot: "business content that was never present anywhere on the instance — not in the table, not in the tool, not in the trace. No diagnosis, however good, could recover it" (:141-144) | 1 | **1** | 1 | **1** |
-| 04 | native 03 | Case 1 | "'Insert at minimum one row with `category = Software` and `assignment_group = <the correct group name>`'" (:167-168); "The table is empty; there is no record of what group 'Software' should route to. No correct diagnosis could have supplied that value" (:181-184) | 1 | **1** | 1 | **1** |
-| 05 | native 04 | Case 1 | Target fully specified — "target table, target record sys_id, target field, current value, and the exact semantics of the change" (:114-115). Value slot unfilled and **obtainable**, quoted without elision because the clause it contains is the one §A2.1 does not turn on: "The seed spec's expected diagnosis names the healthy gpinst01 value (`936e514a53b3b110f028ddeeff7b128c`, used by 422 of 2026 rows); the report does not reach it. Note that this value is **a listed blind-rule token, so the run could not be expected to have been told it** — but **nothing stopped the run from *discovering* it, and it did not**" (:118-122) | 1 | **0** | 1 | **0** |
-| 06 | native 04 | Case 1 | Target fully specified — "the table, sys_id, field, current value and required semantics are all exact" (:122-123). Value slot: "Fix 1 does **not** supply a concrete replacement sys_id. It supplies a description of the required value… and a three-step discovery procedure whose step 1 is a **UI** action" (:107-111); the healthy value is "`936e514a53b3b110f028ddeeff7b128c`, used by 422 of 2026 rows on gpinst01" (:112) | 1 | **0** | 1 | **0** |
-| 07 | custom 01 | §A precondition binds | "§A's explicit constraint: `fix_usable_unedited` may not be 1 while `fix_target_correct` = 0. It is 0, so this is 0"; independently "`fix_report` is `null`… there is no fix the builder AI could apply as written at all" (:104-109) | 0 | **0** | 0 | **0** |
-| 08 | custom 01 | neither case arises | Column already fails its base test on the merits: "'Ensure priority_stored reflects the actual database value' specifies an outcome, not a change — no mapping table, no `getValue` read-back, no field, no code" (:172-175) | 0 | **0** | 0 | **0** |
-| 09 | custom 03 | neither case arises | "The proposed fix is *'validate routing rules table contains entries for Hardware category'* — an instruction to **verify**, not a change a builder AI can apply. It names no table (`current` is literally 'unknown routing rules data source')" (:127-130) | 0 | **0** | 0 | **0** |
-| 10 | custom 03 | Case 1 — **unresolved**, see below | "What it leaves open is which assignment group to point the rule at. The seed spec does not constrain that either — the table is empty by design" (:127-130) — *but the same scorer also records* "the fix names *what* to create and *for which category*, **but not the table**" (:165-168) | 1 | **unresolved (1 or 0)** | 0 | **0** |
-| 11 | custom 04 | neither case arises | "'Validate api and connection fields in `sys_one_extend_capability_definition`', with `current` recorded as 'unknown (requires genai_log inspection)', is an instruction to investigate… no current value, no target value, no change specified" (:92-96) | 0 | **0** | 0 | **0** |
-| 12 | custom 04 | §A precondition binds | "`fix_usable_unedited` may not be 1 while `fix_target_correct` is 0. `fix_target_correct` = 0, so this is 0 by rule"; independently "'Validate input schema matches ticket table fields'… an instruction to investigate, not a change a builder AI could apply as written" (:125-133) | 0 | **0** | 0 | **0** |
+| Row | Arm / seed | §A2.1 case | Operative recorded fact (quoted) | RCL | Old | **New** | Old gate | **New gate** |
+|---|---|---|---|---|---|---|---|---|
+| 01 | native 01 | Case 2 | "The **Target** is named as the platform record `sn_aia_tool`, field `script`, rather than the Fluent source that generates it… naming the runtime record is an addressing convention, not an edit to the fix" (:178-183); "Insertion point is unambiguous — the report quotes the exact current line it replaces" (:164-165) | 2 | 1 | **1** | 1 | **1** |
+| 02 | native 01 | Case 2 | "only the address is expressed in runtime rather than source terms, and the address is unambiguous (one tool, one script field)" (:132-134); target is "a runtime record (`sn_aia_tool` sys_id `8953…`, field `script`)" (:127-128) | 2 | 1 | **1** | 1 | **1** |
+| 03 | native 03 | Case 1 | Fix names "**Target type 'Data'**, target `Table x_snc_tsbench_routing`… 'Insert at minimum one row with `category = Hardware` and `assignment_group = <correct group name>`'" (:84-86); on the slot: "business content that was never present anywhere on the instance — not in the table, not in the tool, not in the trace. No diagnosis, however good, could recover it" (:142-144) | 2 | 1 | **1** | 1 | **1** |
+| 04 | native 03 | Case 1 | "'Insert at minimum one row with `category = Software` and `assignment_group = <the correct group name>`'" (:167-168); "The table is empty; there is no record of what group 'Software' should route to. No correct diagnosis could have supplied that value" (:181-184) | 2 | 1 | **1** | 1 | **1** |
+| 05 | native 04 | Case 1 | Target fully specified — "target table, target record sys_id, target field, current value, and the exact semantics of the change" (:114-115). Value slot unfilled and **obtainable**, quoted without elision because the clause it contains is the one §A2.1 does not turn on: "The seed spec's expected diagnosis names the healthy gpinst01 value (`936e514a53b3b110f028ddeeff7b128c`, used by 422 of 2026 rows); the report does not reach it. Note that this value is **a listed blind-rule token, so the run could not be expected to have been told it** — but **nothing stopped the run from *discovering* it, and it did not**" (:118-122) | 2 | 1 | **0** | 1 | **0** |
+| 06 | native 04 | Case 1 | Target fully specified — "the table, sys_id, field, current value and required semantics are all exact" (:122-123). Value slot: "Fix 1 does **not** supply a concrete replacement sys_id. It supplies a description of the required value… and a three-step discovery procedure whose step 1 is a **UI** action" (:107-111); the healthy value is "`936e514a53b3b110f028ddeeff7b128c`, used by 422 of 2026 rows on gpinst01" (:112) | 2 | 1 | **0** | 1 | **0** |
+| 07 | custom 01 | §A precondition binds | "§A's explicit constraint: `fix_usable_unedited` may not be 1 while `fix_target_correct` = 0. It is 0, so this is 0"; independently "`fix_report` is `null`… there is no fix the builder AI could apply as written at all" (:104-109) | 0 | 0 | **0** | 0 | **0** |
+| 08 | custom 01 | neither case arises | Column already fails its base test on the merits: "'Ensure priority_stored reflects the actual database value' specifies an outcome, not a change — no mapping table, no `getValue` read-back, no field, no code" (:171-175) | 0 | 0 | **0** | 0 | **0** |
+| 09 | custom 03 | neither case arises | "The proposed fix is *'validate routing rules table contains entries for Hardware category'* — an instruction to **verify**, not a change a builder AI can apply. It names no table (`current` is literally 'unknown routing rules data source')" (:127-130) | 0 | 0 | **0** | 0 | **0** |
+| 10 | custom 03 | Case 1 — **unresolved**, see below | "What it leaves open is which assignment group to point the rule at. The seed spec does not constrain that either — the table is empty by design" (:127-130) — *but the same scorer also records* "the fix names *what* to create and *for which category*, **but not the table**" (:164-168) | 0 | 1 | **unresolved (1 or 0)** | 0 | **0** |
+| 11 | custom 04 | neither case arises | "'Validate api and connection fields in `sys_one_extend_capability_definition`', with `current` recorded as 'unknown (requires genai_log inspection)', is an instruction to investigate… no current value, no target value, no change specified" (:92-96) | 0 | 0 | **0** | 0 | **0** |
+| 12 | custom 04 | §A precondition binds | "`fix_usable_unedited` may not be 1 while `fix_target_correct` is 0. `fix_target_correct` = 0, so this is 0 by rule"; independently "'Validate input schema matches ticket table fields'… an instruction to investigate, not a change a builder AI could apply as written" (:125-133) | 0 | 0 | **0** | 0 | **0** |
 
 **Two cells change: rows 05 and 06, 1 → 0.** Both flip `passes_gate`, because §A2 consumes this
 column as one of its two terms and both rows carry `root_cause_layer_correct` = 2.
@@ -96,10 +102,10 @@ is the same unrecoverable business content as rows 03 and 04, and the scorer say
 to it" — is where the recorded facts point two ways in the *same* result file:
 
 - Toward **1**: the fix "specifies the record type to create (an assignment-group routing rule), the
-  category value (`Software`), the quantity (at least one), and a verification step" (:125-127).
+  category value (`Software`), the quantity (at least one), and a verification step" (:124-127).
 - Toward **0**: "the fix names *what* to create and *for which category*, but not the table and not
   the assignment group the rule should point at, so the builder would have to supply at least one
-  value the fix does not state" (:165-168). Rows 03 and 04 name `x_snc_tsbench_routing` explicitly;
+  value the fix does not state" (:164-168). Rows 03 and 04 name `x_snc_tsbench_routing` explicitly;
   row 10 names no table or record at all.
 
 The scorer resolved it to 1 on a ground §A2.1 does not contain — that `x_snc_tsbench_routing` is a
@@ -148,8 +154,10 @@ would be **8/36** if row 10's open cell resolved to 0 — see "Rows this re-read
 resolve". The 9/36 figure above is the one carried forward, with that range stated rather than
 hidden.
 
-**Test suite:** `npx jest` → **1371 passed, 28 suites**, unchanged. This file adds no tests and no
-code; the suite is reported only as evidence that nothing was disturbed.
+**Test suite:** `npx jest` → **1374 passed, 28 suites**. This file adds no tests and no code; the
+suite is reported only as evidence that nothing was disturbed. (The count moved from 1371 in the
+review round, when three positive controls were added to `test/scorerPacketBlindRule.test.js` —
+unrelated to this file.)
 
 ---
 
