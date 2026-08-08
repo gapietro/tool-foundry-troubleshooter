@@ -17,6 +17,38 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0706 — 2026-08-07
+
+### Fixed — the persisted-request clip no longer splits an emoji in half (#106)
+
+`PaRunManager._requestFields` clipped an oversized inbound body with
+`text.substring(0, REQUEST_CHARS)`. JavaScript strings are UTF-16 **code units**, so an
+astral-plane character occupies two of them, and a clip landing between the halves left the stored
+`request` ending in a **lone high surrogate** — not valid UTF-16. It survives the column, and then
+threatens the two places the column is read back out: JSON encoding of the `GET /runs/{run_id}`
+response, and XML export of the record.
+
+The clip now goes through `_clipUtf16`, which drops a trailing high surrogate that has no low
+surrogate after it. The cost is one code unit off a prefix that `request_truncated` already declares
+truncated; the orphan's partner was outside the clip either way, so no whole character is ever
+discarded by this.
+
+**Why it was untested before.** #99 measured this path on gpinst01 and confirmed it stores exactly
+60,000 units — with ASCII input, where every character is one code unit and the defect cannot
+appear. The realistic trigger is the field the clipping exists for in the first place: a pasted
+`logs` value containing an emoji, landing on the wrong boundary.
+
+Two tests: one straddling the boundary (the regression), one ending a pair exactly **on** it, which
+pins the guard to orphans only and would fail an over-eager trim.
+
+**Sibling sites not touched.** The same code-unit arithmetic backs the digest clips in this file
+(`_digest`, `_promptDigest`) and the clips in `PaToolReadKit`, `PaArtifactStore`, `PaToolAgentTrace`
+and `PaAuditLogger`. Those feed `transcript` JSON and artifact bodies, so the JSON-encoding exposure
+is the same shape. Filed rather than folded in here, to keep this fix scoped the way #106 itself was
+scoped out of #99.
+
+---
+
 ## 2026.08.0705 — 2026-08-07
 
 ### Measured — §V5's counterfactual: the strict release rule would have changed 1 release in 64

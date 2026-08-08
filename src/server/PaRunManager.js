@@ -1006,7 +1006,35 @@ PaRunManager.prototype = {
         if (text.length <= this.REQUEST_CHARS) {
             return { request: text, request_truncated: 'false' }
         }
-        return { request: text.substring(0, this.REQUEST_CHARS), request_truncated: 'true' }
+        return { request: this._clipUtf16(text, this.REQUEST_CHARS), request_truncated: 'true' }
+    },
+
+    /**
+     * @param {String} text
+     * @param {Number} limit
+     * @returns {String} `text` clipped to at most `limit` UTF-16 code units,
+     *          never ending on a LONE high surrogate.
+     *
+     * JavaScript strings are UTF-16 code units, so an astral-plane character —
+     * an emoji, most plausibly inside a pasted `logs` value — occupies two of
+     * them. A plain `substring` at `limit` can land between the halves and
+     * leave a high surrogate with no low surrogate after it. That is not valid
+     * UTF-16: it survives the column but can break JSON encoding of the
+     * `GET /runs/{run_id}` response and XML export of the record (issue #106).
+     *
+     * Dropping the orphan costs one code unit off an already-truncated prefix,
+     * which `request_truncated` already declares. The low surrogate that would
+     * have followed is outside the clip either way, so there is no case where
+     * this discards a character that would otherwise have been whole.
+     */
+    _clipUtf16: function (text, limit) {
+        var clipped = text.substring(0, limit)
+        if (!clipped) return clipped
+        var last = clipped.charCodeAt(clipped.length - 1)
+        if (last >= 0xd800 && last <= 0xdbff) {
+            return clipped.substring(0, clipped.length - 1)
+        }
+        return clipped
     },
 
     _stringifyForDigest: function (value) {
