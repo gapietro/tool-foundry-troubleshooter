@@ -68,6 +68,51 @@ const SPECS = fs
     .filter((f) => /^seed-\d+-.*\.md$/.test(f))
     .sort()
 
+const SCORING = path.join(ROOT, 'benchmark')
+
+/**
+ * Every committed packet directory, DECLARED -- including the ones this guard
+ * does not scan, and why.
+ *
+ * A packet is the one self-contained file handed to one blind scorer
+ * (row-NN-<harness>-seed-SS-run-R.md). The other files in a scoring
+ * directory -- packet-build-report.md, run-evidence.md, trigger-report.md --
+ * are operator records that no scorer sees, so they are out of the channel and
+ * out of this scan.
+ */
+const PACKET_SETS = [
+    {
+        dir: 'scoring-v4',
+        packets: 20,
+        scanned: false,
+        why:
+            'Scored before this guard existed. Its 20 packets carry 164 repository-path ' +
+            'references, and they are the record of what those scorers actually read: ' +
+            'editing them to satisfy a later rule would destroy the only thing they exist ' +
+            'to preserve. Declared here rather than omitted so the exception is visible ' +
+            'instead of re-derived by whoever reads this next.',
+    },
+    {
+        dir: 'scoring-v9',
+        packets: 12,
+        scanned: true,
+        why: 'The current pass. Built path-clean by hand (§T7) and kept that way by this scan.',
+    },
+]
+
+/** The scorer-facing packets in one set, sorted. Operator records are excluded by the pattern. */
+function packetFiles(dir) {
+    return fs
+        .readdirSync(path.join(SCORING, dir))
+        .filter((f) => /^row-\d+-.*\.md$/.test(f))
+        .sort()
+}
+
+/** Read a packet and normalize it in one step. */
+function loadPacket(dir, filename) {
+    return normalizeProse(fs.readFileSync(path.join(SCORING, dir, filename), 'utf8'))
+}
+
 const PATTERNS = [
     {
         name: 'scored-a-number',
@@ -327,5 +372,51 @@ describe('the packet scanner itself works (controls)', () => {
         )
 
         expect(scanPackets(text, lineStarts)).toEqual([])
+    })
+})
+
+describe('no repository path reaches a scorer packet (issue #140)', () => {
+    it('declares every committed packet set, scanned or not', () => {
+        // Pinned by name AND count, for the same reason SPECS is: a
+        // substitution -- one set renamed, another added -- would keep the
+        // count right while coverage moved. A new pass CANNOT be added
+        // without a deliberate edit here, which is the point.
+        expect(PACKET_SETS.map((s) => s.dir)).toEqual(['scoring-v4', 'scoring-v9'])
+    })
+
+    it('holds scoring-v4 out of scope with a written reason, rather than omitting it', () => {
+        // The exception is visible in the file instead of re-derived by every
+        // future reader. This is a DIRECTORY-level declaration, not a
+        // pattern-level exemption: the file's doctrine forbids stop-lists
+        // because they are a SILENT second way to be unguarded, and a named
+        // directory carrying its own reason is neither silent nor a hole
+        // inside a scanned file.
+        const v4 = PACKET_SETS.find((s) => s.dir === 'scoring-v4')
+
+        expect(v4.scanned).toBe(false)
+        expect(v4.why.length).toBeGreaterThan(80)
+    })
+
+    PACKET_SETS.filter((s) => s.scanned).forEach((set) => {
+        const files = packetFiles(set.dir)
+
+        it(set.dir + ' has the packet count its pass produced', () => {
+            expect(files).toHaveLength(set.packets)
+        })
+
+        files.forEach((filename) => {
+            it(set.dir + '/' + filename + ' states no repository path', () => {
+                const { text, lineStarts } = loadPacket(set.dir, filename)
+                const hits = scanPackets(text, lineStarts)
+
+                expect(
+                    hits.map(
+                        (h) =>
+                            set.dir + '/' + filename + ':' + h.line + '  [' + h.pattern + ']  ' +
+                            h.text + '  -- ' + h.why
+                    )
+                ).toEqual([])
+            })
+        })
     })
 })

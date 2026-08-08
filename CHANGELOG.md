@@ -17,6 +17,34 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0708 — 2026-08-07
+
+### Fixed — the blind-rule gate now scans the packets, not only the seed specs (#140)
+
+§T7 found `test/scorerPacketBlindRule.test.js` passing 11/11 while two one-hop routes to the
+answer key sat in the v9 packet framing: `(verbatim from benchmark/scorecard-template.md)`,
+whose template cites DECISION.md, and `(verbatim, benchmark/seeds/seed-0N-….md)`, whose parent
+holds `seeds/history/`. Both were shorter than the two-hop route the packet builder had already
+flagged, and both were removed by hand. Second consecutive round caught by a human, not the gate.
+
+The guard was working exactly as written — `answer-key-pointer` matched a literal `DECISION.md`
+and scanned one of the rule's three channels, the seed specs.
+
+`PACKET_PATTERNS` adds one uniform any-repository-path rule bound to the packet channel, and
+`PACKET_SETS` declares every committed packet directory with a scanned flag and a written
+reason. The seed specs keep their existing five patterns and their 22 legitimate path strings;
+paths are stripped when spec content is embedded into a packet, which is what the v9 builder
+did by hand.
+
+`scoring-v4` is declared out of scope — scored before this guard existed, and its packets are
+the record of what those scorers actually read. That is a directory-level declaration with a
+stated reason, not a pattern-level exemption; the file's doctrine forbids stop-lists because
+they are a *silent* second way to be unguarded.
+
+Measured: v9's 12 packets, 0 hits. v4's 20 packets, 164 hits, unedited.
+
+Suite: **1365 passed, 27 suites** (was 1345/27). No production code touched.
+
 ## 2026.08.0707 — 2026-08-07
 
 ### Fixed — `analyze` stopped discarding `createRun`'s note (#105)
