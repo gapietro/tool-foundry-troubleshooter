@@ -19,12 +19,11 @@ column below exists for a stated reason — read the reason before skipping a co
 **Total: 6 points per run.**
 
 **Why `fix_target_correct` has a partial band.** It was 0-or-2, while seed 5's
-specification instructs the scorer to award *partial*
-credit for naming "inactive" without naming which of the two activation gates is
-off — an instruction the scale could not express, leaving the scorer to round
-arbitrarily in either direction. The 1 band resolves it. Seed 5 is the only seed
-that currently defines a partial case; for the others, 1 is available but must be
-justified in `notes` if used.
+specification instructs the scorer to award *partial* credit for naming "inactive"
+without naming which of the two activation gates is off — an instruction the scale
+could not express, leaving the scorer to round arbitrarily in either direction. The
+1 band resolves it. Seed 5 is the only seed that currently defines a partial case;
+for the others, 1 is available but must be justified in `notes` if used.
 
 ## A2. `passes_gate` — the column the gate actually consumes
 
