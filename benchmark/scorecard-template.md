@@ -104,11 +104,12 @@ builder's to choose, and demanding it would reward fabrication. A value the
 instance does hold is diagnosis the run declined to perform.*
 
 **Case 2 — the fix addresses a runtime record rather than the Fluent source.**
-Score **1** if the address resolves to **exactly one record and one field**.
-Score **0** if it does not uniquely identify the target. The builder AI is this
-column's stated consumer, and SDK-owns-creation is a convention of this project
-rather than a property of the diagnosis, so translating a unique runtime address
-into its Fluent source is not an edit to the fix.
+Score **1** if the address resolves to **exactly one record** and
+**names every field it changes**. Score **0** if a scorer would have to work out
+which record or which field the fix means. The builder AI is this column's stated
+consumer, and SDK-owns-creation is a convention of this project rather than a
+property of the diagnosis, so translating a unique runtime address into its
+Fluent source is not an edit to the fix.
 
 Both cases are subordinate to the constraint already stated in §A —
 `fix_usable_unedited` may not be 1 while `fix_target_correct` is 0. **Check that

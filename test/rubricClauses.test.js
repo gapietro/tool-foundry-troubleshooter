@@ -69,8 +69,14 @@ describe('the fix_usable_unedited clauses exist (issue #139)', () => {
         expect(packetReachingRange(source)).toContain('did not look it up')
     })
 
-    it('clause 2 states the uniqueness test for a runtime address', () => {
-        expect(packetReachingRange(source)).toContain('exactly one record and one field')
+    it('clause 2 states the unambiguity test for a runtime address', () => {
+        const range = packetReachingRange(source)
+
+        // Both halves are load-bearing: "exactly one record" alone leaves a
+        // fix that changes several fields on that record an unstated case,
+        // which is the exact defect this clause was reworded to close.
+        expect(range).toContain('exactly one record')
+        expect(range).toContain('names every field it changes')
     })
 
     it('the fix_usable_unedited row points a scorer at §A2.1', () => {
