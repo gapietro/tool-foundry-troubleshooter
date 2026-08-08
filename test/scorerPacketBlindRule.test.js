@@ -38,7 +38,12 @@
  * WHAT THIS GUARD COVERS, AND WHAT IT DOES NOT
  * ---------------------------------------------------------------------------
  * The rule binds three channels (benchmark/README.md, "The scorer blind
- * rule"). This guard scans TWO of them, with a separate pattern list each:
+ * rule"). This guard scans two of them -- SEED SPECS and RUBRIC. PACKETS is
+ * not one of the rule's three channels; it is a separate artefact the
+ * channels are assembled into, scanned here for a different concern (a
+ * repository PATH, not a prior run's outcome). Three pattern lists below,
+ * one per row, because uniform treatment of "what this file scans" still
+ * needs a list entry for the non-channel artefact:
  *
  *   SEED SPECS   PATTERNS         bans a prior run's OUTCOME
  *   PACKETS      PACKET_PATTERNS  bans a repository PATH
@@ -219,10 +224,15 @@ const PACKET_PATTERNS = [
         // Measured after this widening: the twelve committed v9 packets scan
         // 0, unchanged from before it, so nothing here was tightened back for
         // a false positive.
+        // The third alternation's extension is matched case-insensitively
+        // ([mM][dD], not a literal .md) -- M4: the .md alternation used to be
+        // case-sensitive while the seed-spec channel's /DECISION\.md/i was
+        // not, so a bare DECISION.MD escaped this pattern alone. Scoped to
+        // the extension only, so PATH_STEMS stays case-sensitive as written.
         re: new RegExp(
             '(?:(?:\\.{0,2}\\/)*(?:' + PATH_STEMS + ')\\/[A-Za-z0-9_./-]*)' +
                 '|(?:(?:\\.{1,2}\\/)+(?:' + PATH_STEMS + ')\\b)' +
-                '|\\b[A-Za-z0-9_-]+\\.md\\b'
+                '|\\b[A-Za-z0-9_-]+\\.[mM][dD]\\b'
         ),
         why:
             'a repository path a MODEL scorer can follow out of the packet and into this ' +
@@ -306,11 +316,24 @@ const TEMPLATE = path.join(SCORING, 'scorecard-template.md')
 function rubricRange() {
     const { text, lineStarts } = normalizeProse(fs.readFileSync(TEMPLATE, 'utf8'))
 
+    const start = text.indexOf('## A. ')
+    const end = text.indexOf('## B. ')
+
+    // A renamed or removed heading must fail LOUDLY. indexOf returns -1 on a
+    // miss, and slice(-1, -1) is an EMPTY string that scans clean -- both
+    // content scans would go green on nothing, with only the derivation
+    // assertion (expect(start).toBeGreaterThan(-1)) left to notice.
+    if (start < 0 || end <= start) {
+        throw new Error(
+            'rubricRange(): "## A. " / "## B. " headings not found (or out of order) in ' + TEMPLATE
+        )
+    }
+
     return {
         text: text,
         lineStarts: lineStarts,
-        start: text.indexOf('## A. '),
-        end: text.indexOf('## B. '),
+        start: start,
+        end: end,
     }
 }
 
@@ -354,7 +377,7 @@ const COUNT = '\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twel
  * the one incident these patterns were derived from; it does not close this
  * shape, and is not an implied guarantee that it does.
  *
- * THREE WEAKNESSES, recorded rather than glossed:
+ * FOUR WEAKNESSES, recorded rather than glossed:
  *   1. `verdict-moved` is reverse-engineered from the one incident available.
  *      It bans a real shape -- what a prior pass's score did to the verdict --
  *      but nothing establishes it generalises.
@@ -363,6 +386,9 @@ const COUNT = '\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twel
  *      "awarded".
  *   3. `counted-rows` near-misses "two of the four rubric columns", surviving
  *      only because its noun list stops at runs|rows|passes.
+ *   4. The bare-fraction residue documented above is not covered, and the
+ *      coverage argument for excluding `rubric-fraction` rests on the single
+ *      incident the patterns were built from.
  * Both near-misses are pinned as negative controls. Per the doctrine above, a
  * pattern that reddens on real guidance is fixed by writing a better pattern.
  */
@@ -374,6 +400,13 @@ const RUBRIC_PATTERNS = [
         // of the packet, into a document the scorer does not have -- which is
         // exactly what #139's two bare §O5/§T5 pointers were. §B is rejected
         // too, correctly: a packet ends at §A3.
+        //
+        // Residue, stated rather than left to be re-derived: "§ O5" -- a
+        // space between the mark and the section id -- escapes this pattern.
+        // The regex requires an alnum/dot immediately after §; a space there
+        // means the pattern never matches at all, so the negative lookahead
+        // is never reached to reject or admit it. Verified, not observed in
+        // the range today.
         re: /§(?!A[0-9.]*\b)[A-Za-z0-9.]+/,
         why:
             'a section pointer out of the rubric and into the decision record, which a ' +
@@ -560,6 +593,18 @@ describe('the packet scanner itself works (controls)', () => {
         const hits = scanPackets(text, lineStarts)
 
         expect(hits.map((h) => h.text).sort()).toEqual(['DECISION.md', 'DESIGN.md'])
+    })
+
+    it('POSITIVE: an upper-cased extension fires (M4) -- DECISION.MD is not a different file', () => {
+        // The bare-filename alternation used to be case-sensitive on the
+        // extension (`.md` only), so DECISION.MD escaped this pattern even
+        // though the spec channel's /DECISION\.md/i would have caught the
+        // same string. Scoped to [mM][dD] so this route closes without
+        // widening PATH_STEMS to match case-insensitively too.
+        const { text, lineStarts } = normalizeProse('cross-check against DECISION.MD before grading')
+        const hits = scanPackets(text, lineStarts)
+
+        expect(hits.map((h) => h.text)).toEqual(['DECISION.MD'])
     })
 
     it('POSITIVE: a relative path fires, and reports the line it opened on', () => {
@@ -823,6 +868,29 @@ describe('the rubric channel reaches every packet and is scanned (issue #143)', 
         expect(scanRubric(text, lineStarts, 0, text.length)).toEqual([])
     })
 
+    it('I4: PATTERNS\' rubric-fraction still fires on the real range -- the exclusion above holds only while this does', () => {
+        // The exclusion of rubric-fraction from RUBRIC_SCAN is justified by
+        // an argument that is TRUE TODAY, not true forever: it fires 10x on
+        // legitimate Task 12 band guidance in this range (DECISION.md §AA2).
+        // If a future rewrite ever makes §A2/§A3 fraction-free, the exclusion
+        // survives unnoticed and the channel is silently unguarded against
+        // exactly the leak shape #139 contained ("6/6 and 0/6"). This test
+        // is what forces a re-justification instead of a silent bit-rot: if
+        // it goes red, do not delete it -- either restore fraction-shaped
+        // guidance or re-examine whether rubric-fraction should be included.
+        //
+        // Asserts `> 0`, not the measured count (10), deliberately: pinning
+        // 10 would fail on any legitimate rubric edit that adds or removes
+        // one band example, which is a different failure than the one this
+        // test exists to catch. The invariant that matters here is "the
+        // exclusion is still justified", not "the count never moves".
+        const rubricFraction = PATTERNS.find((p) => p.name === 'rubric-fraction')
+        const { text, lineStarts, start, end } = rubricRange()
+        const hits = scanWith([rubricFraction], text.slice(start, end), lineStarts, start)
+
+        expect(hits.length).toBeGreaterThan(0)
+    })
+
     it('NEGATIVE: two near-misses on legitimate guidance stay clean', () => {
         // Both sit ONE WORD from firing, and both are guidance a scorer needs.
         // Pinned so a future widening that would take them fails here instead
@@ -887,9 +955,35 @@ describe('the rubric channel reaches every packet and is scanned (issue #143)', 
         expect(readme).toContain('repository paths')
         expect(readme).toContain("Two of the rule's three channels are now scanned")
 
+        // I1: the roster TABLE ROWS themselves, not only the narrative prose
+        // below the table. A review deleted both new rows from the table and
+        // re-ran the suite: 48/48 stayed green, because every toContain
+        // check above lives in the paragraph below the table, not in it. A
+        // wholesale revert of this file is caught by other assertions in
+        // this file; a targeted roster-row edit -- the realistic drift -- was
+        // not, despite CHANGELOG.md and the plan both claiming "pinned by a
+        // test". These two bind the literal rows.
+        expect(readme).toContain(
+            '| `test/scorerPacketBlindRule.test.js` | **repository paths** reaching a committed scorer packet | #140 |'
+        )
+        expect(readme).toContain(
+            "| `test/scorerPacketBlindRule.test.js` | **a prior pass's outcome or provenance, and repository paths**, reaching the rubric slice | #143 |"
+        )
+
         // The three sentences that became FALSE when the rubric scan landed.
         expect(readme).not.toContain('The guard scans the seed specs — one of the three channels.')
-        expect(readme).not.toContain('is not\nmachine-scanned')
         expect(readme).not.toContain('does the same for the 5 seed specs')
+
+        // M3: matched on a whitespace-collapsed fragment, anchored on "rubric
+        // channel" specifically. The literal 'is not\nmachine-scanned' this
+        // replaced was coupled to hard-wrap position: a benign reflow of the
+        // (still-true, still-present) run-report sentence below -- which
+        // legitimately carries the same "is not machine-scanned" words --
+        // would have reddened this spuriously, and the false claim
+        // reintroduced on a single line would have evaded it entirely.
+        const collapsedReadme = readme.replace(/\s+/g, ' ')
+        expect(collapsedReadme).not.toMatch(
+            /rubric channel is bound by the rule and is not machine-scanned/i
+        )
     })
 })
