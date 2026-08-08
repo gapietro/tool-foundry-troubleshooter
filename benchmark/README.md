@@ -112,21 +112,27 @@ removed. A packet embeds the spec and never the history file.
 
 | Guard | Catches | Origin |
 |---|---|---|
-| `test/scorerPacketBlindRule.test.js` | **prior-run outcomes** reaching a scorer | #100 |
+| `test/scorerPacketBlindRule.test.js` | **prior-run outcomes** reaching the 5 scorer-facing seed specs | #100 |
+| `test/scorerPacketBlindRule.test.js` | **repository paths** reaching a committed scorer packet | #140 |
+| `test/scorerPacketBlindRule.test.js` | **a prior pass's outcome or provenance, and repository paths**, reaching the rubric slice | #143 |
 
-The guard scans the seed specs — one of the three channels. The rubric and the
-run reports are bound by the rule and not by the guard. For the rubric, that is
-a mechanical judgement and not a safety claim: only §A/§A2/§A3 of
-`scorecard-template.md` reach a packet, and the section legitimately explains
-grading with score-shaped text (*"a run can score 3/6 and pass"*), so a
-whole-file scan reddens on guidance rather than on leaks. It was once written up
-here as though score-shaped text in the rubric were *therefore* always
-legitimate; issue #139 falsified that, when a §A2.1 preamble shipped into the
-rubric slice stating what a prior pass had scored and pointing twice into
-`DECISION.md`. **The rubric channel is bound by the rule and is not
-machine-scanned, so every addition to §A/§A2/§A3 must be checked by hand against
-the blind rule before it ships.** As with the harness rule, the roster tracks
-the principle rather than defining it.
+One file, three pattern lists, because the three channels ban different things
+and scan different files. **Two of the rule's three channels are now scanned.**
+The rubric channel — §A/§A2/§A3 of `scorecard-template.md`, the slice copied
+into *every* packet — was the last to be covered, and covering it took two
+changes rather than one. Its four repository paths were reworded out at source
+(they were already being removed by hand at packet-build time), and its
+outcome patterns are scoped to the channel: a naive scan reddens on the Task 12
+band table, because the rubric legitimately explains grading with score-shaped
+text (*"a run can score 3/6 and pass"*). What it does not get to do is report
+what a prior pass measured — which is what issue #139 caught it doing, when a
+§A2.1 preamble shipped into the slice stating what a prior pass had scored and
+pointing twice into `DECISION.md`.
+
+**The run-report channel is bound by the rule and is not machine-scanned.** It
+is per-row prose written fresh each pass, so every run report must be checked by
+hand against the blind rule before it ships. As with the harness rule, the
+roster tracks the principle rather than defining it.
 
 **A passing suite is not evidence of blindness.** None of the three guards above can catch what it
 was not told to look for, and a token that names platform vocabulary a tool legitimately reads is a
@@ -137,8 +143,9 @@ reading — a hand sweep caught a framing leak in `PaToolGenAiLog` that no token
 adversarial review caught a second leak in `PaToolAgentConfig` that the hand sweep had already
 walked past. Every guard's value here is prospective, not diagnostic: `blindRule.test.js` pins both
 #89 leaks closed permanently and covers all 16 harness sources automatically from here on, and
-`scorerPacketBlindRule.test.js` does the same for the 5 seed specs — so the next leak in either
-channel fails a build instead of waiting for someone to notice.
+`scorerPacketBlindRule.test.js` covers the 5 seed specs, the committed scorer packets and the rubric
+slice the same way — so the next leak in any of those fails a build instead of waiting for someone to
+notice.
 
 ## The protocol
 

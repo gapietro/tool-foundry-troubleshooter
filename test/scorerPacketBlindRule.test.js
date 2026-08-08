@@ -35,27 +35,33 @@
  * a second, SILENT way to be unguarded.
  *
  * ---------------------------------------------------------------------------
- * WHAT THIS GUARD DOES NOT COVER
+ * WHAT THIS GUARD COVERS, AND WHAT IT DOES NOT
  * ---------------------------------------------------------------------------
  * The rule binds three channels (benchmark/README.md, "The scorer blind
- * rule"); this guard scans one of them. The rubric channel is
- * benchmark/scorecard-template.md, of which only sections A/A2/A3 reach a
- * packet. It is NOT scanned here, and the reason is mechanical rather than
- * principled: the section legitimately explains grading with score-shaped text
- * ("a run can score 3/6 and pass"), so a naive scan reddens on guidance, while
- * a section-scoped scan would pin the template's heading structure into a test.
+ * rule"). This guard scans TWO of them, with a separate pattern list each:
  *
- * That is a cost/benefit judgement, NOT a claim that the channel is safe. It
- * was once written up as though score-shaped text in the rubric were only ever
- * legitimate guidance; #139 falsified that -- a §A2.1 preamble shipped into the
- * rubric slice carrying a prior pass's grades and two decision-record section
- * pointers, and no guard could have fired. So: the rubric channel is bound by
- * the rule and is not machine-scanned, which makes every addition to §A/§A2/§A3
- * a HAND check against the blind rule before it ships.
+ *   SEED SPECS   PATTERNS         bans a prior run's OUTCOME
+ *   PACKETS      PACKET_PATTERNS  bans a repository PATH
+ *   RUBRIC       RUBRIC_PATTERNS  bans a prior pass's outcome or provenance,
+ *                + PACKET_PATTERNS  and a repository path
  *
- * The run-report channel is per-row prose written fresh each pass. Both are
- * bound by the rule and neither is scanned here. A passing suite is not
- * evidence of blindness; it is evidence the declared patterns did not fire.
+ * The rubric channel is benchmark/scorecard-template.md §A/§A2/§A3 -- the
+ * slice copied into EVERY packet, so a leak there reaches every row of a pass
+ * at once. It was previously unscanned on a cost/benefit judgement: the
+ * section legitimately explains grading with score-shaped text ("a run can
+ * score 3/6 and pass"), so a naive scan reddens on guidance. That judgement
+ * was once written up as though score-shaped text in the rubric were only
+ * ever legitimate guidance; #139 falsified it -- a §A2.1 preamble shipped
+ * into the slice carrying a prior pass's grades and two decision-record
+ * section pointers, and no guard could have fired. #143 scanned it, with the
+ * patterns scoped to the channel rather than borrowed whole. See
+ * RUBRIC_PATTERNS for what is deliberately absent and why.
+ *
+ * The RUN-REPORT channel is per-row prose written fresh each pass. It is
+ * bound by the rule and is NOT scanned here, so it remains a hand check.
+ *
+ * A passing suite is not evidence of blindness; it is evidence the declared
+ * patterns did not fire.
  */
 
 const fs = require('fs')
@@ -864,5 +870,22 @@ describe('the rubric channel reaches every packet and is scanned (issue #143)', 
                     h.text + '  -- ' + h.why
             )
         ).toEqual([])
+    })
+
+    it('the README guard roster names every channel this file scans', () => {
+        // #144 item 2: the roster described only the seed-spec channel, two
+        // guard generations after the packet channel landed. A roster that
+        // does not match the guard is how the next reader mis-scopes a change,
+        // so it is pinned rather than trusted.
+        const readme = fs.readFileSync(path.join(SCORING, 'README.md'), 'utf8')
+
+        expect(readme).toContain('scorer-facing seed specs')
+        expect(readme).toContain('repository paths')
+        expect(readme).toContain('rubric')
+
+        // The three sentences that became FALSE when the rubric scan landed.
+        expect(readme).not.toContain('The guard scans the seed specs — one of the three channels.')
+        expect(readme).not.toContain('is not\nmachine-scanned')
+        expect(readme).not.toContain('does the same for the 5 seed specs')
     })
 })
