@@ -165,17 +165,20 @@ PaAgentLoop.prototype = {
      *  rounds over eight seed-01 runs returned NO VERDICT (§U8.3's stop rule
      *  fired at D<3), and of the 4 runs that fired a return only 2 made a tool
      *  call and only 1 retrieved anything. Undecided is not proven, so the
-     *  default is off. At the dormant setting the guard in `_handleFixReport`
-     *  falls straight through to the existing repair turn, which is
-     *  `2026.08.0505` behaviour exactly.
+     *  default is off. At 0 the guard in `_handleFixReport` falls straight
+     *  through to the existing repair turn, which is `2026.08.0505` behaviour
+     *  exactly. Set `maxEvidenceReturns: 2` via `initialize()` to enable it.
      *
-     *  ⚠ THIS IS THE §W SIZED-ROUND BUILD — NOT A SHIPPING DEFAULT. Raised to
-     *  2 to execute the round pre-registered in DECISION.md §W (#121 steps
-     *  3–4). Per §V5 neither constant has a wiring seam, so a measured round
-     *  is an edit-rebuild-reinstall; this is that edit. Whether the value
-     *  stays at 2 is decided ONLY by §W6's table applied after the round
-     *  closes — do not merge this branch on any other basis. */
-    MAX_EVIDENCE_RETURNS: 2,
+     *  STAYS AT 0 — the §W sized round RAN and did not ratify it (#121,
+     *  `benchmark/raw-evidence-v11-sized-round.md`, DECISION.md §X). n = 60,
+     *  D = 10, N = 1: of the ten runs told "you need a tool call, not a
+     *  rewrite", NINE rewrote anyway and one retrieved. 1/10 = 0.10 against
+     *  §W6's 1/2 threshold, so §W6 row 3 applies — the cap stays 0 and #81 is
+     *  DONE, not re-measured a third time. This is a measured refutation, not
+     *  an undecided round: the Wilson interval on 1-of-10 excludes 0.5, so
+     *  §W3's "not distinguishable from the threshold" caveat does NOT apply.
+     *  Do not raise this constant without a new pre-registration. */
+    MAX_EVIDENCE_RETURNS: 0,
 
     /**
      * #121 — SHIPPED DORMANT. When true, the depth gate releases only on a
