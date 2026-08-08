@@ -615,7 +615,7 @@ const COUNT = '\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twel
  * point of failure. A separate list per channel is visible here, carries its
  * own written reason, and is already how PACKET_PATTERNS exists.
  *
- * WHAT IS DELIBERATELY ABSENT: `rubric-fraction`. It fires SIX times on
+ * WHAT IS DELIBERATELY ABSENT: `rubric-fraction`. It fires TEN times on
  * legitimate Task 12 band guidance in this range -- `≥ 8/10`, `5–7/10`,
  * `< 5/10`, and "a run can score 3/6 and pass; a run can score 4/6 and fail".
  * The alternative considered and rejected was rewriting the range to be
@@ -775,7 +775,7 @@ cannot reduce it to a single point of failure; the real range scans clean on
 all nine. Verified non-circularly by restoring the leak into the real template
 and confirming the file scan fails.
 
-rubric-fraction is deliberately absent -- it fires 6x on legitimate Task 12
+rubric-fraction is deliberately absent -- it fires 10x on legitimate Task 12
 band guidance, and rewriting the range to suit it would take out the one
 sentence explaining why the gate is not the total. Three weaknesses are
 recorded in the file rather than glossed: verdict-moved is reverse-engineered
@@ -1031,12 +1031,22 @@ Verified non-circularly: the leak was restored into the real template and the fi
 to fail, rather than the guard being checked only against a string literal in its own test.
 
 **`rubric-fraction` is deliberately absent, and this is the one judgement call worth quoting.** It
-fires **six times** on legitimate Task 12 band guidance in the range. The alternative — rewriting the
+fires **ten times** on legitimate Task 12 band guidance in the range. The alternative — rewriting the
 range to be fraction-free so the pattern could apply unchanged — takes out the sentence *"a run can
 score 3/6 and pass; a run can score 4/6 and fail"*, which is the only place the rubric explains why
 the gate is not the total. That is lobotomising the packet rather than redacting the leak. This is
 not the stop-list the guard's doctrine forbids: that doctrine bans carve-outs *inside* a list, and a
 separate list per channel is already how `PACKET_PATTERNS` exists.
+
+**And it leaves a residue, recorded rather than left to be re-derived.** A bare fraction carrying no
+scoring verb and no run-noun is caught by nothing in the rubric scan — *"the §A2 arm came out 0/6 last
+time"* passes every pattern. A narrowed fraction rule requiring an adjacent past-tense outcome verb
+would close it and measures clean against all ten legitimate fractions; it was considered and **not**
+shipped, because it would be reverse-engineered from a constructed sentence rather than a real
+incident, which is the weakness already recorded against `verdict-moved`. Compensating for one
+speculative pattern with a second is not a fix. The design review that surfaced this also corrected
+the count in this paragraph from six to ten — the first draft enumerated the band table and missed
+four, including *"two different 4/6 runs"*.
 
 **The four repository paths in the range were reworded out at source**, using §7.2's own A1–A4
 replacements. The packet **text** is unchanged — that is the wording the v9 scorers already read —
@@ -1074,10 +1084,14 @@ harness, in either direction.**
   sentence, and the file says so. Two others — `credit-awarded` and `counted-rows` — sit **one word**
   from firing on legitimate rubric guidance, and both near-misses are pinned as negative controls
   precisely because that margin is thin.
+- **The rubric channel is scanned, not sealed.** AA2's residue is the standing example: a bare
+  fraction with no scoring verb and no run-noun passes every pattern. Scanning a channel is not the
+  same as covering it.
 - **The run-report channel is still unscanned.** Per-row prose written fresh each pass, bound by the
   rule, hand-checked. Two of three channels are machine-scanned; this is not three.
 - **A passing suite is not evidence of blindness.** It is evidence the declared patterns did not
-  fire.
+  fire. This section's own count was wrong by four until a review measured it, which is the same
+  lesson in miniature: a stated measurement is not a measurement.
 
 ### AA5. Disposition
 
@@ -1140,10 +1154,11 @@ in `253de7f` is caught five times from four distinct patterns; the range scans c
 Verified non-circularly by restoring the leak into the real template and confirming the file scan
 fails.
 
-`rubric-fraction` is deliberately absent — it fires six times on legitimate Task 12 band guidance,
+`rubric-fraction` is deliberately absent — it fires ten times on legitimate Task 12 band guidance,
 and rewriting the range to suit it would take out the one sentence explaining why the gate is not
-the total. Three weaknesses are recorded in the file rather than glossed; two near-misses ship as
-pinned negative controls.
+the total. Four weaknesses are recorded in the file rather than glossed, including the residue the
+exclusion leaves — a bare fraction with no scoring verb and no run-noun is caught by nothing. Two
+near-misses ship as pinned negative controls.
 
 The four repository paths in the range were reworded out at source using the packet builder's own
 A1–A4 replacements, so the packet text is unchanged but deviation set A disappears from the next
@@ -1249,7 +1264,7 @@ Verified non-circularly: the leak was restored into the real template and the fi
 
 ## Judgement calls worth reviewing
 
-- **`rubric-fraction` is deliberately absent.** It fires 6× on legitimate Task 12 band guidance. Rewriting the range to suit it would take out *"a run can score 3/6 and pass; a run can score 4/6 and fail"* — the only sentence explaining why the gate is not the total. Not the stop-list the doctrine forbids: that bans carve-outs *inside* a list, and a separate list per channel is already how `PACKET_PATTERNS` exists.
+- **`rubric-fraction` is deliberately absent.** It fires 10× on legitimate Task 12 band guidance. Rewriting the range to suit it would take out *"a run can score 3/6 and pass; a run can score 4/6 and fail"* — the only sentence explaining why the gate is not the total. Not the stop-list the doctrine forbids: that bans carve-outs *inside* a list, and a separate list per channel is already how `PACKET_PATTERNS` exists.
 - **Three weaknesses are recorded rather than glossed.** `verdict-moved` is reverse-engineered from the one incident. `credit-awarded` and `counted-rows` each sit **one word** from a false positive on real guidance; both near-misses ship as pinned negative controls.
 - **`DECISION.md` §AA appends; §Z is untouched.** §Z4 remains the accurate record of what shipped at `2026.08.0709`.
 

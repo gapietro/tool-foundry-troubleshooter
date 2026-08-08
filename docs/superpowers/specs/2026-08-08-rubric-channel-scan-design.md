@@ -149,7 +149,7 @@ the rubric.
 
 **One widened**, `PACKET_PATTERNS`' path rule (§3.5), applied to the range once §3.4 lands.
 
-**`rubric-fraction` is excluded, with the reason written in the file.** It fires **6×** on legitimate
+**`rubric-fraction` is excluded, with the reason written in the file.** It fires **10×** on legitimate
 Task 12 band guidance in the range — `≥ 8/10`, `5–7/10`, `< 5/10`, and *"a run can score 3/6 and
 pass; a run can score 4/6 and fail."*
 
@@ -157,10 +157,25 @@ The alternative considered and rejected: rewrite the range to be fraction-free s
 unchanged. That would require rewriting the one sentence that explains why the gate is not the total.
 That is **lobotomising the packet rather than redacting the leak** — the exact distinction the
 `seed-04` negative control exists to protect (*"Both sentences are scoring guidance a scorer NEEDS;
-both must survive every rewrite"*). Coverage is not lost: the leak's `6/6 and 0/6` sits in the same
-sentence as `moved a whole arm`, which `verdict-moved` catches.
+both must survive every rewrite"*). The leak's `6/6 and 0/6` sits in the same sentence as
+`moved a whole arm`, which `verdict-moved` catches — but note that argues from the one incident the
+patterns were derived from, and does not generalise. See weakness 4.
 
-**Three weaknesses recorded rather than glossed.**
+**Residue, stated rather than left to be re-derived** (added 2026-08-08 after the Task 3 review).
+A bare fraction carrying **no scoring verb and no run-noun** is caught by nothing in `RUBRIC_SCAN`.
+Verified example: *"the §A2 arm came out 0/6 last time"* — `scored-a-number` requires the literal
+"scored", and `prior-pass-reference` has `last` but its noun list is `pass|run|round|scorer`, not
+`time`.
+
+A **third** option existed and the first draft of this spec missed it: the doctrine's own *"write a
+better pattern"* clause. A narrowed fraction rule — one requiring an adjacent past-tense outcome verb
+— measures clean against all ten legitimate fractions and would close this shape. **It was considered
+and deliberately not shipped**, because it would be reverse-engineered from a sentence a reviewer
+constructed rather than from a real incident, which is precisely the weakness recorded below for
+`verdict-moved`. Adding a second speculative pattern to compensate for the first is not a fix. The
+gap is recorded here and in the code so the next editor sees it rather than re-deriving it.
+
+**Four weaknesses recorded rather than glossed.**
 
 1. **`verdict-moved` is reverse-engineered from that one sentence.** It bans a real shape — what a
    prior pass's score did to the verdict — but it was not derived independently of the incident, and
@@ -169,6 +184,8 @@ sentence as `moved a whole arm`, which `verdict-moved` catches.
    award *partial* credit"*; the pattern requires `awarded`. Legitimate guidance surviving on a tense.
 3. **`counted-rows` near-misses line 39** — *"names exactly two of the four rubric columns"* —
    surviving only because the noun list stops at `runs|rows|passes` and excludes `columns`.
+4. **The bare-fraction shape above is not covered**, and the coverage argument for excluding
+   `rubric-fraction` rests on the single incident the patterns were built from.
 
 Both near-misses ship as **pinned negative controls**, so a future widening that would take legitimate
 guidance fails the suite instead of quietly redacting the rubric. Per doctrine, if any pattern reddens
