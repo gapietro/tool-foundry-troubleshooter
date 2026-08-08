@@ -115,11 +115,18 @@ removed. A packet embeds the spec and never the history file.
 | `test/scorerPacketBlindRule.test.js` | **prior-run outcomes** reaching a scorer | #100 |
 
 The guard scans the seed specs — one of the three channels. The rubric and the
-run reports are bound by the rule and not by the guard: only §A/§A2/§A3 of
-`scorecard-template.md` reach a packet and the file legitimately explains
+run reports are bound by the rule and not by the guard. For the rubric, that is
+a mechanical judgement and not a safety claim: only §A/§A2/§A3 of
+`scorecard-template.md` reach a packet, and the section legitimately explains
 grading with score-shaped text (*"a run can score 3/6 and pass"*), so a
-whole-file scan would be a false-positive machine. As with the harness rule, the
-roster tracks the principle rather than defining it.
+whole-file scan reddens on guidance rather than on leaks. It was once written up
+here as though score-shaped text in the rubric were *therefore* always
+legitimate; issue #139 falsified that, when a §A2.1 preamble shipped into the
+rubric slice stating what a prior pass had scored and pointing twice into
+`DECISION.md`. **The rubric channel is bound by the rule and is not
+machine-scanned, so every addition to §A/§A2/§A3 must be checked by hand against
+the blind rule before it ships.** As with the harness rule, the roster tracks
+the principle rather than defining it.
 
 **A passing suite is not evidence of blindness.** None of the three guards above can catch what it
 was not told to look for, and a token that names platform vocabulary a tool legitimately reads is a

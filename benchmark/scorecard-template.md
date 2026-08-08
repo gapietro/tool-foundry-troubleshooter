@@ -14,7 +14,7 @@ column below exists for a stated reason — read the reason before skipping a co
 | `root_cause_layer_correct` | 0 or 2 | Diagnosis names the seed's expected root-cause layer (see the seed's own spec file for the expected value) |
 | `fix_target_correct` | 0, 1 or 2 | Diagnosis names the correct fix target (tool schema / instruction text / data seeding / capability mapping / activation). **1 = partial**: the right area, without the specific target. See the partial-credit note below |
 | `evidence_cites_trace_and_config` | 0 or 1 | Root cause cites BOTH the execution trace AND at least one config/schema source — the evidence rule from `docs/agent/agent-doctor-instructions.md` |
-| `fix_usable_unedited` | 0 or 1 | The Fix Report's proposed fix could be applied by the builder AI as written, with no manual editing first — **and it addresses the defect the seed actually carries.** A well-formed fix aimed at the wrong target is a no-op, not a usable fix, so **`fix_usable_unedited` may not be 1 while `fix_target_correct` is 0.** See the note under the gate rule for why this constraint lives here rather than in the gate expression |
+| `fix_usable_unedited` | 0 or 1 | The Fix Report's proposed fix could be applied by the builder AI as written, with no manual editing first — **and it addresses the defect the seed actually carries.** A well-formed fix aimed at the wrong target is a no-op, not a usable fix, so **`fix_usable_unedited` may not be 1 while `fix_target_correct` is 0.** See the note under the gate rule for why this constraint lives here rather than in the gate expression, and **§A2.1** for the two cases this definition does not otherwise determine — an unfilled value slot, and a fix that addresses a runtime record |
 
 **Total: 6 points per run.**
 
@@ -73,6 +73,46 @@ mis-scored it**; the correct row is 2 / 0 / 0, `passes_gate` = 0.
 **The gate verdict** is `sum(passes_gate) / <number of valid runs>`, read against
 the Task 12 gate table. Record the sum explicitly in the decision record; do not
 re-derive it from the /6 totals.
+
+### A2.1 Two cases the column definition does not otherwise determine
+
+*Added 2026-08-07, issue #139, after this column was found under-determined on
+the majority of the rows it was applied to. The rationale is in the project's
+decision record.* Because `fix_usable_unedited` is one of §A2's two gate terms,
+an under-determined reading of it is not a rounding error — it changes the
+verdict. Both cases below are decided by the seed spec plus the fix text.
+**Neither asks the scorer to weigh anything.**
+
+**Case 1 — the fix leaves a value slot unfilled.** Score `fix_usable_unedited`
+= **1** only if BOTH hold:
+
+1. the target and the operation are fully specified — the table or record, the
+   field, and what to do to it; **and**
+2. the missing value is **not obtainable from the instance** by any of the seven
+   diagnostic tools (`agent_trace`, `agent_config`, `schema_lookup`,
+   `query_table`, `genai_log`, `log_analysis`, `read_artifact`).
+
+If the value **was** obtainable and the run simply **did not look it up**, score
+**0**. Supplying a discovery procedure in place of the value does not change
+this, and a procedure whose steps are UI actions rather than tool calls does not
+make a value unobtainable.
+
+*The distinction, stated so it is not re-derived: a value the instance does not
+hold — an assignment group for a table that is empty by design — is the
+builder's to choose, and demanding it would reward fabrication. A value the
+instance does hold is diagnosis the run declined to perform.*
+
+**Case 2 — the fix addresses a runtime record rather than the Fluent source.**
+Score **1** if the address resolves to **exactly one record** and
+**names every field it changes**. Score **0** if a scorer would have to work out
+which record or which field the fix means. The builder AI is this column's stated
+consumer, and SDK-owns-creation is a convention of this project rather than a
+property of the diagnosis, so translating a unique runtime address into its
+Fluent source is not an edit to the fix.
+
+Both cases are subordinate to the constraint already stated in §A —
+`fix_usable_unedited` may not be 1 while `fix_target_correct` is 0. **Check that
+first**; if it binds, neither case above arises.
 
 ## A3. Void runs — a run that measured nothing
 

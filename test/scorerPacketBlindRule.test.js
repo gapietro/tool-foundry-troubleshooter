@@ -40,13 +40,22 @@
  * The rule binds three channels (benchmark/README.md, "The scorer blind
  * rule"); this guard scans one of them. The rubric channel is
  * benchmark/scorecard-template.md, of which only sections A/A2/A3 reach a
- * packet, and the file legitimately explains grading with score-shaped text
- * ("a run can score 3/6 and pass") -- a whole-file scan would be a
- * false-positive machine, and a section-scoped scan would pin the template's
- * heading structure into a test for no measured benefit. The run-report
- * channel is per-row prose written fresh each pass. Both are bound by the
- * rule and neither is scanned here. A passing suite is not evidence of
- * blindness; it is evidence the declared patterns did not fire.
+ * packet. It is NOT scanned here, and the reason is mechanical rather than
+ * principled: the section legitimately explains grading with score-shaped text
+ * ("a run can score 3/6 and pass"), so a naive scan reddens on guidance, while
+ * a section-scoped scan would pin the template's heading structure into a test.
+ *
+ * That is a cost/benefit judgement, NOT a claim that the channel is safe. It
+ * was once written up as though score-shaped text in the rubric were only ever
+ * legitimate guidance; #139 falsified that -- a §A2.1 preamble shipped into the
+ * rubric slice carrying a prior pass's grades and two decision-record section
+ * pointers, and no guard could have fired. So: the rubric channel is bound by
+ * the rule and is not machine-scanned, which makes every addition to §A/§A2/§A3
+ * a HAND check against the blind rule before it ships.
+ *
+ * The run-report channel is per-row prose written fresh each pass. Both are
+ * bound by the rule and neither is scanned here. A passing suite is not
+ * evidence of blindness; it is evidence the declared patterns did not fire.
  */
 
 const fs = require('fs')
@@ -162,16 +171,27 @@ const PACKET_PATTERNS = [
     {
         name: 'repository-path',
         // Two alternations, both deliberate:
-        //   1. a path qualified by one of this repo's top-level directories,
+        //   1. a path qualified by a directory stem this repo actually uses,
         //      with optional ./ or ../ prefixes (the specs use both forms);
-        //   2. a bare root-level document name -- DESIGN.md was invisible to
-        //      the old literal DECISION.md pattern and is one hop from the
-        //      same answers.
+        //   2. ANY bare markdown filename. This started as an eight-name
+        //      root-level list and was widened in the #139 review: a
+        //      whitelist of eight names missed scorecard-v9.md (the literal
+        //      per-row answer key), raw-evidence-v9-scored-pass.md and
+        //      agent-doctor-instructions.md, and both leaks §T7 found by hand
+        //      escape it if written one directory segment shorter.
         // No file-extension requirement on alternation 1: "benchmark/seeds"
         // is a route even without a filename, and seeds/history/ is what
-        // sits at the end of it.
+        // sits at the end of it -- which is also why the stems include the
+        // NON-top-level ones (seeds, history, results, scoring-vN): a path
+        // written relative to benchmark/ is the same route one segment
+        // shorter. The scorecard-/raw-evidence- stems cover directory forms
+        // of those documents should they ever gain siblings; today it is
+        // alternation 2 that catches them.
+        //
+        // Measured after widening: the twelve committed v9 packets still scan
+        // 0, so nothing here was tightened back for a false positive.
         re:
-            /(?:\.{0,2}\/)*(?:benchmark|docs|src|test|seed-app|node_modules|dist|\.claude)\/[A-Za-z0-9_./-]+|\b(?:DECISION|DESIGN|CHANGELOG|README|IMPLEMENTATION_PLAN|LOW_LEVEL_DESIGN|PREFLIGHT_FINDINGS|CLAUDE)\.md\b/,
+            /(?:\.{0,2}\/)*(?:benchmark|docs|src|test|seed-app|node_modules|dist|\.claude|seeds|history|results|scoring-v[0-9]+|scorecard-[A-Za-z0-9_-]+|raw-evidence-[A-Za-z0-9_-]+)\/[A-Za-z0-9_./-]+|\b[A-Za-z0-9_-]+\.md\b/,
         why:
             'a repository path a MODEL scorer can follow out of the packet and into this ' +
             'project prior conclusions. A pointer to the answer is the same defect as the ' +
@@ -322,10 +342,18 @@ describe('the scanner itself works (controls)', () => {
 // packet and one hop from the citation. The old answer-key-pointer pattern
 // matched a literal DECISION.md and saw neither.
 //
-// The rule here is deliberately UNIFORM: any repository path, no judgement
-// about which paths are "safe". §T7's reasoning -- a selective rule forces
-// every future reader to re-derive which paths were judged safe, and that
-// re-derivation is where the next leak hides.
+// The rule here aims at UNIFORMITY -- any repository path, no judgement about
+// which paths are "safe". §T7's reasoning: a selective rule forces every future
+// reader to re-derive which paths were judged safe, and that re-derivation is
+// where the next leak hides.
+//
+// What ships is close to that but not identical to it, and the gap is worth
+// naming rather than glossing. ANY bare `*.md` filename fires, so every
+// document in this repository is covered by name. Longer paths fire only when
+// rooted at one of the enumerated directory stems -- so a non-markdown file
+// outside those stems (say a top-level `package.json`) is not matched. That
+// residue is deliberate: the answer keys in this project are all markdown, and
+// the directory list covers every route to them found so far.
 describe('the packet scanner itself works (controls)', () => {
     it('POSITIVE: a directory-qualified path fires', () => {
         const { text, lineStarts } = normalizeProse('(verbatim from benchmark/scorecard-template.md)')
@@ -356,6 +384,37 @@ describe('the packet scanner itself works (controls)', () => {
 
         expect(hits.map((h) => h.text)).toEqual(['../../test/blindRule.test.js'])
         expect(hits[0].line).toBe(2)
+    })
+
+    it('POSITIVE: the literal per-row answer key fires by bare filename', () => {
+        // scorecard-v9.md holds the graded row table. The pre-#139 pattern
+        // whitelisted eight root-level names and this was not one of them, so
+        // the single most direct route out of a packet was unguarded.
+        const { text, lineStarts } = normalizeProse('cross-check against scorecard-v9.md before grading')
+        const hits = scanPackets(text, lineStarts)
+
+        expect(hits.map((h) => h.text)).toEqual(['scorecard-v9.md'])
+    })
+
+    it('POSITIVE: a bare seeds/history/ form fires -- the route one segment shorter', () => {
+        // seeds/history/ is prior-run outcomes. Written with its benchmark/
+        // prefix the old pattern caught it; written relative to benchmark/,
+        // as anyone inside that directory would write it, it escaped.
+        const { text, lineStarts } = normalizeProse('prior outcomes were moved to seeds/history/')
+        const hits = scanPackets(text, lineStarts)
+
+        expect(hits.map((h) => h.text)).toEqual(['seeds/history/'])
+    })
+
+    it('POSITIVE: another scorer grade file and an unlisted root doc both fire', () => {
+        const { text, lineStarts } = normalizeProse(
+            'see scoring-v9/results/row-05-result.md and agent-doctor-instructions.md'
+        )
+
+        expect(scanPackets(text, lineStarts).map((h) => h.text).sort()).toEqual([
+            'agent-doctor-instructions.md',
+            'scoring-v9/results/row-05-result.md',
+        ])
     })
 
     it('NEGATIVE: prose containing a slash but no repository path does not fire', () => {

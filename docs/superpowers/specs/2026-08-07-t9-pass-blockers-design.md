@@ -79,6 +79,12 @@ Fluent source scores 1 **if** the address resolves to exactly one record and one
 builder AI is the column's stated consumer, and SDK-owns-creation is a project convention rather
 than a property of the diagnosis. An address that does not uniquely identify the target scores 0.
 
+> **Superseded during execution — do not take the rule from here.** "Exactly one record and one
+> field" left a fix that changes *several* fields on a uniquely-addressed record an unstated case,
+> which is the defect the clause exists to close. The shipped test is **"resolves to exactly one
+> record and names every field it changes"**. `benchmark/scorecard-template.md` **§A2.1** is
+> authoritative.
+
 Both are answerable from the seed spec plus the fix text. Neither asks the scorer to weigh
 anything — which is §T9's stated bar: *"Adopt that or its negation; either makes the column
 mechanical."*
@@ -167,6 +173,17 @@ files only**. The existing `PATTERNS` keep scanning the five seed specs unchange
 paths on disk; paths are stripped when spec content is embedded into a packet. This is exactly what
 the v9 builder adopted by hand, and it keeps each channel's rule auditable by a single regex —
 §T7's stated reason for preferring a uniform rule over a selective one.
+
+> **As shipped (corrected in the #139 review round).** The regex aims at uniformity but is not
+> literally "any repository path". Any bare `*.md` filename fires — which covers every document in
+> this repository by name — and a longer path fires when rooted at one of the enumerated directory
+> stems (`benchmark`, `docs`, `src`, `test`, `seed-app`, `node_modules`, `dist`, `.claude`, `seeds`,
+> `history`, `results`, `scoring-vN`, `scorecard-*`, `raw-evidence-*`). A non-markdown file outside
+> those stems is not matched. The first implementation was narrower again — an eight-name
+> root-level whitelist — and missed `scorecard-v9.md`, `seeds/history/` and
+> `scoring-v9/results/row-NN-result.md`. Widened and re-measured against the twelve v9 packets: still
+> 0 hits, so nothing was tightened back for a false positive. Quote the shipped shape, not
+> "uniform".
 
 **`PACKET_SETS`** — each committed packet directory named explicitly, with a scanned flag and a
 written reason:

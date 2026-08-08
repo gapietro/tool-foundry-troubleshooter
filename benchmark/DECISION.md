@@ -3684,3 +3684,229 @@ it now has to argue that a mechanism which binds that rarely is worth the depth 
 risk — eight measured passes are calibrated against the current release rule. That is a much harder
 case than §T9's *"the obvious next candidate"* framing implied, and it should be made before a round
 is sized, not after.
+
+## Z. Both §T9 pass blockers are closed (`2026.08.0709`, #139 + #140)
+
+**§A through §Y are unmodified** — `git log -p benchmark/DECISION.md` is the check, as §X said of
+§U–§W. This section appends and changes nothing above it.
+
+**No runs were fired for this section, no packet was re-scored and no instance was touched.** It
+records a repair to the measuring instrument, one re-reading of rows that already exist, and one
+test-suite measurement. The packet scan shipped at `2026.08.0708` (#140); the rubric clauses, the
+derived re-reading and this section at `2026.08.0709` (#139).
+
+Artefacts: `benchmark/scorecard-template.md` §A2.1 · `test/rubricClauses.test.js` ·
+`benchmark/scorecard-v9-derived-139.md` · `test/scorerPacketBlindRule.test.js`
+(`PACKET_PATTERNS`, `PACKET_SETS`).
+
+### Z1. What was blocked
+
+§T9 opened with the blocker:
+
+> *"Fix the rubric before spending another scored pass."*
+
+The cost is in §T5. T8 predicted **≥10 of 12** rows would produce an unambiguous `passes_gate` from
+the packet alone; **9 of 12 flagged `ambiguous = yes`**, and the flag landed on
+`fix_usable_unedited` — one of §A2's two gate terms. All six native rows carry a recorded
+alternative reading of that column that yields 0, so §T5 had to publish two readings of the same
+pass:
+
+| | totals | gate |
+|---|---|---|
+| As scored | native 36/36, custom 9/36 | native **6/6**, custom 0/6 |
+| Every native `fix_usable_unedited` resolved to 0 | native 30/36, custom 9/36 | native **0/6**, custom 0/6 |
+
+One under-determined column moved an entire arm between 100% and 0% on the gate.
+
+**§O5 filed the same defect on the same column three passes earlier and nothing closed it.** That
+entry found `assignment_group` placeholder text scored 0 on one v4 native row and 1 on another —
+identical fix text, same seed — and filed it *"for whoever next revises §A, since it is a gap in
+the rubric's text, not a lapse by a scorer."* Nobody revised §A. Rows 03–06 of the v9 pass are that
+finding recurring in a pass whose headline depends on it. A filing with nothing enforcing it
+survived three passes; that is the part worth generalising.
+
+§T9's third recommendation was the second blocker: **widen the blind-rule test to any repository
+path** and run it over the packets. §T7 found the gate green at 11/11 while two one-hop routes to
+the answer key sat in the v9 packet framing, both removed by hand; §T9, carrying that finding into
+its recommendations, is where the generalisation is written — *"this pass is the second consecutive
+round in which the leak was caught by hand rather than by the gate."*
+
+### Z2. The two clauses, and why both cases and not only the one §T9 named
+
+`scorecard-template.md` **§A2.1** is authoritative; this is the summary.
+
+**Case 1 — the fix leaves a value slot unfilled.** Score 1 only if BOTH hold: (1) the target and the
+operation are fully specified — the table or record, the field, and what to do to it; **and** (2)
+the missing value is not obtainable from the instance by any of the seven diagnostic tools. If the
+value **was** obtainable and the run did not look it up, score **0**. Supplying a discovery
+procedure in place of the value does not change this, and a procedure whose steps are UI actions
+rather than tool calls does not make a value unobtainable.
+
+**Case 2 — the fix addresses a runtime record rather than the Fluent source.** Score 1 if the
+address resolves to **exactly one record** and **names every field it changes**; 0 if a scorer would
+have to work out which record or which field the fix means.
+
+Case 1 is row 03's scorer's own draft, which §T9 quoted and said to *"adopt that or its negation."*
+It is adopted with the failing side written out, because the draft states only when to score 1 and a
+scorer needs both sides to be mechanical. The obtainability test is what decides which side a slot
+falls on: a value the instance does not hold — an assignment group for a table empty by design — is
+the builder's to choose, and demanding it would reward fabrication; a value the instance does hold
+is diagnosis the run declined to perform.
+
+**§T9 named only Case 1, and the evidence for Case 2 cuts both ways.** Rows 01 and 02 record a
+*second* under-determination in the same column — whether naming the runtime `sn_aia_tool` record
+rather than the Fluent source counts as applicable without editing. §T5's own sentence is that those
+rows *"resolve it as **not a rubric gap**, each scorer noting the other reading would flip the
+gate"* — so the nearest reading of the evidence is that Case 2 needed no clause, and expanding scope
+to decide it goes beyond what §T9 asked for. It is decided anyway, on the second half of that same
+sentence: a column whose alternative reading flips the gate is under-determined whatever the scorers
+concluded about it, and deciding Case 1 while leaving Case 2 would have reproduced §T9's exact
+complaint, *"a coin the scorers are being asked to flip"*, on the same column of the same rubric. Both cases are subordinate to §A's
+existing constraint — `fix_usable_unedited` may not be 1 while `fix_target_correct` is 0 — which is
+checked first.
+
+The clauses sit inside **§A2** because only §A / §A2 / §A3 are copied into a scorer packet; a clause
+outside that range is a clause the scorers never see. `test/rubricClauses.test.js` pins both clauses
+**and that placement**, which is the part §O5's filing lacked.
+
+### Z3. The derived re-reading of the twelve v9 rows
+
+`benchmark/scorecard-v9-derived-139.md` applies §A2.1 to facts the twelve blind scorers **already
+recorded**, every cell sourced to a quotation from that row's result file or from the seed spec. Read
+it for the per-row sourcing; this is the headline only.
+
+> **Native `passes_gate` 6/6 → 4/6. Native totals 36/36 → 34/36. Custom gate 0/6, unchanged.**
+
+**Two cells change: rows 05 and 06, both seed 04, `fix_usable_unedited` 1 → 0.** Both name the
+target exactly — table, record sys_id, field, current value, required semantics — and both leave the
+replacement `api` value unfilled. Seed 04's own spec records the healthy value as held by **422 of
+the instance's 2026 `sys_one_extend_capability_definition` rows**, which `query_table` reaches, so
+Case 1's second condition fails. Both rows carry `root_cause_layer_correct` = 2, so both flip
+`passes_gate` as well as their /6. **That value is itself a listed blind-rule token**, and row 05's
+scorer records it in the same sentence as the fact the recompute turns on — the run *"could not be
+expected to have been told it — but nothing stopped the run from discovering it, and it did not"*.
+It does not rescue either row: Case 1 condition 2 asks whether the value was **obtainable**, not
+what the run was told. Contrast row 10 below, where the withheld token is an **identifier** and the
+question is condition 1's specification test, which §A2.1 does not address at all. A withheld value
+is disposed of by the clause as written; a withheld identifier is not.
+
+Rows 05 and 06 present both shapes at once — an unfilled slot *and* a runtime-record address. Case 1
+is phrased as a **necessary** condition and governs: passing Case 2's address test does not lift Case
+1's bar. That reading is load-bearing for the two changed cells and is stated in the derived file
+rather than left implicit.
+
+**Row 10 is left unresolved, not decided.** Its scorer's own file points two ways in the same
+document: it records that the fix "specifies the record type to create… the category value… the
+quantity" (toward 1) and also that the fix "names *what* to create and *for which category*, **but
+not the table**" (toward 0), while §A2.1 Case 1 condition 1 requires the table or record be
+specified. The scorer resolved it to 1 on a ground §A2.1 does not contain — that
+`x_snc_tsbench_routing` is a blind-rule token deliberately withheld from the diagnostic agent.
+Deciding it either way would be fresh judgment, which a derived file must not exercise, so it is
+listed. Consequence, and it is narrow: **row 10's `passes_gate` is 0 under either reading** because
+`root_cause_layer_correct` = 0 and §A2's expression is a conjunction, so **custom's gate figure of
+0/6 is invariant**. Only the custom **rubric total** carries an open range — **9/36 under the
+scorers' reading, 8/36 under the strict condition-1 reading**. Quote the range or quote the gate;
+do not quote a bare custom total.
+
+`benchmark/scorecard-v9.md` is **untouched**. Those are the scores the twelve blind scorers produced
+and they remain the primary record; the derived file is meaningless without it.
+
+The derived native figure lands **between** §T5's two published bounds rather than at either, and it
+moves **against** the arm this project currently recommends. That is evidence the clause was not
+selected to produce a result. It is **not** evidence that the clause is correct.
+
+### Z4. The packet channel is now scanned, and v4 is declared rather than exempted
+
+`test/scorerPacketBlindRule.test.js` gains `PACKET_PATTERNS` — a single any-repository-path rule
+bound to the packet channel — and `PACKET_SETS`, which declares every committed packet directory
+with a scanned flag and a written reason. **The rule aims at uniformity without quite reaching it,
+and the shipped shape is the one to quote:** any bare `*.md` filename fires, so every document in
+this repository is covered by name, and a longer path fires when it is rooted at one of the
+enumerated directory stems (`benchmark`, `docs`, `src`, `test`, `seed-app`, `node_modules`, `dist`,
+`.claude`, `seeds`, `history`, `results`, `scoring-vN`, and the `scorecard-` / `raw-evidence-`
+stems). A non-markdown file outside those stems is not matched. The first shipped version was
+narrower still — an eight-name root-level whitelist — and the #139 review found it missing
+`scorecard-v9.md`, `seeds/history/` and `scoring-v9/results/row-NN-result.md`, each a live route to
+an answer key, and both of §T7's own leaks if written one directory segment shorter. Widened and
+re-measured: the twelve v9 packets still scan 0, so no false positive forced a tightening. The old `answer-key-pointer` pattern matched a literal
+`DECISION.md` and scanned the seed specs, one of the rule's three channels; both of §T7's one-hop
+routes were outside it.
+
+> **v9: 12 packets, 0 hits — before and after the widening. v4: 20 packets, 164 hits, held out
+> unedited.**
+
+Three positive controls were added with the widening — `scorecard-v9.md` by bare filename, a bare
+`seeds/history/`, and `scoring-v9/results/row-NN-result.md` beside an unlisted root document — so
+the widening is proven by the suite rather than asserted here.
+
+**Why `scoring-v4` is a directory-level declaration and not a pattern-level exemption.** Its packets
+were scored before this guard existed and they are the record of what those scorers actually read;
+editing them would destroy the record the pass exists to hold, and 164 hits is what that record
+contains. The alternative — adding stop-list patterns so v4's paths stop matching — would weaken the
+rule for **every** future packet in order to accommodate one historical directory, and it would do so
+silently. A declared directory carrying its own stated reason is neither silent nor a hole, and
+`PACKET_SETS` is checked against what is on disk, so a new packet directory that is never declared
+fails the suite rather than going quietly unscanned.
+
+**What the 0 does not mean.** v9's packets were redacted by hand *before* scoring, so 0 hits confirms
+that the widened rule agrees with what the builder did by hand. It is not a retrospective catch and
+it does not establish that the v9 scorers saw nothing they should not have — §T7's account of that
+stands as written. What the change buys is that the next leak of this shape is caught by the suite
+instead of by a reader.
+
+### Z5. What this cannot establish
+
+**This repairs the measurement instrument. It measures nothing about diagnostic quality, for either
+harness, in either direction.**
+
+- **§T3 stands unmoved.** Six custom rows reached layer 4 and all six concluded at layer 1. Nothing
+  in §A2.1, in the derived re-reading, or in the packet scan touches that result. A native row losing
+  a point does not make the custom arm better, and custom's invariance on the gate does not make it
+  worse.
+- **§T8's limits stand in full and unamended.** **No rate** — twelve rows, three seeds, one instance,
+  one day, one model, one app version; two reps per seed per arm measures a flip, not a frequency.
+  **No Task 12 band verdict** — §A3.4 states the floor as *"below 8 valid runs the gate is not
+  evaluable"*, without saying whether the count is per arm or across the pass. Read per arm it is
+  unmet at 6. §T8 records that a permissive reading exists — the clause is written about voids
+  eroding a 10-row denominator, not about a pass designed with 6 rows per arm — and that reading is
+  still contested, not settled here. Either way the band lookup is not performed. 34/36 · 4/6 is not
+  a rate and must not be read as one.
+- **The derived figure is a re-reading of twelve existing rows, not a new pass.** It adds no rows, no
+  seeds and no reps. It re-judges nothing outside `fix_usable_unedited`, and only where a scorer
+  recorded the fact the clause turns on.
+- **§A2.1 does not make the column mechanical in general.** It decides two cases. Row 10 is the
+  standing counter-example in this very pass — a target identified by kind rather than by name, where
+  the name is a blind-rule token — and §A2.1 says nothing about it. It is listed as unresolved rather
+  than smoothed, and it is the open item for whoever next revises §A2.1.
+- **§T9's *"Do not re-run this pass to get a firmer number"* still governs.** The instability §T5
+  measured was in the rubric, not in the sample size, and repairing the rubric does not convert more
+  reps into a firmer number. Any future scored pass needs its own pre-registration in the §U / §W
+  style — predictions and stopping rule committed before a run fires, with the ordering checkable in
+  git — and this section is not that pre-registration.
+- **Nothing here is evidence that §A2.1's clauses are the right clauses.** They are mechanical and
+  they were written before the recompute was run, which is what the "moves against the recommended
+  arm" observation in Z3 supports. Correctness of a rubric clause is not something a recompute can
+  establish.
+
+### Z6. Disposition
+
+**Both §T9 pass blockers are closed.** The rubric clause is written, placed inside the packet-reaching
+range and pinned by a test; the blind-rule gate scans the packet channel with a single
+any-repository-path rule — every `*.md` by name, longer paths by enumerated stem, per Z4 — and one
+declared out-of-scope directory. §T9's remaining recommendation — a release rule that inspects what
+the tool returned — is not addressed here and is separately bounded by §Y4 at a 1.6% bind rate;
+`REQUIRE_RETRIEVAL_TO_RELEASE` stays `false` per §Y6.
+
+**The next scored pass is unblocked. It is not scheduled, sized or pre-registered by this section.**
+Nothing here fixes a seed set, a rep count, an arm, a stopping rule or a date, and a pass run against
+this section as though it were a pre-registration would be exactly the confound §U was built to
+avoid.
+
+**Unchanged: native remains the recommended path on this instance, and the Phase 1b milestone is not
+met.** The derived reading lowers native to 34/36 · 4/6 and leaves custom's gate at 0/6, so it
+narrows the published margin without moving the recommendation — custom's 0/6 is invariant under
+every resolution recorded in the twelve score files, including row 10's. Quote **34/36 · 4/6** only
+with the derived file beside it, and **9/36 or 8/36** for the custom total, never a bare figure.
+
+Suite at the close of this section: **1374 passed, 28 suites.** No production code was touched by
+either issue.

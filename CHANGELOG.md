@@ -17,6 +17,42 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0709 — 2026-08-07
+
+### Fixed — the rubric decides both cases `fix_usable_unedited` left open (#139)
+
+§T9: *"Fix the rubric before spending another scored pass."* §T8 predicted at most two of twelve
+v9 rows would flag `ambiguous`; nine did, and the flag landed on `fix_usable_unedited` — one of
+§A2's two gate terms — so §T5 could read native at 36/36 · 6/6 or 30/36 · 0/6 depending on how
+one clause was taken. §O5 filed the same defect on the same column three passes earlier and
+nothing closed it.
+
+`scorecard-template.md` §A2.1 decides both cases. An unfilled value slot scores 1 only if the
+target and operation are fully specified **and** the missing value is not obtainable from the
+instance by any of the seven diagnostic tools; if it was obtainable and the run did not look it
+up, 0. A fix addressing a runtime record scores 1 if the address resolves to exactly one record
+and names every field it changes. §T9 named only the first case; leaving the second would have
+reproduced its exact complaint on the same column.
+
+The clauses sit inside §A2 because only §A/§A2/§A3 are copied into a scorer packet.
+`test/rubricClauses.test.js` pins both the clauses and that placement.
+
+`benchmark/scorecard-v9-derived-139.md` applies the repaired rule to facts the twelve blind
+scorers already recorded — every cell sourced to a quotation. Two cells change: rows 05 and 06
+left the replacement `api` value unfilled, and seed 04's spec records that value as held by 422
+of 2026 capability-definition rows on the instance, so it was obtainable. **Native's gate
+6/6 → 4/6, totals 36/36 → 34/36; custom unchanged at 0/6.** Row 10 is listed **unresolved**
+rather than decided — its own result file points both ways on whether the fix specifies a table —
+so the custom rubric **total** is open between 9/36 and 8/36; the custom **gate** is 0/6 under
+either reading. `scorecard-v9.md` is untouched — those are the scores the blind scorers produced.
+
+The result lands between §T5's two published bounds and moves against the arm this project
+currently recommends. §T3 is untouched, and nothing here is evidence about diagnostic quality.
+
+Recorded in `DECISION.md` §Z. Suite: **1374 passed, 28 suites** (was 1365/27 — `rubricClauses.test.js`
+is a new suite, +6, and the review round added +3 positive controls to
+`scorerPacketBlindRule.test.js` when the packet-path regex was widened). No production code touched.
+
 ## 2026.08.0708 — 2026-08-07
 
 ### Fixed — the blind-rule gate now scans the packets, not only the seed specs (#140)
@@ -30,7 +66,9 @@ flagged, and both were removed by hand. Second consecutive round caught by a hum
 The guard was working exactly as written — `answer-key-pointer` matched a literal `DECISION.md`
 and scanned one of the rule's three channels, the seed specs.
 
-`PACKET_PATTERNS` adds one uniform any-repository-path rule bound to the packet channel, and
+`PACKET_PATTERNS` adds a single any-repository-path rule bound to the packet channel — any bare
+`*.md` filename, plus longer paths rooted at an enumerated directory stem; it aims at uniformity
+without quite reaching it, and a non-markdown file outside those stems is not matched — and
 `PACKET_SETS` declares every committed packet directory with a scanned flag and a written
 reason. The seed specs keep their existing five patterns and their 22 legitimate path strings;
 paths are stripped when spec content is embedded into a packet, which is what the v9 builder
