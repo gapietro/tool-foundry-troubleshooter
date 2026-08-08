@@ -317,15 +317,32 @@ const COUNT = '\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twel
  * point of failure. A separate list per channel is visible here, carries its
  * own written reason, and is already how PACKET_PATTERNS exists.
  *
- * WHAT IS DELIBERATELY ABSENT: `rubric-fraction`. It fires SIX times on
- * legitimate Task 12 band guidance in this range -- `≥ 8/10`, `5–7/10`,
- * `< 5/10`, and "a run can score 3/6 and pass; a run can score 4/6 and fail".
+ * WHAT IS DELIBERATELY ABSENT: `rubric-fraction`. It fires TEN times on
+ * legitimate Task 12 band guidance in this range -- ten, across the two band
+ * tables and the §A2 hypothetical, among them `≥ 8/10`, `5–7/10`, `< 5/10`,
+ * and "a run can score 3/6 and pass; a run can score 4/6 and fail".
  * The alternative considered and rejected was rewriting the range to be
  * fraction-free so the pattern could apply unchanged; that takes out the one
  * sentence explaining why the gate is not the total, which is lobotomising
  * the packet rather than redacting the leak -- the exact distinction the
  * seed-04 negative control above exists to protect. Coverage is not lost: the
  * #139 leak's "6/6 and 0/6" sits in the same sentence as "moved a whole arm".
+ *
+ * Residue, stated rather than left to be re-derived: a bare fraction with NO
+ * scoring verb and NO run-noun nearby is caught by nothing in RUBRIC_SCAN.
+ * Worked example, verified: "the §A2 arm came out 0/6 last time" -- §A2 is a
+ * self-reference so outside-section-pointer does not fire on it,
+ * scored-a-number requires the literal word "scored", and prior-pass-reference
+ * has "last" but its noun list is pass|run|round|scorer -- "time" is not in
+ * it. A narrowed fraction pattern (one requiring an adjacent past-tense
+ * outcome verb) would close this and was measured clean against all ten
+ * legitimate fractions above; it was considered and deliberately NOT shipped,
+ * because it would be reverse-engineered from a constructed sentence rather
+ * than a real incident -- the exact weakness recorded as #1 below for
+ * `verdict-moved`. The coverage argument two paragraphs up ("the #139 leak's
+ * `6/6 and 0/6` sits in the same sentence as `moved a whole arm`") argues from
+ * the one incident these patterns were derived from; it does not close this
+ * shape, and is not an implied guarantee that it does.
  *
  * THREE WEAKNESSES, recorded rather than glossed:
  *   1. `verdict-moved` is reverse-engineered from the one incident available.
