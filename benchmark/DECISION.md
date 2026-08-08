@@ -3458,3 +3458,111 @@ it.** The metric counts whether a run that was told its evidence was insufficien
 retrieved something. It does not ask whether the right source was read, whether the citation
 supports a true cause, or whether any score would move. **Retrieving evidence is not diagnosing**,
 and a round that stands is a round that licensed one mechanism, not one that improved a diagnosis.
+
+## X. The sized round RAN, and it refuted the return (`2026.08.0704`, #121 steps 3–4)
+
+**§U, §V and §W are unmodified** — `git log -p benchmark/DECISION.md` is the check. §W was merged as
+`2d11e4d` at 2026-08-07 22:50Z; the round's first run posted at 23:04:32Z. The pre-registration
+preceded the data, and that ordering is checkable in git rather than asserted here.
+
+Measurements: `benchmark/raw-evidence-v11-sized-round.md`.
+
+### X1. The result
+
+| Quantity | Value |
+|---|---|
+| `n` | **60** (the §W4 hard cap, reached) — 30 A / 30 B |
+| Terminal states | 56 `complete`, 4 `failed`, **0 `partial`** |
+| **`D`** | **10** |
+| **`N`** | **1** |
+| `N / D` | **0.10** |
+
+§W6 applied in its stated order: the ≥3-`partial` trigger did not fire (0 partials); `N/D ≥ 1/2`
+fails; **`N/D < 1/2` governs.**
+
+> **`MAX_EVIDENCE_RETURNS` STAYS AT `0`, AND #81 IS DONE — NOT RE-MEASURED A THIRD TIME.**
+
+`D` = 10 is §W4's second exit (`8 ≤ D < 12`), so the reduced power is stated rather than buried: the
+false-ratify rate at `D` = 8 is 11.4%, not §W3's targeted 5.4%. **That caveat biases toward
+ratifying, and the round did not ratify** — it cannot be used to soften the result.
+
+### X2. This is a refutation, not an undecided round
+
+§W3 pre-committed to reporting a near-threshold revert as *"not distinguishable from the
+threshold"*. That clause does **not** apply here. The 95% Wilson interval on 1-of-10 is
+approximately **[0.018, 0.404]**; the 0.5 threshold lies outside it. The observed rate is also below
+§V4's 1-of-4 baseline, though those intervals overlap heavily and **this round does not establish a
+decline** — only that the mechanism is below its own bar.
+
+**What the number means.** Nine of the ten runs that were told *"1 evidence problem(s) need a tool
+call, not a rewrite"* rewrote anyway; two of those spent BOTH permitted returns doing it. §U8.3 set
+the bar at one half precisely because the return earns its machinery — classifier, cap, headroom
+guard, state block, draft stash, terminal path — only if the otherwise-impossible move actually
+happens at a non-marginal rate. At 1 in 10 it does not. In §U8.3's own words, the mechanism is
+**"mostly a more expensive repair turn"**.
+
+### X3. The numerator's "after the note" clause did the entire job
+
+A bare `run=<sys_id>^action_type=result^retrieval=ok` query matches **all ten** firing runs, because
+every run opens with a gate-driven sweep (`agent_trace`, `read_artifact`, `agent_config`,
+`schema_lookup`) and several of those legitimately score `ok`. Those retrievals precede the note and
+say nothing about the return.
+
+**§V2's `sys_created_on`-after-the-first-note clause is what separates 1 from 10.** Without it the
+numerator inflates 10× and the mechanism ratifies on tool calls the run was always going to make.
+This is §V1's "counts a call rather than a retrieval" defect in its third form, and the
+pre-registration caught it before it could flatter the change a third time.
+
+All ten runs were verified individually against their own transcripts by `seq` (§U8.2's structural
+test), not by clock and not by extrapolating the pattern.
+
+### X4. Two measurement defects found before run 1, both silent
+
+Recorded because either would have corrupted the round without erroring:
+
+1. **`partial` is not readable from `status`.** A bound-triggered stop closes the run `complete` and
+   reports `outcome: 'partial'` — and `outcome` is `run()`'s return value, **not a persisted
+   column**. Counting §W5's partials off `status` would have returned 0 for every run regardless of
+   what happened, making the ≥3 revert trigger unfireable. The durable marker is the literal
+   `INCOMPLETE:` in the transcript (`PaAgentLoop.js:1648`), which is what this round counted.
+2. **§W7's probe 2 is safe, but not for the obvious reason.** `MAX_EVIDENCE_RETURNS` and the
+   docblock's `maxEvidenceReturns` differ by **underscores, not merely case**, so the probe cannot
+   collide with the comment whichever way `LIKE` handles case. Checked rather than assumed.
+
+### X5. Observations that are NOT §W6 inputs
+
+- **All 4 `failed` runs were firing runs**, all on the same shape-class problem (`fixes` must be an
+  array; `verification` must be a non-empty string). `failed` is not `partial`, so §W5 is untouched
+  and §W6 has no row for it. Whether the extra rejection turn *causes* the malformed report is **not
+  established** and needs its own pre-registration before anyone acts on it.
+- **The fire rate was 10/60 ≈ 0.17**, well under §U9.1's 4-of-8 baseline. The stopping rule was
+  built to be indifferent to this and the round is not powered to call it a change.
+- **#129 earned its place.** The single conversion (TR1000235) called `genai_log` with the
+  parameter-prefixed argument shape; #125's routing fix read it correctly and it returned
+  `llm_call_rows: 3`. The identical malformation scored `none` in §U9.1 — so without the pre-round
+  repair, `N` would most likely have been **0**. Repairing the argument path before spending the
+  round was the right call, and it cuts *against* the change rather than for it.
+
+### X6. Disposition
+
+`MAX_EVIDENCE_RETURNS` stays `0` and the instance was restored to that default and re-probed
+(`: 0` → 1 record, `: 2` → 0 records, `REQUIRE_RETRIEVAL_TO_RELEASE: false` → 1 record). The unit
+suite is back to 1340/1340 — the nine dormant-default guards fail on the round build and pass on the
+shipped one, which is the cleanest confirmation available that they pin the right constant.
+
+**Do not raise this constant without a new pre-registration.** §U9's ruling still governs the
+family — *"No verdict is not the same as proven, so the default is off"* — but this round is
+stronger than that: it is not "no verdict", it is a measured result below the bar.
+
+### X7. What this round cannot establish
+
+Everything in §U5, §V7 and §W8 stands, unsoftened.
+
+- **Nothing about `REQUIRE_RETRIEVAL_TO_RELEASE`** (§W1) — `false` for all 60 runs, probe-verified
+  before and after, still blocked by §V3's unresolved `'DENIED'` ruling.
+- **§T3 remains the governing result** — six custom rows reached layer 4 and all six concluded at
+  layer 1 — and nothing here moves it.
+
+**Retrieving evidence is not diagnosing, and a round that refutes one mechanism has not improved a
+diagnosis either.** What #121 bought is a closed question and an instrument (`retrieval`) that keeps
+accruing on every run.

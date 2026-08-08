@@ -17,6 +17,74 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0704 — 2026-08-07
+
+### Measured — the §W sized round ran, and the evidence return is REFUTED (#121 steps 3–4)
+
+`MAX_EVIDENCE_RETURNS` **stays at `0`, and #81 is done — not re-measured a third time.**
+
+The round pre-registered in `DECISION.md` §W was executed against gpinst01. §W merged as `2d11e4d`
+at 22:50Z; the first run posted at 23:04:32Z, so the prediction preceded the data and the ordering
+is checkable in git. Full measurements: `benchmark/raw-evidence-v11-sized-round.md`; verdict and
+reasoning: `DECISION.md` §X.
+
+| Quantity | Value |
+|---|---|
+| `n` | **60** (the §W4 hard cap, reached) — 30 A / 30 B, strictly sequential |
+| Terminal states | 56 `complete`, 4 `failed`, **0 `partial`** |
+| **`D`** (runs firing an `EVIDENCE RETURN`) | **10** |
+| **`N`** (of those, a post-note `retrieval=ok`) | **1** |
+| `N / D` | **0.10** vs §W6's `1/2` threshold |
+
+**Nine of the ten runs told "you need a tool call, not a rewrite" rewrote anyway** — two of them
+spending both permitted returns doing it. §U8.3 set the bar at one half because the return earns
+its machinery (classifier, cap, headroom guard, state block, draft stash, terminal path) only if
+the otherwise-impossible move happens at a non-marginal rate. At 1 in 10 it does not.
+
+**This is a refutation, not an undecided round.** §W3 pre-committed to reporting a near-threshold
+revert as "not distinguishable from the threshold"; that clause does not apply, because the 95%
+Wilson interval on 1-of-10 (~[0.018, 0.404]) excludes 0.5. `D` = 10 is §W4's reduced-power exit
+(`8 ≤ D < 12`) and that is stated rather than buried — but the caveat biases toward *ratifying*,
+and the round did not ratify.
+
+**§V2's "after the first note" clause did the entire job.** A bare
+`run=<sys_id>^action_type=result^retrieval=ok` query matches **all ten** firing runs, because every
+run opens with a gate-driven sweep whose tools legitimately score `ok` — before the note. Dropping
+that clause would have inflated the numerator 10× and ratified the mechanism on tool calls the run
+was always going to make. This is §V1's "counts a call rather than a retrieval" defect in its third
+form, caught by the pre-registration.
+
+### Fixed — two silent measurement defects, found before run 1
+
+- **`partial` is not readable from `status`.** A bound-triggered stop closes the run `complete` and
+  reports `outcome: 'partial'` — and `outcome` is `run()`'s return value, not a persisted column.
+  Counting §W5's partials off `status` would have returned 0 for every run no matter what happened,
+  making the ≥3 revert trigger unfireable. The durable marker is the literal `INCOMPLETE:` in the
+  transcript (`PaAgentLoop.js:1648`).
+- **§W7 probe 2 verified rather than assumed.** `MAX_EVIDENCE_RETURNS` and the docblock's
+  `maxEvidenceReturns` differ by underscores, not merely case, so the probe cannot collide with the
+  comment whichever way `LIKE` handles case.
+
+### Recorded — observations that are NOT §W6 inputs
+
+- **All 4 `failed` runs were firing runs**, all on the same shape-class problem. `failed` is not
+  `partial`, so §W5 is untouched. Whether the extra rejection turn *causes* the malformed report is
+  **not established** and needs its own pre-registration.
+- **#129 earned its place.** The single conversion called `genai_log` with the parameter-prefixed
+  argument shape; #125's routing fix read it correctly (`llm_call_rows: 3`). The identical
+  malformation scored `none` in §U9.1, so without the pre-round repair `N` would most likely have
+  been **0** — a point that cuts against the change, not for it.
+- **Seed-03 regression guard clean** — 4 runs, 4 `complete`, 0 `partial`, 0 fires.
+
+### Instance
+
+Restored to the shipped dormant default and probe-verified after reinstall (`: 0` → 1 record,
+`: 2` → 0 records, `REQUIRE_RETRIEVAL_TO_RELEASE: false` → 1 record). Rollback context
+`c3b3fff92bee839817a6ffbeee91bfc9`. Unit suite 1340/1340 — the nine dormant-default guards fail on
+the round build and pass on the shipped one, confirming they pin the right constant.
+
+---
+
 ## 2026.08.0703 — 2026-08-07
 
 ### Fixed — the five `PaAgentLoop` prerequisites blocking #121's sized round

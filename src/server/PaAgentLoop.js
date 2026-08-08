@@ -167,7 +167,17 @@ PaAgentLoop.prototype = {
      *  call and only 1 retrieved anything. Undecided is not proven, so the
      *  default is off. At 0 the guard in `_handleFixReport` falls straight
      *  through to the existing repair turn, which is `2026.08.0505` behaviour
-     *  exactly. Set `maxEvidenceReturns: 2` via `initialize()` to enable it. */
+     *  exactly. Set `maxEvidenceReturns: 2` via `initialize()` to enable it.
+     *
+     *  STAYS AT 0 — the §W sized round RAN and did not ratify it (#121,
+     *  `benchmark/raw-evidence-v11-sized-round.md`, DECISION.md §X). n = 60,
+     *  D = 10, N = 1: of the ten runs told "you need a tool call, not a
+     *  rewrite", NINE rewrote anyway and one retrieved. 1/10 = 0.10 against
+     *  §W6's 1/2 threshold, so §W6 row 3 applies — the cap stays 0 and #81 is
+     *  DONE, not re-measured a third time. This is a measured refutation, not
+     *  an undecided round: the Wilson interval on 1-of-10 excludes 0.5, so
+     *  §W3's "not distinguishable from the threshold" caveat does NOT apply.
+     *  Do not raise this constant without a new pre-registration. */
     MAX_EVIDENCE_RETURNS: 0,
 
     /**
