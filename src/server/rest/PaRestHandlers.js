@@ -172,11 +172,18 @@ PaRestHandlers.prototype = {
             }
         }
 
+        // R-19b lives in `createRun`: when the creation row exists but the
+        // write that forces `queued` failed, it returns a note rather than let
+        // the caller hold a claim the row contradicts. Honouring that one layer
+        // down and discarding it here would reintroduce exactly the silence it
+        // guards against — and since #99 the note also covers the inbound
+        // request having been lost, which is the run's own diagnostic subject
+        // (issue #105).
         if (validation.mode === 'collect') {
-            return this._runCollect(created.run_id)
+            return this._runCollect(created.run_id, created.note)
         }
 
-        return this._queueDiagnose(created.run_id, body)
+        return this._queueDiagnose(created.run_id, body, created.note)
     },
 
     /**
@@ -224,16 +231,19 @@ PaRestHandlers.prototype = {
      * `queued` forever would be a stuck-looking row for work that already
      * finished.
      */
-    _runCollect: function (runId) {
+    _runCollect: function (runId, note) {
         var bundle = this._runs().collectBundle(runId)
         this._runs().close(runId, 'complete', {})
         return {
             status: 200,
-            body: {
-                run_id: runId,
-                mode: 'collect',
-                data: bundle && bundle.data ? bundle.data : {},
-            },
+            body: this._withNote(
+                {
+                    run_id: runId,
+                    mode: 'collect',
+                    data: bundle && bundle.data ? bundle.data : {},
+                },
+                note
+            ),
         }
     },
 
@@ -244,7 +254,7 @@ PaRestHandlers.prototype = {
      * GlideRecord and the platform call are behind the `eventQueue` seam
      * (`_defaultEventQueue` below) so this method stays Glide-free.
      */
-    _queueDiagnose: function (runId, body) {
+    _queueDiagnose: function (runId, body, note) {
         var requestJson = this._safeStringify(body)
         var queued = this._eventQueue(runId, requestJson)
 
@@ -255,7 +265,25 @@ PaRestHandlers.prototype = {
             }
         }
 
-        return { status: 202, body: { run_id: runId, status: 'queued' } }
+        return { status: 202, body: this._withNote({ run_id: runId, status: 'queued' }, note) }
+    },
+
+    /**
+     * @param {Object} body
+     * @param {*} note
+     * @returns {Object} `body`, with `note` attached only when there is one.
+     *
+     * The key is ADDED rather than always present-and-sometimes-empty: `note`
+     * exists to mark a run whose row may contradict the response, so a caller
+     * should be able to read its mere presence as "something went wrong here"
+     * without also having to test it for emptiness. An always-present `note: ''`
+     * would make every clean 202 carry the trouble marker.
+     */
+    _withNote: function (body, note) {
+        if (this._nonEmptyString(note)) {
+            body.note = note
+        }
+        return body
     },
 
     // =======================================================================

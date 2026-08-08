@@ -190,6 +190,24 @@ describe('analyze — collect mode', () => {
         expect(eventQueueCalled).toBe(false)
     })
 
+    test("collect mode surfaces createRun's note on the 200 — the same gap as the 202 path (#105)", () => {
+        const runManager = fakeRunManager({
+            createRun: function () {
+                return { run_id: 'run1', number: 'TR0001042', note: 'status could not be forced to queued' }
+            },
+        })
+        const { handlers } = load({ runManager: runManager, eventQueue: () => true })
+
+        const res = handlers.analyze({
+            body: { execution: 'plan1', mode: 'collect' },
+            pathParams: {},
+            userId: 'u1',
+        })
+
+        expect(res.status).toBe(200)
+        expect(res.body.note).toBe('status could not be forced to queued')
+    })
+
     test('collect mode records its request too — it never queues, so nothing downstream would (#99)', () => {
         const runManager = fakeRunManager()
         const { handlers } = load({ runManager: runManager, eventQueue: () => true })
@@ -242,6 +260,39 @@ describe('analyze — diagnose mode (default)', () => {
         expect(queued).toHaveLength(1)
         expect(queued[0].runId).toBe('run1')
         expect(JSON.parse(queued[0].requestJson)).toEqual({ execution: 'plan1' })
+    })
+
+    test("createRun's note reaches the 202 caller — R-19b is not honoured only to be dropped a layer up (#105)", () => {
+        // createRun writes this note when the creation row exists but the write
+        // that forces `queued` failed — so the row may read `running`, and
+        // since #99 the inbound request was not persisted either. Answering a
+        // bare `status: 'queued'` here hands the caller a claim the row
+        // contradicts, which is the exact thing the note exists to prevent.
+        const note =
+            'The run record was created but its status could not be forced to queued — ' +
+            'it may still read as running until the next successful write. The run_id is real ' +
+            'and usable regardless. The inbound request was not persisted either, for the same reason.'
+        const runManager = fakeRunManager({
+            createRun: function () {
+                return { run_id: 'run1', number: 'TR0001042', note: note }
+            },
+        })
+        const { handlers } = load({ runManager: runManager, eventQueue: () => true })
+
+        const res = handlers.analyze({ body: { execution: 'plan1' }, pathParams: {}, userId: 'u1' })
+
+        expect(res.status).toBe(202)
+        expect(res.body.run_id).toBe('run1')
+        expect(res.body.note).toBe(note)
+    })
+
+    test('a clean creation carries NO note key — the field marks trouble, so its presence must mean something (#105)', () => {
+        const runManager = fakeRunManager()
+        const { handlers } = load({ runManager: runManager, eventQueue: () => true })
+
+        const res = handlers.analyze({ body: { execution: 'plan1' }, pathParams: {}, userId: 'u1' })
+
+        expect(Object.prototype.hasOwnProperty.call(res.body, 'note')).toBe(false)
     })
 
     test('run creation failure surfaces as a 500 naming the degraded reason', () => {

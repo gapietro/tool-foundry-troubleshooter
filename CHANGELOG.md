@@ -17,6 +17,37 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0707 — 2026-08-07
+
+### Fixed — `analyze` stopped discarding `createRun`'s note (#105)
+
+`PaRunManager.createRun` returns a `note` when the creation row exists but the write that forces
+`status: 'queued'` failed — the row may read `running`, and since #99 the inbound request was not
+persisted either. That is R-19b working: the caller is not handed a claim the row contradicts.
+
+`PaRestHandlers.analyze` never read `created.note`. `_queueDiagnose` answered a hardcoded
+`{run_id, status: 'queued'}`, so the note was being written for a consumer that could not see it —
+R-19b honoured at the manager boundary and dropped one layer up. An API caller was told `queued` for
+a row that might read `running`, and told nothing at all about the request having been lost.
+
+Both response paths now carry it: the 202 from `_queueDiagnose` and the 200 from `_runCollect`,
+which the issue flagged for the same gap and which had it.
+
+**The key is added, never blank.** `_withNote` attaches `note` only when there is one, so its mere
+presence reads as "something went wrong here" without a consumer also having to test it for
+emptiness. An always-present `note: ''` would put the trouble marker on every clean 202. A test pins
+this: a clean creation must not carry the key at all.
+
+**Why it matters more since #99.** Before #99 the note covered one concern, the status force. It now
+covers two, and the second — the run's own diagnostic subject — is the thing #99 exists to make
+recoverable. Losing it silently at the REST boundary is the failure mode #99 was filed against,
+reintroduced one layer up.
+
+No route change was needed: `rest-api.now.ts` sets `result.body` verbatim, so the note reaches the
+wire as soon as the handler puts it there.
+
+---
+
 ## 2026.08.0706 — 2026-08-07
 
 ### Fixed — the persisted-request clip no longer splits an emoji in half (#106)
