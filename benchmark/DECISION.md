@@ -3566,3 +3566,121 @@ Everything in §U5, §V7 and §W8 stands, unsoftened.
 **Retrieving evidence is not diagnosing, and a round that refutes one mechanism has not improved a
 diagnosis either.** What #121 bought is a closed question and an instrument (`retrieval`) that keeps
 accruing on every run.
+
+## Y. The strict release rule would have changed ONE release in 64 (`2026.08.0704`, §V5's counterfactual)
+
+**Retrospective. No runs were fired for this section and nothing was enabled.** §V5 pre-registered
+this measurement as the cheap route to the evidence §T9 said was missing:
+
+> *"The audit column is written on every run regardless of the flag. So the counterfactual — how
+> often the strict rule would have changed a release — is measurable from runs that were happening
+> anyway, before anything is switched on."*
+
+`REQUIRE_RETRIEVAL_TO_RELEASE` is `false` on gpinst01 and stays `false`. This section does not move
+it, and §V3's unresolved `'DENIED'` ruling still blocks the round that would.
+
+### Y1. What the flag actually changes
+
+`_releaseSet(trail)` returns `trail.retrieving` instead of `trail.tools`, and **two** consumers read
+it (`PaAgentLoop.js`):
+
+1. **R1, the sticky release** — `_anyOf(this._heldTools, release)` discharges a hold.
+2. **`_openGaps(gaps, release)`** — which declared gaps count as still open at the FIRST hold, so a
+   barren call cannot pre-close a gap "one step earlier" (the docblock's own words).
+
+So the rule binds only where a **non-retrieving call is what discharged a hold or closed a gap**.
+
+### Y2. The corpus, and why the answer is nearly forced
+
+64 runs carry a populated `retrieval` column (the §W round's 60 plus the 4 seed-03 guard runs).
+**All 64 hit a HOLD; none was `capped`** — 64 trail-backed gate releases.
+
+154 `action_type=result` rows carry a verdict:
+
+| verdict | rows | tools |
+|---|---|---|
+| `ok` | **144** | `agent_trace` 67/67, `schema_lookup` 34/35, `query_table` 29/29, `agent_config` 13/13, `genai_log` 1/1 |
+| `unknown` | 9 | `read_artifact` — **9 of 9** |
+| `none` | **1** | `schema_lookup` (TR1000202) |
+| `DENIED` | 0 | — |
+
+**The nine `unknown` rows cannot matter, and the reason is structural rather than statistical.**
+`read_artifact` is absent from `PaFixReport._layerToolMap()` — layers 1–7 map only to `agent_trace`,
+`genai_log`, `log_analysis`, `agent_config`, `schema_lookup` and `query_table`. A tool outside that
+map can never enter `_heldTools` and can never close a gap, so its verdict is invisible to the gate
+whatever it is. *(If the layer map ever gains `read_artifact`, this paragraph stops being true and
+the counterfactual must be recomputed.)*
+
+That leaves exactly **one** gate-relevant non-`ok` call in the whole corpus.
+
+### Y3. The one changed release — and it is §T4's defect, live
+
+**TR1000202.** `agent_trace`(ok) → fix_report → **HOLD: "layer 4 (ranked) must be reached"** →
+`agent_config`(ok) → `schema_lookup`(**none**) → fix_report → released → EVIDENCE RETURN → validated.
+
+Layer 4's dedicated tool is `schema_lookup`, so `_heldTools = ['schema_lookup']`. The barren call is
+what discharged the hold: `agent_config` was `ok` but is not in the held set, so it could not have
+released it.
+
+The call asked for `sn_tsbench_bench_ticket` — a guessed table that does not exist — and the tool
+answered `table_exists: false`, `field_rows: 0`. **It established nothing, and the gate released on
+it.** That is §T4 verbatim:
+
+> *"v9 row 07's `schema_lookup` answered `table_exists: false` — it established nothing — and the
+> gate released, because the release path compares tool NAMES from the audit trail and never
+> inspects what came back."*
+
+Under `REQUIRE_RETRIEVAL_TO_RELEASE` the hold would have stayed sticky and the fix_report would have
+been refused a second time instead of released.
+
+### Y4. The number
+
+> **1 of 64 gate releases would have changed. 1.6%, 95% Wilson [0.3%, 8.3%].**
+
+Two readings, and both are honest:
+
+- **The rule is very nearly a no-op at this corpus's behaviour.** 63 of 64 releases were discharged
+  by a call that genuinely retrieved. The strict rule is not the broad tightening §T4's framing
+  might suggest; on this evidence it almost never binds.
+- **When it did bind, it bound on exactly the defect it was designed for** — not on a borderline
+  case, and not on a false positive. The single case is the §T4 pattern reproduced with a different
+  guessed table name.
+
+`_openGaps`, the second consumer, changed **nothing**: the only barren gate-relevant call occurred
+*after* its run's first hold, so no gap was pre-closed by a barren call anywhere in the corpus.
+
+### Y5. What this CANNOT establish — and the limit is severe
+
+**This is retrospective on runs whose behaviour was shaped by the permissive rule.** It measures how
+often the strict rule would have **withheld a release given the tool calls that actually happened**.
+It does **not** measure what those runs would have done had they been held longer — which is the
+entire question §T9 asked. A withheld release means another hold, another iteration, and a model
+that might comply, might loop, or might ride to `MAX_HOLDS` and report `capped`. **None of that is
+observable here.**
+
+So Y4 bounds the rule's *bind rate*, not its *benefit*. A rule that binds 1.6% of the time cannot
+help more often than 1.6% of the time — that ceiling is real and is the useful half of this result —
+but nothing here says it helps at all when it does bind.
+
+Also unestablished:
+
+- **Nothing about `'DENIED'`.** Zero denials in 64 runs, so §V3's more consequential accepted false
+  negative was never exercised. The ruling stays open and still blocks the round.
+- **`schema_lookup` is the load-bearing tool** — 34 of 35 `ok`, and the single `none` is the only
+  case in scope. A corpus with more guessed table names would move this number, and the §W round's
+  targets are two fixed plans, so this corpus is narrow by construction.
+- **Nothing about diagnostic quality.** §T3 still governs: six custom rows reached layer 4 and all
+  six concluded at layer 1. **Retrieving evidence is not diagnosing.**
+
+### Y6. Disposition
+
+`REQUIRE_RETRIEVAL_TO_RELEASE` **stays `false`.** This section does not ratify it and was not
+designed to: a 1.6% bind rate is not evidence that the rule helps, and §U9's ruling still governs
+the family — *"No verdict is not the same as proven, so the default is off."*
+
+What it does buy is a **ceiling**, cheaply and with no runs spent: whatever the strict rule is worth,
+it is worth it on about one release in sixty at this corpus's behaviour. Anyone proposing to enable
+it now has to argue that a mechanism which binds that rarely is worth the depth gate's instrument
+risk — eight measured passes are calibrated against the current release rule. That is a much harder
+case than §T9's *"the obvious next candidate"* framing implied, and it should be made before a round
+is sized, not after.

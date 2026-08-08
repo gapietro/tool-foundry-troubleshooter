@@ -17,6 +17,56 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0705 — 2026-08-07
+
+### Measured — §V5's counterfactual: the strict release rule would have changed 1 release in 64
+
+**Retrospective. No runs fired, nothing enabled.** `REQUIRE_RETRIEVAL_TO_RELEASE` stays `false`.
+`DECISION.md` §Y.
+
+§V5 pre-registered this as the cheap route to the evidence §T9 said was missing — the `retrieval`
+column is written on every run regardless of the flag, so the counterfactual is measurable from
+runs that were happening anyway. The §W round's 60 runs plus the 4 seed-03 guard runs supply the
+first real corpus.
+
+> **1 of 64 gate releases would have changed. 1.6%, 95% Wilson [0.3%, 8.3%].**
+
+**Why the answer is nearly forced.** Of 154 scored rows, 144 are `ok`, 9 are `unknown` and 1 is
+`none`. All nine `unknown` rows are `read_artifact` — which is **absent from
+`PaFixReport._layerToolMap()`**, so it can never enter `_heldTools` or close a gap and its verdict
+is structurally invisible to the gate. That leaves exactly one gate-relevant non-`ok` call.
+
+**The one changed release is §T4's defect, live.** TR1000202 was held on *"layer 4 (ranked)"*, whose
+sole tool is `schema_lookup`; it then called `schema_lookup` for `sn_tsbench_bench_ticket`, a guessed
+table that does not exist. The tool answered `table_exists: false`, established nothing, and the
+gate released on it — §T4 verbatim, with a different guessed name. Under the strict rule the hold
+would have stayed sticky.
+
+`_openGaps`, the flag's second consumer, changed nothing: the only barren gate-relevant call landed
+*after* its run's first hold, so no gap was pre-closed anywhere in the corpus.
+
+**The limit is severe and is stated in §Y5.** This is retrospective on runs whose behaviour was
+shaped by the permissive rule, so it bounds how often the rule would **bind**, not whether it would
+**help**. A rule that binds 1.6% of the time cannot help more often than that — the ceiling is the
+useful half — but nothing here says it helps when it does bind. Zero `DENIED` rows in 64 runs, so
+§V3's more consequential accepted false negative was never exercised and its ruling still blocks the
+round.
+
+### Instance — a version-label drift, closed
+
+gpinst01 read `2026.08.0703` while `main` had moved to `2026.08.0705`. The deployed **code** was
+correct throughout and probe-verified; only the label lagged, because §W1 pinned the round build at
+`2026.08.0703` deliberately (its "one edit" claim) and the post-round restore was installed before
+the bump. Synced with a behaviour-neutral rebuild + reinstall and re-probed: `sys_app.version` =
+`2026.08.0705`, `MAX_EVIDENCE_RETURNS: 0` → 1 record, `REQUIRE_RETRIEVAL_TO_RELEASE: true` → 0
+records. Rollback context `dcc777712bea4f94f243fed2ce91bf30`.
+
+Recorded because §W7's pre-flight item 1 reads `sys_app.version`, and a stale label is exactly the
+misleading deploy signal this project has repeatedly been bitten by — `now-sdk install` does not
+stamp `sys_updated_on` either, so the `scriptLIKE` probes remain the real check.
+
+---
+
 ## 2026.08.0704 — 2026-08-07
 
 ### Measured — the §W sized round ran, and the evidence return is REFUTED (#121 steps 3–4)
