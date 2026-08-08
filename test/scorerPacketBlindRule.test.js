@@ -159,6 +159,17 @@ const PATTERNS = [
 ]
 
 /**
+ * The directory stems this repository actually uses, as regex alternatives.
+ * Named because the rule below interpolates them twice -- once for the
+ * "stem/..." form and once for the "../stem" form -- and two copies of a
+ * fifteen-item list is two places to forget an entry.
+ */
+const PATH_STEMS =
+    'benchmark|docs|src|test|seed-app|node_modules|dist|\\.claude|\\.superpowers|' +
+    'seeds|history|results|scoring-v[0-9]+|' +
+    'scorecard-[A-Za-z0-9_-]+|raw-evidence-[A-Za-z0-9_-]+'
+
+/**
  * The packet channel's pattern list, kept SEPARATE from PATTERNS above
  * because the two channels ban different things and scan different files.
  * PATTERNS bans a prior run's outcome and scans the seed specs. This bans a
@@ -170,28 +181,39 @@ const PATTERNS = [
 const PACKET_PATTERNS = [
     {
         name: 'repository-path',
-        // Two alternations, both deliberate:
-        //   1. a path qualified by a directory stem this repo actually uses,
-        //      with optional ./ or ../ prefixes (the specs use both forms);
-        //   2. ANY bare markdown filename. This started as an eight-name
+        // Three alternations, each closing a route measured to be walkable:
+        //   1. a stem followed by a slash and ZERO OR MORE path characters.
+        //      The "zero or more" is #144: the first shipped version required
+        //      one or more, so "the packets are in scoring-v9/" -- a complete
+        //      route -- did not match. Measured on that version: scoring-v9/,
+        //      results/ and ../results all returned NO HIT.
+        //   2. a ./ or ../ prefix followed by a bare stem with no trailing
+        //      slash. Alternation 1 cannot reach this because there is no
+        //      slash after the stem to anchor on.
+        //   3. ANY bare markdown filename. This started as an eight-name
         //      root-level list and was widened in the #139 review: a
         //      whitelist of eight names missed scorecard-v9.md (the literal
         //      per-row answer key), raw-evidence-v9-scored-pass.md and
         //      agent-doctor-instructions.md, and both leaks §T7 found by hand
         //      escape it if written one directory segment shorter.
-        // No file-extension requirement on alternation 1: "benchmark/seeds"
-        // is a route even without a filename, and seeds/history/ is what
-        // sits at the end of it -- which is also why the stems include the
-        // NON-top-level ones (seeds, history, results, scoring-vN): a path
-        // written relative to benchmark/ is the same route one segment
-        // shorter. The scorecard-/raw-evidence- stems cover directory forms
-        // of those documents should they ever gain siblings; today it is
-        // alternation 2 that catches them.
         //
-        // Measured after widening: the twelve committed v9 packets still scan
-        // 0, so nothing here was tightened back for a false positive.
-        re:
-            /(?:\.{0,2}\/)*(?:benchmark|docs|src|test|seed-app|node_modules|dist|\.claude|seeds|history|results|scoring-v[0-9]+|scorecard-[A-Za-z0-9_-]+|raw-evidence-[A-Za-z0-9_-]+)\/[A-Za-z0-9_./-]+|\b[A-Za-z0-9_-]+\.md\b/,
+        // A bare stem WORD with no slash deliberately does NOT match --
+        // "the results were mixed" is prose, not a route -- which is the
+        // boundary the #144 negative control pins.
+        //
+        // Residue, stated rather than left to be re-derived: a NON-markdown
+        // file outside these stems (a top-level package.json, say) is still
+        // not matched. The answer keys in this project are all markdown and
+        // the stem list covers every route to them found so far.
+        //
+        // Measured after this widening: the twelve committed v9 packets scan
+        // 0, unchanged from before it, so nothing here was tightened back for
+        // a false positive.
+        re: new RegExp(
+            '(?:(?:\\.{0,2}\\/)*(?:' + PATH_STEMS + ')\\/[A-Za-z0-9_./-]*)' +
+                '|(?:(?:\\.{1,2}\\/)+(?:' + PATH_STEMS + ')\\b)' +
+                '|\\b[A-Za-z0-9_-]+\\.md\\b'
+        ),
         why:
             'a repository path a MODEL scorer can follow out of the packet and into this ' +
             'project prior conclusions. A pointer to the answer is the same defect as the ' +
@@ -415,6 +437,43 @@ describe('the packet scanner itself works (controls)', () => {
             'agent-doctor-instructions.md',
             'scoring-v9/results/row-05-result.md',
         ])
+    })
+
+    it('POSITIVE: a reference that stops at a directory stem fires (#144)', () => {
+        // "the packets are in scoring-v9/" was a walkable route the first
+        // shipped version of this rule missed: its path alternation required
+        // at least one character after the slash, so a reference that stops
+        // at the stem escaped. Measured on the pre-#144 regex: no hit.
+        const { text, lineStarts } = normalizeProse('the packets are in scoring-v9/ and results/')
+
+        expect(scanPackets(text, lineStarts).map((h) => h.text).sort()).toEqual([
+            'results/',
+            'scoring-v9/',
+        ])
+    })
+
+    it('POSITIVE: a relative reference with no trailing slash fires (#144)', () => {
+        // ../results is the same route written from inside a sibling
+        // directory. It has no trailing slash for the first alternation to
+        // anchor on, which is why the rule needs a prefix-form alternation.
+        const { text, lineStarts } = normalizeProse('grades live in ../results')
+
+        expect(scanPackets(text, lineStarts).map((h) => h.text)).toEqual(['../results'])
+    })
+
+    it('POSITIVE: the .superpowers workspace stem fires (#144)', () => {
+        // Review artefacts live here. It was absent from the stem list.
+        const { text, lineStarts } = normalizeProse('see .superpowers/sdd/v9-pass/ for the review')
+
+        expect(scanPackets(text, lineStarts).map((h) => h.text)).toEqual(['.superpowers/sdd/v9-pass/'])
+    })
+
+    it('NEGATIVE: a bare stem WORD with no slash does not fire (#144)', () => {
+        // The widening must not turn every occurrence of "results" or "test"
+        // in ordinary prose into a hit. The slash is what makes it a route.
+        const { text, lineStarts } = normalizeProse('the results were mixed and test results matter')
+
+        expect(scanPackets(text, lineStarts)).toEqual([])
     })
 
     it('NEGATIVE: prose containing a slash but no repository path does not fire', () => {
