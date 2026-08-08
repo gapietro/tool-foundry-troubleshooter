@@ -76,13 +76,12 @@ re-derive it from the /6 totals.
 
 ### A2.1 Two cases the column definition does not otherwise determine
 
-*Added 2026-08-07, issue #139.* §O5 filed this gap and nothing closed it; §T5
-measured the cost three passes later — **nine of twelve rows flagged
-`ambiguous`**, against a prediction of at most two, and the flag landed on this
-column. Because `fix_usable_unedited` is one of §A2's two gate terms, an
-under-determined reading of it moved a whole arm between 6/6 and 0/6. Both
-cases below are decided by the seed spec plus the fix text. **Neither asks the
-scorer to weigh anything.**
+*Added 2026-08-07, issue #139, after this column was found under-determined on
+the majority of the rows it was applied to. The rationale is in the project's
+decision record.* Because `fix_usable_unedited` is one of §A2's two gate terms,
+an under-determined reading of it is not a rounding error — it changes the
+verdict. Both cases below are decided by the seed spec plus the fix text.
+**Neither asks the scorer to weigh anything.**
 
 **Case 1 — the fix leaves a value slot unfilled.** Score `fix_usable_unedited`
 = **1** only if BOTH hold:
