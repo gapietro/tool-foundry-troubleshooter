@@ -377,10 +377,22 @@ describe('the packet scanner itself works (controls)', () => {
 
 describe('no repository path reaches a scorer packet (issue #140)', () => {
     it('declares every committed packet set, scanned or not', () => {
-        // Pinned by name AND count, for the same reason SPECS is: a
-        // substitution -- one set renamed, another added -- would keep the
-        // count right while coverage moved. A new pass CANNOT be added
-        // without a deliberate edit here, which is the point.
+        // Checked against the directories actually on disk, not against
+        // itself: a literal-vs-literal comparison would keep passing if a
+        // future benchmark/scoring-v10/ arrived and nobody edited this file
+        // to match -- which is issue #140's own failure pattern (a human
+        // catch instead of a gate) reproduced one level up, inside the guard
+        // built to prevent it. Both sides sorted so the comparison is
+        // order-independent.
+        const onDisk = fs
+            .readdirSync(SCORING)
+            .filter((d) => /^scoring-v\d+$/.test(d) && fs.statSync(path.join(SCORING, d)).isDirectory())
+            .sort()
+
+        expect(onDisk).toEqual(PACKET_SETS.map((s) => s.dir).slice().sort())
+
+        // Kept as documentation of the declared order/membership -- the
+        // disk-derived assertion above is the one that has to bind.
         expect(PACKET_SETS.map((s) => s.dir)).toEqual(['scoring-v4', 'scoring-v9'])
     })
 
