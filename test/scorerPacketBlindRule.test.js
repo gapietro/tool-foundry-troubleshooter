@@ -304,6 +304,101 @@ function rubricRange() {
     }
 }
 
+/** Number words this rubric uses, plus digits. Interpolated twice below. */
+const COUNT = '\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve'
+
+/**
+ * The rubric channel's pattern list -- the THIRD, kept separate for the same
+ * reason PACKET_PATTERNS is separate from PATTERNS: the channels ban
+ * different things and scan different files.
+ *
+ * This is not the stop-list the doctrine at the top of this file forbids.
+ * That doctrine bans carve-outs INSIDE a list, which are invisible at the
+ * point of failure. A separate list per channel is visible here, carries its
+ * own written reason, and is already how PACKET_PATTERNS exists.
+ *
+ * WHAT IS DELIBERATELY ABSENT: `rubric-fraction`. It fires SIX times on
+ * legitimate Task 12 band guidance in this range -- `≥ 8/10`, `5–7/10`,
+ * `< 5/10`, and "a run can score 3/6 and pass; a run can score 4/6 and fail".
+ * The alternative considered and rejected was rewriting the range to be
+ * fraction-free so the pattern could apply unchanged; that takes out the one
+ * sentence explaining why the gate is not the total, which is lobotomising
+ * the packet rather than redacting the leak -- the exact distinction the
+ * seed-04 negative control above exists to protect. Coverage is not lost: the
+ * #139 leak's "6/6 and 0/6" sits in the same sentence as "moved a whole arm".
+ *
+ * THREE WEAKNESSES, recorded rather than glossed:
+ *   1. `verdict-moved` is reverse-engineered from the one incident available.
+ *      It bans a real shape -- what a prior pass's score did to the verdict --
+ *      but nothing establishes it generalises.
+ *   2. `credit-awarded` (borrowed, below) sits ONE WORD from a false positive:
+ *      the rubric says "to award *partial* credit" and the pattern requires
+ *      "awarded".
+ *   3. `counted-rows` near-misses "two of the four rubric columns", surviving
+ *      only because its noun list stops at runs|rows|passes.
+ * Both near-misses are pinned as negative controls. Per the doctrine above, a
+ * pattern that reddens on real guidance is fixed by writing a better pattern.
+ */
+const RUBRIC_PATTERNS = [
+    {
+        name: 'outside-section-pointer',
+        // EVERY § in the whole §A->§B range is a self-reference: §A, §A2,
+        // §A2.1, and nothing else. A pointer anywhere else is a pointer OUT
+        // of the packet, into a document the scorer does not have -- which is
+        // exactly what #139's two bare §O5/§T5 pointers were. §B is rejected
+        // too, correctly: a packet ends at §A3.
+        re: /§(?!A[0-9.]*\b)[A-Za-z0-9.]+/,
+        why:
+            'a section pointer out of the rubric and into the decision record, which a ' +
+            'MODEL scorer can follow into every prior pass rows and grades',
+    },
+    {
+        name: 'counted-rows',
+        re: new RegExp(
+            '\\b(?:' + COUNT + ')\\s+of\\s+(?:the\\s+)?(?:' + COUNT + ')?\\s*(?:runs?|rows?|passes)\\b',
+            'i'
+        ),
+        why: 'how many prior rows or runs did something -- "nine of twelve rows flagged ambiguous"',
+    },
+    {
+        name: 'prior-pass-reference',
+        re: /\b(?:prior|previous|earlier|last)\s+(?:pass(?:es)?|runs?|rounds?|scorers?)\b|\bpass(?:es)?\s+(?:later|earlier|ago)\b/i,
+        why: 'the provenance vocabulary of an earlier pass -- "three passes later", "a prior run"',
+    },
+    {
+        name: 'verdict-moved',
+        re: /\b(?:moved|swung|flipped|shifted)\s+(?:a|an|the)\s+(?:whole\s+|entire\s+)?(?:arm|verdict|gate|pass)\b/i,
+        why: 'what a prior pass score did to the verdict -- "moved a whole arm between 6/6 and 0/6"',
+    },
+]
+
+/**
+ * The four spec-channel patterns that are inert on this range today, borrowed
+ * by name so the two lists cannot silently drift apart. They cost nothing
+ * measured and they cover the seed-spec-shaped leak -- "run 2 named...",
+ * "earning full credit" -- if that prose ever migrates into the rubric.
+ *
+ * `rubric-fraction` and `answer-key-pointer` are the two NOT borrowed: the
+ * first per the note above, the second because PACKET_PATTERNS already bans
+ * every markdown filename including DECISION.md, so borrowing it would double
+ * every hit.
+ */
+const BORROWED_FOR_RUBRIC = ['scored-a-number', 'scored-runs-or-rows', 'run-N-did', 'credit-awarded']
+
+/**
+ * The rubric range is scanned for BOTH an outcome and a path. The path half
+ * is PACKET_PATTERNS itself rather than a copy, so the #144 widening reaches
+ * this channel automatically.
+ */
+const RUBRIC_SCAN = RUBRIC_PATTERNS.concat(
+    PATTERNS.filter((p) => BORROWED_FOR_RUBRIC.indexOf(p.name) !== -1)
+).concat(PACKET_PATTERNS)
+
+/** Every hit of every rubric-channel pattern in the slice [start, end). */
+function scanRubric(text, lineStarts, start, end) {
+    return scanWith(RUBRIC_SCAN, text.slice(start, end), lineStarts, start)
+}
+
 /** Read a seed spec and normalize it in one step. */
 function load(filename) {
     return normalizeProse(fs.readFileSync(path.join(SEEDS, filename), 'utf8'))
@@ -597,6 +692,21 @@ describe('no repository path reaches a scorer packet (issue #140)', () => {
 })
 
 describe('the rubric channel reaches every packet and is scanned (issue #143)', () => {
+    it('borrows exactly the four spec patterns it names, by resolved identity', () => {
+        // A typo in BORROWED_FOR_RUBRIC would silently drop a pattern: filter
+        // returns a shorter array and no one notices. Compare resolved names,
+        // not the literal list against itself.
+        const borrowed = PATTERNS.filter((p) => BORROWED_FOR_RUBRIC.indexOf(p.name) !== -1)
+
+        expect(borrowed.map((p) => p.name).sort()).toEqual([
+            'credit-awarded',
+            'run-N-did',
+            'scored-a-number',
+            'scored-runs-or-rows',
+        ])
+        expect(RUBRIC_SCAN).toHaveLength(RUBRIC_PATTERNS.length + 4 + PACKET_PATTERNS.length)
+    })
+
     it('derives the packet-reaching range from its own headings', () => {
         const { text, start, end } = rubricRange()
 
@@ -624,6 +734,117 @@ describe('the rubric channel reaches every packet and is scanned (issue #143)', 
         expect(
             hits.map(
                 (h) => 'scorecard-template.md:' + h.line + '  [' + h.pattern + ']  ' + h.text
+            )
+        ).toEqual([])
+    })
+
+    it('POSITIVE: the paragraph that actually leaked is caught, four ways', () => {
+        // Verbatim from 253de7f, the §A2.1 preamble removed by the #142 final
+        // review. It shipped nowhere -- it was caught by a reviewer reading a
+        // diff -- but it was in the file, and benchmark/README.md lists this
+        // range as reaching every packet.
+        //
+        // Pinned by DISTINCT PATTERN NAME, not by hit count: if a later edit
+        // leaves only one pattern matching, this must fail rather than stay
+        // green on a single point of failure.
+        const { text, lineStarts } = normalizeProse(
+            "*Added 2026-08-07, issue #139.* §O5 filed this gap and nothing closed it; §T5\n" +
+                'measured the cost three passes later — **nine of twelve rows flagged\n' +
+                '`ambiguous`**, against a prediction of at most two, and the flag landed on this\n' +
+                "column. Because `fix_usable_unedited` is one of §A2's two gate terms, an\n" +
+                'under-determined reading of it moved a whole arm between 6/6 and 0/6.'
+        )
+        const hits = scanRubric(text, lineStarts, 0, text.length)
+
+        expect(hits.map((h) => h.pattern).filter((n, i, a) => a.indexOf(n) === i).sort()).toEqual([
+            'counted-rows',
+            'outside-section-pointer',
+            'prior-pass-reference',
+            'verdict-moved',
+        ])
+        expect(hits.map((h) => h.text).sort()).toEqual([
+            'moved a whole arm',
+            'nine of twelve rows',
+            'passes later',
+            '§O5',
+            '§T5',
+        ])
+    })
+
+    it('NEGATIVE: the rubric self-references do not fire', () => {
+        // Every § in the whole range points at §A, §A2 or §A2.1. That is what
+        // makes outside-section-pointer viable at all -- a pointer anywhere
+        // else is a pointer out of the packet, into a document the scorer
+        // does not have. §B is correctly rejected too: a packet ends at §A3.
+        const { text, lineStarts } = normalizeProse(
+            "see §A2.1 for the two cases, §A2's gate expression and §A's constraint"
+        )
+
+        expect(scanRubric(text, lineStarts, 0, text.length)).toEqual([])
+    })
+
+    it('NEGATIVE: the Task 12 band guidance does not fire', () => {
+        // This is why rubric-fraction is not in this channel's list. The
+        // fractions here are the gate bands and §A2's hypothetical guidance,
+        // which the blind rule explicitly permits -- it forbids what a prior
+        // run was AWARDED, not the vocabulary of grading.
+        const { text, lineStarts } = normalizeProse(
+            'A run can score 3/6 and pass; a run can score 4/6 and fail. The bands are ' +
+                '`≥ 8/10`, `5–7/10` and `< 5/10`.'
+        )
+
+        expect(scanRubric(text, lineStarts, 0, text.length)).toEqual([])
+    })
+
+    it('NEGATIVE: two near-misses on legitimate guidance stay clean', () => {
+        // Both sit ONE WORD from firing, and both are guidance a scorer needs.
+        // Pinned so a future widening that would take them fails here instead
+        // of quietly redacting the rubric.
+        //   - credit-awarded requires "awarded"; the rubric says "to award".
+        //   - counted-rows stops its noun list at runs|rows|passes; the rubric
+        //     says "two of the four rubric COLUMNS".
+        const { text, lineStarts } = normalizeProse(
+            'instructs the scorer to award *partial* credit for naming "inactive", and ' +
+                'names exactly two of the four rubric columns.'
+        )
+
+        expect(scanRubric(text, lineStarts, 0, text.length)).toEqual([])
+    })
+
+    it('scans ONLY the packet-reaching range, and reports file-absolute lines', () => {
+        // Two properties in one control, because they fail the same way -- a
+        // scan that silently reads the wrong span reports plausible line
+        // numbers for text no scorer ever sees.
+        const synthetic = [
+            '# Scorecard template', // 1
+            '', // 2
+            'Copy this file per §T5, the prior reading.', // 3  <- OUTSIDE the range
+            '', // 4
+            '## A. The 6-point rubric', // 5
+            '', // 6
+            'see §O5 for how this was decided', // 7  <- INSIDE the range
+            '', // 8
+            '## B. Four further columns', // 9
+            '', // 10
+            'and §Z9 down here', // 11 <- OUTSIDE the range
+        ].join('\n')
+
+        const { text, lineStarts } = normalizeProse(synthetic)
+        const hits = scanRubric(text, lineStarts, text.indexOf('## A. '), text.indexOf('## B. '))
+
+        expect(hits.map((h) => h.text)).toEqual(['§O5'])
+        expect(hits[0].line).toBe(7)
+    })
+
+    it('states no prior pass outcome -- the real file', () => {
+        const { text, lineStarts, start, end } = rubricRange()
+        const hits = scanRubric(text, lineStarts, start, end)
+
+        expect(
+            hits.map(
+                (h) =>
+                    'scorecard-template.md:' + h.line + '  [' + h.pattern + ']  ' +
+                    h.text + '  -- ' + h.why
             )
         ).toEqual([])
     })
