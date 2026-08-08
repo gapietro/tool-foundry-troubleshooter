@@ -3910,3 +3910,134 @@ with the derived file beside it, and **9/36 or 8/36** for the custom total, neve
 
 Suite at the close of this section: **1374 passed, 28 suites.** No production code was touched by
 either issue.
+
+---
+
+## AA. The rubric channel is scanned (`2026.08.0801`, #143 + #144)
+
+**§A through §Z are unmodified** — `git log -p benchmark/DECISION.md` is the check, as §Z said of
+§A–§Y and §X of §U–§W. This section appends and changes nothing above it. In particular **§Z4
+stands as written**: it is the accurate record of the rule that shipped at `2026.08.0709`, and this
+section supersedes it rather than correcting it.
+
+**No runs were fired, no packet was re-scored and no instance was touched.** This is a repair to the
+measuring instrument, one reword of the rubric's source, and one test-suite measurement.
+
+Artefacts: `test/scorerPacketBlindRule.test.js` (`RUBRIC_PATTERNS`, `PATH_STEMS`, `rubricRange`) ·
+`benchmark/scorecard-template.md` §A–§A3 · `benchmark/README.md` guard roster.
+
+### AA1. What was unguarded
+
+The blind rule binds **three** channels. #100 guarded the seed specs; #140 guarded the packets. The
+**rubric** — `scorecard-template.md` §A/§A2/§A3, the slice copied into every packet — was never
+machine-scanned, and §Z shipped without touching it.
+
+It had already leaked. §A2.1's preamble stated what a prior pass measured (*"nine of twelve rows
+flagged `ambiguous`"*, *"moved a whole arm between 6/6 and 0/6"*) and carried two bare `§`-pointers
+into this document. It was caught by a reviewer reading a diff and removed in `253de7f`.
+
+**That is the §T7 failure shape one level up.** #140 hardened the packet channel after a leak was
+caught by hand; this is the channel feeding every packet, caught by hand, with no guard. The fanout
+is what makes it more than tidiness: a leak in one seed spec reaches the rows scored against that
+seed, and a leak in the rubric reaches **all twelve rows at once**.
+
+The protection that existed was real but lived in the wrong place. `scoring-v9/packet-build-report.md`
+§7.2 records four substitutions on the rubric slice, each asserted to match exactly once at build
+time or the build throws. They are **path-only** — they did not see the prose leak at all.
+
+### AA2. What now binds
+
+A third channel-scoped pattern list. The range is derived from the `## A.` / `## B.` headings rather
+than hardcoded, which pins the template's heading structure into a test **deliberately**: the packet
+build depends on the same two headings, so a rename that breaks the scan is a rename that changes
+what ships to twelve scorers.
+
+Four new patterns, plus four spec-channel patterns verified inert on the range, plus
+`PACKET_PATTERNS` itself so the widening below reaches this channel automatically. The load-bearing
+one is `outside-section-pointer`: **every `§` in the entire §A→§B range is a self-reference** — `§A`,
+`§A2`, `§A2.1`, nothing else — so a pointer anywhere else is a pointer out of the packet, into a
+document the scorer does not have. Zero false positives, and it catches both of #139's pointers.
+
+> **The paragraph removed in `253de7f` is caught five times from four distinct patterns. The
+> reworded range scans clean on all nine, with zero residual paths.**
+
+Verified non-circularly: the leak was restored into the real template and the file scan was confirmed
+to fail, rather than the guard being checked only against a string literal in its own test.
+
+**`rubric-fraction` is deliberately absent, and this is the one judgement call worth quoting.** It
+fires **ten times** on legitimate Task 12 band guidance in the range. The alternative — rewriting the
+range to be fraction-free so the pattern could apply unchanged — takes out the sentence *"a run can
+score 3/6 and pass; a run can score 4/6 and fail"*, which is the only place the rubric explains why
+the gate is not the total. That is lobotomising the packet rather than redacting the leak. This is
+not the stop-list the guard's doctrine forbids: that doctrine bans carve-outs *inside* a list, and a
+separate list per channel is already how `PACKET_PATTERNS` exists.
+
+**And it leaves a residue, recorded rather than left to be re-derived.** A bare fraction carrying no
+scoring verb and no run-noun is caught by nothing in the rubric scan — *"the §A2 arm came out 0/6 last
+time"* passes every pattern. A narrowed fraction rule requiring an adjacent past-tense outcome verb
+would close it and measures clean against all ten legitimate fractions; it was considered and **not**
+shipped, because it would be reverse-engineered from a constructed sentence rather than a real
+incident, which is the weakness already recorded against `verdict-moved`. Compensating for one
+speculative pattern with a second is not a fix. The design review that surfaced this also corrected
+the count in this paragraph from six to ten — the first draft enumerated the band table and missed
+four, including *"two different 4/6 runs"*.
+
+**The four repository paths in the range were reworded out at source**, using §7.2's own A1–A4
+replacements. The packet **text** is unchanged — that is the wording the v9 scorers already read —
+but deviation set A disappears from the next packet build, and a future editor who adds a path to §A
+now fails the suite instead of depending on the builder noticing.
+
+### AA3. The path rule's residue, closed
+
+§Z4 described the widened rule as firing on *"a longer path … rooted at one of the enumerated
+directory stems"*. That was accurate and it understated the gap: the alternation required at least
+one character after the slash, so a reference **stopping at a stem** escaped. Measured on the shipped
+rule — `scoring-v9/`, `results/`, `../results` and `.superpowers/sdd/v9-pass/` all returned **no
+hit**. *"The packets are in `scoring-v9/`"* was a walkable route.
+
+Three alternations now. A bare stem **word** with no slash still correctly misses, pinned as a
+negative control so a later widening cannot take ordinary prose.
+
+> **v9: 12 packets, 0 hits — before and after this widening, as before and after §Z4's.** No false
+> positive forced a tightening.
+
+`scoring-v4` remains a declared out-of-scope directory for the reason §Z4 gives.
+
+### AA4. What this cannot establish
+
+**This repairs the measuring instrument. It measures nothing about diagnostic quality, for either
+harness, in either direction.**
+
+- **§T3 stands unmoved**, and so does everything §Z5 listed. Six custom rows reached layer 4 and all
+  six concluded at layer 1; no scan changes that.
+- **0 hits on the reworded range confirms the rule agrees with the reword.** It is not a
+  retrospective catch, and it does not establish the v9 scorers saw nothing they should not have —
+  §T7's account of that stands as written.
+- **Nothing here establishes the new patterns are the right patterns.** Three were written against
+  the one incident available. `verdict-moved` is explicitly reverse-engineered from a single
+  sentence, and the file says so. Two others — `credit-awarded` and `counted-rows` — sit **one word**
+  from firing on legitimate rubric guidance, and both near-misses are pinned as negative controls
+  precisely because that margin is thin.
+- **The rubric channel is scanned, not sealed.** AA2's residue is the standing example: a bare
+  fraction with no scoring verb and no run-noun passes every pattern. Scanning a channel is not the
+  same as covering it.
+- **The run-report channel is still unscanned.** Per-row prose written fresh each pass, bound by the
+  rule, hand-checked. Two of three channels are machine-scanned; this is not three.
+- **A passing suite is not evidence of blindness.** It is evidence the declared patterns did not
+  fire. This section's own count was wrong by four until a review measured it, which is the same
+  lesson in miniature: a stated measurement is not a measurement.
+
+### AA5. Disposition
+
+**Both #143 and #144 are closed.** Two of the rule's three channels are machine-scanned, the rubric
+slice is path-clean at source, and the guard roster matches the guard.
+
+**§Z6 still governs the next scored pass.** It is unblocked and it is still not scheduled, sized or
+pre-registered; any pass needs its own §U/§W-style pre-registration with predictions committed
+before a run fires, and **this section is not that pre-registration** any more than §Z was.
+
+**Unchanged: native remains the recommended path on this instance, and the Phase 1b milestone is not
+met.** §Z6's quoting rule stands — **34/36 · 4/6** only with the derived file beside it, and **9/36
+or 8/36** for the custom total, never a bare figure.
+
+Suite at the close of this section: **1388 passed, 28 suites.** No production code was touched.

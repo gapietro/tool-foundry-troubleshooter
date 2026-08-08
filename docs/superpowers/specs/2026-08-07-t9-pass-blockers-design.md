@@ -256,3 +256,10 @@ recompute and the widening; the version bump; the `CHANGELOG.md` entry.
 size it, or pre-register it. §T9's remaining instruction — *"Do not re-run this pass to get a
 firmer number"* — still governs, and any future pass needs its own pre-registration in the §U/§W
 style.
+
+---
+
+> **Forward note, 2026-08-08 (#144).** This spec describes the path rule as it was designed on
+> 2026-08-07, and it is left unedited on that basis. It understated one residue: a reference that
+> **stops at an enumerated stem** (`scoring-v9/`, `results/`, `../results`) did not fire. Closed in
+> `docs/superpowers/specs/2026-08-08-rubric-channel-scan-design.md`; see `DECISION.md` §AA3.
