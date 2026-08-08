@@ -17,6 +17,46 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0801 — 2026-08-08
+
+### Fixed — the rubric channel is scanned (#143)
+
+The blind rule binds three channels. #100 guarded the seed specs, #140 guarded the packets; the
+rubric slice — `scorecard-template.md` §A/§A2/§A3, copied into **every** packet — had never been
+machine-scanned, and it demonstrably leaked (`253de7f`, caught by a reviewer reading a diff). A leak
+in one seed spec reaches the rows scored against that seed; a leak here reaches all twelve at once.
+
+`RUBRIC_PATTERNS` is the third channel-scoped list, scanning a range derived from the `## A.` /
+`## B.` headings. The load-bearing pattern is `outside-section-pointer`: every `§` in the whole range
+is a self-reference, so a pointer anywhere else is a route out of the packet. The paragraph removed
+in `253de7f` is caught five times from four distinct patterns; the range scans clean on all nine.
+Verified non-circularly by restoring the leak into the real template and confirming the file scan
+fails.
+
+`rubric-fraction` is deliberately absent — it fires ten times on legitimate Task 12 band guidance,
+and rewriting the range to suit it would take out the one sentence explaining why the gate is not
+the total. Four weaknesses are recorded in the file rather than glossed, including the residue the
+exclusion leaves — a bare fraction with no scoring verb and no run-noun is caught by nothing. Two
+near-misses ship as pinned negative controls.
+
+The four repository paths in the range were reworded out at source using the packet builder's own
+A1–A4 replacements, so the packet text is unchanged but deviation set A disappears from the next
+build.
+
+### Fixed — the path rule catches a stem-terminated reference (#144)
+
+`scoring-v9/`, `results/`, `../results` and `.superpowers/sdd/v9-pass/` all returned no hit on the
+shipped rule, because the alternation required at least one character after the slash. Three
+alternations now; a bare stem word with no slash still misses, pinned as a control. The twelve v9
+packets scan 0 before and after.
+
+### Changed — the guard roster matches the guard (#144)
+
+`benchmark/README.md`'s roster described the guard two generations out of date. Three rows now, pinned
+by a test. The test file's own header no longer claims the rubric channel is unscanned.
+
+Suite: **1388 passed, 28 suites.** No production code touched. `benchmark/DECISION.md` §AA.
+
 ## 2026.08.0709 — 2026-08-07
 
 ### Fixed — the rubric decides both cases `fix_usable_unedited` left open (#139)
@@ -82,6 +122,10 @@ they are a *silent* second way to be unguarded.
 Measured: v9's 12 packets, 0 hits. v4's 20 packets, 164 hits, unedited.
 
 Suite: **1365 passed, 27 suites** (was 1345/27). No production code touched.
+
+> **Forward note, 2026-08-08 (#144).** Accurate for the rule shipped here, and left unedited. It
+> understated one residue: a reference stopping at an enumerated stem did not fire. Closed at
+> `2026.08.0801`; see `benchmark/DECISION.md` §AA3.
 
 ## 2026.08.0707 — 2026-08-07
 

@@ -13,23 +13,22 @@ column below exists for a stated reason — read the reason before skipping a co
 |---|---|---|
 | `root_cause_layer_correct` | 0 or 2 | Diagnosis names the seed's expected root-cause layer (see the seed's own spec file for the expected value) |
 | `fix_target_correct` | 0, 1 or 2 | Diagnosis names the correct fix target (tool schema / instruction text / data seeding / capability mapping / activation). **1 = partial**: the right area, without the specific target. See the partial-credit note below |
-| `evidence_cites_trace_and_config` | 0 or 1 | Root cause cites BOTH the execution trace AND at least one config/schema source — the evidence rule from `docs/agent/agent-doctor-instructions.md` |
+| `evidence_cites_trace_and_config` | 0 or 1 | Root cause cites BOTH the execution trace AND at least one config/schema source — the evidence rule from the diagnostic agent's own instructions |
 | `fix_usable_unedited` | 0 or 1 | The Fix Report's proposed fix could be applied by the builder AI as written, with no manual editing first — **and it addresses the defect the seed actually carries.** A well-formed fix aimed at the wrong target is a no-op, not a usable fix, so **`fix_usable_unedited` may not be 1 while `fix_target_correct` is 0.** See the note under the gate rule for why this constraint lives here rather than in the gate expression, and **§A2.1** for the two cases this definition does not otherwise determine — an unfilled value slot, and a fix that addresses a runtime record |
 
 **Total: 6 points per run.**
 
-**Why `fix_target_correct` has a partial band.** It was 0-or-2, while
-`seeds/seed-05-inactive-usecase.md` instructs the scorer to award *partial*
-credit for naming "inactive" without naming which of the two activation gates is
-off — an instruction the scale could not express, leaving the scorer to round
-arbitrarily in either direction. The 1 band resolves it. Seed 5 is the only seed
-that currently defines a partial case; for the others, 1 is available but must be
-justified in `notes` if used.
+**Why `fix_target_correct` has a partial band.** It was 0-or-2, while seed 5's
+specification instructs the scorer to award *partial* credit for naming "inactive"
+without naming which of the two activation gates is off — an instruction the scale
+could not express, leaving the scorer to round arbitrarily in either direction. The
+1 band resolves it. Seed 5 is the only seed that currently defines a partial case;
+for the others, 1 is available but must be justified in `notes` if used.
 
 ## A2. `passes_gate` — the column the gate actually consumes
 
-The rubric scores each run **out of 6**. The gate in `docs/IMPLEMENTATION_PLAN.md`
-Task 12 counts **runs**: *"≥ 8/10 runs with correct root cause + usable fixes."*
+The rubric scores each run **out of 6**. The gate counts **runs**:
+*"≥ 8/10 runs with correct root cause + usable fixes."*
 Nothing connected the two, so two different 4/6 runs could be opposite verdicts —
 correct cause with an unusable fix, versus wrong cause with a usable fix and
 cited evidence — and whoever writes the decision record would have invented
@@ -150,7 +149,7 @@ reason is honest; a `0` is a measurement that did not happen.
 3. If a void run cannot be made valid, the gate is read as
    `sum(passes_gate) / <valid runs>` against the **same proportions**, and
    *all three* bands are proportional — not just the top one. The
-   `IMPLEMENTATION_PLAN.md` Task 12 bands are `≥ 8/10`, `5–7/10` and `< 5/10`,
+   Task 12 bands are `≥ 8/10`, `5–7/10` and `< 5/10`,
    which are:
 
    | Band | Proportion of valid runs | Outcome |

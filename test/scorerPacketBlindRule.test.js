@@ -35,27 +35,42 @@
  * a second, SILENT way to be unguarded.
  *
  * ---------------------------------------------------------------------------
- * WHAT THIS GUARD DOES NOT COVER
+ * WHAT THIS GUARD COVERS, AND WHAT IT DOES NOT
  * ---------------------------------------------------------------------------
  * The rule binds three channels (benchmark/README.md, "The scorer blind
- * rule"); this guard scans one of them. The rubric channel is
- * benchmark/scorecard-template.md, of which only sections A/A2/A3 reach a
- * packet. It is NOT scanned here, and the reason is mechanical rather than
- * principled: the section legitimately explains grading with score-shaped text
- * ("a run can score 3/6 and pass"), so a naive scan reddens on guidance, while
- * a section-scoped scan would pin the template's heading structure into a test.
+ * rule"). This guard scans two of them -- SEED SPECS and RUBRIC. PACKETS is
+ * not one of the rule's three channels; it is a separate artefact the
+ * channels are assembled into, scanned here for a different concern (a
+ * repository PATH, not a prior run's outcome). Three pattern lists below,
+ * one per row, because uniform treatment of "what this file scans" still
+ * needs a list entry for the non-channel artefact:
  *
- * That is a cost/benefit judgement, NOT a claim that the channel is safe. It
- * was once written up as though score-shaped text in the rubric were only ever
- * legitimate guidance; #139 falsified that -- a §A2.1 preamble shipped into the
- * rubric slice carrying a prior pass's grades and two decision-record section
- * pointers, and no guard could have fired. So: the rubric channel is bound by
- * the rule and is not machine-scanned, which makes every addition to §A/§A2/§A3
- * a HAND check against the blind rule before it ships.
+ *   SEED SPECS   PATTERNS         bans a prior run's OUTCOME
+ *   PACKETS      PACKET_PATTERNS  bans a repository PATH
+ *   RUBRIC       RUBRIC_PATTERNS  bans a prior pass's outcome or provenance,
+ *                + 4 patterns       a repository path, and -- via those 4
+ *                  borrowed from     borrowed patterns -- a seed-spec-shaped
+ *                  PATTERNS          leak reaching the rubric
+ *                + PACKET_PATTERNS  see RUBRIC_PATTERNS' own doc comment for
+ *                                    the exact three-source composition
  *
- * The run-report channel is per-row prose written fresh each pass. Both are
- * bound by the rule and neither is scanned here. A passing suite is not
- * evidence of blindness; it is evidence the declared patterns did not fire.
+ * The rubric channel is benchmark/scorecard-template.md §A/§A2/§A3 -- the
+ * slice copied into EVERY packet, so a leak there reaches every row of a pass
+ * at once. It was previously unscanned on a cost/benefit judgement: the
+ * section legitimately explains grading with score-shaped text ("a run can
+ * score 3/6 and pass"), so a naive scan reddens on guidance. That judgement
+ * was once written up as though score-shaped text in the rubric were only
+ * ever legitimate guidance; #139 falsified it -- a §A2.1 preamble shipped
+ * into the slice carrying a prior pass's grades and two decision-record
+ * section pointers, and no guard could have fired. #143 scanned it, with the
+ * patterns scoped to the channel rather than borrowed whole. See
+ * RUBRIC_PATTERNS for what is deliberately absent and why.
+ *
+ * The RUN-REPORT channel is per-row prose written fresh each pass. It is
+ * bound by the rule and is NOT scanned here, so it remains a hand check.
+ *
+ * A passing suite is not evidence of blindness; it is evidence the declared
+ * patterns did not fire.
  */
 
 const fs = require('fs')
@@ -159,6 +174,17 @@ const PATTERNS = [
 ]
 
 /**
+ * The directory stems this repository actually uses, as regex alternatives.
+ * Named because the rule below interpolates them twice -- once for the
+ * "stem/..." form and once for the "../stem" form -- and two copies of a
+ * fifteen-item list is two places to forget an entry.
+ */
+const PATH_STEMS =
+    'benchmark|docs|src|test|seed-app|node_modules|dist|\\.claude|\\.superpowers|' +
+    'seeds|history|results|scoring-v[0-9]+|' +
+    'scorecard-[A-Za-z0-9_-]+|raw-evidence-[A-Za-z0-9_-]+'
+
+/**
  * The packet channel's pattern list, kept SEPARATE from PATTERNS above
  * because the two channels ban different things and scan different files.
  * PATTERNS bans a prior run's outcome and scans the seed specs. This bans a
@@ -170,28 +196,44 @@ const PATTERNS = [
 const PACKET_PATTERNS = [
     {
         name: 'repository-path',
-        // Two alternations, both deliberate:
-        //   1. a path qualified by a directory stem this repo actually uses,
-        //      with optional ./ or ../ prefixes (the specs use both forms);
-        //   2. ANY bare markdown filename. This started as an eight-name
+        // Three alternations, each closing a route measured to be walkable:
+        //   1. a stem followed by a slash and ZERO OR MORE path characters.
+        //      The "zero or more" is #144: the first shipped version required
+        //      one or more, so "the packets are in scoring-v9/" -- a complete
+        //      route -- did not match. Measured on that version: scoring-v9/,
+        //      results/ and ../results all returned NO HIT.
+        //   2. a ./ or ../ prefix followed by a bare stem with no trailing
+        //      slash. Alternation 1 cannot reach this because there is no
+        //      slash after the stem to anchor on.
+        //   3. ANY bare markdown filename. This started as an eight-name
         //      root-level list and was widened in the #139 review: a
         //      whitelist of eight names missed scorecard-v9.md (the literal
         //      per-row answer key), raw-evidence-v9-scored-pass.md and
         //      agent-doctor-instructions.md, and both leaks §T7 found by hand
         //      escape it if written one directory segment shorter.
-        // No file-extension requirement on alternation 1: "benchmark/seeds"
-        // is a route even without a filename, and seeds/history/ is what
-        // sits at the end of it -- which is also why the stems include the
-        // NON-top-level ones (seeds, history, results, scoring-vN): a path
-        // written relative to benchmark/ is the same route one segment
-        // shorter. The scorecard-/raw-evidence- stems cover directory forms
-        // of those documents should they ever gain siblings; today it is
-        // alternation 2 that catches them.
         //
-        // Measured after widening: the twelve committed v9 packets still scan
-        // 0, so nothing here was tightened back for a false positive.
-        re:
-            /(?:\.{0,2}\/)*(?:benchmark|docs|src|test|seed-app|node_modules|dist|\.claude|seeds|history|results|scoring-v[0-9]+|scorecard-[A-Za-z0-9_-]+|raw-evidence-[A-Za-z0-9_-]+)\/[A-Za-z0-9_./-]+|\b[A-Za-z0-9_-]+\.md\b/,
+        // A bare stem WORD with no slash deliberately does NOT match --
+        // "the results were mixed" is prose, not a route -- which is the
+        // boundary the #144 negative control pins.
+        //
+        // Residue, stated rather than left to be re-derived: a NON-markdown
+        // file outside these stems (a top-level package.json, say) is still
+        // not matched. The answer keys in this project are all markdown and
+        // the stem list covers every route to them found so far.
+        //
+        // Measured after this widening: the twelve committed v9 packets scan
+        // 0, unchanged from before it, so nothing here was tightened back for
+        // a false positive.
+        // The third alternation's extension is matched case-insensitively
+        // ([mM][dD], not a literal .md) -- M4: the .md alternation used to be
+        // case-sensitive while the seed-spec channel's /DECISION\.md/i was
+        // not, so a bare DECISION.MD escaped this pattern alone. Scoped to
+        // the extension only, so PATH_STEMS stays case-sensitive as written.
+        re: new RegExp(
+            '(?:(?:\\.{0,2}\\/)*(?:' + PATH_STEMS + ')\\/[A-Za-z0-9_./-]*)' +
+                '|(?:(?:\\.{1,2}\\/)+(?:' + PATH_STEMS + ')\\b)' +
+                '|\\b[A-Za-z0-9_-]+\\.[mM][dD]\\b'
+        ),
         why:
             'a repository path a MODEL scorer can follow out of the packet and into this ' +
             'project prior conclusions. A pointer to the answer is the same defect as the ' +
@@ -212,14 +254,24 @@ const PACKET_PATTERNS = [
  *     re.lastIndex++`) prevents an infinite loop if a pattern can match an
  *     empty string.
  */
-function scanWith(patterns, text, lineStarts) {
+function scanWith(patterns, text, lineStarts, indexOffset) {
+    // Offset for callers that scan a SLICE of a normalized document (the
+    // rubric channel does). Match indices are relative to the slice; line
+    // numbers must stay relative to the file, or a failure points at a line
+    // that does not exist in the source the reader opens.
+    const offset = indexOffset || 0
     const hits = []
 
     patterns.forEach((p) => {
         const re = new RegExp(p.re.source, p.re.flags.replace('g', '') + 'g')
         let m
         while ((m = re.exec(text)) !== null) {
-            hits.push({ pattern: p.name, why: p.why, line: lineAt(lineStarts, m.index), text: m[0] })
+            hits.push({
+                pattern: p.name,
+                why: p.why,
+                line: lineAt(lineStarts, m.index + offset),
+                text: m[0],
+            })
             if (m.index === re.lastIndex) re.lastIndex++
         }
     })
@@ -235,6 +287,176 @@ function scanProse(text, lineStarts) {
 /** Every hit of every packet-channel pattern. See scanWith for the matcher. */
 function scanPackets(text, lineStarts) {
     return scanWith(PACKET_PATTERNS, text, lineStarts)
+}
+
+// ---------------------------------------------------------------------------
+// THE RUBRIC CHANNEL (issue #143)
+// ---------------------------------------------------------------------------
+const TEMPLATE = path.join(SCORING, 'scorecard-template.md')
+
+/**
+ * The packet-reaching slice of the rubric, as offsets into the WHOLE
+ * normalized template.
+ *
+ * Only §A/§A2/§A3 are copied into a scorer packet, so the scanned range runs
+ * from the `## A.` heading to the `## B.` heading. Derived from the headings
+ * at scan time and never hardcoded to line numbers, which move.
+ *
+ * This pins the template's heading structure into a test, which is the
+ * objection this file previously recorded against scanning the channel at
+ * all. It is the right trade rather than a cost: the PACKET BUILD depends on
+ * the same two headings, so a rename that breaks this scan is a rename that
+ * changes what ships to twelve scorers. Failing loudly is the correct
+ * response.
+ *
+ * Returns the whole file's text and line map alongside the offsets, because
+ * line numbers reported by a scan of the slice must still name lines in the
+ * file.
+ */
+function rubricRange() {
+    const { text, lineStarts } = normalizeProse(fs.readFileSync(TEMPLATE, 'utf8'))
+
+    const start = text.indexOf('## A. ')
+    const end = text.indexOf('## B. ')
+
+    // A renamed or removed heading must fail LOUDLY. indexOf returns -1 on a
+    // miss, and slice(-1, -1) is an EMPTY string that scans clean -- both
+    // content scans would go green on nothing, with only the derivation
+    // assertion (expect(start).toBeGreaterThan(-1)) left to notice.
+    if (start < 0 || end <= start) {
+        throw new Error(
+            'rubricRange(): "## A. " / "## B. " headings not found (or out of order) in ' + TEMPLATE
+        )
+    }
+
+    return {
+        text: text,
+        lineStarts: lineStarts,
+        start: start,
+        end: end,
+    }
+}
+
+/** Number words this rubric uses, plus digits. Interpolated twice below. */
+const COUNT = '\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve'
+
+/**
+ * The rubric channel's pattern list -- the THIRD, kept separate for the same
+ * reason PACKET_PATTERNS is separate from PATTERNS: the channels ban
+ * different things and scan different files.
+ *
+ * This is not the stop-list the doctrine at the top of this file forbids.
+ * That doctrine bans carve-outs INSIDE a list, which are invisible at the
+ * point of failure. A separate list per channel is visible here, carries its
+ * own written reason, and is already how PACKET_PATTERNS exists.
+ *
+ * WHAT IS DELIBERATELY ABSENT: `rubric-fraction`. It fires TEN times on
+ * legitimate Task 12 band guidance in this range -- ten, across the two band
+ * tables and the §A2 hypothetical, among them `≥ 8/10`, `5–7/10`, `< 5/10`,
+ * and "a run can score 3/6 and pass; a run can score 4/6 and fail".
+ * The alternative considered and rejected was rewriting the range to be
+ * fraction-free so the pattern could apply unchanged; that takes out the one
+ * sentence explaining why the gate is not the total, which is lobotomising
+ * the packet rather than redacting the leak -- the exact distinction the
+ * seed-04 negative control above exists to protect. Coverage is not lost: the
+ * #139 leak's "6/6 and 0/6" sits in the same sentence as "moved a whole arm".
+ *
+ * Residue, stated rather than left to be re-derived: a bare fraction with NO
+ * scoring verb and NO run-noun nearby is caught by nothing in RUBRIC_SCAN.
+ * Worked example, verified: "the §A2 arm came out 0/6 last time" -- §A2 is a
+ * self-reference so outside-section-pointer does not fire on it,
+ * scored-a-number requires the literal word "scored", and prior-pass-reference
+ * has "last" but its noun list is pass|run|round|scorer -- "time" is not in
+ * it. A narrowed fraction pattern (one requiring an adjacent past-tense
+ * outcome verb) would close this and was measured clean against all ten
+ * legitimate fractions above; it was considered and deliberately NOT shipped,
+ * because it would be reverse-engineered from a constructed sentence rather
+ * than a real incident -- the exact weakness recorded as #1 below for
+ * `verdict-moved`. The coverage argument two paragraphs up ("the #139 leak's
+ * `6/6 and 0/6` sits in the same sentence as `moved a whole arm`") argues from
+ * the one incident these patterns were derived from; it does not close this
+ * shape, and is not an implied guarantee that it does.
+ *
+ * FOUR WEAKNESSES, recorded rather than glossed:
+ *   1. `verdict-moved` is reverse-engineered from the one incident available.
+ *      It bans a real shape -- what a prior pass's score did to the verdict --
+ *      but nothing establishes it generalises.
+ *   2. `credit-awarded` (borrowed, below) sits ONE WORD from a false positive:
+ *      the rubric says "to award *partial* credit" and the pattern requires
+ *      "awarded".
+ *   3. `counted-rows` near-misses "two of the four rubric columns", surviving
+ *      only because its noun list stops at runs|rows|passes.
+ *   4. The bare-fraction residue documented above is not covered, and the
+ *      coverage argument for excluding `rubric-fraction` rests on the single
+ *      incident the patterns were built from.
+ * Both near-misses are pinned as negative controls. Per the doctrine above, a
+ * pattern that reddens on real guidance is fixed by writing a better pattern.
+ */
+const RUBRIC_PATTERNS = [
+    {
+        name: 'outside-section-pointer',
+        // EVERY § in the whole §A->§B range is a self-reference: §A, §A2,
+        // §A2.1, and nothing else. A pointer anywhere else is a pointer OUT
+        // of the packet, into a document the scorer does not have -- which is
+        // exactly what #139's two bare §O5/§T5 pointers were. §B is rejected
+        // too, correctly: a packet ends at §A3.
+        //
+        // Residue, stated rather than left to be re-derived: "§ O5" -- a
+        // space between the mark and the section id -- escapes this pattern.
+        // The regex requires an alnum/dot immediately after §; a space there
+        // means the pattern never matches at all, so the negative lookahead
+        // is never reached to reject or admit it. Verified, not observed in
+        // the range today.
+        re: /§(?!A[0-9.]*\b)[A-Za-z0-9.]+/,
+        why:
+            'a section pointer out of the rubric and into the decision record, which a ' +
+            'MODEL scorer can follow into every prior pass rows and grades',
+    },
+    {
+        name: 'counted-rows',
+        re: new RegExp(
+            '\\b(?:' + COUNT + ')\\s+of\\s+(?:the\\s+)?(?:' + COUNT + ')?\\s*(?:runs?|rows?|passes)\\b',
+            'i'
+        ),
+        why: 'how many prior rows or runs did something -- "nine of twelve rows flagged ambiguous"',
+    },
+    {
+        name: 'prior-pass-reference',
+        re: /\b(?:prior|previous|earlier|last)\s+(?:pass(?:es)?|runs?|rounds?|scorers?)\b|\bpass(?:es)?\s+(?:later|earlier|ago)\b/i,
+        why: 'the provenance vocabulary of an earlier pass -- "three passes later", "a prior run"',
+    },
+    {
+        name: 'verdict-moved',
+        re: /\b(?:moved|swung|flipped|shifted)\s+(?:a|an|the)\s+(?:whole\s+|entire\s+)?(?:arm|verdict|gate|pass)\b/i,
+        why: 'what a prior pass score did to the verdict -- "moved a whole arm between 6/6 and 0/6"',
+    },
+]
+
+/**
+ * The four spec-channel patterns that are inert on this range today, borrowed
+ * by name so the two lists cannot silently drift apart. They cost nothing
+ * measured and they cover the seed-spec-shaped leak -- "run 2 named...",
+ * "earning full credit" -- if that prose ever migrates into the rubric.
+ *
+ * `rubric-fraction` and `answer-key-pointer` are the two NOT borrowed: the
+ * first per the note above, the second because PACKET_PATTERNS already bans
+ * every markdown filename including DECISION.md, so borrowing it would double
+ * every hit.
+ */
+const BORROWED_FOR_RUBRIC = ['scored-a-number', 'scored-runs-or-rows', 'run-N-did', 'credit-awarded']
+
+/**
+ * The rubric range is scanned for BOTH an outcome and a path. The path half
+ * is PACKET_PATTERNS itself rather than a copy, so the #144 widening reaches
+ * this channel automatically.
+ */
+const RUBRIC_SCAN = RUBRIC_PATTERNS.concat(
+    PATTERNS.filter((p) => BORROWED_FOR_RUBRIC.indexOf(p.name) !== -1)
+).concat(PACKET_PATTERNS)
+
+/** Every hit of every rubric-channel pattern in the slice [start, end). */
+function scanRubric(text, lineStarts, start, end) {
+    return scanWith(RUBRIC_SCAN, text.slice(start, end), lineStarts, start)
 }
 
 /** Read a seed spec and normalize it in one step. */
@@ -373,6 +595,18 @@ describe('the packet scanner itself works (controls)', () => {
         expect(hits.map((h) => h.text).sort()).toEqual(['DECISION.md', 'DESIGN.md'])
     })
 
+    it('POSITIVE: an upper-cased extension fires (M4) -- DECISION.MD is not a different file', () => {
+        // The bare-filename alternation used to be case-sensitive on the
+        // extension (`.md` only), so DECISION.MD escaped this pattern even
+        // though the spec channel's /DECISION\.md/i would have caught the
+        // same string. Scoped to [mM][dD] so this route closes without
+        // widening PATH_STEMS to match case-insensitively too.
+        const { text, lineStarts } = normalizeProse('cross-check against DECISION.MD before grading')
+        const hits = scanPackets(text, lineStarts)
+
+        expect(hits.map((h) => h.text)).toEqual(['DECISION.MD'])
+    })
+
     it('POSITIVE: a relative path fires, and reports the line it opened on', () => {
         // Packets embed spec content, and the specs use ../ and ../../ forms.
         // The line map matters for the same reason it does in the spec channel:
@@ -415,6 +649,43 @@ describe('the packet scanner itself works (controls)', () => {
             'agent-doctor-instructions.md',
             'scoring-v9/results/row-05-result.md',
         ])
+    })
+
+    it('POSITIVE: a reference that stops at a directory stem fires (#144)', () => {
+        // "the packets are in scoring-v9/" was a walkable route the first
+        // shipped version of this rule missed: its path alternation required
+        // at least one character after the slash, so a reference that stops
+        // at the stem escaped. Measured on the pre-#144 regex: no hit.
+        const { text, lineStarts } = normalizeProse('the packets are in scoring-v9/ and results/')
+
+        expect(scanPackets(text, lineStarts).map((h) => h.text).sort()).toEqual([
+            'results/',
+            'scoring-v9/',
+        ])
+    })
+
+    it('POSITIVE: a relative reference with no trailing slash fires (#144)', () => {
+        // ../results is the same route written from inside a sibling
+        // directory. It has no trailing slash for the first alternation to
+        // anchor on, which is why the rule needs a prefix-form alternation.
+        const { text, lineStarts } = normalizeProse('grades live in ../results')
+
+        expect(scanPackets(text, lineStarts).map((h) => h.text)).toEqual(['../results'])
+    })
+
+    it('POSITIVE: the .superpowers workspace stem fires (#144)', () => {
+        // Review artefacts live here. It was absent from the stem list.
+        const { text, lineStarts } = normalizeProse('see .superpowers/sdd/v9-pass/ for the review')
+
+        expect(scanPackets(text, lineStarts).map((h) => h.text)).toEqual(['.superpowers/sdd/v9-pass/'])
+    })
+
+    it('NEGATIVE: a bare stem WORD with no slash does not fire (#144)', () => {
+        // The widening must not turn every occurrence of "results" or "test"
+        // in ordinary prose into a hit. The slash is what makes it a route.
+        const { text, lineStarts } = normalizeProse('the results were mixed and test results matter')
+
+        expect(scanPackets(text, lineStarts)).toEqual([])
     })
 
     it('NEGATIVE: prose containing a slash but no repository path does not fire', () => {
@@ -489,5 +760,230 @@ describe('no repository path reaches a scorer packet (issue #140)', () => {
                 ).toEqual([])
             })
         })
+    })
+})
+
+describe('the rubric channel reaches every packet and is scanned (issue #143)', () => {
+    it('borrows exactly the four spec patterns it names, by resolved identity', () => {
+        // A typo in BORROWED_FOR_RUBRIC would silently drop a pattern: filter
+        // returns a shorter array and no one notices. Compare resolved names,
+        // not the literal list against itself.
+        const borrowed = PATTERNS.filter((p) => BORROWED_FOR_RUBRIC.indexOf(p.name) !== -1)
+
+        expect(borrowed.map((p) => p.name).sort()).toEqual([
+            'credit-awarded',
+            'run-N-did',
+            'scored-a-number',
+            'scored-runs-or-rows',
+        ])
+        expect(RUBRIC_SCAN).toHaveLength(RUBRIC_PATTERNS.length + 4 + PACKET_PATTERNS.length)
+    })
+
+    it('derives the packet-reaching range from its own headings', () => {
+        const { text, start, end } = rubricRange()
+
+        expect(start).toBeGreaterThan(-1)
+        expect(end).toBeGreaterThan(start)
+
+        // §A2.1 must fall inside the range. test/rubricClauses.test.js pins
+        // the same placement for a different reason -- that a clause outside
+        // §A/§A2/§A3 is a clause the scorers never see. Two tests, one
+        // invariant, independent derivations.
+        const slice = text.slice(start, end)
+        expect(slice).toContain('### A2.1')
+    })
+
+    it('states no repository path -- the range ships to twelve scorers', () => {
+        // The four paths this range used to carry were removed by hand at
+        // PACKET BUILD time (scoring-v9/packet-build-report.md §7.2, four
+        // substitutions each asserted to match exactly once). That assertion
+        // is real, but it lives in the builder rather than in the suite, and
+        // it is path-only -- it did not see the #139 prose leak at all.
+        // Reworded at source so the builder no longer has to.
+        const { text, lineStarts, start, end } = rubricRange()
+        const hits = scanWith(PACKET_PATTERNS, text.slice(start, end), lineStarts, start)
+
+        expect(
+            hits.map(
+                (h) => 'scorecard-template.md:' + h.line + '  [' + h.pattern + ']  ' + h.text
+            )
+        ).toEqual([])
+    })
+
+    it('POSITIVE: the paragraph that actually leaked is caught, four ways', () => {
+        // Verbatim from 253de7f, the §A2.1 preamble removed by the #142 final
+        // review. It shipped nowhere -- it was caught by a reviewer reading a
+        // diff -- but it was in the file, and benchmark/README.md lists this
+        // range as reaching every packet.
+        //
+        // Pinned by DISTINCT PATTERN NAME, not by hit count: if a later edit
+        // leaves only one pattern matching, this must fail rather than stay
+        // green on a single point of failure.
+        const { text, lineStarts } = normalizeProse(
+            "*Added 2026-08-07, issue #139.* §O5 filed this gap and nothing closed it; §T5\n" +
+                'measured the cost three passes later — **nine of twelve rows flagged\n' +
+                '`ambiguous`**, against a prediction of at most two, and the flag landed on this\n' +
+                "column. Because `fix_usable_unedited` is one of §A2's two gate terms, an\n" +
+                'under-determined reading of it moved a whole arm between 6/6 and 0/6.'
+        )
+        const hits = scanRubric(text, lineStarts, 0, text.length)
+
+        expect(hits.map((h) => h.pattern).filter((n, i, a) => a.indexOf(n) === i).sort()).toEqual([
+            'counted-rows',
+            'outside-section-pointer',
+            'prior-pass-reference',
+            'verdict-moved',
+        ])
+        expect(hits.map((h) => h.text).sort()).toEqual([
+            'moved a whole arm',
+            'nine of twelve rows',
+            'passes later',
+            '§O5',
+            '§T5',
+        ])
+    })
+
+    it('NEGATIVE: the rubric self-references do not fire', () => {
+        // Every § in the whole range points at §A, §A2 or §A2.1. That is what
+        // makes outside-section-pointer viable at all -- a pointer anywhere
+        // else is a pointer out of the packet, into a document the scorer
+        // does not have. §B is correctly rejected too: a packet ends at §A3.
+        const { text, lineStarts } = normalizeProse(
+            "see §A2.1 for the two cases, §A2's gate expression and §A's constraint"
+        )
+
+        expect(scanRubric(text, lineStarts, 0, text.length)).toEqual([])
+    })
+
+    it('NEGATIVE: the Task 12 band guidance does not fire', () => {
+        // This is why rubric-fraction is not in this channel's list. The
+        // fractions here are the gate bands and §A2's hypothetical guidance,
+        // which the blind rule explicitly permits -- it forbids what a prior
+        // run was AWARDED, not the vocabulary of grading.
+        const { text, lineStarts } = normalizeProse(
+            'A run can score 3/6 and pass; a run can score 4/6 and fail. The bands are ' +
+                '`≥ 8/10`, `5–7/10` and `< 5/10`.'
+        )
+
+        expect(scanRubric(text, lineStarts, 0, text.length)).toEqual([])
+    })
+
+    it('I4: PATTERNS\' rubric-fraction still fires on the real range -- the exclusion above holds only while this does', () => {
+        // The exclusion of rubric-fraction from RUBRIC_SCAN is justified by
+        // an argument that is TRUE TODAY, not true forever: it fires 10x on
+        // legitimate Task 12 band guidance in this range (DECISION.md §AA2).
+        // If a future rewrite ever makes §A2/§A3 fraction-free, the exclusion
+        // survives unnoticed and the channel is silently unguarded against
+        // exactly the leak shape #139 contained ("6/6 and 0/6"). This test
+        // is what forces a re-justification instead of a silent bit-rot: if
+        // it goes red, do not delete it -- either restore fraction-shaped
+        // guidance or re-examine whether rubric-fraction should be included.
+        //
+        // Asserts `> 0`, not the measured count (10), deliberately: pinning
+        // 10 would fail on any legitimate rubric edit that adds or removes
+        // one band example, which is a different failure than the one this
+        // test exists to catch. The invariant that matters here is "the
+        // exclusion is still justified", not "the count never moves".
+        const rubricFraction = PATTERNS.find((p) => p.name === 'rubric-fraction')
+        const { text, lineStarts, start, end } = rubricRange()
+        const hits = scanWith([rubricFraction], text.slice(start, end), lineStarts, start)
+
+        expect(hits.length).toBeGreaterThan(0)
+    })
+
+    it('NEGATIVE: two near-misses on legitimate guidance stay clean', () => {
+        // Both sit ONE WORD from firing, and both are guidance a scorer needs.
+        // Pinned so a future widening that would take them fails here instead
+        // of quietly redacting the rubric.
+        //   - credit-awarded requires "awarded"; the rubric says "to award".
+        //   - counted-rows stops its noun list at runs|rows|passes; the rubric
+        //     says "two of the four rubric COLUMNS".
+        const { text, lineStarts } = normalizeProse(
+            'instructs the scorer to award *partial* credit for naming "inactive", and ' +
+                'names exactly two of the four rubric columns.'
+        )
+
+        expect(scanRubric(text, lineStarts, 0, text.length)).toEqual([])
+    })
+
+    it('scans ONLY the packet-reaching range, and reports file-absolute lines', () => {
+        // Two properties in one control, because they fail the same way -- a
+        // scan that silently reads the wrong span reports plausible line
+        // numbers for text no scorer ever sees.
+        const synthetic = [
+            '# Scorecard template', // 1
+            '', // 2
+            'Copy this file per §T5, the prior reading.', // 3  <- OUTSIDE the range
+            '', // 4
+            '## A. The 6-point rubric', // 5
+            '', // 6
+            'see §O5 for how this was decided', // 7  <- INSIDE the range
+            '', // 8
+            '## B. Four further columns', // 9
+            '', // 10
+            'and §Z9 down here', // 11 <- OUTSIDE the range
+        ].join('\n')
+
+        const { text, lineStarts } = normalizeProse(synthetic)
+        const hits = scanRubric(text, lineStarts, text.indexOf('## A. '), text.indexOf('## B. '))
+
+        expect(hits.map((h) => h.text)).toEqual(['§O5'])
+        expect(hits[0].line).toBe(7)
+    })
+
+    it('states no prior pass outcome -- the real file', () => {
+        const { text, lineStarts, start, end } = rubricRange()
+        const hits = scanRubric(text, lineStarts, start, end)
+
+        expect(
+            hits.map(
+                (h) =>
+                    'scorecard-template.md:' + h.line + '  [' + h.pattern + ']  ' +
+                    h.text + '  -- ' + h.why
+            )
+        ).toEqual([])
+    })
+
+    it('the README guard roster names every channel this file scans', () => {
+        // #144 item 2: the roster described only the seed-spec channel, two
+        // guard generations after the packet channel landed. A roster that
+        // does not match the guard is how the next reader mis-scopes a change,
+        // so it is pinned rather than trusted.
+        const readme = fs.readFileSync(path.join(SCORING, 'README.md'), 'utf8')
+
+        expect(readme).toContain('scorer-facing seed specs')
+        expect(readme).toContain('repository paths')
+        expect(readme).toContain("Two of the rule's three channels are now scanned")
+
+        // I1: the roster TABLE ROWS themselves, not only the narrative prose
+        // below the table. A review deleted both new rows from the table and
+        // re-ran the suite: 48/48 stayed green, because every toContain
+        // check above lives in the paragraph below the table, not in it. A
+        // wholesale revert of this file is caught by other assertions in
+        // this file; a targeted roster-row edit -- the realistic drift -- was
+        // not, despite CHANGELOG.md and the plan both claiming "pinned by a
+        // test". These two bind the literal rows.
+        expect(readme).toContain(
+            '| `test/scorerPacketBlindRule.test.js` | **repository paths** reaching a committed scorer packet | #140 |'
+        )
+        expect(readme).toContain(
+            "| `test/scorerPacketBlindRule.test.js` | **a prior pass's outcome or provenance, and repository paths**, reaching the rubric slice | #143 |"
+        )
+
+        // The three sentences that became FALSE when the rubric scan landed.
+        expect(readme).not.toContain('The guard scans the seed specs — one of the three channels.')
+        expect(readme).not.toContain('does the same for the 5 seed specs')
+
+        // M3: matched on a whitespace-collapsed fragment, anchored on "rubric
+        // channel" specifically. The literal 'is not\nmachine-scanned' this
+        // replaced was coupled to hard-wrap position: a benign reflow of the
+        // (still-true, still-present) run-report sentence below -- which
+        // legitimately carries the same "is not machine-scanned" words --
+        // would have reddened this spuriously, and the false claim
+        // reintroduced on a single line would have evaded it entirely.
+        const collapsedReadme = readme.replace(/\s+/g, ' ')
+        expect(collapsedReadme).not.toMatch(
+            /rubric channel is bound by the rule and is not machine-scanned/i
+        )
     })
 })
