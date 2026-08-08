@@ -135,16 +135,22 @@ const PACKET_PATTERNS = [
 ]
 
 /**
- * Every hit of every pattern, as {pattern, line, text}. Pure -- no file I/O --
- * so the controls below exercise THE REAL MATCHER on planted prose.
+ * Every hit of every pattern in `patterns`, as {pattern, line, text}. Pure --
+ * no file I/O -- so the controls below exercise THE REAL MATCHER on planted
+ * prose. Shared by both channels (scanProse/scanPackets) because the loop
+ * carries two non-obvious correctness details that must not drift apart if
+ * one channel's pattern list is ever tuned without the other in mind:
+ *   - the RegExp reconstruction strips 'g' from p.re.flags before adding it
+ *     back, because p.re.flags + 'g' would duplicate 'g' (and throw) if a
+ *     future pattern is ever declared with it already set;
+ *   - the zero-width-match guard (`if (m.index === re.lastIndex)
+ *     re.lastIndex++`) prevents an infinite loop if a pattern can match an
+ *     empty string.
  */
-function scanProse(text, lineStarts) {
+function scanWith(patterns, text, lineStarts) {
     const hits = []
 
-    PATTERNS.forEach((p) => {
-        // p.re.flags + 'g' would duplicate 'g' (and throw) if a future pattern
-        // is ever declared with it already set -- strip it first so the 'g'
-        // this scan needs is always the only one.
+    patterns.forEach((p) => {
         const re = new RegExp(p.re.source, p.re.flags.replace('g', '') + 'g')
         let m
         while ((m = re.exec(text)) !== null) {
@@ -156,24 +162,14 @@ function scanProse(text, lineStarts) {
     return hits
 }
 
-/**
- * Every hit of every PACKET pattern, in the same shape scanProse returns.
- * Kept as a separate function rather than a parameter on scanProse so each
- * channel's call sites read as what they are; the duplication is six lines.
- */
+/** Every hit of every spec-channel pattern. See scanWith for the matcher. */
+function scanProse(text, lineStarts) {
+    return scanWith(PATTERNS, text, lineStarts)
+}
+
+/** Every hit of every packet-channel pattern. See scanWith for the matcher. */
 function scanPackets(text, lineStarts) {
-    const hits = []
-
-    PACKET_PATTERNS.forEach((p) => {
-        const re = new RegExp(p.re.source, p.re.flags.replace('g', '') + 'g')
-        let m
-        while ((m = re.exec(text)) !== null) {
-            hits.push({ pattern: p.name, why: p.why, line: lineAt(lineStarts, m.index), text: m[0] })
-            if (m.index === re.lastIndex) re.lastIndex++
-        }
-    })
-
-    return hits
+    return scanWith(PACKET_PATTERNS, text, lineStarts)
 }
 
 /** Read a seed spec and normalize it in one step. */
