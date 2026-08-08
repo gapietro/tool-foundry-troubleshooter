@@ -1213,7 +1213,7 @@ Expected: 28 suites, `<N>` passed — the same number written into §AA5 and the
 ```bash
 git add benchmark/DECISION.md CHANGELOG.md package.json README.md docs/superpowers/specs/2026-08-07-t9-pass-blockers-design.md
 git commit -m "$(cat <<'EOF'
-docs(#143,#140): DECISION.md §AA records the rubric channel scan
+docs(#143,#144): DECISION.md §AA records the rubric channel scan
 
 Appends §AA; §A through §Z unmodified, per the norm §Z asserted of §A-§Y and
 §X of §U-§W. §Z4 stands as the accurate record of the rule that shipped at
