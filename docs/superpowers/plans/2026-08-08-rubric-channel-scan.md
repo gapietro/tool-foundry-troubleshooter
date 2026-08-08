@@ -876,10 +876,17 @@ with:
 
 ```
 and
-`scorerPacketBlindRule.test.js` does the same for the 5 seed specs, the committed scorer packets and
-the rubric slice — so the next leak in any of those fails a build instead of waiting for someone to
+`scorerPacketBlindRule.test.js` covers the 5 seed specs, the committed scorer packets and the rubric
+slice the same way — so the next leak in any of those fails a build instead of waiting for someone to
 notice.
 ```
+
+> **Corrected 2026-08-08, during execution.** The first draft of this step kept the phrase *"does the
+> same for the 5 seed specs"*, which is the exact string Step 1's test bans with `not.toContain` —
+> applying this step verbatim would have left the new test permanently failing. Caught by the Task 4
+> implementer, who reworded the prose rather than weakening the test. That is the right branch: the
+> test is the guard and the prose is what it guards. Recorded here rather than silently patched,
+> because a plan that contradicts its own test is the same defect class this whole change is about.
 
 - [ ] **Step 5: Rewrite the test file's own header**
 
