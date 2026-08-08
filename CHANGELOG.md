@@ -49,8 +49,9 @@ either reading. `scorecard-v9.md` is untouched — those are the scores the blin
 The result lands between §T5's two published bounds and moves against the arm this project
 currently recommends. §T3 is untouched, and nothing here is evidence about diagnostic quality.
 
-Recorded in `DECISION.md` §Z. Suite: **1371 passed, 28 suites** (was 1365/27 — `rubricClauses.test.js`
-is a new suite). No production code touched.
+Recorded in `DECISION.md` §Z. Suite: **1374 passed, 28 suites** (was 1365/27 — `rubricClauses.test.js`
+is a new suite, +6, and the review round added +3 positive controls to
+`scorerPacketBlindRule.test.js` when the packet-path regex was widened). No production code touched.
 
 ## 2026.08.0708 — 2026-08-07
 
@@ -65,7 +66,9 @@ flagged, and both were removed by hand. Second consecutive round caught by a hum
 The guard was working exactly as written — `answer-key-pointer` matched a literal `DECISION.md`
 and scanned one of the rule's three channels, the seed specs.
 
-`PACKET_PATTERNS` adds one uniform any-repository-path rule bound to the packet channel, and
+`PACKET_PATTERNS` adds a single any-repository-path rule bound to the packet channel — any bare
+`*.md` filename, plus longer paths rooted at an enumerated directory stem; it aims at uniformity
+without quite reaching it, and a non-markdown file outside those stems is not matched — and
 `PACKET_SETS` declares every committed packet directory with a scanned flag and a written
 reason. The seed specs keep their existing five patterns and their 22 legitimate path strings;
 paths are stripped when spec content is embedded into a packet, which is what the v9 builder
