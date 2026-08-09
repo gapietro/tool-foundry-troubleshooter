@@ -859,9 +859,30 @@ PaFixReport.prototype = {
      * report that PROPOSES fixes still owes a verification step, even if it
      * named no root cause. Only a fix-less inconclusive report has nothing
      * to verify.
+     *
+     * #148 — an ABSENT `fixes` counts as a fix-less report here. The earlier
+     * form required `_isArray(report.fixes)`, so a draft that omitted the key
+     * satisfied `_isInconclusiveShape` and failed THIS predicate, losing the
+     * `fixes` relaxation and the verification relaxation together: ONE
+     * omission, TWO problems, and `repairPrompt` re-serving the same schema
+     * text that produced the omission. Six live drafts died exactly that way
+     * (TR1000168/174/182/208/214/218). A PRESENT but wrong-typed `fixes` is
+     * NOT tolerated — only the missing key reads as empty.
      */
     _isInconclusiveWithoutFixes: function (report) {
-        return this._isInconclusiveShape(report) && this._isArray(report.fixes) && report.fixes.length === 0
+        if (!this._isInconclusiveShape(report)) return false
+        if (this._isFixesAbsent(report)) return true
+        return this._isArray(report.fixes) && report.fixes.length === 0
+    },
+
+    /**
+     * True only when the `fixes` key is MISSING — not when it is present and
+     * null, a string, or any other wrong type. #148's relaxation is about an
+     * omitted key, and widening it to falsy values would let `fixes: null`
+     * through as "no fixes proposed", which is a different claim.
+     */
+    _isFixesAbsent: function (report) {
+        return typeof report.fixes === 'undefined'
     },
 
     /**
@@ -950,6 +971,10 @@ PaFixReport.prototype = {
     _checkFixes: function (report, problems) {
         var fixes = report.fixes
         if (!this._isArray(fixes)) {
+            // #148: on the inconclusive path an omitted `fixes` reads as an
+            // empty one, exactly as `fixes: []` does. Off that path — and for
+            // a `fixes` that is present but not an array — this still errors.
+            if (this._isFixesAbsent(report) && this._isInconclusiveShape(report)) return
             problems.push('fixes is required and must be an array')
             return
         }
@@ -1111,7 +1136,12 @@ PaFixReport.prototype = {
                 'the layer that would confirm the cause'
         )
         lines.push(
-            'fixes: array of {target_type, target, current, proposed, rationale} — NON-EMPTY unless root_causes ' +
+            // #148: the presence requirement is stated FIRST and in the same
+            // words `data_markers` and `current` already use. The earlier line
+            // opened with "NON-EMPTY unless …", which reads as "omit it
+            // unless" — and six live drafts omitted it.
+            'fixes: array of {target_type, target, current, proposed, rationale} — the key must be present on ' +
+                'every report (send `fixes: []` rather than omitting it); NON-EMPTY unless root_causes ' +
                 'is empty and you supply `inconclusive`; target_type is a ' +
                 'string, one of ' + this._fixTargetTypes().join('|') + '; target, proposed and rationale are ' +
                 'each non-empty strings; current is a string and may be empty but must be present'
@@ -1125,7 +1155,8 @@ PaFixReport.prototype = {
         lines.push(
             'inconclusive: OPTIONAL object {evidence_read, needed_to_conclude} — supply it ONLY when you could ' +
                 'not isolate a cause. When present, root_causes may be an empty array, and fixes may also be ' +
-                'empty; verification may be omitted ONLY when fixes is ALSO empty — if you propose any fixes, ' +
+                'empty (send `fixes: []`; the key is still expected); verification may be omitted ONLY when ' +
+                'fixes is ALSO empty — if you propose any fixes, ' +
                 'verification is still required even though root_causes is empty. evidence_read is a non-empty ' +
                 'array of {source, detail} in the same shape as root_causes[].evidence, recording what you ' +
                 'ACTUALLY read (the trace-plus-one evidence rule does NOT apply to it); needed_to_conclude is a ' +

@@ -2379,3 +2379,125 @@ describe('evidenceProblems classification — audit-backed checks (#81)', () => 
         expect(res.evidenceProblems).toEqual([])
     })
 })
+
+/**
+ * #148 — the presence/emptiness trap on the inconclusive path.
+ *
+ * FOUND FROM LIVE DATA, NOT CONSTRUCTED. Six of the seven `EVIDENCE RETURN`
+ * runs that terminated `failed` (TR1000168, 174, 182, 208, 214, 218) stored a
+ * rejected draft of exactly one shape: `root_causes: []`, a well-formed
+ * `inconclusive` object, `data_markers: []`, and NO `fixes` key and NO
+ * `verification` key. Every one died on the same two-problem pair, and that
+ * pair-alone signature appears in 0 of the 202 non-firing runs on gpinst01.
+ *
+ * The mechanism is a gap between two predicates. `_isInconclusiveShape` is
+ * satisfied (empty `root_causes` + an `inconclusive` object), but
+ * `_isInconclusiveWithoutFixes` additionally requires `_isArray(report.fixes)`
+ * — so an ABSENT `fixes` is not an EMPTY `fixes`, both relaxations vanish at
+ * once, and ONE omission raises TWO problems. `repairPrompt` then re-serves
+ * the same `schemaText()`, so the single allowed repair turn reads the same
+ * instruction and repeats the omission.
+ *
+ * Why the model omits the key: `schemaText` says `fixes` is "NON-EMPTY unless
+ * root_causes is empty and you supply `inconclusive`" and never that the key
+ * must be PRESENT — while `data_markers` says "may be empty, must be present"
+ * and `fixes[].current` says "may be empty but must be present". The one field
+ * whose absence costs two errors is the only one that never states it.
+ *
+ * This matters past #134: §T4's ruling is that an honest inconclusive must be
+ * expressible or the only valid output is an invented root cause. The trap
+ * silently un-does that, and it is reachable by any run that chooses the shape
+ * — `MAX_EVIDENCE_RETURNS: 0` closes the route those six runs took, not the
+ * trap itself.
+ */
+describe('#148 — an OMITTED `fixes` on the inconclusive path', () => {
+    /** The six live drafts' shape, verbatim in structure. */
+    function liveDraftShape() {
+        return {
+            failure_summary: 'The execution completed with the tool returning ok:true; no failure observed.',
+            layers_swept: {
+                1: { status: 'SWEPT', reason: 'agent_trace provided execution details' },
+                2: { status: 'NOT_SWEPT', reason: 'agent_config section instructions was not requested' },
+                3: { status: 'SWEPT', reason: 'agent_config section tools confirmed tool definitions' },
+                4: { status: 'SWEPT', reason: 'schema_lookup validated the m2m table structure' },
+                5: { status: 'NOT_SWEPT', reason: 'query_table and log_analysis were not invoked' },
+                6: { status: 'NOT_SWEPT', reason: 'genai_log and log_analysis were not invoked' },
+                7: { status: 'NOT_SWEPT', reason: 'agent_config section triggers was not requested' },
+            },
+            root_causes: [],
+            inconclusive: {
+                evidence_read: [
+                    { source: 'trace', detail: 'agent_trace showed a successful execution with ok:true' },
+                    { source: 'config', detail: 'agent_config confirmed the set_ticket_priority definition' },
+                    { source: 'schema', detail: 'schema_lookup validated sn_aia_agent_tool_m2m' },
+                ],
+                needed_to_conclude: 'query_table for the ticket record, or genai_log for the model turn',
+            },
+            data_markers: [],
+        }
+        // NOTE: no `fixes` key and no `verification` key — that is the defect.
+    }
+
+    const CTX148 = { auditAvailable: true, invokedTools: ['agent_trace', 'agent_config', 'schema_lookup'] }
+
+    test('CONTROL: the same draft with `fixes: []` validates — so the ONLY difference is the absent key', () => {
+        const report = liveDraftShape()
+        report.fixes = []
+
+        const res = load().validate(report, CTX148)
+
+        expect(res.problems || []).toEqual([])
+        expect(res.valid).toBe(true)
+    })
+
+    test('an absent `fixes` no longer costs the verification relaxation as well', () => {
+        const res = load().validate(liveDraftShape(), CTX148)
+
+        // `problems` is absent entirely on a valid result, which is itself the
+        // relaxation holding — hence the `|| []`.
+        expect((res.problems || []).join('\n')).not.toContain('verification is required')
+    })
+
+    test('an absent `fixes` on the inconclusive path is accepted, exactly as `fixes: []` is', () => {
+        const res = load().validate(liveDraftShape(), CTX148)
+
+        expect(res.valid).toBe(true)
+    })
+
+    test('the relaxation does NOT extend to a report that names a root cause — an absent `fixes` is still rejected there', () => {
+        const report = liveDraftShape()
+        report.root_causes = [
+            {
+                layer: '3',
+                component: 'sn_aia_tool "set_ticket_priority"',
+                finding: 'input schema omits the ticket sys_id',
+                evidence: [
+                    { source: 'trace', detail: 'task 2 error: missing required input' },
+                    { source: 'schema', detail: 'sn_aia_tool.inputs has no ticket key' },
+                ],
+            },
+        ]
+        delete report.inconclusive
+
+        const res = load().validate(report, CTX148)
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.join('\n')).toContain('fixes is required and must be an array')
+    })
+
+    test('schemaText states the PRESENCE requirement for the `fixes` ARRAY, as it already does for data_markers', () => {
+        const schema = load().schemaText()
+        const fixesLine = schema.split('\n').filter(function (l) {
+            return l.indexOf('fixes: array') === 0
+        })[0]
+
+        // The line ALREADY ends with "current is a string and may be empty but
+        // must be present" — a clause about the per-fix `current` field, not
+        // about the array. Asserting on the whole line passes for the wrong
+        // reason, so the assertion is scoped to the array-level description
+        // that precedes it.
+        const arrayClause = fixesLine.split('current is a string')[0]
+
+        expect(arrayClause).toContain('must be present')
+    })
+})
