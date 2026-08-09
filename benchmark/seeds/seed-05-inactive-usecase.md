@@ -90,20 +90,53 @@ PATCH took.
 Leave `sn_aia_trigger_configuration.active` at `false` — that is the seeded
 defect and the whole point of the seed.
 
+> **Status 2026-08-09 (#151): the gate is currently ON and has stayed on.** The
+> 2026-08-02 PATCH persisted — `sn_aia_trigger_agent_usecase_m2m`
+> `ba30d8775b0c4cebb960c58830590d5d` still reads `active=true`. The step is not
+> outstanding. **Re-read it anyway** before any pass, per the rule directly above:
+> a reinstall of the fixture app resets it, and this seed's rows are void without it.
+
 **If this step is skipped, the seed is void.** Record both of its runs as `void`
 in the scorecard (see `../scorecard-template.md` § "Void runs"); do not score
 them as hits or misses.
 
-### Also open, for Task 12 — do not guess a value for it
+### ~~Also open, for Task 12~~ — ANSWERED 2026-08-09 (#151)
 
 SDK 4.9.0 guidance (`.claude/context/sdk-reference.md`, "4.9.0 guide hardening")
 states that trigger run-as configuration is now **required for all trigger
 types**. This workflow sets no `runAs`, and `dist/` confirms the emitted trigger
-configuration carries `run_as`, `run_as_script` and `run_as_user` all empty. The
-trigger may therefore still not fire even after the m2m gate is on. If it does
-not, that is a **second** wiring defect layered on the seeded one and the seed is
-no longer isolating a single cause — resolve it before scoring rather than
-scoring through it.
+configuration carries `run_as`, `run_as_script` and `run_as_user` all empty —
+**re-confirmed live on gpinst01, all three still empty**.
+
+**The trigger fires anyway.** Measured 2026-08-09, evidence in
+`../raw-evidence-seed-qualification-02-05.md` §3: activating the trigger
+generates a backing `sys_hub_flow` that carries **`run_as: user`** of its own
+(`active=true`, `status=published`), and a ticket inserted after that flow exists
+produces an `sn_aia_execution_plan` in **~1 second**. There is **no second wiring
+defect at the firing layer**, and the 4.9.0 run-as guidance does not bite here.
+
+**Two things that measurement DID surface, both live:**
+
+1. **Activation is asynchronous — there is a race.** The backing flow is
+   generated 4–5s *after* the activating PATCH returns. A ticket inserted inside
+   that window produces nothing, which looks exactly like a non-firing trigger
+   and is not one. **Wait for `trigger_flow` to be populated and its
+   `sys_hub_flow.active` to read `true`** before inserting any triggering row.
+2. **The execution terminates immediately — a second defect at the *execution*
+   layer.** The plan is created with `status=error`, **0 tasks, 0 tool calls, 0
+   messages**, `execution_mode=interactive` despite the use case being
+   `autopilot`, and an empty `objective` despite the trigger config carrying an
+   `objective_template`. So flipping `active` to `true` — this seed's own
+   sanctioned fix — makes the trigger fire but **does not produce the
+   acknowledgement**.
+
+   This does **not** disqualify the seed: the expected diagnosis (root cause
+   `wiring`, the trigger's `active=false`, fix target activation, naming the
+   specific gate) is unaffected and fully scorable. The exposure is
+   **`fix_usable_unedited`** only — a report proposing "activate the trigger"
+   proposes a fix that, applied unedited, does not restore the acknowledgement.
+   §A2.1's clauses do not cover this case. **Any pass including seed 05 must rule
+   on it in its pre-registration, before the scorers meet it.**
 
 ## Setup
 
