@@ -49,7 +49,31 @@ Accepting the omission creates a second valid shape, so `validate` now fills `fi
 `GET /runs/{id}`, and two shapes for one claim is the silent inconsistency this file exists to keep
 out.
 
-Suite: **1397 passed, 28 suites** (1390 on `main` + 7). `now-sdk build` clean on SDK 4.9.2.
+### Fixed — the same trap one key over, found by review (#148)
+
+`root_causes` carried the identical wording — *"NON-EMPTY unless you supply the `inconclusive`
+object"* — and `_isInconclusiveShape` required `_isArray(report.root_causes)`, so omitting **that**
+key cost both relaxations the same way. Measured before the fix: three problems from one omission,
+and with `fixes: []` supplied it produced `fixes must include at least one entry` — an instruction
+to the repair turn to **invent a fix** for a report that explicitly declined to name a cause, which
+is the §T4 fabrication pressure the inconclusive path exists to remove. Fixed symmetrically, and the
+inconclusive block is still priced for its sweep claims on that path.
+
+Unlike the `fixes` case this is a **predicted** failure, not a measured one — all six live drafts
+did send `root_causes: []`.
+
+A `fixes` (or `root_causes`) that is **present but wrong-typed** — `null`, `{}` — is deliberately
+not relaxed, and is now pinned by tests. The single repair turn has to see every requirement at
+once; relaxing verification for a wrong-typed `fixes` would show it only the type error, and a
+repair returning `fixes: [ ... ]` with no verification would then fail with no turns left. An absent
+key does not have that shape because it needs no repair at all.
+
+`verification` is deliberately **not** normalized alongside `fixes` and `root_causes`: `[]` is the
+real empty value of a list and invents nothing, while a filled `verification` string would fabricate
+a claim about a step someone took. `renderMarkdown` already renders the absence as
+*"(not applicable — inconclusive)"*.
+
+Suite: **1406 passed, 28 suites** (1390 on `main` + 16). `now-sdk build` clean on SDK 4.9.2.
 `benchmark/DECISION.md` §AB.
 
 ## 2026.08.0801 — 2026-08-08

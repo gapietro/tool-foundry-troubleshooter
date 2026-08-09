@@ -4141,6 +4141,10 @@ is relaxed off that path).
   comparing code versions, not arms.
 - **6 of 7 is an explanation of six runs, not of failure in general.** TR1000173 failed on evidence
   class and is not explained by anything above.
+- **One of the two traps was never observed.** The identical omit-it-unless wording on
+  `root_causes` was found by review, not by a run — all six live drafts sent `root_causes: []`. It
+  is fixed because the mechanism is understood, and it is recorded here as predicted rather than
+  measured so a later reader does not promote it to evidence.
 - **The association itself remains observational.** Firing was never randomly assigned. What
   replaces the missing randomisation here is a mechanism confirmed in the stored drafts and
   reproduced offline — not a design that rules out confounding.
@@ -4159,7 +4163,7 @@ explicitly rather than inheriting it silently.
 met.** §Z6's quoting rule stands — **34/36 · 4/6** only with the derived file beside it, and
 **9/36 or 8/36** for the custom total, never a bare figure.
 
-Suite at the close of this section: **1397 passed, 28 suites** (1390 on `main` plus the seven #148
-tests). `now-sdk build` clean on SDK 4.9.2. Production code WAS touched — `src/server/PaFixReport.js`
+Suite at the close of this section: **1406 passed, 28 suites** (1390 on `main` plus the sixteen
+#148 tests). `now-sdk build` clean on SDK 4.9.2. Production code WAS touched — `src/server/PaFixReport.js`
 — which makes this the first section since §Z to carry a code change, and the change is unverified
 against a live run by the project's own standard.
