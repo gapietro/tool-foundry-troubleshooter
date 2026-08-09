@@ -150,3 +150,6 @@ Record a new decision where its kind already lives. Do not start a new ledger.
 - **Comments:** JSDoc for public methods, inline for complex logic
 - **ServiceNow:** Script Includes for reusable logic; Flow Designer over Business Rules for complex workflows; always check `next()`/`get()` return values and use encoded queries
 - Server-side logic belongs in `src/server/*.js` where it is unit-testable, not inline in a Fluent `script` template (see Rule #43)
+
+## Quality cadence
+- This repo is graded via `/senior-grade` (or `/foundry:servicenow-grade` for platform artifacts) with `GRADE.md` as the grade ledger (`AUDIT.md` belongs to the audit skill). No grade exists yet — run the first sitting, then remediate findings as issues.
