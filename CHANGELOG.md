@@ -44,7 +44,12 @@ or the only structurally valid output is an invented root cause — the trap sil
 any run choosing the shape. `MAX_EVIDENCE_RETURNS: 0` closed the route those six runs took, not the
 trap.
 
-Suite: **1395 passed, 28 suites** (1390 on `main` + 5). `now-sdk build` clean on SDK 4.9.2.
+Accepting the omission creates a second valid shape, so `validate` now fills `fixes: []` into
+`normalized` — `renderJson(normalized)` is what lands in the run row and comes back out of
+`GET /runs/{id}`, and two shapes for one claim is the silent inconsistency this file exists to keep
+out.
+
+Suite: **1397 passed, 28 suites** (1390 on `main` + 7). `now-sdk build` clean on SDK 4.9.2.
 `benchmark/DECISION.md` §AB.
 
 ## 2026.08.0801 — 2026-08-08

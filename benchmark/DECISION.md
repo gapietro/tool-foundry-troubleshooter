@@ -4159,7 +4159,7 @@ explicitly rather than inheriting it silently.
 met.** §Z6's quoting rule stands — **34/36 · 4/6** only with the derived file beside it, and
 **9/36 or 8/36** for the custom total, never a bare figure.
 
-Suite at the close of this section: **1395 passed, 28 suites** (1390 on `main` plus the five #148
+Suite at the close of this section: **1397 passed, 28 suites** (1390 on `main` plus the seven #148
 tests). `now-sdk build` clean on SDK 4.9.2. Production code WAS touched — `src/server/PaFixReport.js`
 — which makes this the first section since §Z to carry a code change, and the change is unverified
 against a live run by the project's own standard.

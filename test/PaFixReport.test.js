@@ -2501,3 +2501,57 @@ describe('#148 — an OMITTED `fixes` on the inconclusive path', () => {
         expect(arrayClause).toContain('must be present')
     })
 })
+
+/**
+ * #148 follow-on — the normalized report must not change shape downstream.
+ *
+ * Accepting an omitted `fixes` creates a second valid shape: before this
+ * change, every report that passed `validate` carried `fixes` as an array, and
+ * `renderJson(normalized)` is what lands in the run row's `fix_report` column
+ * and comes back out of `GET /runs/{id}` to the scorers. Letting the key stay
+ * absent would hand those readers two shapes for the same claim — a silent
+ * inconsistency of exactly the kind this codebase keeps being bitten by.
+ * `normalized` therefore fills it in.
+ */
+describe('#148 — normalization keeps one downstream shape', () => {
+    function absentFixesInconclusive() {
+        return {
+            failure_summary: 'The execution completed; no failure observed in the trace.',
+            layers_swept: {
+                1: { status: 'SWEPT', reason: 'agent_trace provided execution details' },
+                2: { status: 'NOT_SWEPT', reason: 'instructions not requested' },
+                3: { status: 'NOT_SWEPT', reason: 'tools not requested' },
+                4: { status: 'NOT_SWEPT', reason: 'schema_lookup not called' },
+                5: { status: 'NOT_SWEPT', reason: 'query_table not called' },
+                6: { status: 'NOT_SWEPT', reason: 'genai_log not called' },
+                7: { status: 'NOT_SWEPT', reason: 'triggers not requested' },
+            },
+            root_causes: [],
+            inconclusive: {
+                evidence_read: [{ source: 'trace', detail: 'agent_trace showed ok:true' }],
+                needed_to_conclude: 'the GenAI log for the model turn',
+            },
+            data_markers: [],
+        }
+    }
+
+    test('an accepted report with no `fixes` key normalizes to an empty array', () => {
+        const res = load().validate(absentFixesInconclusive(), {
+            auditAvailable: true,
+            invokedTools: ['agent_trace'],
+        })
+
+        expect(res.valid).toBe(true)
+        expect(res.normalized.fixes).toEqual([])
+    })
+
+    test('renderJson of that report carries `fixes`, so GET /runs sees one shape either way', () => {
+        const fr = load()
+        const res = fr.validate(absentFixesInconclusive(), {
+            auditAvailable: true,
+            invokedTools: ['agent_trace'],
+        })
+
+        expect(JSON.parse(fr.renderJson(res.normalized)).fixes).toEqual([])
+    })
+})

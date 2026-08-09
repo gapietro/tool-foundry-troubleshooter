@@ -146,6 +146,13 @@ PaFixReport.prototype = {
 
         var normalized = this._clone(report)
         this._normalizeRootCauseLayers(normalized)
+        // #148: an accepted report may have omitted `fixes` on the
+        // inconclusive path. Fill it in so `normalized` has ONE shape —
+        // `renderJson(normalized)` is what lands in the run row's `fix_report`
+        // column and comes back out of `GET /runs/{id}`, and handing those
+        // readers two shapes for the same claim is the silent-inconsistency
+        // class this file exists to keep out.
+        if (this._isFixesAbsent(normalized)) normalized.fixes = []
         return { valid: true, normalized: normalized }
     },
 
