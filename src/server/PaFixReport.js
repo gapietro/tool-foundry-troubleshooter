@@ -146,6 +146,21 @@ PaFixReport.prototype = {
 
         var normalized = this._clone(report)
         this._normalizeRootCauseLayers(normalized)
+        // #148: an accepted report may have omitted `fixes` or `root_causes`
+        // on the inconclusive path. Fill them in so `normalized` has ONE shape
+        // — `renderJson(normalized)` is what lands in the run row's
+        // `fix_report` column and comes back out of `GET /runs/{id}`, and
+        // handing those readers two shapes for the same claim is the
+        // silent-inconsistency class this file exists to keep out.
+        //
+        // `verification` is deliberately NOT filled the same way (raised in
+        // the #148 review). `[]` is the real empty value of a list, so writing
+        // it invents nothing; there is no equivalent for a string — a filled
+        // `verification` would be a fabricated claim about a step someone
+        // took, which is worse than an absent key. `renderMarkdown` already
+        // renders that absence as "(not applicable — inconclusive)".
+        if (this._isFixesAbsent(normalized)) normalized.fixes = []
+        if (this._isRootCausesAbsent(normalized)) normalized.root_causes = []
         return { valid: true, normalized: normalized }
     },
 
@@ -481,6 +496,20 @@ PaFixReport.prototype = {
     _checkRootCauses: function (report, problems, ctx) {
         var rcs = report.root_causes
         if (!this._isArray(rcs)) {
+            // #148 review: an omitted `root_causes` alongside a well-formed
+            // `inconclusive` reads as an empty one — the same relaxation
+            // `_checkFixes` makes, for the same reason, and it routes to the
+            // same pricing so the inconclusive block is still charged for its
+            // sweep claims. Without it the omission cost THREE problems, and
+            // with `fixes: []` supplied it produced `fixes must include at
+            // least one entry` — an instruction to invent a fix for a report
+            // that explicitly declined to name a cause, which is the §T4
+            // fabrication pressure this path exists to remove. A `root_causes`
+            // that is present but not an array is NOT relaxed.
+            if (this._isRootCausesAbsent(report) && this._isPlainObject(report.inconclusive)) {
+                this._checkInconclusive(report, problems, ctx)
+                return
+            }
             problems.push('root_causes is required and must be an array')
             return
         }
@@ -847,11 +876,22 @@ PaFixReport.prototype = {
      * must NOT re-raise the problems that method already raises.
      */
     _isInconclusiveShape: function (report) {
-        return (
-            this._isArray(report.root_causes) &&
-            report.root_causes.length === 0 &&
-            this._isPlainObject(report.inconclusive)
-        )
+        if (!this._isPlainObject(report.inconclusive)) return false
+        // #148 review: an ABSENT `root_causes` counts as an empty one here,
+        // symmetric with `_isFixesAbsent` below and for the same reason — the
+        // key's absence must not silently withdraw the relaxations that the
+        // `inconclusive` object earns.
+        if (this._isRootCausesAbsent(report)) return true
+        return this._isArray(report.root_causes) && report.root_causes.length === 0
+    },
+
+    /**
+     * True only when the `root_causes` key is MISSING — not when it is present
+     * and null or wrong-typed. Same boundary, and the same reasoning, as
+     * `_isFixesAbsent`.
+     */
+    _isRootCausesAbsent: function (report) {
+        return typeof report.root_causes === 'undefined'
     },
 
     /**
@@ -859,9 +899,30 @@ PaFixReport.prototype = {
      * report that PROPOSES fixes still owes a verification step, even if it
      * named no root cause. Only a fix-less inconclusive report has nothing
      * to verify.
+     *
+     * #148 — an ABSENT `fixes` counts as a fix-less report here. The earlier
+     * form required `_isArray(report.fixes)`, so a draft that omitted the key
+     * satisfied `_isInconclusiveShape` and failed THIS predicate, losing the
+     * `fixes` relaxation and the verification relaxation together: ONE
+     * omission, TWO problems, and `repairPrompt` re-serving the same schema
+     * text that produced the omission. Six live drafts died exactly that way
+     * (TR1000168/174/182/208/214/218). A PRESENT but wrong-typed `fixes` is
+     * NOT tolerated — only the missing key reads as empty.
      */
     _isInconclusiveWithoutFixes: function (report) {
-        return this._isInconclusiveShape(report) && this._isArray(report.fixes) && report.fixes.length === 0
+        if (!this._isInconclusiveShape(report)) return false
+        if (this._isFixesAbsent(report)) return true
+        return this._isArray(report.fixes) && report.fixes.length === 0
+    },
+
+    /**
+     * True only when the `fixes` key is MISSING — not when it is present and
+     * null, a string, or any other wrong type. #148's relaxation is about an
+     * omitted key, and widening it to falsy values would let `fixes: null`
+     * through as "no fixes proposed", which is a different claim.
+     */
+    _isFixesAbsent: function (report) {
+        return typeof report.fixes === 'undefined'
     },
 
     /**
@@ -950,6 +1011,10 @@ PaFixReport.prototype = {
     _checkFixes: function (report, problems) {
         var fixes = report.fixes
         if (!this._isArray(fixes)) {
+            // #148: on the inconclusive path an omitted `fixes` reads as an
+            // empty one, exactly as `fixes: []` does. Off that path — and for
+            // a `fixes` that is present but not an array — this still errors.
+            if (this._isFixesAbsent(report) && this._isInconclusiveShape(report)) return
             problems.push('fixes is required and must be an array')
             return
         }
@@ -1095,7 +1160,11 @@ PaFixReport.prototype = {
                 'REQUIRED when status is not SWEPT'
         )
         lines.push(
+            // #148 review: presence stated first, in the same words as
+            // `fixes` and `data_markers`. The line previously opened with
+            // "NON-EMPTY unless …", which reads as "omit it unless".
             'root_causes: array of {layer, component, finding, evidence, confidence?, would_confirm?} — ' +
+                'the key must be present on every report (send `root_causes: []` rather than omitting it); ' +
                 'NON-EMPTY unless you ' +
                 'supply the `inconclusive` object described below; layer is the ' +
                 'layer number as a string "1".."7" (a bare JSON number 1-7 is also accepted and normalized to a ' +
@@ -1111,7 +1180,12 @@ PaFixReport.prototype = {
                 'the layer that would confirm the cause'
         )
         lines.push(
-            'fixes: array of {target_type, target, current, proposed, rationale} — NON-EMPTY unless root_causes ' +
+            // #148: the presence requirement is stated FIRST and in the same
+            // words `data_markers` and `current` already use. The earlier line
+            // opened with "NON-EMPTY unless …", which reads as "omit it
+            // unless" — and six live drafts omitted it.
+            'fixes: array of {target_type, target, current, proposed, rationale} — the key must be present on ' +
+                'every report (send `fixes: []` rather than omitting it); NON-EMPTY unless root_causes ' +
                 'is empty and you supply `inconclusive`; target_type is a ' +
                 'string, one of ' + this._fixTargetTypes().join('|') + '; target, proposed and rationale are ' +
                 'each non-empty strings; current is a string and may be empty but must be present'
@@ -1125,7 +1199,8 @@ PaFixReport.prototype = {
         lines.push(
             'inconclusive: OPTIONAL object {evidence_read, needed_to_conclude} — supply it ONLY when you could ' +
                 'not isolate a cause. When present, root_causes may be an empty array, and fixes may also be ' +
-                'empty; verification may be omitted ONLY when fixes is ALSO empty — if you propose any fixes, ' +
+                'empty (send `fixes: []`; the key is still expected); verification may be omitted ONLY when ' +
+                'fixes is ALSO empty — if you propose any fixes, ' +
                 'verification is still required even though root_causes is empty. evidence_read is a non-empty ' +
                 'array of {source, detail} in the same shape as root_causes[].evidence, recording what you ' +
                 'ACTUALLY read (the trace-plus-one evidence rule does NOT apply to it); needed_to_conclude is a ' +

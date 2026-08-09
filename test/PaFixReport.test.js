@@ -2379,3 +2379,339 @@ describe('evidenceProblems classification — audit-backed checks (#81)', () => 
         expect(res.evidenceProblems).toEqual([])
     })
 })
+
+/**
+ * #148 — the presence/emptiness trap on the inconclusive path.
+ *
+ * FOUND FROM LIVE DATA, NOT CONSTRUCTED. Six of the seven `EVIDENCE RETURN`
+ * runs that terminated `failed` (TR1000168, 174, 182, 208, 214, 218) stored a
+ * rejected draft of exactly one shape: `root_causes: []`, a well-formed
+ * `inconclusive` object, `data_markers: []`, and NO `fixes` key and NO
+ * `verification` key. Every one died on the same two-problem pair, and that
+ * pair-alone signature appears in 0 of the 202 non-firing runs on gpinst01.
+ *
+ * The mechanism is a gap between two predicates. `_isInconclusiveShape` is
+ * satisfied (empty `root_causes` + an `inconclusive` object), but
+ * `_isInconclusiveWithoutFixes` additionally requires `_isArray(report.fixes)`
+ * — so an ABSENT `fixes` is not an EMPTY `fixes`, both relaxations vanish at
+ * once, and ONE omission raises TWO problems. `repairPrompt` then re-serves
+ * the same `schemaText()`, so the single allowed repair turn reads the same
+ * instruction and repeats the omission.
+ *
+ * Why the model omits the key: `schemaText` says `fixes` is "NON-EMPTY unless
+ * root_causes is empty and you supply `inconclusive`" and never that the key
+ * must be PRESENT — while `data_markers` says "may be empty, must be present"
+ * and `fixes[].current` says "may be empty but must be present". The one field
+ * whose absence costs two errors is the only one that never states it.
+ *
+ * This matters past #134: §T4's ruling is that an honest inconclusive must be
+ * expressible or the only valid output is an invented root cause. The trap
+ * silently un-does that, and it is reachable by any run that chooses the shape
+ * — `MAX_EVIDENCE_RETURNS: 0` closes the route those six runs took, not the
+ * trap itself.
+ */
+describe('#148 — an OMITTED `fixes` on the inconclusive path', () => {
+    /** The six live drafts' shape, verbatim in structure. */
+    function liveDraftShape() {
+        return {
+            failure_summary: 'The execution completed with the tool returning ok:true; no failure observed.',
+            layers_swept: {
+                1: { status: 'SWEPT', reason: 'agent_trace provided execution details' },
+                2: { status: 'NOT_SWEPT', reason: 'agent_config section instructions was not requested' },
+                3: { status: 'SWEPT', reason: 'agent_config section tools confirmed tool definitions' },
+                4: { status: 'SWEPT', reason: 'schema_lookup validated the m2m table structure' },
+                5: { status: 'NOT_SWEPT', reason: 'query_table and log_analysis were not invoked' },
+                6: { status: 'NOT_SWEPT', reason: 'genai_log and log_analysis were not invoked' },
+                7: { status: 'NOT_SWEPT', reason: 'agent_config section triggers was not requested' },
+            },
+            root_causes: [],
+            inconclusive: {
+                evidence_read: [
+                    { source: 'trace', detail: 'agent_trace showed a successful execution with ok:true' },
+                    { source: 'config', detail: 'agent_config confirmed the set_ticket_priority definition' },
+                    { source: 'schema', detail: 'schema_lookup validated sn_aia_agent_tool_m2m' },
+                ],
+                needed_to_conclude: 'query_table for the ticket record, or genai_log for the model turn',
+            },
+            data_markers: [],
+        }
+        // NOTE: no `fixes` key and no `verification` key — that is the defect.
+    }
+
+    const CTX148 = { auditAvailable: true, invokedTools: ['agent_trace', 'agent_config', 'schema_lookup'] }
+
+    test('CONTROL: the same draft with `fixes: []` validates — so the ONLY difference is the absent key', () => {
+        const report = liveDraftShape()
+        report.fixes = []
+
+        const res = load().validate(report, CTX148)
+
+        expect(res.problems || []).toEqual([])
+        expect(res.valid).toBe(true)
+    })
+
+    test('an absent `fixes` no longer costs the verification relaxation as well', () => {
+        const res = load().validate(liveDraftShape(), CTX148)
+
+        // `problems` is absent entirely on a valid result, which is itself the
+        // relaxation holding — hence the `|| []`.
+        expect((res.problems || []).join('\n')).not.toContain('verification is required')
+    })
+
+    test('an absent `fixes` on the inconclusive path is accepted, exactly as `fixes: []` is', () => {
+        const res = load().validate(liveDraftShape(), CTX148)
+
+        expect(res.valid).toBe(true)
+    })
+
+    test('the relaxation does NOT extend to a report that names a root cause — an absent `fixes` is still rejected there', () => {
+        const report = liveDraftShape()
+        report.root_causes = [
+            {
+                layer: '3',
+                component: 'sn_aia_tool "set_ticket_priority"',
+                finding: 'input schema omits the ticket sys_id',
+                evidence: [
+                    { source: 'trace', detail: 'task 2 error: missing required input' },
+                    { source: 'schema', detail: 'sn_aia_tool.inputs has no ticket key' },
+                ],
+            },
+        ]
+        delete report.inconclusive
+
+        const res = load().validate(report, CTX148)
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.join('\n')).toContain('fixes is required and must be an array')
+    })
+
+    test('schemaText states the PRESENCE requirement for the `fixes` ARRAY, as it already does for data_markers', () => {
+        const schema = load().schemaText()
+        const fixesLine = schema.split('\n').filter(function (l) {
+            return l.indexOf('fixes: array') === 0
+        })[0]
+
+        // The line ALREADY ends with "current is a string and may be empty but
+        // must be present" — a clause about the per-fix `current` field, not
+        // about the array. Asserting on the whole line passes for the wrong
+        // reason, so the assertion is scoped to the array-level description
+        // that precedes it.
+        const arrayClause = fixesLine.split('current is a string')[0]
+
+        expect(arrayClause).toContain('must be present')
+    })
+})
+
+/**
+ * #148 follow-on — the normalized report must not change shape downstream.
+ *
+ * Accepting an omitted `fixes` creates a second valid shape: before this
+ * change, every report that passed `validate` carried `fixes` as an array, and
+ * `renderJson(normalized)` is what lands in the run row's `fix_report` column
+ * and comes back out of `GET /runs/{id}` to the scorers. Letting the key stay
+ * absent would hand those readers two shapes for the same claim — a silent
+ * inconsistency of exactly the kind this codebase keeps being bitten by.
+ * `normalized` therefore fills it in.
+ */
+describe('#148 — normalization keeps one downstream shape', () => {
+    function absentFixesInconclusive() {
+        return {
+            failure_summary: 'The execution completed; no failure observed in the trace.',
+            layers_swept: {
+                1: { status: 'SWEPT', reason: 'agent_trace provided execution details' },
+                2: { status: 'NOT_SWEPT', reason: 'instructions not requested' },
+                3: { status: 'NOT_SWEPT', reason: 'tools not requested' },
+                4: { status: 'NOT_SWEPT', reason: 'schema_lookup not called' },
+                5: { status: 'NOT_SWEPT', reason: 'query_table not called' },
+                6: { status: 'NOT_SWEPT', reason: 'genai_log not called' },
+                7: { status: 'NOT_SWEPT', reason: 'triggers not requested' },
+            },
+            root_causes: [],
+            inconclusive: {
+                evidence_read: [{ source: 'trace', detail: 'agent_trace showed ok:true' }],
+                needed_to_conclude: 'the GenAI log for the model turn',
+            },
+            data_markers: [],
+        }
+    }
+
+    test('an accepted report with no `fixes` key normalizes to an empty array', () => {
+        const res = load().validate(absentFixesInconclusive(), {
+            auditAvailable: true,
+            invokedTools: ['agent_trace'],
+        })
+
+        expect(res.valid).toBe(true)
+        expect(res.normalized.fixes).toEqual([])
+    })
+
+    test('renderJson of that report carries `fixes`, so GET /runs sees one shape either way', () => {
+        const fr = load()
+        const res = fr.validate(absentFixesInconclusive(), {
+            auditAvailable: true,
+            invokedTools: ['agent_trace'],
+        })
+
+        expect(JSON.parse(fr.renderJson(res.normalized)).fixes).toEqual([])
+    })
+})
+
+/**
+ * #148 review round — the same trap one key over, and the boundary of the
+ * relaxation.
+ *
+ * FINDING 1 (fixed here). `root_causes` carried the identical wording the #148
+ * fix rewrote for `fixes` — "NON-EMPTY unless you supply the `inconclusive`
+ * object" — and `_isInconclusiveShape` required `_isArray(report.root_causes)`,
+ * so omitting THAT key cost both relaxations the same way. Measured before the
+ * fix: an omitted `root_causes` alongside a well-formed `inconclusive` yielded
+ * THREE problems, and the same omission with `fixes: []` and a verification
+ * string yielded `fixes must include at least one entry` — an instruction to
+ * the repair turn to INVENT a fix for a report that explicitly declined to name
+ * a cause. That is the §T4 fabrication pressure the inconclusive path exists to
+ * remove, so it is fixed rather than filed.
+ *
+ * Unlike the `fixes` case this is a PREDICTED failure, not a measured one: all
+ * six live drafts did send `root_causes: []`. It is fixed because the mechanism
+ * is identical and now understood, not because it was observed.
+ *
+ * FINDING 2 (pinned, deliberately NOT changed). A `fixes` that is PRESENT but
+ * not an array — `null`, `{}` — still raises both problems. That is kept: the
+ * single repair turn has to see every requirement at once, and relaxing
+ * verification here would show it only the type error, let it return
+ * `fixes: [ ... ]` with no verification, and fail with no turns left. The
+ * absent-key relaxation does not have that shape because an absent key needs no
+ * repair at all.
+ */
+describe('#148 review — an OMITTED `root_causes` on the inconclusive path', () => {
+    const CTX = { auditAvailable: true, invokedTools: ['agent_trace', 'agent_config'] }
+
+    function absentRootCauses() {
+        return {
+            failure_summary: 'The execution completed; no failure observed in the trace.',
+            layers_swept: {
+                1: { status: 'SWEPT', reason: 'agent_trace provided execution details' },
+                2: { status: 'NOT_SWEPT', reason: 'instructions not requested' },
+                3: { status: 'NOT_SWEPT', reason: 'tools not requested' },
+                4: { status: 'NOT_SWEPT', reason: 'schema_lookup not called' },
+                5: { status: 'NOT_SWEPT', reason: 'query_table not called' },
+                6: { status: 'NOT_SWEPT', reason: 'genai_log not called' },
+                7: { status: 'NOT_SWEPT', reason: 'triggers not requested' },
+            },
+            inconclusive: {
+                evidence_read: [{ source: 'trace', detail: 'agent_trace showed ok:true' }],
+                needed_to_conclude: 'the GenAI log for the model turn',
+            },
+            data_markers: [],
+        }
+        // no `root_causes`, no `fixes`, no `verification`
+    }
+
+    test('an omitted `root_causes` alongside a well-formed `inconclusive` is accepted', () => {
+        const res = load().validate(absentRootCauses(), CTX)
+
+        expect(res.problems || []).toEqual([])
+        expect(res.valid).toBe(true)
+    })
+
+    test('it no longer instructs the repair turn to invent a fix — the §T4 fabrication pressure', () => {
+        const report = absentRootCauses()
+        report.fixes = []
+        report.verification = 're-run the agent and confirm the trace'
+
+        const res = load().validate(report, CTX)
+
+        expect((res.problems || []).join('\n')).not.toContain('fixes must include at least one entry')
+    })
+
+    test('an omitted `root_causes` WITHOUT an inconclusive block is still rejected', () => {
+        const report = absentRootCauses()
+        delete report.inconclusive
+
+        const res = load().validate(report, CTX)
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.join('\n')).toContain('root_causes is required and must be an array')
+    })
+
+    test('the inconclusive block is still PRICED when `root_causes` is omitted rather than empty', () => {
+        const report = absentRootCauses()
+        // Four layers claimed SWEPT against a single citation — the
+        // citation-per-sweep price must still bite on this path.
+        report.layers_swept[2] = { status: 'SWEPT', reason: 'read' }
+        report.layers_swept[3] = { status: 'SWEPT', reason: 'read' }
+        report.layers_swept[4] = { status: 'SWEPT', reason: 'read' }
+
+        const res = load().validate(report, CTX)
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.join('\n')).toContain('evidence_read')
+    })
+
+    test('an accepted report with no `root_causes` key normalizes to an empty array', () => {
+        const res = load().validate(absentRootCauses(), CTX)
+
+        expect(res.normalized.root_causes).toEqual([])
+    })
+
+    test('schemaText states the PRESENCE requirement for the `root_causes` array', () => {
+        const line = load()
+            .schemaText()
+            .split('\n')
+            .filter(function (l) {
+                return l.indexOf('root_causes:') === 0
+            })[0]
+
+        expect(line.split('layer is the layer number')[0]).toContain('must be present')
+    })
+})
+
+describe('#148 review — a PRESENT but wrong-typed `fixes` is not relaxed', () => {
+    const CTX = { auditAvailable: true, invokedTools: ['agent_trace'] }
+
+    function inconclusiveWith(fixes) {
+        return {
+            failure_summary: 'The execution completed; no failure observed in the trace.',
+            layers_swept: {
+                1: { status: 'SWEPT', reason: 'agent_trace provided execution details' },
+                2: { status: 'NOT_SWEPT', reason: 'instructions not requested' },
+                3: { status: 'NOT_SWEPT', reason: 'tools not requested' },
+                4: { status: 'NOT_SWEPT', reason: 'schema_lookup not called' },
+                5: { status: 'NOT_SWEPT', reason: 'query_table not called' },
+                6: { status: 'NOT_SWEPT', reason: 'genai_log not called' },
+                7: { status: 'NOT_SWEPT', reason: 'triggers not requested' },
+            },
+            root_causes: [],
+            fixes: fixes,
+            inconclusive: {
+                evidence_read: [{ source: 'trace', detail: 'agent_trace showed ok:true' }],
+                needed_to_conclude: 'the GenAI log for the model turn',
+            },
+            data_markers: [],
+        }
+    }
+
+    test('`fixes: null` is rejected — the relaxation is for a MISSING key, not a falsy value', () => {
+        const res = load().validate(inconclusiveWith(null), CTX)
+
+        expect(res.valid).toBe(false)
+        expect(res.problems).toContain('fixes is required and must be an array')
+    })
+
+    test('`fixes: {}` is rejected for the same reason', () => {
+        const res = load().validate(inconclusiveWith({}), CTX)
+
+        expect(res.valid).toBe(false)
+        expect(res.problems).toContain('fixes is required and must be an array')
+    })
+
+    test('a wrong-typed `fixes` deliberately still surfaces the verification requirement in the SAME turn', () => {
+        const res = load().validate(inconclusiveWith(null), CTX)
+
+        // The single repair turn must see every requirement at once. Relaxing
+        // verification here would show it only the type error, and a repair
+        // returning `fixes: [ ... ]` with no verification would then fail with
+        // no turns left.
+        expect(res.problems).toContain('verification is required and must be a non-empty string')
+    })
+})
