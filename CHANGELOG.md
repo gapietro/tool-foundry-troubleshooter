@@ -17,6 +17,36 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0901 — 2026-08-09
+
+### Fixed — an omitted `fixes` no longer costs two errors on the inconclusive path (#148)
+
+Found by the #134 retrospective, from live data rather than from reading the code. Six of the seven
+`EVIDENCE RETURN` runs that terminated `failed` stored a rejected draft of one shape: `root_causes:
+[]`, a well-formed `inconclusive` object, `data_markers: []`, and **no `fixes` key and no
+`verification` key** (TR1000168, 174, 182, 208, 214, 218). That two-problem pair, alone, appears in
+**0 of the 202** non-firing runs on gpinst01.
+
+The mechanism is a gap between two predicates. `_isInconclusiveShape` was satisfied;
+`_isInconclusiveWithoutFixes` additionally required `_isArray(report.fixes)`, so an **absent**
+`fixes` was not an **empty** `fixes`, both relaxations vanished together, and one omission raised
+two problems. `repairPrompt` then re-served the same schema text that produced the omission, which
+is why the one allowed repair turn never rescued any of the six.
+
+Fixed at both layers. `schemaText` now states the presence requirement for the `fixes` array first
+and in the words `data_markers` and `fixes[].current` already use — the previous line opened with
+"NON-EMPTY unless …", which reads as *omit it unless*. `_checkFixes` and
+`_isInconclusiveWithoutFixes` treat a **missing** key as empty on the inconclusive path; a `fixes`
+that is present but not an array still errors, and off the inconclusive path nothing is relaxed.
+
+This is not only #134's mechanism. §T4's ruling is that an honest inconclusive must be expressible
+or the only structurally valid output is an invented root cause — the trap silently un-did that for
+any run choosing the shape. `MAX_EVIDENCE_RETURNS: 0` closed the route those six runs took, not the
+trap.
+
+Suite: **1395 passed, 28 suites** (1390 on `main` + 5). `now-sdk build` clean on SDK 4.9.2.
+`benchmark/DECISION.md` §AB.
+
 ## 2026.08.0801 — 2026-08-08
 
 ### Fixed — the rubric channel is scanned (#143)

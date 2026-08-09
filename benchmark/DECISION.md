@@ -4041,3 +4041,125 @@ met.** §Z6's quoting rule stands — **34/36 · 4/6** only with the derived fil
 or 8/36** for the custom total, never a bare figure.
 
 Suite at the close of this section: **1388 passed, 28 suites.** No production code was touched.
+
+---
+
+## AB. #134 answered from stored data — the return did not make reports shaky, it steered them into a trap (`2026.08.0901`, #134 + #148)
+
+**§A through §AA are unmodified** — `git log -p benchmark/DECISION.md` is the check, as §AA said of
+§A–§Z. This section appends.
+
+**No runs were fired and no instance record was mutated.** Everything below is read-only queries
+against the `x_snc_troubleshoot_run` table on gpinst01, plus one offline reproduction and one fix
+with tests. This is #134's own "cheap first move" — *"the v10 rounds and the eight §U9.1 seed-01
+runs also have transcripts. Check whether the association holds there before designing anything."*
+It held, and it turned out not to need the paired design #134 sketched.
+
+Artefacts: `src/server/PaFixReport.js` (`_checkFixes`, `_isInconclusiveWithoutFixes`,
+`_isFixesAbsent`, `schemaText`) · `test/PaFixReport.test.js` (`#148` describe).
+
+### AB1. The association replicates outside §W
+
+`_evidenceReturnBlock` shipped in `0f3d30f` on 2026-08-06, so **no run before that date could
+fire** — the split is exact, not a chosen cutoff. Across the three rounds where the mechanism
+existed (v10, round 2, §W):
+
+| | runs | `failed` |
+|---|---|---|
+| Fired at least one `EVIDENCE RETURN` | 14 | **7** |
+| Did not fire | 58 | **0** |
+
+§W alone was 4 of 10 against 0 of 50. The v10 + round-2 rounds add 3 of 4 against 0 of 4 — an
+independent replication, and one §X5 did not claim.
+
+### AB2. One correction to #134's wording, and one signature it did not have
+
+**"All shape-class" is 6 of 7, not all.** TR1000173 (r2-2) terminated on an evidence-class problem
+— *"evidence cites only the trace"* — after spending both returns, which `raw-evidence-v10` §R2.4
+already recorded. #134 was written from the §W round's four and generalised one step too far.
+
+The other six carry **exactly two problems and nothing else**:
+
+> `fixes is required and must be an array; verification is required and must be a non-empty string`
+
+**That pair-alone signature appears in 0 of the 202 non-firing runs in the table.** The only three
+non-firing failures whose error text contains `fixes is required` — TR1000050–52, all on
+2026-08-02 — carry all six required-field problems at once, i.e. a report that arrived essentially
+empty. Different failure, and on a build three days older.
+
+### AB3. The mechanism, read off the stored drafts rather than inferred
+
+`fix_report` on all six (TR1000168, 174, 182, 208, 214, 218) is the same shape: `root_causes: []`, a
+well-formed `inconclusive` object with 2–3 `evidence_read` citations, `data_markers: []`, and **no
+`fixes` key and no `verification` key**. Every other required field is present and valid.
+
+That draft satisfies `_isInconclusiveShape` — empty `root_causes` plus an `inconclusive` object —
+but failed `_isInconclusiveWithoutFixes`, which additionally required `_isArray(report.fixes)`. **An
+absent `fixes` is not an empty `fixes`**, so both relaxations vanished together and one omission
+raised two problems. `repairPrompt` re-serves `schemaText()`, so the one allowed repair turn read
+the same instruction and repeated the omission — which is why all six died on the repair rather
+than being rescued by it.
+
+Why the models omitted the key: the `fixes` line opened *"NON-EMPTY unless root_causes is empty and
+you supply `inconclusive`"* and never said the key must be **present**, while its neighbours say so
+explicitly — `data_markers: array (may be empty, must be present)` and, in the very same line,
+`current is a string and may be empty but must be present`. The one field whose absence cost two
+errors was the only one that never stated its presence requirement.
+
+Reproduced offline, deterministically, with no instance involved: the identical draft with
+`fixes: []` validates; with the key removed it yields exactly those two problems and nothing else.
+
+### AB4. What this changes about #134's question
+
+**Causation runs in the direction #134 feared, and by a different route than it proposed.** #134's
+mechanism was *"the evidence return hands the model an extra rejection turn, and the extra turn is
+where the malformed report appears"*, with the alternative that shaky runs draw both. Neither is
+what happened. The block's **option 2** explicitly offers the `inconclusive` shape, the models took
+it, and the shape carried a presence/emptiness trap. Firing runs failed because firing is what
+routed them into it.
+
+So the paired design #134 sketched — *"the cap toggled with the same targets"* — is **not needed**,
+and `MAX_EVIDENCE_RETURNS` was not raised to study a side effect. §X6's ruling is untouched.
+
+**The defect outlives the mechanism that exposed it.** §T4's ruling is that an honest "I could not
+reach a conclusion" must be expressible, or the only structurally valid output is an invented root
+cause. The trap silently un-did that for any run choosing the shape for any reason. The cap at `0`
+closed the route those six runs took; it did not close the trap. Fixed at both layers under #148 —
+the schema text states the presence requirement, and the validator treats a **missing** key as
+empty on the inconclusive path (a `fixes` that is present but wrong-typed still errors, and nothing
+is relaxed off that path).
+
+### AB5. What this cannot establish
+
+- **It does not re-open or move any verdict.** §W6 stands (`MAX_EVIDENCE_RETURNS` stays `0`, #81
+  done), §X2's refutation stands, and **§T3 stands** — six custom rows reached layer 4 and all six
+  concluded at layer 1. Nothing here is about diagnostic quality.
+- **It does not establish that the fix improves any score.** No run has executed against the fixed
+  build. What is established is that a specific way of destroying a scorable row is closed.
+- **The 0-of-58 control is within-round only.** The 32 `failed` non-firing runs elsewhere in the
+  table are from older builds under different validators; comparing them to these rounds would be
+  comparing code versions, not arms.
+- **6 of 7 is an explanation of six runs, not of failure in general.** TR1000173 failed on evidence
+  class and is not explained by anything above.
+- **The association itself remains observational.** Firing was never randomly assigned. What
+  replaces the missing randomisation here is a mechanism confirmed in the stored drafts and
+  reproduced offline — not a design that rules out confounding.
+
+### AB6. Disposition
+
+**#134 is answered and closed; #148 carries the fix.** No re-measurement of #81, no change to
+`MAX_EVIDENCE_RETURNS`, no round fired.
+
+**§Z6 still governs the next scored pass**, unchanged: it is unblocked, and it is still not
+scheduled, sized or pre-registered. **This section is not that pre-registration.** It does, however,
+change what the pass should run against — the fixed build — and a pre-registration should say so
+explicitly rather than inheriting it silently.
+
+**Unchanged: native remains the recommended path on this instance, and the Phase 1b milestone is not
+met.** §Z6's quoting rule stands — **34/36 · 4/6** only with the derived file beside it, and
+**9/36 or 8/36** for the custom total, never a bare figure.
+
+Suite at the close of this section: **1395 passed, 28 suites** (1390 on `main` plus the five #148
+tests). `now-sdk build` clean on SDK 4.9.2. Production code WAS touched — `src/server/PaFixReport.js`
+— which makes this the first section since §Z to carry a code change, and the change is unverified
+against a live run by the project's own standard.
