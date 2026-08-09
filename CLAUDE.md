@@ -63,6 +63,14 @@ Full list in `.claude/context/sdk-reference.md` (43 build rules). The ones that 
 - Never `Now.ref()` for roles/agents/scriptIds in the AI family — it emits phantom GUIDs that fail silently (Rules #21, #33). Use direct sys_id strings or `roleMap` names.
 - Escape sequences and backticks inside a Fluent `` script`…` `` template are consumed by TypeScript — a `\n` emits a real newline and unterminates the string; a backtick even inside a `//` comment closes the template (Rule #43). Keep anything longer than a few lines in `src/server/*.js` and pull it in with `Now.include()`.
 
+### Build passing is not verification
+
+Rules #19, #33, #34, #40, #41, #42 and #43 all describe the same failure shape: **builds clean, installs clean, fails at runtime.** In this codebase a green `now-sdk build` carries almost no signal.
+
+- A change under `src/fluent/` is **unverified** until it has been installed and exercised against gpinst01 via the foundry MCP tools.
+- A change under `src/server/` is unverified until its jest tests run.
+- There is currently **no CI and no branch protection** on this repo — nothing runs these checks for you, and nothing blocks a merge. Run them locally before opening a PR and say in the PR which ones you ran.
+
 ### SDK vs MCP boundary
 
 **SDK owns creation.** Agents, tools, tables, flows — defined as Fluent DSL in `src/fluent/`,
@@ -88,6 +96,10 @@ Storing instance credentials for `servicenow_connect authType="keychain"` is don
 ### Before building — ask first
 
 Before building, creating, or implementing anything new, use `AskUserQuestion` to clarify: **purpose, inputs, outputs, and failure behavior.** Skip only when the user says "just build it," supplies a detailed spec, or points at an existing pattern to copy.
+
+### Before fixing — verify the premise
+
+Confirm the issue's stated premise against current code before designing a fix. If it is stale, already resolved, or wrong, stop and report the discrepancy rather than building on it.
 
 ### Workflow routing
 
@@ -120,6 +132,15 @@ All work is associated with a GitHub issue; create one before starting if it doe
 
 Increment on every merge to `main`. Format `YYYY.MM.DDXX` — year, zero-padded month, day plus a two-digit same-day counter that resets daily (`2026.08.0902` = 9th, second merge). Update `package.json` `version` and the `README.md` badge. History in `CHANGELOG.md`.
 
+### Where decisions live
+
+- `DESIGN.md` §4 — rulings R-1..R-12, the build contract
+- `benchmark/DECISION.md` — experiment pre-registrations and verdicts
+- `docs/PREFLIGHT_FINDINGS.md` — Phase 0 platform evidence (**keynexus01**, see instance-split warning)
+- `.claude/context/sdk-reference.md` — SDK build rules, one per observed failure
+
+Record a new decision where its kind already lives. Do not start a new ledger.
+
 ---
 
 ## Conventions
@@ -128,3 +149,4 @@ Increment on every merge to `main`. Format `YYYY.MM.DDXX` — year, zero-padded 
 - **Naming:** camelCase for variables/functions, PascalCase for classes
 - **Comments:** JSDoc for public methods, inline for complex logic
 - **ServiceNow:** Script Includes for reusable logic; Flow Designer over Business Rules for complex workflows; always check `next()`/`get()` return values and use encoded queries
+- Server-side logic belongs in `src/server/*.js` where it is unit-testable, not inline in a Fluent `script` template (see Rule #43)
