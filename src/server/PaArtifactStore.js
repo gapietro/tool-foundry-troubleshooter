@@ -260,8 +260,35 @@ PaArtifactStore.prototype = {
         var len = this._toInt(length, this.MAX_PAGE_CHARS)
         if (len <= 0 || len > this.MAX_PAGE_CHARS) len = this.MAX_PAGE_CHARS
 
-        var slice = off >= total ? '' : content.substring(off, Math.min(off + len, total))
-        var next = off + slice.length
+        // #137: a page boundary is a clip like any other, and every page is
+        // JSON-encoded into a tool result on its own, so neither end may carry
+        // an orphaned surrogate half.
+        //
+        // FRONT: only reachable when a caller passes an arbitrary offset —
+        // the tail guard below makes `next_offset` always land on a whole
+        // character. Skipping the orphan means the page describes source range
+        // [start, …), so `next` is measured from `start`, not from `off`, or
+        // the reader would rewind by one unit forever.
+        var start = off
+        if (start > 0 && start < total) {
+            var firstUnit = content.charCodeAt(start)
+            if (firstUnit >= 0xdc00 && firstUnit <= 0xdfff) start++
+        }
+
+        var end = Math.min(start + len, total)
+        var slice = start >= total ? '' : content.substring(start, end)
+
+        // TAIL: end the page one unit early and let the whole pair move to the
+        // next one — `next_offset` follows `slice.length`, so reassembly stays
+        // byte-identical. Two cases must NOT trim, both because the reader
+        // would stop advancing and page forever: the final page (a trailing
+        // high surrogate there is malformed content, not a split pair), and a
+        // single-unit page, which would otherwise clip to empty.
+        if (end < total && slice.length > 1) {
+            slice = this._clipUtf16(slice, slice.length)
+        }
+
+        var next = start + slice.length
         var eof = next >= total
 
         return {
@@ -270,7 +297,10 @@ PaArtifactStore.prototype = {
                 artifact_id: id,
                 file_name: gr.getValue('file_name'),
                 total_length: total,
-                offset: off,
+                // `start`, not `off`: when the front guard skipped an orphan,
+                // reporting the requested offset would misplace the content by
+                // one unit for anything reading positionally.
+                offset: start,
                 length: slice.length,
                 next_offset: eof ? null : next,
                 eof: eof,
@@ -491,6 +521,54 @@ PaArtifactStore.prototype = {
         return Object.prototype.toString.call(value) === '[object Array]'
     },
 
+    /**
+     * @param {String} text
+     * @param {Number} limit
+     * @returns {String} `text` clipped to at most `limit` UTF-16 code units,
+     *          never ending on a LONE high surrogate.
+     *
+     * A VERBATIM COPY of `PaToolReadKit.clipUtf16`, which carries the full
+     * rationale. This Script Include holds no kit reference, and a shared
+     * helper would put a cross-Script-Include instantiation in the paging path
+     * — same ruling as `PaToolAgentTrace._splitParamPrefix` (#122). Keep the
+     * copies in step: `test/utf16ClipContract.test.js` fails if one drifts.
+     *
+     * In short: an astral-plane character occupies two UTF-16 code units, a
+     * `substring` at `limit` can land between them, and the resulting lone
+     * surrogate survives into the artifact body and each paged tool result but
+     * can break their JSON encoding (#106, #137). Used by `read` and
+     * `_truncate`.
+     */
+    _clipUtf16: function (text, limit) {
+        var clipped = text.substring(0, limit)
+        if (!clipped) return clipped
+        var last = clipped.charCodeAt(clipped.length - 1)
+        if (last >= 0xd800 && last <= 0xdbff) {
+            return clipped.substring(0, clipped.length - 1)
+        }
+        return clipped
+    },
+
+    /**
+     * @param {String} text
+     * @param {Number} count
+     * @returns {String} the last `count` UTF-16 code units of `text`, never
+     *          BEGINNING on a lone low surrogate.
+     *
+     * A VERBATIM COPY of `PaToolReadKit.clipTailUtf16`. `_truncate` keeps a
+     * head AND a tail, and the tail's cut is what `clipUtf16` cannot reach:
+     * it trims the wrong end.
+     */
+    _clipTailUtf16: function (text, count) {
+        var clipped = count >= text.length ? text : text.substring(text.length - count)
+        if (!clipped) return clipped
+        var first = clipped.charCodeAt(0)
+        if (first >= 0xdc00 && first <= 0xdfff) {
+            return clipped.substring(1)
+        }
+        return clipped
+    },
+
     _truncate: function (content, limit) {
         var text = this._stringify(content)
         var cap = limit > 0 ? limit : this.EXCERPT_HEAD_CHARS + this.EXCERPT_TAIL_CHARS
@@ -499,15 +577,16 @@ PaArtifactStore.prototype = {
         var ratio = this.EXCERPT_HEAD_CHARS / (this.EXCERPT_HEAD_CHARS + this.EXCERPT_TAIL_CHARS)
         var head = Math.floor(cap * ratio)
         var tail = cap - head
-        var elided = text.length - head - tail
 
-        return (
-            text.substring(0, head) +
-            '\n…[elided ' +
-            elided +
-            ' chars]…\n' +
-            text.substring(text.length - tail)
-        )
+        // #137: BOTH cuts land at an arbitrary code-unit index, so the head can
+        // end on an orphaned high surrogate and the tail can begin on an
+        // orphaned low one. The elided count is then taken from what the guards
+        // actually kept, so the marker stays exact.
+        var headText = this._clipUtf16(text, head)
+        var tailText = this._clipTailUtf16(text, tail)
+        var elided = text.length - headText.length - tailText.length
+
+        return headText + '\n…[elided ' + elided + ' chars]…\n' + tailText
     },
 
     /**

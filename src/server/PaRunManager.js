@@ -915,7 +915,10 @@ PaRunManager.prototype = {
     _digest: function (value) {
         var s = this._stringifyForDigest(value)
         if (s.length <= this.DIGEST_CHARS) return s
-        return s.substring(0, this.DIGEST_CHARS) + '...[+' + (s.length - this.DIGEST_CHARS) + ' more chars]'
+        // Count from the CLIPPED length — the surrogate guard can shave one
+        // more unit, and the marker must state what was actually cut (#137).
+        var clipped = this._clipUtf16(s, this.DIGEST_CHARS)
+        return clipped + '...[+' + (s.length - clipped.length) + ' more chars]'
     },
 
     /**
@@ -931,12 +934,8 @@ PaRunManager.prototype = {
         var s = this._stringifyForDigest(value)
         if (s.length <= this.DIGEST_CHARS) return null
         if (s.length <= this.PROMPT_DIGEST_CHARS) return s
-        return (
-            s.substring(0, this.PROMPT_DIGEST_CHARS) +
-            '...[+' +
-            (s.length - this.PROMPT_DIGEST_CHARS) +
-            ' more chars]'
-        )
+        var clipped = this._clipUtf16(s, this.PROMPT_DIGEST_CHARS)
+        return clipped + '...[+' + (s.length - clipped.length) + ' more chars]'
     },
 
     /**
@@ -1015,17 +1014,17 @@ PaRunManager.prototype = {
      * @returns {String} `text` clipped to at most `limit` UTF-16 code units,
      *          never ending on a LONE high surrogate.
      *
-     * JavaScript strings are UTF-16 code units, so an astral-plane character —
-     * an emoji, most plausibly inside a pasted `logs` value — occupies two of
-     * them. A plain `substring` at `limit` can land between the halves and
-     * leave a high surrogate with no low surrogate after it. That is not valid
-     * UTF-16: it survives the column but can break JSON encoding of the
-     * `GET /runs/{run_id}` response and XML export of the record (issue #106).
+     * A VERBATIM COPY of `PaToolReadKit.clipUtf16`, which carries the full
+     * rationale. This Script Include holds no kit reference, and a shared
+     * helper would put a cross-Script-Include instantiation in the hot digest
+     * path — same ruling as `PaToolAgentTrace._splitParamPrefix` (#122). Keep
+     * the copies in step: `test/utf16ClipContract.test.js` fails if one drifts.
      *
-     * Dropping the orphan costs one code unit off an already-truncated prefix,
-     * which `request_truncated` already declares. The low surrogate that would
-     * have followed is outside the clip either way, so there is no case where
-     * this discards a character that would otherwise have been whole.
+     * In short: an astral-plane character occupies two UTF-16 code units, a
+     * `substring` at `limit` can land between them, and the resulting lone
+     * surrogate survives the column but can break JSON encoding of the
+     * `GET /runs/{run_id}` response and XML export of the record (#106, #137).
+     * Used by `_requestFields`, `_digest` and `_promptDigest`.
      */
     _clipUtf16: function (text, limit) {
         var clipped = text.substring(0, limit)
@@ -1033,6 +1032,27 @@ PaRunManager.prototype = {
         var last = clipped.charCodeAt(clipped.length - 1)
         if (last >= 0xd800 && last <= 0xdbff) {
             return clipped.substring(0, clipped.length - 1)
+        }
+        return clipped
+    },
+
+    /**
+     * @param {String} text
+     * @param {Number} count
+     * @returns {String} the last `count` UTF-16 code units of `text`, never
+     *          BEGINNING on a lone low surrogate.
+     *
+     * A VERBATIM COPY of `PaToolReadKit.clipTailUtf16`. Nothing here clips a
+     * tail today; it is carried anyway so the next truncation written in this
+     * file finds the guard already present instead of reaching for `substring`
+     * — which is exactly how #106's one-site fix became #137's eight sites.
+     */
+    _clipTailUtf16: function (text, count) {
+        var clipped = count >= text.length ? text : text.substring(text.length - count)
+        if (!clipped) return clipped
+        var first = clipped.charCodeAt(0)
+        if (first >= 0xdc00 && first <= 0xdfff) {
+            return clipped.substring(1)
         }
         return clipped
     },

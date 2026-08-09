@@ -1287,7 +1287,11 @@ PaToolAgentConfig.prototype = {
                         'It builds and installs cleanly and fails only when the tool is called ' +
                         '(SDK Build Rule #19).',
                     'End the script with })(inputs);',
-                    k.digest(script.substring(Math.max(0, script.length - 120)), this.DIGEST_CHARS)
+                    // #137: a TAIL slice can begin on an orphaned low
+                    // surrogate, which `digest`'s head guard cannot reach. This
+                    // core holds a kit reference, so it uses the canonical
+                    // helper rather than carrying a copy.
+                    k.digest(k.clipTailUtf16(script, 120), this.DIGEST_CHARS)
                 )
             }
             if (

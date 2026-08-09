@@ -604,7 +604,58 @@ PaToolAgentTrace.prototype = {
         }
 
         if (s.length <= lim) return s
-        return s.substring(0, lim) + '...[+' + (s.length - lim) + ' more chars]'
+        // Count from the CLIPPED length — the surrogate guard can shave one
+        // more unit, and the marker must state what was actually cut (#137).
+        var clipped = this._clipUtf16(s, lim)
+        return clipped + '...[+' + (s.length - clipped.length) + ' more chars]'
+    },
+
+    /**
+     * @param {String} text
+     * @param {Number} limit
+     * @returns {String} `text` clipped to at most `limit` UTF-16 code units,
+     *          never ending on a LONE high surrogate.
+     *
+     * A VERBATIM COPY of `PaToolReadKit.clipUtf16`, which carries the full
+     * rationale. This tool does not use the kit — migrating it is issue #41,
+     * deliberately not done here, the same standing ruling that governs
+     * `_splitParamPrefix` above (#122). Keep the copies in step:
+     * `test/utf16ClipContract.test.js` fails if one drifts.
+     *
+     * In short: an astral-plane character occupies two UTF-16 code units, a
+     * `substring` at `limit` can land between them, and the resulting lone
+     * surrogate survives into the transcript and the artifact body but can
+     * break their JSON encoding (#106, #137).
+     */
+    _clipUtf16: function (text, limit) {
+        var clipped = text.substring(0, limit)
+        if (!clipped) return clipped
+        var last = clipped.charCodeAt(clipped.length - 1)
+        if (last >= 0xd800 && last <= 0xdbff) {
+            return clipped.substring(0, clipped.length - 1)
+        }
+        return clipped
+    },
+
+    /**
+     * @param {String} text
+     * @param {Number} count
+     * @returns {String} the last `count` UTF-16 code units of `text`, never
+     *          BEGINNING on a lone low surrogate.
+     *
+     * A VERBATIM COPY of `PaToolReadKit.clipTailUtf16`. Nothing here clips a
+     * tail today; it is carried anyway so the next truncation written in this
+     * file finds the guard already present instead of reaching for `substring`
+     * — which is exactly how #106's one-site fix became #137's eight sites.
+     */
+    _clipTailUtf16: function (text, count) {
+        var clipped = count >= text.length ? text : text.substring(text.length - count)
+        if (!clipped) return clipped
+        var first = clipped.charCodeAt(0)
+        if (first >= 0xdc00 && first <= 0xdfff) {
+            return clipped.substring(1)
+        }
+        return clipped
     },
 
     /**
