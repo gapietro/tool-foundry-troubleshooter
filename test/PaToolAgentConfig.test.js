@@ -1244,6 +1244,39 @@ describe('tool_smells (K26 Lab 3)', () => {
         expect(result.data.tools.tool_smells.map((s) => s.smell)).toContain('script_missing_iife_invocation')
     })
 
+    it('does not put a lone surrogate in the evidence when the last 120 chars start mid-pair (#137)', () => {
+        // The evidence for this smell is a TAIL slice of the script — the one
+        // direction #106's fix never covered. A script whose 120-char tail
+        // begins on the second half of an astral pair would otherwise carry an
+        // orphaned LOW surrogate straight into the tool result's JSON.
+        // The slice is `script.substring(script.length - 120)`, so the emoji's
+        // LOW half has to sit at exactly `length - 120`. Solved rather than
+        // hand-counted: with the pair at `head.length`, that needs a total
+        // length of `head.length + 121`.
+        const head = '(function (inputs) { var s = "'
+        const closer = '"; })'
+        const script = head + '😀' + new Array(119 - closer.length + 1).join('y') + closer
+        expect(script.length - 120).toBe(head.length + 1)
+        expect(script.charCodeAt(script.length - 120)).toBeGreaterThanOrEqual(0xdc00)
+
+        const { result } = run({ agent: 'Seed Agent', section: 'tools' }, withTool({ script: script }))
+
+        const smell = result.data.tools.tool_smells.find((s) => s.smell === 'script_missing_iife_invocation')
+        expect(smell).toBeDefined()
+
+        const evidence = String(smell.evidence === undefined ? JSON.stringify(smell) : smell.evidence)
+        for (let i = 0; i < evidence.length; i++) {
+            const c = evidence.charCodeAt(i)
+            if (c >= 0xd800 && c <= 0xdbff) {
+                const next = i + 1 < evidence.length ? evidence.charCodeAt(i + 1) : 0
+                expect({ at: i, paired: next >= 0xdc00 && next <= 0xdfff }).toEqual({ at: i, paired: true })
+                i++
+            } else if (c >= 0xdc00 && c <= 0xdfff) {
+                throw new Error('orphaned low surrogate in evidence at index ' + i)
+            }
+        }
+    })
+
     it('flags an unbounded query', () => {
         const { result } = run(
             { agent: 'Seed Agent', section: 'tools' },

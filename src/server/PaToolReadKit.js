@@ -532,7 +532,71 @@ PaToolReadKit.prototype = {
         }
 
         if (s.length <= lim) return s
-        return s.substring(0, lim) + '...[+' + (s.length - lim) + ' more chars]'
+        // The count is taken from the CLIPPED length, not from `lim`: the
+        // surrogate guard can shave one more unit off, and R-24 wants the
+        // marker to state what was actually cut rather than what was intended.
+        var clipped = this.clipUtf16(s, lim)
+        return clipped + '...[+' + (s.length - clipped.length) + ' more chars]'
+    },
+
+    /**
+     * @param {String} text
+     * @param {Number} limit
+     * @returns {String} `text` clipped to at most `limit` UTF-16 code units,
+     *          never ending on a LONE high surrogate.
+     *
+     * THE CANONICAL COPY. `PaRunManager`, `PaToolAgentTrace`, `PaArtifactStore`
+     * and `PaAuditLogger` each carry a verbatim `_clipUtf16` duplicate of this
+     * body — those are Script Includes that hold no kit reference, and a shared
+     * one would put a cross-Script-Include instantiation in the hot digest path.
+     * Same ruling as `PaToolAgentTrace._splitParamPrefix` (#122). Keep them in
+     * step: `test/utf16ClipContract.test.js` fails if any copy drifts.
+     *
+     * JavaScript strings are UTF-16 code units, so an astral-plane character —
+     * an emoji, most plausibly inside a pasted `logs` value — occupies two of
+     * them. A plain `substring` at `limit` can land between the halves and
+     * leave a high surrogate with no low surrogate after it. That is not valid
+     * UTF-16: it survives the column but can break JSON encoding of the
+     * `GET /runs/{run_id}` response and XML export of the record (#106, #137).
+     *
+     * Dropping the orphan costs one code unit off an already-truncated prefix,
+     * which the caller's truncation marker already declares. The low surrogate
+     * that would have followed is outside the clip either way, so there is no
+     * case where this discards a character that would otherwise have been whole.
+     */
+    clipUtf16: function (text, limit) {
+        var clipped = text.substring(0, limit)
+        if (!clipped) return clipped
+        var last = clipped.charCodeAt(clipped.length - 1)
+        if (last >= 0xd800 && last <= 0xdbff) {
+            return clipped.substring(0, clipped.length - 1)
+        }
+        return clipped
+    },
+
+    /**
+     * @param {String} text
+     * @param {Number} count
+     * @returns {String} the last `count` UTF-16 code units of `text`, never
+     *          BEGINNING on a lone low surrogate.
+     *
+     * The other half of the defect, and the half #106 never had to think about:
+     * a head+tail excerpt (`PaArtifactStore._truncate`, `PaAuditLogger._digest`)
+     * and a tail slice (`PaToolAgentConfig`'s script evidence) start at an
+     * arbitrary index too, so the cut can leave the SECOND half of a pair
+     * orphaned at the front. `clipUtf16` cannot cover this: it trims the wrong
+     * end.
+     *
+     * Canonical copy, duplicated under the same ruling as `clipUtf16` above.
+     */
+    clipTailUtf16: function (text, count) {
+        var clipped = count >= text.length ? text : text.substring(text.length - count)
+        if (!clipped) return clipped
+        var first = clipped.charCodeAt(0)
+        if (first >= 0xdc00 && first <= 0xdfff) {
+            return clipped.substring(1)
+        }
+        return clipped
     },
 
     /**

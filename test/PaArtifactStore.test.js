@@ -413,6 +413,83 @@ describe('read', () => {
         expect(out.data.eof).toBe(true)
     })
 
+    // -----------------------------------------------------------------------
+    // #137: a page boundary is a clip like any other, and each page is
+    // JSON-encoded into a tool result on its own. A pair straddling the
+    // boundary must move WHOLE to the next page rather than be split — the
+    // reassembly contract above is what makes that the only correct answer.
+    // -----------------------------------------------------------------------
+
+    /** Index of the first UNPAIRED surrogate code unit, or -1. */
+    function loneSurrogateAt(str) {
+        for (let i = 0; i < str.length; i++) {
+            const c = str.charCodeAt(i)
+            if (c >= 0xd800 && c <= 0xdbff) {
+                const next = i + 1 < str.length ? str.charCodeAt(i + 1) : 0
+                if (!(next >= 0xdc00 && next <= 0xdfff)) return i
+                i++
+            } else if (c >= 0xdc00 && c <= 0xdfff) {
+                return i
+            }
+        }
+        return -1
+    }
+
+    /** Astral pair straddling the 4000-unit page boundary at 3999..4000. */
+    function straddling() {
+        return filler(3999).substring(0, 3999) + '😀' + filler(4000).substring(0, 4000)
+    }
+
+    test('a page boundary landing mid-pair ends the page one unit early rather than splitting it', () => {
+        const s = seeded(straddling())
+        const out = s.store.read(s.ref.artifact_id, 0, 4000)
+
+        expect(loneSurrogateAt(out.data.content)).toBe(-1)
+        expect(out.data.length).toBe(3999)
+        // The reported length and next_offset must agree with the SHORT page,
+        // or the reader skips the character it was protecting.
+        expect(out.data.next_offset).toBe(3999)
+        expect(out.data.eof).toBe(false)
+    })
+
+    test('the pair deferred by a short page arrives WHOLE at the head of the next one', () => {
+        const s = seeded(straddling())
+        const out = s.store.read(s.ref.artifact_id, 3999, 4000)
+
+        expect(out.data.content.substring(0, 2)).toBe('😀')
+        expect(loneSurrogateAt(out.data.content)).toBe(-1)
+    })
+
+    test('paging content with a straddling pair still reassembles byte-identical', () => {
+        const content = straddling()
+        const s = seeded(content)
+
+        let assembled = ''
+        let offset = 0
+        let guard = 0
+        for (;;) {
+            const page = s.store.read(s.ref.artifact_id, offset, 4000)
+            expect(page.success).toBe(true)
+            expect(loneSurrogateAt(page.data.content)).toBe(-1)
+            assembled += page.data.content
+            if (page.data.eof) break
+            offset = page.data.next_offset
+            if (++guard > 50) throw new Error('paging did not terminate')
+        }
+
+        expect(assembled).toBe(content)
+    })
+
+    test('a caller resuming ON the low half of a pair is not handed the orphan', () => {
+        // Nothing stops a client passing an arbitrary offset. 4000 lands on the
+        // second half of the pair, so the page would otherwise OPEN on an
+        // orphaned low surrogate.
+        const s = seeded(straddling())
+        const out = s.store.read(s.ref.artifact_id, 4000, 4000)
+
+        expect(loneSurrogateAt(out.data.content)).toBe(-1)
+    })
+
     test('length is clamped to the page ceiling', () => {
         const s = seeded(filler(35000))
         expect(s.store.read(s.ref.artifact_id, 0, 999999).data.length).toBe(4000)

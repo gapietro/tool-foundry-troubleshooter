@@ -17,6 +17,47 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0902 — 2026-08-09
+
+### Fixed — the lone-surrogate clip defect, at every truncation site rather than one (#137)
+
+#106 fixed `PaRunManager._requestFields`: a `substring` at a code-unit index can land between the
+two UTF-16 halves of an astral-plane character and store a lone surrogate, which survives the
+column and then breaks JSON encoding of the `GET /runs/{run_id}` response and XML export of the
+record. #137 found the same arithmetic unfixed in seven more places. A sweep of `src/server/`
+during this fix found an **eighth** the issue's table had missed — `PaToolAgentConfig`'s
+`script.substring(script.length - 120)` script-smell evidence — and a ninth that is the same
+defect in a different costume: `PaArtifactStore.read`, where a page boundary can split a pair at
+either end and each page is JSON-encoded into a tool result on its own.
+
+Two guards, because #106's fix only covers one direction. `clipUtf16` trims an orphaned **high**
+surrogate off the end of a head clip; `clipTailUtf16` trims an orphaned **low** surrogate off the
+front of a tail slice — the case `PaArtifactStore._truncate` and `PaAuditLogger._digest` hit,
+which the original helper cannot reach because it trims the wrong end.
+
+Canonical on `PaToolReadKit`, duplicated verbatim into `PaRunManager`, `PaToolAgentTrace`,
+`PaArtifactStore` and `PaAuditLogger` — Script Includes with no kit reference, where a shared
+helper would put a cross-Script-Include instantiation in the hot digest path. That is the standing
+ruling for `PaToolAgentTrace._splitParamPrefix` (#122, migration tracked as #41), applied again
+rather than reopened. `PaToolAgentConfig` already holds a kit reference and calls the canonical
+copy directly.
+
+Paging keeps its byte-identical reassembly contract. The tail guard ends a page one unit early and
+`next_offset` follows `slice.length`, so a straddling pair moves **whole** to the next page rather
+than being split or dropped. Two cases deliberately do not trim, both because the reader would
+otherwise stop advancing and page forever: the final page, and a single-unit page. The front guard
+is only reachable when a caller passes an arbitrary offset, and the response now reports the offset
+actually **served** rather than the one requested.
+
+Truncation markers stay exact: every `+N more chars` and `[elided N chars]` count is now taken from
+the clipped length rather than from the intended limit, so shaving a surrogate cannot quietly
+understate what was cut (R-24).
+
+Duplication is only safe if it cannot drift, so `test/utf16ClipContract.test.js` asserts the copies
+are byte-identical and walks all nine sites through their real entry points, failing on an unpaired
+surrogate anywhere in the output — the structural form already used by `coreTruncationContract`,
+for the same reason: fixing instances one at a time was not converging.
+
 ## 2026.08.0901 — 2026-08-09
 
 ### Fixed — an omitted `fixes` no longer costs two errors on the inconclusive path (#148)

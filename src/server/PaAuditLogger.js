@@ -489,15 +489,16 @@ PaAuditLogger.prototype = {
         var ratio = this.DIGEST_HEAD_CHARS / (this.DIGEST_HEAD_CHARS + this.DIGEST_TAIL_CHARS)
         var head = Math.floor(this.MAX_PAYLOAD_CHARS * ratio)
         var tail = this.MAX_PAYLOAD_CHARS - head
-        var elided = text.length - head - tail
 
-        return (
-            text.substring(0, head) +
-            '\n…[elided ' +
-            elided +
-            ' chars]…\n' +
-            text.substring(text.length - tail)
-        )
+        // #137: BOTH cuts land at an arbitrary code-unit index, so the head can
+        // end on an orphaned high surrogate and the tail can begin on an
+        // orphaned low one. The elided count is then taken from what the guards
+        // actually kept, so the marker stays exact.
+        var headText = this._clipUtf16(text, head)
+        var tailText = this._clipTailUtf16(text, tail)
+        var elided = text.length - headText.length - tailText.length
+
+        return headText + '\n…[elided ' + elided + ' chars]…\n' + tailText
     },
 
     /**
@@ -532,7 +533,56 @@ PaAuditLogger.prototype = {
     },
 
     _trim: function (value, max) {
-        return value.length > max ? value.substring(0, max) : value
+        return value.length > max ? this._clipUtf16(value, max) : value
+    },
+
+    /**
+     * @param {String} text
+     * @param {Number} limit
+     * @returns {String} `text` clipped to at most `limit` UTF-16 code units,
+     *          never ending on a LONE high surrogate.
+     *
+     * A VERBATIM COPY of `PaToolReadKit.clipUtf16`, which carries the full
+     * rationale. This Script Include holds no kit reference, and it sits inside
+     * the hot path — PaScriptToolAdapter calls it immediately before and after
+     * every tool execution — so a shared helper would add a cross-Script-Include
+     * instantiation per call. Same ruling as `PaToolAgentTrace._splitParamPrefix`
+     * (#122). Keep the copies in step: `test/utf16ClipContract.test.js` fails if
+     * one drifts.
+     *
+     * In short: an astral-plane character occupies two UTF-16 code units, a
+     * `substring` at `limit` can land between them, and the resulting lone
+     * surrogate survives into the audit row but can break its JSON encoding and
+     * the XML export of the record (#106, #137). Used by `_digest` and `_trim`.
+     */
+    _clipUtf16: function (text, limit) {
+        var clipped = text.substring(0, limit)
+        if (!clipped) return clipped
+        var last = clipped.charCodeAt(clipped.length - 1)
+        if (last >= 0xd800 && last <= 0xdbff) {
+            return clipped.substring(0, clipped.length - 1)
+        }
+        return clipped
+    },
+
+    /**
+     * @param {String} text
+     * @param {Number} count
+     * @returns {String} the last `count` UTF-16 code units of `text`, never
+     *          BEGINNING on a lone low surrogate.
+     *
+     * A VERBATIM COPY of `PaToolReadKit.clipTailUtf16`. `_digest` keeps a head
+     * AND a tail, and the tail's cut is what `clipUtf16` cannot reach: it trims
+     * the wrong end.
+     */
+    _clipTailUtf16: function (text, count) {
+        var clipped = count >= text.length ? text : text.substring(text.length - count)
+        if (!clipped) return clipped
+        var first = clipped.charCodeAt(0)
+        if (first >= 0xdc00 && first <= 0xdfff) {
+            return clipped.substring(1)
+        }
+        return clipped
     },
 
     /**
