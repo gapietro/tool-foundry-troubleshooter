@@ -17,6 +17,74 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.0903 — 2026-08-09
+
+### Added — seeds 02 and 05 qualified as pass-ready fixtures (#151, PR #152)
+
+The next scored pass is sized at 5 seeds × 2 reps × 2 arms — 20 runs, 10 valid per arm, with
+§A3.4's 8-valid-run floor read **per arm** (the strict reading). Seeds 02 and 05 have been out of
+scope since §Q6, so both had to be qualified before a pre-registration commits to them: a
+pre-registration binds you to what it asserts, which makes the seed set a design input to be
+measured rather than assumed. §W's build-under-test probe is the precedent.
+
+**Seed 02 qualifies on construction** — one tool bound and active (`measure_request`, `type=script`)
+whose description carries no group/routing/assignment vocabulary, so the v2 construction rule holds
+live. Its 0/6 convergence across both harnesses is a prediction the pre-registration must file, not
+a defect to fix; §O6 declined to rule whether that is a true negative or a shared blind spot, and
+this change does not rule either.
+
+**Seed 05's `run_as` question is answered — the trigger fires.** Open since 2026-08-01 and never
+carried into `DECISION.md`, the question was whether an empty `run_as` blocks firing under the
+4.9.0 "run-as required for all trigger types" guidance. It does not: activation generates a backing
+`sys_hub_flow` carrying `run_as: user` of its own (`active=true`, `status=published`), and a ticket
+inserted after that flow exists produces an `sn_aia_execution_plan` in ~1 second.
+
+Two findings the question did not anticipate, both live:
+
+- **Activation is asynchronous, and the race is indistinguishable from the defect.** The backing
+  flow appears 4–5s *after* the activating PATCH returns. The first probe fired inside that window
+  and produced no execution plan — a true zero from an unarmed mechanism, which reads exactly like a
+  non-firing trigger. Recorded so the next operator does not repeat it: wait for `trigger_flow` to
+  be populated and its `sys_hub_flow.active` to read `true` before inserting any triggering row.
+- **The execution terminates immediately** — `status=error`, 0 tasks / 0 tool calls / 0 messages,
+  `execution_mode=interactive` against an `autopilot` use case, empty `objective` despite an
+  `objective_template`. So flipping `active` makes the trigger fire but does **not** produce the
+  acknowledgement. The seed's expected diagnosis is unaffected and fully scorable; the exposure is
+  `fix_usable_unedited` — the column behind five of seven native gate failures in v4 — which
+  §A2.1's clauses do not cover. Any pass including seed 05 must rule on it in its pre-registration.
+
+Also established: the m2m gate PATCHed on 2026-08-02 persisted and still reads `true`, so that
+mandatory step is not outstanding (re-read it anyway — a fixture reinstall resets it, and the seed's
+rows are void without it).
+
+**Fixture restored and verified**, not assumed: trigger back to `active=false`, the generated flow
+auto-deactivated by the platform (`active=false`, `status=draft`), and a third probe ticket produced
+no execution plan across four minutes — conclusive against a measured 1-second fire time.
+`trigger_flow` is now populated and its pre-activation value was never captured, so the evidence
+file records that as **unknown** rather than claiming it was empty.
+
+One finding outside the seeds: `test/scorerPacketBlindRule.test.js` scans a hand-maintained
+`PACKET_SETS` declaration and does not auto-discover scoring directories, so a new `scoring-v<n>/`
+starts unscanned while the suite stays green — the same shape as #143.
+
+### Added — `LEARNING.md`, the active-recall ledger
+
+New at the repo root, per the `/learn` workflow. Two entries from the #151 session, both logged
+`shaky`: admissibility of a null observation (observability) and when a threshold actually binds
+(testing). `/retro` reads this file as qualitative input.
+
+### Changed — `CLAUDE.md` records the quality cadence
+
+States that the repo is graded via `/senior-grade` with `AUDIT.md` as the ledger, and that no grade
+exists yet — the first sitting is still outstanding.
+
+### Note — this entry also repairs a missed bump
+
+PR #152 merged without incrementing the version, contrary to the convention above. This entry
+covers both that merge and the three changes here.
+
+---
+
 ## 2026.08.0902 — 2026-08-09
 
 ### Fixed — the lone-surrogate clip defect, at every truncation site rather than one (#137)
