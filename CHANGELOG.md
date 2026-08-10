@@ -17,6 +17,88 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1007 — 2026-08-10
+
+### Fixed
+
+- **The last four rubric ambiguity flags now decide themselves — all fourteen of §AD3's are closed
+  (#164, `DECISION.md` §AH).** §AG closed the ten flags on `evidence_cites_trace_and_config` and
+  `fix_usable_unedited` and was careful **not** to call the rubric determinate: four flags remained on
+  `root_cause_layer_correct` (rows 07, 14) and `fix_target_correct` (rows 05, 12), **one of them a
+  gate term**. Those four are now answered in `scorecard-template.md`, transcribed from each verdict's
+  own `### ambiguity` section rather than from the flag tally.
+
+  New **§A2.2** (`root_cause_layer_correct`, §A2's other gate term): where a report declares a layer,
+  **the declared value is scored and the finding text's substance is not** — a root cause filed under
+  layer 3 whose prose describes the seed's layer-2 mechanism scores 0, and the reverse scores 2; where
+  no layer is declared, the root cause must name the expected layer by the **name or number the seed
+  spec prints**, since the packet carries no layer-to-artifact map. A report with several root causes
+  is scored **against its primary**, lifting §A1 Case 2's selection rule by reference — without which
+  a shotgunned five- or seven-layer enumeration scores 2 on every seed and the column measures list
+  length. `layers_swept` status and validator rejections are **explicitly kept out** of the column;
+  both are scored elsewhere.
+
+  New **§A2.3** (`fix_target_correct`): where a fix declares a target, **the declared field is scored,
+  not prose elsewhere in the fix body**. All three bands are fixed against the seed spec's
+  `Expected fix target` header row — 2 names the specific target, 1 matches the area without it, 0 is
+  a different area **or any reading the seed spec explicitly excludes** (seed 01's *"Not 'the tool
+  input schema'"* sits inside the expected area and must not earn the partial band). Where several
+  fixes are proposed, the column takes the highest value any one non-hedged fix earns, **and that fix
+  is the one §A2.1 Case 5 then evaluates**, so §A's cross-column constraint relates one fix to itself.
+
+- **§A's partial-band note is superseded in place, with the old sentence quoted rather than deleted.**
+  *"For the others, 1 is available but must be justified in `notes` if used"* authorised the band
+  without locating either boundary, and both `fix_target_correct` flags landed on it. §A2.3 Case 2 now
+  locates both, for every seed; `notes` is good practice and no longer the authorisation.
+
+### Changed
+
+- **`test/rubricClauses.test.js` grew two describe blocks (21 tests)** pinning both clause sets inside
+  the `## A2.` → `## A3.` window a packet copies, each load-bearing decision term, and the
+  supersession note — including that the superseded sentence survives **exactly once and only as a
+  quotation**, so a second live occurrence cannot reappear. Suite: **31 files, 1566 tests, green.**
+- **`test/scorerPacketBlindRule.test.js` gained three `RUBRIC_PATTERNS`** — `pass-version-token`,
+  `empirically-observed`, `rows-were-flagged` — after the review of this PR found two provenance
+  leaks inside the packet slice that all four existing patterns walked past (see Notes). Each is
+  verified to fire on the exact string it was written for and inert on the slice as it now stands.
+
+### Notes
+
+- **No run was fired, no packet re-scored, no v12 number moved** (§T9 / §AF7 / §AG5). §AH5 reports
+  what the clauses *would* have changed rather than recomputing: row 05 `fix_target_correct` 1→0
+  (native) and row 14 `root_cause_layer_correct` 2→0 (custom) — one flip per arm, rubric totals 50/60
+  and 7/60 against the published 51/60 and 9/60. **No `passes_gate` value moves in either direction**,
+  so §AD1's headline (native 6/10 · 60% · middle band, custom 0/10 · 0% · bottom band) is unchanged
+  even under the new clauses. §AD2's "8 of 10" for custom `root_cause_layer_correct` = 0 would read
+  9 of 10; AC-2's ≤7 refutation threshold still holds.
+- **Both flips are downward**, and §AH5 records that rather than explaining it away. The defence is
+  §AG5's and no stronger: mechanical clauses, written before any pass scored against them, ordering
+  checkable in git.
+- **`test/scorerPacketBlindRule.test.js` caught a real defect in this change before it left the
+  working tree** — the first cut of §A2.2 pointed a scorer at "§E", which sits outside the
+  `## A.` → `## B.` packet slice and would have led a model scorer out of the packet toward prior
+  passes' rows and grades. A rubric clause is a blind-rule surface like any other channel (#143).
+- **Code review found ten findings on this branch and all ten were real** (`DECISION.md` §AH5a).
+  Three were consequential: **two further provenance leaks inside the packet slice** that every
+  existing pattern walked past ("two v12 rows were flagged on it"; "a run has been observed doing
+  exactly that") — removed, with three new guard patterns added; **§A2.3's first cut contradicted
+  §A2.1 Case 5** by claiming to designate which fix that case evaluates, handing a scorer opposite
+  values on a gate term; and **§A2.3's 2 band was unreachable on four of five seeds**, because only
+  seed 01's `Expected fix target` row names a specific target while the rest print an area.
+- **The review's asymmetry finding was right about the gap and wrong about the fix, and the rows
+  settled it.** Making §A2.3 use §A2.2's primary-only rule scores row 07's `fix_target_correct` = 0,
+  though its FIX-2 names `sn_aia_agent[…].instructions` at full specificity and is merely listed
+  second. The asymmetry is kept and its reason is now stated in the clause.
+- **The largest hole was found by re-verifying the rows, not by the review: compound declared layers
+  are the native format's norm** (`Layer: 3 (tool script) + 4 (schema)`). §A2.2 had no rule for them,
+  leaving **eight published full-credit rows undecidable** under the clause meant to make the column
+  determinate. Now read on the conjunct naming the expected layer.
+- **The §AH5 counterfactual was re-derived after every rule change and is unchanged** — two flips,
+  one per arm, no `passes_gate` movement. Every `rc = 2` row and every nonzero `fix_target_correct`
+  row was re-checked, not only the four flagged ones.
+- **The Phase 1b milestone remains unmet** — the sixth consecutive section to close that way. The next
+  scored pass is still not scheduled, sized or pre-registered.
+
 ## 2026.08.1006 — 2026-08-10
 
 ### Fixed
