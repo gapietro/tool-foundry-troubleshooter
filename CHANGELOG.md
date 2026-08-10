@@ -17,6 +17,49 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1001 — 2026-08-10
+
+### Added — the v12 scored pass is pre-registered (#151, DECISION.md §AC)
+
+Closes #151's last task and §Z6's open item: the next scored pass was unblocked but never
+scheduled, sized or pre-registered. §AC fixes all of it before a single run fires, and the ordering
+is checkable in `git log -p benchmark/DECISION.md` rather than asserted — the §U/§W standard.
+
+**Shape:** 5 seeds × 2 reps × 2 arms = 20 runs, 10 valid rows per arm, on build `2026.08.1001`
+carrying #148's fix (verified by `scriptLIKE` probe, not by version string). This is the v4 shape,
+chosen because v4 is the only prior pass to run all five seeds against both arms.
+
+**Three rulings made blind**, each one a decision someone would otherwise make with rows in hand:
+
+1. **Seed 05 `fix_usable_unedited` = 1** for a report that names the specific gate and proposes
+   activating it — notwithstanding the qualification's finding that activation alone does not
+   restore the acknowledgement. The column is read against the *seeded* defect; the execution-layer
+   break is an unseeded second defect no diagnosis could detect. A seed-05 clause for this pass
+   only — it does not amend §A2.1 and does not touch §A2's decoy constraint.
+2. **§A3.4's floor is per arm**, the strict reading §T8 left contested. Settled in the direction
+   that binds harder, and settled while no void count exists.
+3. **The milestone criterion is the top band** (custom ≥ 80% of its valid runs), not *custom ≥
+   native* — the latter makes the milestone a function of native's measured intra-day drift, so a
+   bad native day could carry it without the custom harness improving.
+
+**Nine predictions with stated refutation criteria**, including AC-9 — *the milestone is NOT met* —
+filed against the project's own preferred outcome so the standing prior is exposed rather than
+restated. AC-5 (≥14 of 20 rows unambiguous) is the first live test of §Z's rubric repair against
+§T8's measured 3 of 12.
+
+**Sizing honesty:** at 10 rows per arm a harness whose true pass rate is exactly 80% lands in the
+top band only 67.8% of the time. Tabulated in §AC2 rather than discovered afterwards, and §T9's
+"do not re-run this pass to get a firmer number" still governs.
+
+### Fixed — one claim in the seed-qualification record was wrong
+
+`raw-evidence-seed-qualification-02-05.md` §4 item 4 said a new `scoring-v<n>/` directory leaves the
+blind-rule suite green until someone declares it. It does not:
+`test/scorerPacketBlindRule.test.js:709` compares `PACKET_SETS` against the directories on disk, so
+an undeclared set turns the suite **red** — the guard fails closed on declaration. The residual hole
+is narrower and real: `scanned` is consumed as `PACKET_SETS.filter((s) => s.scanned)`, so a set
+declared `scanned: false` is accepted and never scanned. Corrected in §AC7.
+
 ## 2026.08.0903 — 2026-08-09
 
 ### Added — seeds 02 and 05 qualified as pass-ready fixtures (#151, PR #152)
