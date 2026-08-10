@@ -736,6 +736,167 @@ pass of the custom arm noticing something the native arm did not.
 Its fix names a specific target (`sn_aia_agent_tool_m2m` `3c72dab2668c4ba5a6080a5cd5fb2b91`) but with
 `current: "unknown"` and a proposal to *"validate input schema"* — an instruction to inspect, not a change.
 
+### 3.58 Seed 05's absence, verified before either arm ran
+
+| check | result |
+|---|---|
+| ticket inserted | `01b435322bea8318f243fed2ce91bfbd` at **17:22:26**, `short_description` non-empty (satisfies `short_descriptionISNOTEMPTY`) |
+| execution plans created since 17:22:00, **instance-wide** | **zero** — re-queried after a multi-minute silence window |
+| m2m gate `ba30d8775b0c4cebb960c58830590d5d` | still **`true`** |
+| trigger config `bfb77d6c64884500a80203ee029436ee` | still **Inactive** |
+
+The qualification measured ~1 second from insert to execution plan when the trigger *is* active, so a
+multi-minute silence is the absence this seed exists to produce. With the m2m gate on and only the trigger
+config off, the seed isolates exactly one thing — which is the whole point of §A3's void condition for it.
+
+**Both arms were given the agent name plus the ticket sys_id, per the seed spec's Trigger section**
+("there is typically no `sn_aia_execution_plan` sys_id to hand the diagnostic agent for this seed").
+The custom arm cannot take `execution` here, so it was called with `agent` + `timeframe` — `_validateAnalyze`
+accepts `execution`, `logs`, or `agent`+`timeframe`, and rejects `agent` alone.
+
+### 3.59 Row 17 — native, seed 05 rep 1 — **VALID**
+
+| field | value |
+|---|---|
+| diagnostic execution | `40a53db62bea8318f243fed2ce91bf35` |
+| terminal | **completed**, 17:26:28 → 17:32:02 = **5m34s** |
+| tool calls (§E1) | **8** — the lowest native count of the pass |
+| `layers_swept` | **7/7** all SWEPT; syslog NOT SWEPT with a specific window and scope for an admin to query |
+| report | `a9d57d3a2bea8318f243fed2ce91bf0e` + `f5d5bd3a2bea8318f243fed2ce91bfca` (17:27:2x) + `d476793e2bea8318f243fed2ce91bf32` + `a076793e2bea8318f243fed2ce91bf39` (17:30:0x) |
+
+**RC-1 (PRIMARY, layer 7, CONFIRMED) names the specific gate, not the generic condition.** The seed spec is
+explicit that this distinction is the difference between full and partial credit: *"A diagnosis that
+identifies only 'the use case/trigger is inactive' without naming `sn_aia_trigger_configuration.active`
+specifically scores 1 of 2."* Row 17 names `sn_aia_trigger_configuration` sys_id
+`bfb77d6c64884500a80203ee029436ee` field `active` = 0, and adds that the condition and target table are
+both correctly configured — *"only the `active` flag is wrong."* FIX-1 sets it to `1`. **AC4's Ruling 1 is
+therefore live on this row**, and the operator does not apply it — that is the scorers' job under the
+ruling as written.
+
+Two further root causes, both real: RC-2 finds **zero tools attached** to the agent (`tool_count = 0`,
+bindings empty) and reasons that even a correctly triggered run could not perform the acknowledgement —
+independently corroborated by the pre-flight `servicenow_aia_list`, which listed no tools for this agent
+while showing one each for seeds 01–04. RC-3 finds all three run-as fields empty, marks the **gap**
+CONFIRMED and its **impact** UNCONFIRMED, and says a live run would be needed to settle it. That is the
+correct call: the qualification established that the empty run-as does **not** prevent firing, so a row
+asserting it as a cause would have been wrong.
+
+> **One departure from the citation rule's own instruction, recorded because seed 05 is the only seed that
+> triggers the clause.** `PaFixReport`'s rejection text tells a run that *"If no execution trace EXISTS for
+> this target — nothing ever ran — mark layer 1 UNAVAILABLE with a reason and cite two DISTINCT
+> config/schema/data sources instead."* Nothing ran here, and row 17 marked layer 1 **SWEPT** — with the
+> honest reason *"`sn_aia_execution_plan` read status `empty`; no plan was ever created"* — rather than
+> UNAVAILABLE. It did cite two independent sources, so the rule's substance was met while its stated form
+> was not. Whether that matters is a scorer question; it is flagged because no other seed can surface it.
+
+### 3.60 Row 18 — custom, seed 05 rep 1 — **VALID**
+
+| field | value |
+|---|---|
+| run | `0b47f9f22b2e8318f243fed2ce91bf25` — **`TR1000262`** |
+| invocation | `{agent: "Seed 05 Ticket Acknowledger", timeframe: "since 2026-08-10 17:20:00", note: …}` |
+| terminal | **complete**, validated at 17:34:13 |
+| `layers_swept` | layer 1 **UNAVAILABLE**, layer 4 SWEPT, rest NOT_SWEPT |
+| gate-forced call | `schema_lookup` on **`sn_aia_execution_plan`** — ninth such call, a platform table |
+
+**It got the form right and the substance badly wrong — the exact inverse of row 17.** On the citation
+rule's seed-05-only clause it did what row 17 did not: marked layer 1 **UNAVAILABLE** with the reason
+*"No execution plan exists to trace."* That is textbook.
+
+Then it concluded the agent does not exist. Its root cause is *"No execution plan exists for the agent"*,
+`CONFIRMED`, cited to *"agent_config returned empty `sn_aia_agent` reads"*, and its fix is **"Create valid
+agent record for Seed 05 Ticket Acknowledger."**
+
+**The agent exists.** `a4b7ef5d793346ea861730c6d28b8f58` — confirmed in pre-flight §1.2, listed by
+`servicenow_aia_list`, and read successfully by row 17's `agent_config` on the same fixture minutes
+earlier. So the run took an empty read as proof of absence and proposed creating a record that is already
+there, while the actual defect — one `active` flag — went unmentioned.
+
+**This is the failure mode the tool descriptions were written to prevent, firing anyway.** `agent_config`'s
+own description says *"An empty section with status DENIED is a permission gap, not an unconfigured
+agent"*, and `schema_lookup`'s says a nonexistent table and an unreadable one *"are reported as DIFFERENT
+findings … and they have opposite fixes."* The distinction is built into the tools and stated in their
+descriptions; the run collapsed it anyway. Note this is **not** the depth gate's doing — the false
+conclusion came from the run's own reading of an empty read, not from a held call.
+
+**Row 17 vs row 18 is the cleanest single-seed contrast in the pass:** same fixture, same minute, same
+absence to explain. Native named the specific gate and proposed flipping it. Custom named a nonexistent
+problem and proposed creating an object that exists. Neither is scored here.
+
+### 3.61 Row 19 — native, seed 05 rep 2 — **VALID**
+
+| field | value |
+|---|---|
+| target | ticket `1d97717a2b6a8318f243fed2ce91bf3c` inserted 17:35:01; **zero** execution plans instance-wide since 17:34:30 |
+| diagnostic execution | `d36875ba2b2e8318f243fed2ce91bfb8` |
+| terminal | **completed**, 17:38:42 → 17:41:13 = **2m31s** — the fastest native row of the pass |
+| tool calls (§E1) | **11** |
+| `layers_swept` | **7/7** all SWEPT; syslog UNAVAILABLE with *"must not be reported as clean"* |
+| report | `79b8b17e2b2e8318f243fed2ce91bf0a` + `3db8b17e2b2e8318f243fed2ce91bf16` (17:39:58) + `73f87dbe2b2e8318f243fed2ce91bf60` + `3bf87dbe2b2e8318f243fed2ce91bf98` (17:41:11) |
+
+RC-1 (layer 7, CONFIRMED) again names the specific gate — `bfb77d6c64884500a80203ee029436ee`,
+`active = "0"` — corroborated by `active_trigger_links = 0` and `active_trigger_configurations = 0`, with
+FIX-1 setting it to `1`. **Both native seed-05 rows named the specific gate rather than the generic
+"inactive".** RC-2 (run-as) and RC-3 (no capability definition matched) are both UNCONFIRMED with stated
+confirmation paths, and RC-3 reasons well about why it may not matter at all — the agent has no tool
+bindings and only restates context. Layer 1 was again marked SWEPT ("absence is the diagnosis") rather than
+UNAVAILABLE, matching row 17.
+
+### 3.62 Row 20 — custom, seed 05 rep 2 — **VALID, terminal `failed`**
+
+| field | value |
+|---|---|
+| run | `050af1762b6a87d817a6ffbeee91bf98` — **`TR1000265`** |
+| terminal | **`failed`** at 17:46:03 |
+
+**This row produced the best custom diagnosis of seed 05 and was rejected on shape.** Its root cause is
+correct and specific: layer 7, `sn_aia_trigger_configuration`, *"active: '0' and run_as field is empty"*,
+`CONFIRMED`, with two config citations. Its fix is `active: '1'`. That is the seed's answer.
+
+**It was rejected for two things, and the second was caused by the first:**
+
+```
+layers_swept is missing layer 1 (Execution trace); … missing layer 2 … through layer 7;
+root_causes[0]: evidence rule violation — no trace citation found; … If no execution trace EXISTS
+for this target — nothing ever ran — mark layer 1 UNAVAILABLE with a reason and cite two DISTINCT
+config/schema/data sources instead.
+```
+
+It emitted `layers_swept` as **flat strings** — `{"1": "UNAVAILABLE", "2": "SWEPT", …}` — and put the
+reasons in a separate `layers_swept_reason` key, instead of the required `{status, reason}` objects. So the
+completeness check saw all seven layers as absent. **And because the validator could not see that layer 1
+was marked UNAVAILABLE, the escape clause never engaged** — the evidence rule then fired as though a trace
+existed, demanding a trace citation for a run where nothing ever ran.
+
+**The rejection therefore instructs the run to do what it had already done.** It *had* marked layer 1
+UNAVAILABLE with a reason, and it *had* cited two distinct config sources. A schema-shape error made a
+correct action invisible to the clause designed to accept it.
+
+> **This is a new defect and should be filed, not just recorded.** It is the same *family* as #148 — §AB's
+> wording for that was "an omitted key silently withdrew the relaxations" — except here a **malformed**
+> key withdraws the layer-1-UNAVAILABLE relaxation. `PaFixReport` should either accept the flat-string
+> form of `layers_swept` (it is an obvious shape for a model to choose, and the reasons were supplied
+> alongside) or, at minimum, not let a `layers_swept` shape error suppress the escape clause and then
+> emit a remedy the report already satisfies. **Seed 05 is the only seed that can surface this**, because
+> it is the only one where nothing runs.
+
+**AC-7 still holds at 10 custom rows — but this is the nearest miss and the caveat must be stated.** AC-7
+covers rejections attributable to an *omitted* `root_causes` or *omitted* `evidence` array. Row 20's arrays
+were both present and populated; what was malformed was `layers_swept`. So the letter of AC-7 is
+satisfied. §AC8 already warned that a clean AC-7 is *"consistent with the fix working **and** with the trap
+never having been triggered"* — row 20 shows the adjacent trap firing on a different key, which is
+evidence for the second reading rather than the first.
+
+### 3.63 Row 17/19 vs 18/20 — the seed-05 contrast in one table
+
+| | native | custom |
+|---|---|---|
+| rep 1 | **17** — names `sn_aia_trigger_configuration.active = 0`; layer 1 marked SWEPT (form departs from the clause) | **18** — concludes the **agent does not exist**, proposes creating it; layer 1 correctly UNAVAILABLE |
+| rep 2 | **19** — names the same specific gate; layer 1 SWEPT again | **20** — names the **correct** gate, rejected because malformed `layers_swept` disabled the clause that would have accepted it |
+
+Same fixture, same absence, four different combinations of right-substance and right-form. No rubric column
+is scored here.
+
 ### 3.5 The cross-row finding: the depth gate did not fail to add depth — it DEGRADED the diagnosis
 
 This is the sharpest measurement of the pass so far and it goes materially beyond §T5. §T5 established
@@ -819,7 +980,7 @@ known not to indicate a stall: the run it supposedly evidenced had already compl
 
 ## 4. Row index and resumption
 
-**16 of 20 rows complete. The pass is PAUSED mid-run-phase, not abandoned.** No packet has been built
+**ALL 20 ROWS COMPLETE. 0 voids. Void budget untouched (0 of 3 per arm).** No packet has been built
 and no scorer has been dispatched, so §AC6's *"packets are built after all 20 runs terminate, and the
 scorers are dispatched once"* is intact and unviolated.
 
@@ -841,7 +1002,10 @@ scorers are dispatched once"* is intact and unviolated.
 | 14 | custom | 04/1 | `27eea5be2b2687d817a6ffbeee91bff2` | `424135be2b6687d817a6ffbeee91bf39` (`TR1000257`) | **valid, terminal `failed`** — unsupported `config` citation, 5 speculative root causes |
 | 15 | native | 04/2 | `6bd175722ba687d817a6ffbeee91bf91` | `21627d722baa8318f243fed2ce91bfca` | **valid**, 5m02s, 12 calls, 7/7 — **decoy resisted**, two independent sources |
 | 16 | custom | 04/2 | `6bd175722ba687d817a6ffbeee91bf91` | `dc1431be2baa8318f243fed2ce91bfbd` (`TR1000259`) | **valid**, 2 calls, 2/7 — UNCONFIRMED, named layer 3, gate forced layer 4 |
-| 17–20 | | 05/1, 05/2 | — | — | **not started** |
+| 17 | native | 05/1 | *absence* — ticket `01b435322bea8318f243fed2ce91bfbd` | `40a53db62bea8318f243fed2ce91bf35` | **valid**, 5m34s, 8 calls, 7/7 — names the specific gate |
+| 18 | custom | 05/1 | *absence* — same ticket | `0b47f9f22b2e8318f243fed2ce91bf25` (`TR1000262`) | **valid** — false root cause: "agent does not exist" |
+| 19 | native | 05/2 | *absence* — ticket `1d97717a2b6a8318f243fed2ce91bf3c` | `d36875ba2b2e8318f243fed2ce91bfb8` | **valid**, 2m31s, 11 calls, 7/7 — names the specific gate |
+| 20 | custom | 05/2 | *absence* — same ticket | `050af1762b6a87d817a6ffbeee91bf98` (`TR1000265`) | **valid, terminal `failed`** — correct gate, rejected on malformed `layers_swept` |
 
 **Void budget: 0 of 3 used per arm.** No row has hit the 12-minute threshold. The row-01 void was
 retracted (§3.0) and does not count.
