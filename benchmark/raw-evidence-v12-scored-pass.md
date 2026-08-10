@@ -99,6 +99,7 @@ never from `aia_logs`.
 | seed | rep | execution plan sys_id | trigger | plan state |
 |---|---|---|---|---|
 | 01 | 1 | `a860d5322b6e4318f243fed2ce91bf93` | fresh ticket `3b4051322b6e4318f243fed2ce91bf73` ("Core banking API returns 503 for every teller terminal nationwide, no workaround"), `priority` empty at insert | completed, 67s, 1 tool call (`set_ticket_priority` **OK**, 286ms) — and `priority` still **empty** afterwards: the seeded defect, invisible from both the plan header and the tool's own status |
+| 01 | 2 | `396a15be2b6e47d817a6ffbeee91bf0a` | fresh ticket `c46a19ba2b228318f243fed2ce91bfca` ("Warehouse scanning system offline across all distribution centres, shipments halted"), `priority` empty at insert | completed 15:27:32 → 15:28:49 = **77s**, 1 tool call `378a19fe2b6e47d817a6ffbeee91bf93` — `priority` still **empty**: defect intact |
 
 **Fresh bench ticket per rep** for seeds 01 and 04, so rep 1's agent writes cannot contaminate rep 2
 (v9 §2's rule). Seed 03 needs no ticket — its Setup says to add none.
@@ -125,17 +126,22 @@ the failure mode is reusable and the next operator will meet it.
 
 **What is stale and what is not:**
 
-| read | behaviour observed |
-|---|---|
-| `servicenow_query` on `sn_aia_execution_plan.state` | **stale for 30+ min** — returned `in_progress` for a plan that had reached `completed` |
-| `servicenow_query` on `sn_aia_message` (row count) | **stale** — returned 3 rows for a plan that had 4+, missing the Fix Report itself |
-| `servicenow_aia_logs` | **stale by minutes** (already noted at §1.3) |
-| `servicenow_aia_trace` | **stale** — task/message timestamps clustered minutes behind actual progress |
-| **`sys_updated_on` on the record** | **fresh and authoritative** — read `2026-08-10 14:49:48`, the true completion moment |
-| **`sn_aia_tools_execution` row count** | **fresh** — 15 rows, matching the completed run |
+| read | behaviour observed | established? |
+|---|---|---|
+| `sn_aia_execution_plan.state` | read **`in_progress`** for row 01 at a moment bounded above by 15:18:34, when the plan had reached `completed` at **14:49:48** — wrong by **≥28 min** | **yes** |
+| `servicenow_aia_logs` | reported `State: In progress` for the smoke-gate execution while `aia_trace` reported `Completed` with a duration (§1.3) | **yes** |
+| `servicenow_aia_trace` | task and message timestamps clustered behind observed progress; tool-call count advanced 2→5 between reads whose newest message timestamp did not move | **yes** |
+| **`sys_updated_on`** | moved to the true completion moment on all three native runs | **yes — use this** |
+| **`sn_aia_tools_execution` row count** | 15 rows, matching the completed run | **yes — use this** |
+| ~~`sn_aia_message` under-reporting~~ | **RETRACTED.** An earlier draft claimed this table returned 3 rows for a plan that had more, hiding the Fix Report. It did not: the operator had passed **`limit: 3`**, and the report messages may simply not have existed yet at that moment. The query returned exactly what it was asked for | **no — operator error** |
+
+**Cause not established, and deliberately not asserted.** Whether `state` was served from a cache or
+the column itself is written late is **unknown** — nothing here distinguishes them, and calling it a
+"stale read" would be a guess dressed as a finding. What is established is the *operational* fact,
+which is all the protocol needs.
 
 **The rule this pass adopts, and any later pass should keep: never conclude a run has stalled from a
-`state` read. Terminal state is established by `sys_updated_on` advancing and by a terminal message
+`state` read. Terminal state is established by `sys_updated_on` advancing and a terminal Fix Report
 existing, cross-checked against the tool-call row count.** A `state` value alone cannot distinguish
 "still running" from "finished half an hour ago".
 
@@ -157,22 +163,35 @@ phantom voids can therefore terminate a pre-registered pass without a single rea
 **Native was never degraded.** Row 01 completed in 4m24s; the smoke gate completed in 197s 10 minutes
 earlier. Both are within the v9 range (2m47s–5m38s).
 
-**But genuine hangs DO occur, and the fresh signal separates them from stale reads.** The health-probe
-run fired at 15:18:34 still read `sys_updated_on = 2026-08-10 15:18:35` — its creation moment,
-**unadvanced after 20+ minutes** — with 5 tool calls and no terminal message. Compare row 01, whose
-`sys_updated_on` moved to 14:49:48 on completion. So on this instance, on this day, a native run
-either finishes inside ~4½ minutes or hangs indefinitely; there is no observed middle.
+**No hang has been observed on this instance. Every native run completed.**
+
+| native run | created | completed (`sys_updated_on`) | duration |
+|---|---|---|---|
+| smoke gate `06de0d76…` | 14:37:02 | 14:40:18 | **3m16s** |
+| row 01 `24c05d36…` | 14:45:24 | 14:49:48 | **4m24s** |
+| health probe `5e58d9fe…` | 15:18:34 | 15:24:10 | **5m36s** |
+
+All three sit inside the v9 range (2m47s–5m38s), the slowest landing 2s under v9's own maximum.
+
+> **A second operator error, corrected here rather than carried.** An earlier draft of this section
+> asserted that the health probe "sat unadvanced 20+ minutes" and concluded that *"genuine hangs DO
+> occur"*. **Both were wrong**, and from the same cause as the false void: the operator estimated
+> elapsed wall-clock from its own turn count instead of reading instance timestamps. The probe was
+> ~6 minutes old, not 20+, and it completed normally at 15:24:10. Instance "now" was pinned at
+> `MAX(sys_created_on)` on `x_snc_troubleshoot_run` = **15:24:16**, which is the cheap way to do this
+> and should have been the first move. **Elapsed time on this pass is measured from instance
+> timestamps only.**
 
 **The void threshold this pass adopts, stated before it is applied to any scored row:**
 
-> A native row is declared **void under §A3** when **`sys_updated_on` has not advanced for 12
-> consecutive minutes AND no terminal Fix Report message exists.** 12 minutes is ~2× the slowest
-> native run on record (v9's 5m38s) and ~2.7× this pass's own row 01.
+> A row is declared **void under §A3** when **`sys_updated_on` has not advanced for 12 consecutive
+> minutes of INSTANCE time AND no terminal Fix Report exists.** 12 minutes is ~2.1× the slowest
+> native run yet observed (5m36s here, 5m38s in v9).
 
 Fixing the number in advance matters for the same reason §AC2 fixed the 8-valid-row floor in advance:
-a patience threshold chosen *after* seeing which arm is hanging is a degree of freedom, not a
-criterion. **The threshold is symmetric across arms** — it is a property of the instance, not of
-either harness — and it is applied identically to native and custom rows.
+a patience threshold chosen *after* seeing which arm is slow is a degree of freedom, not a criterion.
+**The threshold is symmetric across arms** — it is a property of the instance, not of either harness.
+It has **not** been reached by any run in this pass.
 
 ### 3.1 Row 01 — native, seed 01 rep 1 — **VALID**
 
@@ -203,6 +222,129 @@ known Rule-#42-adjacent gap, correctly reported as a gap rather than as a clean 
 > `sn_aia_message` rows**. The packet must carry the concatenation, in `message_sequence` order. Taking
 > only the newest agent message yields the tail (`FIX-2` onward) and silently drops the failure
 > summary, every root cause and FIX-1.
+
+### 3.2 Row 02 — custom, seed 01 rep 1 — **VALID**
+
+| field | value |
+|---|---|
+| arm / seed / rep | custom / 01 / 1 |
+| target execution | `a860d5322b6e4318f243fed2ce91bf93` (**same** seeded execution as row 01) |
+| run | `4aa911b62b228318f243fed2ce91bf39` — **`TR1000245`** |
+| terminal | **complete**, `fix_report validated` at seq 8 |
+| duration | created 15:24:16 → `sys_updated_on` 15:24:41 = **25s** (v9 custom range: 19–26s) |
+| transcript | 8 entries |
+| tool calls | **2** — `agent_trace`, `query_table` |
+| `layers_swept` (mechanical §E2) | **2/7** (L1, L5) |
+| HOLDs | **1** |
+| report | `x_snc_troubleshoot_run.fix_report` on the run row above (structured JSON, single field — unlike native's split messages) |
+
+**The HOLD cited `layer 5 (declared)`, not `layer 4 (ranked)` — the `declared` path has fired for the
+first time.** §T2's prediction T9 and v9 §3.2 both recorded the same sentence: *"every one of the six
+cited 'layer 4 (ranked)'. The `declared` path fired zero times."* It is no longer zero. The custom
+smoke run earlier today still cited `layer 4 (ranked)`, so **both** paths are now observed live on the
+same build within one hour. Recorded as a measurement; what it means for §AA3's residue is a §AD
+question, not this file's.
+
+**This row is the strongest instance yet of the §T5 mechanism, and it goes further than §T5 did.**
+Held for depth, the run answered with `query_table` on table **`task`** — querying
+`sys_id=3b4051322b6e4318f243fed2ce91bf73`, the bench ticket, against the **wrong table**. The ticket
+lives in `x_snc_tsbench_ticket`. `PaToolQueryTable` behaved correctly and honestly: `task` exists,
+the GlideRecordSecure read returned nothing, the unfiltered COUNT also returned nothing, so it
+reported `verdict: "genuinely_empty"` with the explicit note *"This is a DATA finding: the records the
+agent needed are not there … so this is not a lookup mistake."* It also warned that
+`priority_value` does not exist on `task`.
+
+The model then read that honest emptiness as the defect. Its root cause is **layer 5**, *"The task
+record does not exist in the system"*, `confidence: CONFIRMED`, and its fix is **"Create the task
+record with the specified sys_id"** — for a record that exists, in another table, and whose real
+defect (an Integer column silently discarding the string `"critical"`) row 01 identified from the same
+trace.
+
+**So the depth gate did not merely fail to add depth — on this row it manufactured a false positive.**
+§T5 established that the gate counts a layer-4 tool being *called* rather than *reached*; this row
+shows the held call actively producing a confident wrong answer that the run would not otherwise have
+had. The tool was not wrong, the gate was not bypassed, and the report is internally consistent. That
+combination is what makes it dangerous, and it is the sharpest available illustration of §AB's
+"steered into a trap" reading.
+
+*(No rubric column is scored here. Scoring is the blind scorers' job under §AC7 and the operator does
+not pre-empt it — this section records only what the run did.)*
+
+### 3.3 Row 03 — native, seed 01 rep 2 — **VALID**
+
+| field | value |
+|---|---|
+| arm / seed / rep | native / 01 / 2 |
+| target execution | `396a15be2b6e47d817a6ffbeee91bf0a` |
+| diagnostic execution | `cb0b15be2b228318f243fed2ce91bf21` |
+| terminal | **completed**, 15:30:20 → 15:35:28 = **5m08s** |
+| tool calls (audit-derived §E1) | **16** |
+| `layers_swept` (mechanical §E2) | **7/7**; the report itself marks all seven **SWEPT** and platform logs **UNAVAILABLE** |
+| report | **one** message — `d93c9db62b628318f243fed2ce91bfb2` (15:35:25) |
+
+**Diagnosis:** ROOT CAUSE 1 (PRIMARY, CONFIRMED) is the seed's defect, attributed across layers 3+4+5
+with **four** independent citations — the tool script's `gr.setValue('priority', inputs.priority)` with
+no conversion, `sys_dictionary` showing `type = Integer`, the tool response `priority_stored: null`,
+and `query_table` showing the column blank after the run. FIX 1 supplies a complete rewritten IIFE
+with a word→integer map. Two secondary causes: a first-turn ReAct parser `TypeError` (CONFIRMED for
+occurrence, cause UNCONFIRMED — correctly attributed to the unavailable syslog rather than guessed)
+and latency/instruction bloat (CONFIRMED for latency, attribution explicitly UNCONFIRMED because the
+flags carry `corroborated = false`).
+
+> **Packet rule, corrected and now generalised.** Row 01's report spanned **two** `sn_aia_message`
+> rows; row 03's is **one**. The split is variable and cannot be assumed either way. **The packet must
+> carry every `role=agent` message from after the final tool call through the end of the run,
+> concatenated in creation order.** Note also that `message_sequence` is **populated on only the first
+> agent message** and empty on the rest, so ordering must use `sys_created_on`, not `message_sequence`
+> — the opposite of what §3.1's first draft of this note said.
+
+### 3.4 Row 04 — custom, seed 01 rep 2 — **VALID**
+
+| field | value |
+|---|---|
+| arm / seed / rep | custom / 01 / 2 |
+| target execution | `396a15be2b6e47d817a6ffbeee91bf0a` (same as row 03) |
+| run | `238cd1ba2bae47d817a6ffbeee91bffa` — **`TR1000247`** |
+| terminal | **complete**, `fix_report validated` at seq 8; 15:37:04 → 15:37:15 |
+| tool calls | **2** — `agent_trace`, `query_table` |
+| `layers_swept` (mechanical §E2) | **2/7** (L1, L5) |
+| HOLDs | **1**, citing **`layer 5 (declared)`** |
+
+**An exact replication of row 02.** Same HOLD wording, same `declared` path, same answer — `query_table`
+on table **`task`** with the bench ticket's sys_id — same honest `genuinely_empty`, same false root
+cause at layer 5 (*"The ticket record required by the agent does not exist"*, `CONFIRMED`), same fix
+(*"Create the ticket record with valid data"*). Two of two custom rows on seed 01.
+
+### 3.5 The cross-row finding: the depth gate did not fail to add depth — it DEGRADED the diagnosis
+
+This is the sharpest measurement of the pass so far and it goes materially beyond §T5. §T5 established
+that the release counts a layer-4 tool being *called* rather than *reached* — a gate that adds nothing.
+Rows 02 and 04 show something worse, and they show it twice:
+
+**In both rows the pre-HOLD draft was closer to correct than the post-HOLD final report.**
+
+| row | seq 3 — the draft the gate REFUSED | seq 7 — the report the gate ACCEPTED |
+|---|---|---|
+| 02 | *"…the tool call to set the ticket priority to 'cri…"* | *"…the target **task record does not exist** in the system"* |
+| 04 | *"…However, the **`priority_stored`** …"* | *"…the target **ticket record** (`c46a19ba…`) **does not exist**"* |
+
+Row 04's refused draft had reached `priority_stored` — the exact null read-back that both native rows
+(01 and 03) built their CONFIRMED root cause on. The HOLD sent the model looking for a layer it had
+declared unswept; it queried the wrong table; `PaToolQueryTable` correctly answered
+`genuinely_empty`; and the model **replaced a partially-correct diagnosis with a confidently wrong
+one**. The gate then released, because a `query_table` call had occurred.
+
+**Every component behaved as designed.** The tool was right and even warned about a nonexistent field.
+The gate enforced exactly the rule it encodes. The validator accepted a well-formed report. Nothing
+errored. **The harm is emergent from the composition, which is why no single component's tests could
+catch it** — and it is the mechanism §AB was circling when it concluded the return *"steered them into
+a trap"*.
+
+**Stated limits, so this is not over-read.** Two rows, one seed, one instance, one day. It says nothing
+yet about seeds 02–05, and it is **not** a scored result — `passes_gate` for these rows is the blind
+scorers' to determine under §AC7, and the operator has deliberately not scored them. What it does
+establish is a **mechanism**, observed twice, with the refused draft preserved verbatim in the
+transcript both times. Whether it generalises is exactly what rows 05–20 will show.
 
 <!-- superseded void record, retained deliberately — see §3.0 -->
 <details>
@@ -251,3 +393,84 @@ evidence of provider failure.
 known not to indicate a stall: the run it supposedly evidenced had already completed.)*
 
 </details>
+
+---
+
+## 4. Row index and resumption
+
+**4 of 20 rows complete. The pass is PAUSED mid-run-phase, not abandoned.** No packet has been built
+and no scorer has been dispatched, so §AC6's *"packets are built after all 20 runs terminate, and the
+scorers are dispatched once"* is intact and unviolated.
+
+| row | arm | seed/rep | target execution | run | status |
+|---|---|---|---|---|---|
+| 01 | native | 01/1 | `a860d5322b6e4318f243fed2ce91bf93` | `24c05d362baa47d817a6ffbeee91bfcd` | **valid**, 4m24s, 15 calls, 7/7 |
+| 02 | custom | 01/1 | `a860d5322b6e4318f243fed2ce91bf93` | `4aa911b62b228318f243fed2ce91bf39` (`TR1000245`) | **valid**, 25s, 2 calls, 2/7 |
+| 03 | native | 01/2 | `396a15be2b6e47d817a6ffbeee91bf0a` | `cb0b15be2b228318f243fed2ce91bf21` | **valid**, 5m08s, 16 calls, 7/7 |
+| 04 | custom | 01/2 | `396a15be2b6e47d817a6ffbeee91bf0a` | `238cd1ba2bae47d817a6ffbeee91bffa` (`TR1000247`) | **valid**, ~11s, 2 calls, 2/7 |
+| 05–08 | | 02/1, 02/2 | — | — | **not started** |
+| 09–12 | | 03/1, 03/2 | — | — | **not started** |
+| 13–16 | | 04/1, 04/2 | — | — | **not started** |
+| 17–20 | | 05/1, 05/2 | — | — | **not started** |
+
+**Void budget: 0 of 3 used per arm.** No row has hit the 12-minute threshold. The row-01 void was
+retracted (§3.0) and does not count.
+
+### 4.1 The per-seed/rep recipe, as actually executed
+
+1. **Seeds 01 and 04 only** — insert a fresh `x_snc_tsbench_ticket` with a non-empty
+   `short_description` and **no `priority`**; record the sys_id. Seed 03 takes no rows (its emptiness
+   is the defect). Seed 02 needs no ticket.
+2. **Fire the seed agent** with `servicenow_aia_execute`, `waitForCompletion: false`. It returns a
+   Session ID but **not** the plan sys_id — recover the plan with
+   `sn_aia_execution_plan^sys_created_on>=javascript:gs.minutesAgoStart(4)`, newest first.
+   Trigger phrasings are in each seed spec's "Trigger" section.
+3. **Confirm the seeded defect** before diagnosing (e.g. seeds 01/04: the ticket's `priority` is still
+   empty and the tool call reported `Success`). A seed not in its spec's state makes both its rows void
+   under §A3.
+4. **Row N (native)** — `servicenow_aia_execute` on **`Agent Doctor`** with the v9 standard objective,
+   verbatim so it stays comparable:
+   `Diagnose the failing AI Agent execution with plan sys_id <PLAN>. Sweep all seven layers and produce a Fix Report with root causes, evidence citations, and proposed fixes.`
+5. **Row N+1 (custom)** — `POST /api/x_snc_troubleshoot/v1/troubleshooter/analyze` with
+   `{"execution": "<PLAN>"}`, then `GET /runs/<run_id>` for the transcript and `fix_report`.
+6. **Seed 05 has no execution plan** — its defect is the *absence* of one. Insert a ticket, confirm
+   nothing fires, then give each arm the **agent name** plus the ticket sys_id. For the custom arm that
+   means `{"agent": "...", "timeframe": "..."}` — `_validateAnalyze` requires `execution`, `logs`, or
+   `agent`+`timeframe`, and `agent` alone is rejected.
+
+### 4.2 Operating rules this pass learned the hard way — carry them forward
+
+- **Never conclude a stall from a `state` read.** Use `sys_updated_on` + a terminal report, cross-checked
+  against the `sn_aia_tools_execution` row count (§3.0).
+- **Get instance "now" from `GET /troubleshooter/status`** → `stuck_runs.cutoff`, which is exactly
+  `now − 15 min` (`STUCK_RUN_BUDGET_MS = 900000`). Do **not** estimate elapsed time any other way; two
+  separate false conclusions in this pass came from doing so.
+- **A background waiter only helps if the turn then ENDS.** Firing `sleep` and continuing to work in the
+  same turn advances no wall-clock at all — this was the root cause of both timing errors.
+- **Native timings so far:** 3m16s, 4m24s, 5m08s, 5m36s. Budget ~5–6 min per native row, ~30s per custom row.
+- **`servicenow_aia_logs` is unreliable for state**; `aia_trace` lags too. Table reads on
+  `sn_aia_tools_execution` and `sys_updated_on` were always fresh.
+- **A bad field name returns `Access denied`, not a field error** — this bit three times here
+  (`sn_aia_message.content`/`.conversation`, `sn_aia_tools_execution.tool_name`). Retry without the
+  `fields` filter, or read the schema, before concluding an ACL problem.
+- **`sn_aia_trigger_configuration` is not queryable via `servicenow_query`/Table API on this instance**
+  even as admin — use `servicenow_aia_trigger_get`. (Curiously the app's own `/status` reports it `ok`,
+  so the app's scoped read path works where the operator's does not. Unexplained; not blocking.)
+
+### 4.3 What must happen before the first packet is handed to a scorer
+
+Unchanged from §AC7, and none of it has been started:
+
+1. Create `benchmark/scoring-v12/` **and** declare it in `test/scorerPacketBlindRule.test.js` in the
+   same change — `PACKET_SETS` entry with `dir: 'scoring-v12'`, `scanned: true`, a `why`, and a
+   **`packets:` count equal to the real number of `row-NN-*.md` files**; then extend the membership
+   literal `['scoring-v4', 'scoring-v9']`; then `npm test` green. The guard globs `^scoring-v\d+$`, so
+   the directory turning up undeclared makes the suite **red** — which is why it must not be created
+   early. (Navigate by test name; the disk-derived assertion sits just above the membership literal.)
+2. Each packet carries the rubric (§A/§A2/§A3), the **scorer-facing** seed spec with repository paths
+   redacted — never `seeds/history/*` — that row's report verbatim, and that row's audit-derived
+   measurements. Native reports must be the **concatenation of every `role=agent` message after the
+   final tool call, ordered by `sys_created_on`** (§3.3).
+3. Scorer topology is fixed: **independent agents, one per packet, redacted packets** (§AC7, on §O5's
+   ~2-row topology effect). One agent scoring many rows sequentially is not a substitute.
+4. This file, and any packet-build report, stay **outside** the scorer-facing channel.
