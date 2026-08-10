@@ -173,6 +173,14 @@ rather than inherit:
 3. **Operational** — re-read the m2m gate before the pass; wait on `trigger_flow` before any
    post-activation probe; decide whether to delete the three probe rows.
 4. **The blind-rule guard will not scan the new pass's packets until it is told to.**
+   *(Corrected 2026-08-10 in DECISION.md §AC7 — the sentence below about the suite staying green is
+   wrong. The `declares every committed packet set` test in `test/scorerPacketBlindRule.test.js`
+   compares `PACKET_SETS` against the directories on disk, so an undeclared `scoring-v<n>/` turns
+   the suite RED. The real hole is that `scanned` is consumed as
+   `PACKET_SETS.filter((s) => s.scanned)`, so a set declared `scanned: false` is accepted and never
+   scanned. §AC7 also lists the three edits a declaration actually needs — the entry with a matching
+   `packets:` count, the hardcoded membership literal in the same test, and a green `npm test`.
+   Left in place rather than rewritten, per this file's status as a record.)*
    `test/scorerPacketBlindRule.test.js` scans a **hand-maintained `PACKET_SETS` declaration**
    (`scoring-v4`, `scanned: false`; `scoring-v9`, `scanned: true`) — it does **not** auto-discover
    scoring directories. A new `scoring-v<n>/` therefore starts life unscanned, and the suite stays

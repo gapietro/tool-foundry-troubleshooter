@@ -4167,3 +4167,293 @@ Suite at the close of this section: **1406 passed, 28 suites** (1390 on `main` p
 #148 tests). `now-sdk build` clean on SDK 4.9.2. Production code WAS touched — `src/server/PaFixReport.js`
 — which makes this the first section since §Z to carry a code change, and the change is unverified
 against a live run by the project's own standard.
+
+---
+
+## AC. Pre-registration — the v12 scored pass (`2026.08.1001`, #151)
+
+**Written and committed before a single run fired. §A through §AB are unmodified** — `git log -p
+benchmark/DECISION.md` is the check, in the form §W and §Z both used. **This section claims no
+result.** It fixes a seed set, a size, three rulings, nine predictions and a stopping rule, and it
+does so while no row of this pass exists.
+
+It discharges §Z6's open item — *"The next scored pass is unblocked. It is not scheduled, sized or
+pre-registered by this section"* — and §AB6's added requirement that the pass state its build
+explicitly rather than inherit it. The seed qualification it depends on is
+`benchmark/raw-evidence-seed-qualification-02-05.md`, committed at `84ae0f0`, ahead of this section
+and for this reason.
+
+### AC1. What this pass decides, and what it does not
+
+**Decides:** the Phase 1b milestone — *"deep diagnosis passes the same seeded-failure benchmark"*
+(PRD, quoted at §G) — measured as both arms' `passes_gate` proportion under §A2, on the #148-fixed
+build, across all five seeds for the first time since the v4 pass (§O).
+
+**Does not decide:**
+
+- **`MAX_EVIDENCE_RETURNS`.** Stays `0` for every run. §W6 was applied at §X and #81 is done;
+  re-opening it inside a scored pass would confound the depth mechanism with the arm comparison.
+- **`REQUIRE_RETRIEVAL_TO_RELEASE`.** Stays `false` per §Y6, for the same reason and on §W1's
+  precedent — the two switches fire on opposite sides of validation.
+- **Whether §A2.1's clauses are the right clauses.** §Z5 already ruled that a recompute cannot
+  establish that, and neither can a fresh pass. Row 10's open case — a target identified by kind
+  rather than by name — is **still unresolved** and this section does not resolve it. If it recurs,
+  it is recorded as recurring.
+- **Anything about the seed-05 execution-layer defect** found at qualification §3.3. AC4's ruling
+  scores *through* it under a stated convention; that is a scoring decision recorded in advance, not
+  a repair, and not a finding about the fixture's future.
+
+**The build under test is `2026.08.1001`, and it must carry #148's fix.** Verified by probe, not by
+the version string and not by `sys_updated_on` — §W7's rule, and §AB's fix is precisely the class of
+change a version string cannot evidence.
+
+### AC2. Shape and sizing
+
+**5 seeds × 2 reps × 2 arms = 20 runs, 10 valid rows per arm.** This is the v4 shape (§O1) and it
+is chosen for that reason: v4 is the only prior pass that ran all five seeds against both arms, so
+its rows are the closest thing this project has to a comparable baseline.
+
+**§A3.4's 8-valid-run floor is read PER ARM.** §T8 recorded the reading as contested — the clause is
+written about voids eroding a 10-row denominator, not about a pass designed with 6 rows per arm, and
+a permissive across-pass reading exists. **This section settles it for this pass, in the direction
+that binds harder, and it settles it before any row exists.** That ordering is the entire point: a
+floor consulted after the void count is known is a degree of freedom, not a criterion, and it is
+resolvable by someone who can already see which reading flatters which arm (§W5's standard, and the
+gap logged in `LEARNING.md` on 2026-08-09).
+
+**The floor counts valid rows at the close of the pass, not voids encountered along the way.** §A3
+requires voids to be re-run rather than absorbed, and a void that is successfully replaced costs the
+denominator nothing — `scorecard-template.md` §A3.4 bites only on voids that **cannot be made
+valid**. So the margin is: an arm may finish with up to **2 unrecoverable voids** (8 valid rows) and
+still be evaluable; a third unrecoverable void takes that arm below its floor. A pass that voids six
+rows and recovers all six has 10 valid rows per arm and is fully evaluable — it is a costly pass,
+not an under-powered one. AC6 states the cost stop separately, and AC-8 predicts on voids
+*encountered* for exactly this reason.
+
+**What 10 rows per arm buys, stated against this pass's own interest.** The gate is a binomial read
+against §A3.3's proportional bands, so its resolution is computable and it is not high:
+
+| true per-run pass rate | P(top band, ≥8/10) | P(bottom band, ≤4/10) |
+|---|---|---|
+| 0.25 | 0.04% | 92.2% |
+| 0.40 | 1.2% | 63.3% |
+| 0.50 | 5.5% | 37.7% |
+| 0.65 | 26.2% | 9.5% |
+| **0.80** | **67.8%** | 0.6% |
+| 0.90 | 93.0% | 0.01% |
+
+**A harness whose true pass rate is exactly the top band's own threshold lands in the top band only
+about two times in three.** That is inherent to reading a point threshold off ten runs and it is not
+a defect to be fixed by re-running — §W3 made the identical statement about `D = 12`, and §T9's
+*"Do not re-run this pass to get a firmer number"* still governs. The honest report for a result
+near a band edge is "not distinguishable from the boundary".
+
+**What this shape still is not: a rate.** §T8's limit is carried verbatim and unamended — twenty
+rows, five seeds, one instance, one day, one model, one app version; two reps per seed per arm
+measures a flip, not a frequency.
+
+### AC3. The seed set — five seeds, two of them carrying a stated condition
+
+All five seeds are in scope. Seeds 02 and 05 have been out of scope since §Q6 and were qualified at
+`84ae0f0`; the qualification is fixture state only and **claims nothing about either harness**.
+
+- **Seed 02 — qualified on construction.** Exactly one bound tool (`measure_request`), no
+  group/routing/assignment vocabulary in its description, guarded in-repo by
+  `test/seed02Construction.test.js`. Its 0/6 prior convergence is **filed as prediction AC-3 below**,
+  not treated as a defect to fix mid-pass.
+- **Seed 05 — qualified to fire.** The `sn_aia_trigger_agent_usecase_m2m` gate persists `active=true`;
+  the empty `run_as` does **not** prevent firing (measured: ~1 second from insert to execution plan);
+  the seeded `active=false` was restored and verified against four minutes of silence. The
+  execution-layer defect at qualification §3.3 is handled by AC4's ruling.
+
+**Operational conditions, all three carried from the qualification's §4 and all binding:**
+
+1. **Re-read the m2m gate before run 1** — the seed doc's rule is "do not assume the PATCH took",
+   and an intervening reinstall resets it. Re-read, do not re-apply blind.
+2. **The three probe rows are deleted before run 1, and the deletion is verified by re-query.**
+   `e24c49a22b2203d817a6ffbeee91bf16`, `2fac09262b2203d817a6ffbeee91bfa0`,
+   `f3ec4d662b2203d817a6ffbeee91bfd5`. Their `short_description` values name the seed-05
+   qualification, which is text a diagnostic run could read as a hint — that is a blind-rule leak of
+   the §O5 shape, and the cheapest moment to close it is before the pass, not by adjudicating it
+   afterwards. The seven pre-existing rows stay.
+3. **Any procedure that activates a trigger and then exercises it must wait for `trigger_flow` to be
+   populated and its `sys_hub_flow.active` to read `true` first.** Qualification §3.1 measured a void
+   probe caused by inserting four seconds ahead of the generated flow. This applies to no step of the
+   scored protocol as written — the seed stays inactive — and is recorded here so that a mid-pass
+   repair does not re-commit it.
+
+### AC4. The three rulings made in advance
+
+These exist because each is a decision someone would otherwise make with rows in hand.
+
+**Ruling 1 — seed 05 `fix_usable_unedited`.** A report that names the specific gate
+(`sn_aia_trigger_configuration.active = false`) and proposes activating it scores
+`fix_usable_unedited` = **1**, notwithstanding qualification §3.3's finding that activation alone
+does not restore the acknowledgement.
+
+*Rationale.* The column is read against the **seeded** defect. The run named the right gate and
+proposed the seed spec's own sanctioned fix; the execution-layer break — empty `objective`,
+`execution_mode` `interactive` against the use case's `autopilot` — is an unseeded second defect,
+discovered by an operator probe that deliberately left the seed's own state, and it is not
+detectable from any diagnosis of the seeded condition. Scoring it 0 would hold seed 05 to a standard
+no other seed faces, and would move both arms identically, buying nothing while spending the seed's
+value as a discriminator.
+
+*What it costs, stated plainly.* The pass will publish `fix_usable_unedited` = 1 for a fix that, run
+against this instance today, does not restore the behaviour. That is a real gap between the column's
+name and the column's meaning, and it is accepted here in exchange for the ruling being made blind.
+**This is a seed-05 clause for this pass. It does not amend §A2.1 and it does not generalise** — in
+particular it does not touch §A2's decoy constraint, which is about a fix aimed at the *wrong
+target*, whereas this fix is aimed at the right one. If `fix_target_correct` = 0, §A's constraint
+binds first and this ruling never arises.
+
+**Ruling 2 — the floor is per arm.** Stated at AC2. Recorded as a ruling as well as a size, because
+§T8 left it contested and a contested clause next to a pending measurement is a degree of freedom.
+
+**Ruling 3 — the milestone criterion.** The milestone is met iff the custom arm reaches §A3.3's
+**top band — `sum(passes_gate) / valid runs ≥ 80%`**. The alternative reading available in the record
+is *custom ≥ native*, and it is rejected here for a stated reason: it makes the milestone a function
+of native's intra-day drift, which §O measured as real, so a bad native day could carry the milestone
+without the custom harness improving at all. The band reading is fixed and does not move with the
+control. **Native's arm is reported beside it and is not part of the criterion.**
+
+### AC5. The predictions
+
+Filed here, before any run. Refutation criteria are stated for each; a prediction with no stated
+refutation is not one.
+
+| | Prediction | What refutes it |
+|---|---|---|
+| **AC-1** | Native's `sum(passes_gate)` **exceeds** custom's | Custom ≥ native |
+| **AC-2** | Custom scores `root_cause_layer_correct` = 0 on **≥ 8 of its 10 rows** — §T3's six-of-six standing on a larger and broader sample | ≤ 7 rows at 0 |
+| **AC-3** | Seed 02 — **all four** rows (2 native + 2 custom) score `root_cause_layer_correct` = 0, and ≥ 3 of the 4 reports contain an explicit "no failure observed" style conclusion | Any row scores 2, **or** ≤ 2 reports converge. Either half refutes it, and the first half is the one that would rule §O6's open question toward *shared blind spot* being wrong |
+| **AC-4** | Seed 05 — native passes the gate on **≥ 1 of 2** rows (Task 12: both 6/6); custom passes on **0 of 2** | Native 0 of 2, or custom ≥ 1 of 2. Ruling 1 applies to both arms identically |
+| **AC-5** | **≥ 14 of 20** rows produce an unambiguous `passes_gate` from the packet alone — the first test of §A2.1 and §Z's rubric repair, against the v9 baseline of 3 of 12 recorded at §T2's prediction T8. **"Unambiguous" means the scorer's packet-level `ambiguous` flag reads `no`** — the broad reading, counting ambiguity anywhere in the row. The narrower gate-only reading that §T2 also records (4 of 12 there) is **not** the one measured, and may not be substituted afterwards | ≤ 13 rows with `ambiguous = no`. This is the prediction most likely to fail and the most useful if it does |
+| **AC-6** | Custom's audit-derived sweep breadth is **at or below** native's on every row — §T2's prediction T9 held at 12 of 12 | Any custom row exceeds **either** of its seed-matched native rows |
+| **AC-7** | **0 of 10** custom rows are lost to #148's trap — no row terminates on a validator rejection attributable to an omitted `root_causes` or omitted `evidence` array | ≥ 1 such row. §AC8's third bullet states why a clean result here is weak evidence |
+| **AC-8** | **≤ 2 void rows encountered across the whole pass**, and every arm finishes with **10 valid rows** | ≥ 3 voids encountered, **or** any arm closing below 10 valid rows. Stated on voids *encountered* rather than surviving, because AC6 re-runs them: a pass that voids six rows and recovers all six is not the clean run this predicts |
+| **AC-9** | **The milestone is NOT met** under Ruling 3 — custom lands below 80% | Custom ≥ 80% of its valid runs |
+
+**AC-9 is a prediction against the project's own preferred outcome**, and it is filed that way on
+purpose: §Z6, §AA and §AB have each closed carrying *"the Phase 1b milestone is not met"*, so the
+prior is explicit and it should be exposed to refutation rather than restated.
+
+### AC6. The stopping rule, and why it is fixed rather than adaptive
+
+**Fixed `n` = 20 runs. The pass does not extend and does not stop early.**
+
+§W deliberately did *not* do this — it sampled to a fixed `D` because whether a run fired an
+`EVIDENCE RETURN` was stochastic, leaving the denominator to chance. **That condition does not hold
+here.** Every run in this pass produces a scorable row unless it is void, so the denominator is
+fixed by construction and inverse-binomial sampling would buy nothing while adding a mid-pass
+quantity for an operator to read.
+
+**The stopping rule reads the void count and nothing else.** No score, no `passes_gate`, no arm
+total is computed while runs remain. §U8.5's ruling governs: *"Continuing because the split is tied
+is optional stopping at the most result-sensitive moment there is."*
+
+**Void handling, decided now:**
+
+| Situation | Action |
+|---|---|
+| A row is void under §A3 | Re-run that seed/rep, per §A3's *"void runs should be re-run, not absorbed"*. Record both the void and its replacement |
+| Re-runs reach **3 in one arm** | **A cost stop, not a verdict.** Stop re-running that arm and close the pass with what is valid. Then apply §A3.4 to the arm's **valid row count**: at 10 valid rows it is evaluable normally; at 9 or 8 it is evaluable with the void reasons stated; **below 8** report *gate not evaluable — insufficient data* and **do not compute a verdict from the survivors**. The re-run cap bounds instance time; the floor is what bounds the verdict, and the two are not the same test |
+| A void is caused by an operator error rather than fixture state | Still a void, still re-run, and the error is recorded in the raw-evidence file. §O5's controller error is the precedent for recording rather than quietly correcting |
+
+**Packets are built after all 20 runs terminate, and the scorers are dispatched once.** No packet is
+scored while a run remains unfired. This is a procedural commitment of the same class as §W4's
+*"the operator must not compute `N` mid-round"*, and it is the one thing here a careless operator can
+break silently.
+
+### AC7. Protocol and pre-flight
+
+**Sequencing: interleaved by seed** — native rep 1, custom rep 1, native rep 2, custom rep 2, per
+seed, strictly sequential, one day, one deployed version (§O1). Interleaving spreads intra-day model
+drift across both arms instead of aligning it with the arm boundary.
+
+**Run identity is verified, not inferred.** Each row's `conversation_ref` is queried directly and
+confirmed distinct — `PaRunAnchor`'s one-anchor-per-user-per-30-minute fallback makes interleaving a
+hazard here rather than a safeguard (§O1).
+
+**Scorer topology is fixed to match v9: independent agents, one per packet, redacted packets.** §O5
+measured topology moving the result by about two rows — one agent scoring ten rows sequentially is
+materially more generous than ten independent agents on identical material — so topology is held
+constant or the comparison to v9 is meaningless. Packets are built by the §Z4 packet-scan rules.
+
+**Pre-flight, every item verified by probe before run 1:**
+
+1. `sys_app.version` reads `2026.08.1001`.
+2. **#148's fix is present in the installed `PaFixReport`**, by `scriptLIKE` probe against the fixed
+   wording — not by version, and not by `sys_updated_on` (§W7, §U7).
+3. `PaAgentLoop^scriptLIKEMAX_EVIDENCE_RETURNS: 0` → 1 record (AC1).
+4. `PaAgentLoop^scriptLIKEREQUIRE_RETRIEVAL_TO_RELEASE: false` → 1 record (AC1).
+5. **All five seeds' §A3 fixture conditions re-read live** — including seed 05's m2m gate (AC3.1) and
+   seed 04's capability sys_id matching the instance's `sys_one_extend_capability` record, whose
+   mismatch is §A3's other void condition.
+6. The three seed-05 probe rows are gone (AC3.2), by re-query.
+7. `layers_available` read by **two independent paths** — `sn_aia_agent_tool_m2m` for native,
+   `PaToolRegistry`'s own registry read for custom — rather than one value asserted for both (§O1).
+8. Budget knobs read fresh: `sn_aia.continuous_tool_execution_limit` and `max_auto_executions`. §T1
+   recorded the first as *not read* during the v9 pass; that omission is not repeated.
+9. Smoke gate fired and passed on **both** arms before any scored row is spent.
+
+**The blind-rule guard must be told about `scoring-v12/` as part of building the packets, not
+after.** One correction to the qualification file's §4 item 4, which said the suite "stays green
+while it is": it does not. The `declares every committed packet set` test compares `PACKET_SETS`
+against the directories actually on disk, so a new `scoring-v12/` turns the suite **red** until it
+is declared — the guard fails closed on *declaration*. **The residual hole is narrower and real:**
+`scanned` is consumed as `PACKET_SETS.filter((s) => s.scanned)`, so a set declared `scanned: false`
+with a written reason is accepted and never scanned.
+
+**Declaring it takes three edits, not one, and all three are needed before the suite goes green
+again.** Naming only the first would leave an operator debugging the guard in the middle of the one
+procedure §AC6 says must not be interrupted:
+
+1. **Add the `PACKET_SETS` entry** with `dir: 'scoring-v12'`, **`scanned: true`** (the
+   `scanned: false` route exists for `scoring-v4`'s historical record and for nothing in this pass),
+   a `why`, and a **`packets:` count** — the per-set test asserts the number of `row-NN-*.md` files
+   on disk equals that count, so it must be the real number.
+2. **Update the hardcoded membership literal** in the same test —
+   `expect(PACKET_SETS.map((s) => s.dir)).toEqual(['scoring-v4', 'scoring-v9'])` — to include
+   `'scoring-v12'`. This is documentation of declared order; the disk-derived assertion above it is
+   the one that binds, but both must pass.
+3. **Run `npm test`** and confirm green before the first packet is handed to a scorer.
+
+Line numbers are deliberately omitted here: they drift on any edit to that file, and the earlier
+draft of this section pinned `:709` when the assertion is at `:722`. Navigate by test name.
+
+**Artefacts.** Measurements → `benchmark/raw-evidence-v12-scored-pass.md`. Rows →
+`benchmark/scorecard-v12.md`. Packets exactly as scored → `benchmark/scoring-v12/`. Operator records
+(packet-build report, run evidence, this pass's qualification file) are **outside** the scorer-facing
+channel by the guard's own declaration and must never be pasted into a packet.
+
+### AC8. What this pass cannot establish
+
+Everything in §T8, §Z5 and §AB5 stands, unsoftened.
+
+- **It is not a rate.** Repeated from AC2 because it is the limit most often lost in quotation. Two
+  reps per seed per arm measures a flip.
+- **It cannot establish that the rubric is correct.** §A2.1's clauses are mechanical and were
+  written before the recompute that used them; that makes them reproducible, not right. AC-5 tests
+  whether they *determine* an answer, which is a different property from whether the answer is the
+  right one.
+- **Ruling 1 is a scoring convention, not a finding.** It does not establish that "activate the
+  trigger" is a good fix, and the pass's seed-05 rows must never be quoted as evidence that it is.
+- **A clean AC-7 is weak.** #148's trap was found by review, not by a run — §AB5 records that all six
+  observed drafts sent `root_causes: []`, and the identical `omit-it-unless` wording on the other
+  field was never observed firing. Zero losses is therefore consistent with the fix working **and**
+  with the trap never having been triggered in these ten runs. It is not a measurement of the fix.
+- **It cannot establish transferability.** One instance, one model, one day, one app version, one
+  ceiling (`continuous_tool_execution_limit`, whose shipped OOB default is still UNKNOWN per §B).
+- **It CAN move §T3, and this is the first pass with the power to** — but only within its own twenty
+  rows, and only on `root_cause_layer_correct`. AC-2 predicts it does not move. **Reaching a layer is
+  still not diagnosing at it** (§T3), and no arrangement of this pass's numbers changes that
+  distinction.
+- **It does not license a re-run.** §T9's *"Do not re-run this pass to get a firmer number"* applies
+  to this pass as it did to v9: the resolution table in AC2 is a property of ten rows, and a result
+  near a band edge is reported as near a band edge.
+
+**Unchanged at the time of writing: native remains the recommended path on this instance, and the
+Phase 1b milestone is not met.** §Z6's quoting rule stands — **34/36 · 4/6** only with the derived
+file beside it, and **9/36 or 8/36** for the custom total, never a bare figure. This section changes
+none of that, because it contains no measurement.
