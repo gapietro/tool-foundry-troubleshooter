@@ -5027,9 +5027,9 @@ Artefacts: `benchmark/scorecard-template.md` §A1 (new) and §A2.1 Cases 3–4 (
 
 §AD7 item 3 asks for *"a third clause for a formally-present-but-irrelevant citation"*, and §AD3's
 own correction widens it — *"item 3 should be read as covering both columns rather than the evidence
-column alone."* Read against the twenty verdict files rather than against the summary, the fourteen
-flags over twelve rows decompose into **seven distinct questions**, of which the filed one is a
-single case:
+column alone."* Read against the twenty verdict files rather than against the summary, **the ten
+flags that fall on those two columns decompose into eight distinct questions**, of which the filed
+one is a single case:
 
 | # | question the packet did not answer | rows |
 |---|---|---|
@@ -5040,14 +5040,30 @@ single case:
 | **E-e** | a citation to a tool the run never called, and whether the validator settles it | 14 |
 | **F-a** | the operation is named and the supplied edit does not perform it | 01 |
 | **F-b** | the target is named by kind rather than by name | 20 |
+| **F-c** | a report proposing several fixes — score the union, or the repair | 07 |
 
 **Two of the five `fix_usable_unedited` flags were already closed by §AF4 and are not clauses here.**
 Rows 17 and 19 flagged that column because §AC4's Ruling 1 was authored blind and then not
 delivered; both scorers said so in as many words, and one named the absence. The ruling now ships in
-the packet. That leaves F-a and F-b as the live residue on that column — which is why this section
-writes **two** clauses there rather than the none item 3 implies or the five the flag count suggests.
+the packet. That leaves F-a, F-b and F-c as the live residue on that column — which is why this
+section writes **three** clauses there rather than the none item 3 implies.
 
 Writing E-c alone would have closed one row of five on the column the item names.
+
+**The other four of §AD3's fourteen flags are NOT closed here, and saying so is the point of this
+paragraph.** They fall on `root_cause_layer_correct` (rows 07, 14) and `fix_target_correct` (rows 05,
+12) — two columns item 3 does not name and this section does not touch. **One of them is a gate
+term**, so it carries the same verdict-moving exposure that motivated §A2.1 in the first place. Filed
+as **#164** with the four rows' actual questions transcribed, rather than folded in here on the
+strength of a resemblance.
+
+> **Corrected during this section's own review round, before merge.** The first cut of §AG1 said the
+> fourteen flags decomposed into seven questions and that F-a and F-b were the whole residue. Row 07
+> carries **two** flags — §AD3 lists it under `root_cause_layer_correct` *and* `fix_usable_unedited`
+> — and only the first was accounted for, so a gate-term flag went missing and the coverage claim
+> was overstated on the column §AD3 called the most consequential. F-c is the clause that closes it;
+> #164 is where the four genuinely-out-of-scope flags now live. The count that matters, stated once:
+> **14 flags — 10 on the two named columns, all 10 now closed; 4 on two unnamed columns, all 4 open.**
 
 ### AG2. E-c is the hard one, and the test is structural rather than semantic
 
@@ -5105,6 +5121,32 @@ The ordering problem is real and is fixed in the text: Case 1 asks whether the c
 Case 2 fixes which root cause is the subject, Cases 3–5 then ask whether a given citation counts.
 Entered in the other order, Case 2 and Case 3 can disagree about the same report.
 
+### AG3a. The two sections order their cases differently, and that is deliberate
+
+Both sections now state how their cases combine, and the two statements are **not** the same rule.
+The review round found §A2.1 with no combination rule at all — five cases and nothing saying what to
+do when two of them point opposite ways, which is under-determination of exactly the kind the section
+exists to remove, sitting inside a gate term.
+
+- **§A1 is a pipeline.** Cases 1–2 settle *which root cause* is under evaluation and are never
+  revisited; Cases 3–5 alone award the point. The failure mode it guards is a scorer reaching a value
+  at Case 2 and stopping, before the tests that do the work have run.
+- **§A2.1 is a conjunction.** Case 5 selects *which fix* is under evaluation, and Cases 1–4 are then
+  each **necessary** on that fix — the first failure decides, and passing a later case never lifts an
+  earlier bar. The failure mode it guards is a fix that names exactly one record and every field it
+  changes (Case 2) and still hands the builder a snippet that does not perform the change (Case 3).
+
+**The asymmetry is not an inconsistency; it follows from what the two columns ask.** Evidence is a
+property of one claim, so the work is choosing the claim and then testing its citations. Usability is
+a conjunction of independent properties of one fix — addressed, specified, applicable, complete — and
+any one of them failing makes the fix unusable. Writing one rule for both would have forced the wrong
+shape on one of them.
+
+The conjunctive reading is not new law: §Z2 already recorded it for Cases 1–2 — *"Case 1 is phrased
+as a **necessary** condition and governs: passing Case 2's address test does not lift Case 1's bar"*
+— and noted that reading was load-bearing for two changed cells and *"stated in the derived file
+rather than left implicit."* It is now stated in the template, where the scorers are.
+
 ### AG4. Item 5 is closed by F-b, and the clause overrides a fact about the run
 
 §AD7 item 5 — *"a target identified by kind rather than by name"* — was left open because it *"did not
@@ -5156,19 +5198,25 @@ function of the redaction map, which is worse.
   whole of the claim. Unlike §Z3, this section does not even have a recompute to point at as evidence
   the clauses were not selected for their result — which is the price of the no-recompute decision
   above, and is recorded here rather than argued away.
-- **Seven questions answered is not the count of questions that exist.** These seven are the ones
-  twenty verdict files exposed. A pass with different seeds, a different terminal shape, or a report
-  format not yet seen will find more, and the correct response is another clause, not a scorer's
-  judgement call.
+- **Eight questions answered is not the count of questions that exist**, and this section learned that
+  about itself the hard way. These eight are the ones twenty verdict files exposed **on two columns**;
+  four flags on two other columns are untouched (#164), and its own review round found the first cut
+  claiming otherwise. A pass with different seeds, a different terminal shape, or a report format not
+  yet seen will find more, and the correct response is another clause, not a scorer's judgement call.
 
 ### AG6. Disposition
 
-**§AD7 is fully closed.** Items 1 and 2 closed at §AE, item 4 at §AF, items 3 and 5 here.
+**§AD7 is closed — all five items.** Items 1 and 2 at §AE, item 4 at §AF, items 3 and 5 here.
+
+**That is not the same as "every v12 ambiguity flag is answered", and the two must not be quoted
+interchangeably.** §AD7 closed means the items §AD *filed* are disposed of. Ten of §AD3's fourteen
+flags are now decided by a clause; the other four are open at **#164**. The correct sentence is *ten
+of fourteen, on the two columns item 3 names* — never a bare "the rubric is determinate".
 
 **Unchanged: native remains the recommended path on this instance, and the Phase 1b milestone is not
 met.** Quote §AD1's figures, both arms, as §AD7 requires.
 
 **The next scored pass is not scheduled, sized or pre-registered by this section**, and running one
 against it as though it were would be §U's confound. What it inherits is a rubric whose two most
-frequently flagged columns now decide themselves, and a suite that reddens if either clause set is
-edited away.
+frequently flagged columns now decide themselves, a stated rule in each for how its cases combine,
+and a suite that reddens if either clause set is edited away.

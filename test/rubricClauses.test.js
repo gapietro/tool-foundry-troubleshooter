@@ -43,6 +43,25 @@ const path = require('path')
 const TEMPLATE = path.join(__dirname, '..', 'benchmark', 'scorecard-template.md')
 const source = fs.readFileSync(TEMPLATE, 'utf8')
 
+/**
+ * Collapse runs of whitespace to single spaces.
+ *
+ * The template is hard-wrapped prose, so a phrase this file pins can sit
+ * across a line break -- and which break depends on where the paragraph was
+ * last re-wrapped. Without this, a pure copy-edit reddens the suite and the
+ * next reader learns to shorten the assertion until it passes, which is how a
+ * guard becomes vacuous. Bold/code markers are dropped for the same reason:
+ * whether a word is bolded is not what these tests are about.
+ *
+ * UNDERSCORES ARE KEPT. They are markdown emphasis too, but they are also in
+ * every tool name this file pins -- `log_analysis`, `schema_lookup` -- and
+ * stripping them would quietly turn those assertions into matches against
+ * `loganalysis`, which the template never contains.
+ */
+function flat(text) {
+    return text.replace(/[*`]/g, '').replace(/\s+/g, ' ')
+}
+
 /** A named slice of the template, with both bounds proven to exist. */
 function between(text, startHeading, endHeading) {
     const start = text.indexOf(startHeading)
@@ -53,7 +72,7 @@ function between(text, startHeading, endHeading) {
     expect(start).toBeGreaterThan(-1)
     expect(end).toBeGreaterThan(start)
 
-    return text.slice(start, end)
+    return flat(text.slice(start, end))
 }
 
 /** The §A2.1 window: the slice §A2.1 has always occupied. */
@@ -120,10 +139,35 @@ describe('the fix_usable_unedited clauses exist (issue #139)', () => {
     it('clause 3 states that the snippet, not only the address, must be applicable', () => {
         // Cases 1 and 2 both pass on a fix whose address is perfect and whose
         // supplied edit does not perform the change. That gap is the clause.
+        //
+        // Both strings are DISTINCTIVE on purpose. An earlier cut asserted the
+        // bare word 'describes', which any future paragraph in this window
+        // would satisfy -- the clause could then be deleted and the guard stay
+        // green, which is the failure mode this file exists to prevent.
         const range = packetReachingRange(source)
 
-        expect(range).toContain('describes')
+        expect(range).toContain('produces the change the fix describes')
         expect(range).toContain('exactly as given')
+    })
+
+    it('§A2.1 says how its cases combine, and that they are not a cascade', () => {
+        // Without this, Case 2 (address resolves, fields named -> 1) and Case 3
+        // (snippet does not perform the change -> 0) give opposite verdicts on
+        // the same fix, and the scorer picks by reading order. That is the
+        // under-determination on a gate term the whole section removes.
+        const range = packetReachingRange(source)
+
+        expect(range).toContain('necessary conditions')
+        expect(range).toContain('the first case that fails')
+    })
+
+    it('clause 5 scores the fix aimed at the seeded defect, not the union', () => {
+        // A multi-part fix report otherwise scores either as its best part or
+        // its worst, and nothing said which.
+        const range = packetReachingRange(source)
+
+        expect(range).toContain('addresses the defect the seed carries')
+        expect(range).toContain('neither credited nor charged')
     })
 
     it('clause 4 rules on a target named by kind, and on the withheld-name defence', () => {
@@ -181,6 +225,20 @@ describe('the evidence_cites_trace_and_config clauses exist (issue #159)', () =>
         expect(range).toContain('every entry')
     })
 
+    it('clause 2 selects the subject without awarding the point', () => {
+        // "Score 1 if that entry carries both citations" read alone lets a
+        // scorer stop at case 2 -- before case 3 is reached to disqualify a
+        // citation the primary carries but does not connect to.
+        expect(evidenceClauseRange(source)).toContain('it does not award the point')
+    })
+
+    it('clause 2 skips a primary entry that asserts no defect exists', () => {
+        // Case 1 fires on a report with no root causes. A report whose FIRST
+        // root cause is itself a non-diagnosis passes case 1 and would then be
+        // scored against the non-diagnosis.
+        expect(evidenceClauseRange(source)).toContain('asserts no defect exists')
+    })
+
     it('clause 3 makes relevance a structural test, not a judgement', () => {
         const range = evidenceClauseRange(source)
 
@@ -194,6 +252,21 @@ describe('the evidence_cites_trace_and_config clauses exist (issue #159)', () =>
 
         expect(range).toContain('audit trail')
         expect(range).toContain('trail decides, the validator does not')
+    })
+
+    it('clause 4 enumerates the two tool families instead of leaving them judged', () => {
+        // "the corresponding tool family" is a judgement call unless the
+        // membership is written down -- one config claim is reachable through
+        // four of the six tools, and asking which one it "really" came from
+        // reintroduces exactly what the preamble disclaims.
+        const range = evidenceClauseRange(source)
+
+        expect(range).toContain('enumerated rather than judged')
+        expect(range).toContain('and by nothing else')
+        // The trace family has one member; the config/schema family has six.
+        // Naming two of the six catches a rewrite that drops the list.
+        expect(range).toContain('schema_lookup')
+        expect(range).toContain('read_artifact')
     })
 
     it('clause 5 requires co-location, with an explicit-reference escape', () => {

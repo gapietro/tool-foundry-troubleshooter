@@ -21,23 +21,37 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ### Fixed
 
-- **The two rubric columns that drew every ambiguity flag now decide themselves (#159, `DECISION.md`
-  §AG).** §AD3 measured fourteen flags over twelve of twenty v12 rows, split evenly between
-  `evidence_cites_trace_and_config` and `fix_usable_unedited` — a gate term. §AD7 item 3 filed it as
-  *"a third clause"* for one shape of citation; the twenty verdict files hold **seven distinct
-  questions**, and all seven are now answered in `scorecard-template.md`.
+- **The two most frequently flagged rubric columns now decide themselves (#159, `DECISION.md`
+  §AG).** §AD3 measured **fourteen flags over twelve of twenty v12 rows, across four columns** —
+  `fix_usable_unedited` (a gate term) and `evidence_cites_trace_and_config` drawing them equally
+  often at **five rows each**, with the remaining four falling on `root_cause_layer_correct` and
+  `fix_target_correct`. §AD7 item 3 filed it as *"a third clause"* for one shape of citation; the ten
+  flags on the two named columns hold **eight distinct questions**, and all eight are now answered in
+  `scorecard-template.md`. The other four are **not** closed here — they are filed as **#164**, and
+  one of those two columns is also a gate term.
 
   New **§A1** (five clauses, `evidence_cites_trace_and_config`): a report with no root cause scores 0
-  rather than blank; a report with several is scored **against its primary**, not as a whole and not
-  all-entries-must-comply; a citation counts only if the root-cause statement **names the artifact
-  cited**; a citation with no backing call in the audit trail does not count, and **the trail decides,
-  the validator does not**; and both halves must sit with the root cause under evaluation, unless it
-  refers to the other location explicitly.
+  rather than blank; a report with several is scored **against its primary** — skipping any entry
+  that asserts no defect exists — not as a whole and not all-entries-must-comply; a citation counts
+  only if the root-cause statement **names the artifact cited**; a citation with no backing call in
+  the audit trail does not count, with the two tool families **enumerated rather than judged** and
+  **the trail deciding, not the validator**; and both halves must sit with the root cause under
+  evaluation, unless it refers to the other location explicitly.
 
-  New **§A2.1 Cases 3–4** (`fix_usable_unedited`): a supplied snippet must, applied exactly as given,
+  New **§A2.1 Cases 3–5** (`fix_usable_unedited`): a supplied snippet must, applied exactly as given,
   perform the change it describes — Case 1 is about a missing *value*, this is about a missing *edit*;
-  and a target named by **kind** rather than by name scores 0, with a kind-named *value* routed back
-  to Case 1's obtainability test so the two clauses cannot contradict each other.
+  a target named by **kind** rather than by name scores 0, with a kind-named *value* routed back
+  to Case 1's obtainability test so the two clauses cannot contradict each other; and a report
+  proposing several fixes is scored against **the fix that addresses the seeded defect**, with the
+  others neither credited nor charged.
+
+  **Both sections now state how their cases combine, and the two rules differ on purpose.** §A1 is a
+  pipeline — Cases 1–2 settle which root cause is the subject and never award the point; Cases 3–5
+  do. §A2.1 is a conjunction — Case 5 selects which fix is under evaluation, then Cases 1–4 are each
+  **necessary**, so the first failure decides and passing a later case never lifts an earlier bar.
+  §A2.1 previously had no combination rule at all, which left Cases 2 and 3 able to give opposite
+  verdicts on the same fix. The conjunctive reading itself is not new — §Z2 recorded it for Cases 1–2
+  and called it load-bearing; it is now in the template, where the scorers are.
 
   §A1 is a section rather than a third case under §A2 because that heading is *"the column the gate
   actually consumes"* and this column is not in the gate expression. It still ships — the packet
@@ -54,7 +68,11 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 - **`test/rubricClauses.test.js` guards both clause sets and both placements** — §A2.1 in the
   §A2..§A3 window it has always occupied, §A1 in §A..§A2, and §A1 additionally inside the generator's
-  own §A..§B slice. Every new assertion was verified to go red against a mutated template.
+  own §A..§B slice. Every new assertion was verified to go red against a mutated template, each
+  mutation applied independently. Assertions now match against a whitespace-flattened slice, so a
+  paragraph being re-wrapped cannot redden the suite and teach the next reader to shorten the
+  assertion until it passes — underscores are deliberately preserved, since every tool name the file
+  pins contains one.
 
 ## 2026.08.1005 — 2026-08-10
 
