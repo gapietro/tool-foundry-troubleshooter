@@ -133,7 +133,11 @@ const PACKET_SETS = [
             'write anything if one survives. That copy is deliberate rather than an import -- ' +
             'two independent copies disagreeing is a signal, one shared copy being wrong is ' +
             'invisible. This scan is still the binding check, because the generator could be ' +
-            'edited and this cannot be.',
+            'edited and this cannot be. (That copy DID drift, and nothing looked; ' +
+            'test/packetGeneratorParity.test.js now diffs the two lists.) ' +
+            'These twenty are now FROZEN, on the same ground as scoring-v4 above: the pass was ' +
+            'scored, and the generator no longer reproduces them because scorecard-template.md ' +
+            'moved afterwards (#158). The generator refuses to overwrite them without --force.',
     },
 ]
 
