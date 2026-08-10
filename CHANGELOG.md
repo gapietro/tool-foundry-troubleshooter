@@ -17,6 +17,64 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1004 — 2026-08-10
+
+### Changed
+
+- **The benchmark band table no longer prescribes across arms (#158, `DECISION.md` §AE).** The
+  middle band's Outcome cell read the **native** arm's proportion and prescribed *"build the custom
+  deep-diagnosis harness"* — a two-arm prescription carried by a single-arm classification. That was
+  sound only while the custom arm was unmeasured; it carried *"the custom arm is unmeasured"* as a
+  silent premise rather than a stated precondition. The v12 pass measured both arms on the same
+  instance, day, seeds and build (**native 6/10 · 60%**, **custom 0/10 · 0%**) and §AD4 found the
+  depth gate — the very component the cell prescribes — *degrading* diagnoses rather than deepening
+  them, so adopting the cell as written would have prescribed the component the pass found most
+  harmful.
+
+  Re-derived as a measurement-state rule, **binding on passes after v12**: (a) while the other arm is
+  unmeasured the original prescription stands; (b) once it is measured, a band prescribes about the
+  arm it was read on, and the custom harness is built out only on **its own ≥ 80%** — the fixed
+  anchor, not a relative `custom ≥ native` test, which §AC4 Ruling 3 rejected because it makes the
+  test a function of native's intra-day drift; (c) either way, a component **measured to degrade** a
+  diagnosis is removed or re-derived before any further build, since arm-level proportions can hide
+  component-level harm.
+
+  **All three bands carried the defect, not just the middle one.** The bottom band
+  (`< 50% → full custom harness as designed`) is claim-(3) end to end; and three copies of the **top**
+  band attach a custom-side clause too (*"the custom harness shrinks to the Evidence Bundle path +
+  measured gaps"*), which is the same shape in the row that looked clean. What is untouched is the
+  **native-side half of every band**, not the top band. The repaired bottom cell reads *"this arm does
+  not clear triage on this evidence"* — never *"not a path"*: a bottom-band score is a floor, silent on
+  how far below the band an arm sits and on whether it could clear one later.
+
+  Applied across every surface carrying the stale prescription: `benchmark/scorecard-template.md`
+  §A3.3 (the live instrument) and `README.md` get the corrected rule; `docs/ARCHITECTURE_DECISIONS.md`
+  Decision 0.5, `docs/IMPLEMENTATION_PLAN.md` Task 12 and `docs/AGENT_DOCTOR_ARCHITECTURE.md` §8 take
+  supersession notes rather than rewrites, because each is a record of a decision as it was made.
+  Two surfaces deliberately keep the retired rule: `benchmark/scorecard-agent-doctor.md` (a historical
+  scorecard must state the rule it was scored under) and `DESIGN.md` §4's ruling **R-21**, which quotes
+  the `< 5/10` cell as evidence in its own argument — editing it would rewrite the ruling's reasoning.
+
+  **`scorerPacketBlindRule` failed the first cut of the instrument edit** (one `repository-path`,
+  three `outside-section-pointer`) — the rubric channel reaches every packet, so the *derivation*
+  cannot cross into the template even when the *rule* must. The two prior-run proportions in that
+  draft were removed on the same reasoning and would not have been caught by any pattern. **The #161
+  review then caught the rewrite still opening with provenance** (*"This column used to prescribe…"*),
+  which the guard also passed — two drafts in a row put the derivation at the site of the change, so
+  the guard's blind spot needs a named reviewer rather than vigilance. Recorded at §AE6.
+
+  **v12's numbers are unchanged and no re-run is licensed** (§T9). Both halves of §AD7's disposition
+  that rest on measurement stand — native remains the recommended path on this instance, and the
+  Phase 1b milestone remains unmet. What v12 no longer carries is any prescription to build out the
+  custom harness.
+
+### Added
+
+- The three remaining unfiled §AD7 open items are now on the board: **#159** (§A2.1 needs a third
+  clause for a formally-present-but-irrelevant citation, plus §Z5's unresolved by-kind-not-by-name
+  case) and **#160** (an advance ruling on a scoring column must ship in the packets, not only in the
+  pre-registration — Ruling 1 never reached the v12 scorers and changed no score only by luck).
+
 ## 2026.08.1003 — 2026-08-10
 
 ### Fixed

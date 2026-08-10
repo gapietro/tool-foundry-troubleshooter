@@ -4641,3 +4641,200 @@ Open items this section creates, none of which it resolves:
 4. **Advance rulings must ship in packets** (AD5).
 5. **Row 10's §A2.1 open case from §Z5 — a target identified by kind rather than by name — did not
    recur** in a form this pass had to adjudicate, and remains unresolved.
+
+## AE. The middle band's prescription, re-derived (`2026.08.1004`, #158)
+
+**§AD is unmodified and this section appends to it** — the check is `git log -p benchmark/DECISION.md`,
+in the form §W, §Z, §AC and §AD all used. This closes §AD7's open item 2. It reports no new measurement
+and changes no v12 number.
+
+### AE1. The cell, and the three separate claims packed into it
+
+`scorecard-template.md` §A3.3, the proportional form of the `≥ 8/10` / `5–7/10` / `< 5/10` thresholds
+fixed in `ARCHITECTURE_DECISIONS.md` Decision 0.5 (July 2026):
+
+| Band | Proportion of valid runs | Outcome |
+|---|---|---|
+| Top | ≥ 80% | Native is the front door |
+| **Middle** | **≥ 50% and < 80%** | **Native for lightweight triage + custom deep-diagnosis harness** |
+| Bottom | < 50% | Full custom harness as designed |
+
+The middle row's Outcome does three unrelated things at once:
+
+1. **It classifies** — native's proportion falls in `≥ 50%, < 80%`. A measurement.
+2. **It prescribes native's role** — *"for lightweight triage"*. A claim about the **native** arm,
+   resting on the native arm's own number.
+3. **It prescribes building the custom harness** — a claim about a **different** arm, resting on
+   nothing in the measurement.
+
+Only (3) is at issue. (1) and (2) are intact, and both halves of §AD7's disposition rest on them.
+
+### AE2. Why (3) was sound when it was written
+
+Because the custom arm did not exist. With one arm measured, *"native is middling"* is the only
+evidence in the room and *"so build the alternative"* is the only inference available from it — there
+is no second number that could contradict it. The cell is not a mistake in its own context.
+
+It is a rule **authored under a counterfactual** — *the custom harness is unmeasured* — which it
+carried as a silent premise rather than as a stated precondition. That is the whole defect, and it is
+a defect of form, not of judgement: **a decision rule authored under a counterfactual expires when the
+counterfactual is measured, and nothing in the rule says so.**
+
+### AE3. What v12 measured, and the category error it exposed
+
+Native **6/10 · 60%** — middle band. Custom **0/10 · 0%** — bottom band. Same instance, same day, same
+five seeds, same probe-verified build, zero void rows (§AD1).
+
+The middle band's third claim now reads a **native** number to prescribe about an arm **whose own
+number exists and is worse**. The premise the cell carried is no longer merely unstated; on this
+evidence it is false.
+
+§AD4 makes it worse than an inert contradiction. The component the prescription names — the
+*deep-diagnosis* half — is the component measured to **degrade** diagnoses: across the nine held rows
+not one gate-forced call targeted anything connected to its seed's defect, and rows 02 and 04 carry the
+proof in the transcript, where the pre-HOLD draft the gate **refused** was closer to correct than the
+post-HOLD report it **accepted**.
+
+**The mechanism is the gate's release condition, not an implementation defect.**
+`PaAgentLoop._depthGate` records ONE target gap (`_selectTarget`) and discharges when any of that
+layer's **dedicated** tools appears in the audit trail (`_heldTools` / `_releaseSet`), capped at
+`MAX_HOLDS` = 2. It can require *a* layer-4 call; it has no way to require *the* confirming one — rows
+12 and 16 each wrote a `would_confirm` naming the call they actually needed and spent the held beat
+elsewhere. §T5 recorded the weaker form of this already: release counts a tool being **called** rather
+than a layer being **reached**. §AD4's finding is that every component behaved as designed, which is
+precisely why the correction belongs in the decision rule and not in a bug fix.
+
+### AE4. The replacement rule
+
+The error is that a **single-arm classification** was made to carry a **two-arm prescription**. The
+repair keeps the classification, keeps the native-side prescription, and makes the custom-side
+prescription a function of the custom arm's own measurement — with the counterfactual that made the old
+form valid promoted from silent premise to stated precondition:
+
+> **Custom-side prescription, by measurement state.**
+>
+> **(a) The custom arm is UNMEASURED on this seed set** — the band's original prescription stands.
+> Native's shortfall is the only evidence available and building the alternative is the only inference
+> it supports. This is Decision 0.5's rule in Decision 0.5's context, and it remains correct there.
+>
+> **(b) The custom arm IS measured** — native's band prescribes **native's role and nothing else**. The
+> custom harness is built out only if **the custom arm's own proportion reaches the top band
+> (≥ 80% of its valid runs)**, on the same seed set, in the same pass. Native's arm is reported beside
+> it and is not part of the condition.
+>
+> **(c) Under (a) or (b) alike** — a component **measured to degrade a diagnosis** is removed or
+> re-derived before any further build, whatever the arm proportions say.
+
+**Why the ≥ 80% anchor is fixed rather than relative.** The obvious alternative — build out custom if
+it *exceeds native* — is already considered and rejected in this file. §AC4's **Ruling 3** rejected
+`custom ≥ native` as the milestone criterion because it makes the test a function of native's intra-day
+drift, which §O measured as real, so a bad native day could carry it without the custom arm improving
+at all. That objection applies to a build-out prescription exactly as it applies to a milestone, so the
+same drift-free anchor is used and the relative form is rejected here for the same stated reason.
+
+**Why (c) is separate from (b) rather than implied by it.** Arm-level proportions can hide a
+component-level harm: an arm can clear a band while containing a component that degrades a subset of
+its rows. §AD4 is exactly such a finding, and the 0/10 does not express it — the arm score would look
+the same if the gate were merely inert, which §T5 had assumed it was.
+
+**This codifies practice rather than inventing it.** §AC4's Ruling 3 already read the band table as a
+**classifier applied to the custom arm's own number**, and explicitly declined to read native's arm
+into the criterion. The Outcome column had in practice already stopped being used as written; this
+section makes the instrument agree with the use.
+
+### AE5. The bottom band carries the identical defect and is repaired with it
+
+`< 50% → Full custom harness as designed` is the same category error in the same table: native failing
+tells you native is not the answer; it does not tell you the custom harness is. Under (a) it stands;
+under (b) it does not. The rule above governs both rows, and the extension is recorded here rather than
+left for a later reader to trip over one cell away from the one that was fixed.
+
+**Note what the bottom row did NOT contain: a claim about native at all.** Unlike the middle row, whose
+*"native for lightweight triage"* is claim (2), the bottom row is claim (3) end to end. Withdrawing claim
+(3) therefore leaves it **empty**, and the repaired cell has to *state* a native-side outcome that was
+never previously written down. It is worded **`this arm does not clear triage on this evidence`** —
+scoped to the evidence and to the role, and deliberately **not** *"this arm is not a path"*, which would
+condemn an arm §AE7 explicitly refuses to condemn and which no measurement supports: a bottom-band score
+is a floor (§AD6), silent both on how far below the band the arm sits and on whether it could clear a
+band later. The instrument carries that caveat beside the table.
+
+**Correction, from the #161 review: the top band is untouched only in the scorecard's copy.**
+`scorecard-template.md`'s top row reads *"Native is the front door"* and nothing else — claim (2),
+correctly left alone. But three other copies attach a **custom-side clause to that same band**: Decision
+0.5's *"Phase 1b shrinks to the Evidence Bundle path and whatever the scorecard showed native can't do"*,
+`AGENT_DOCTOR_ARCHITECTURE.md` §8's *"the custom harness shrinks to the Evidence Bundle path + measured
+gaps"*, and `README.md`'s *"custom harness shrinks to Evidence Bundle + gaps"*. Each is a claim about the
+**custom** arm read off a **native** number — claim (3) sitting in the top row — and each therefore falls
+under the same rule: it stands under (a), and is withdrawn under (b). **The accurate statement is that the
+native-side half of EVERY band is untouched**, not that the top band is. All three copies are annotated
+accordingly, and this section's first draft was wrong on that point.
+
+**Cell-level record, so this file and the instrument agree on what moved.** In `scorecard-template.md`
+§A3.3 the Outcome header gained *"— the arm this band was read on"*; the top cell became `This arm is the
+front door` (arm-neutral wording, unchanged claim); the middle became `This arm is lightweight triage
+only`, where **`only`** is a new and deliberate restriction carrying (b)'s *"and nothing else"*; the
+bottom became `This arm does not clear triage on this evidence` for the reason above.
+
+### AE6. What binds, and when
+
+- **Binding on passes AFTER v12.** This rule is authored with v12's numbers in view. It is not, and
+  must never be quoted as, pre-registered against v12.
+- **v12 closes with no custom-side prescription.** Both halves of §AD7's disposition that rest on
+  measurement are unchanged — *native remains the recommended path on this instance* (native's own
+  number) and *the milestone is not met* (Ruling 3, the custom arm's own number). What v12 does **not**
+  carry is a prescription to build out the custom deep-diagnosis harness. The middle band's cell was
+  the only thing that ever supplied one, and it is withdrawn.
+- **Ruling 3 is unaffected**, having conditioned on the custom arm's own number from the start.
+- **Written into the instrument** at `scorecard-template.md` §A3.3.
+  `scorecard-agent-doctor.md`'s copy is the **v4 pass's record** and is deliberately left as it was: a
+  historical scorecard must state the rule it was scored under. `ARCHITECTURE_DECISIONS.md` Decision
+  0.5 takes a supersession note pointing here rather than a rewrite.
+
+> **The instrument's copy of the rule is stated arm-neutral and outcome-free, and §AA's guard is why.**
+> The first cut of the template edit wrote the rule the way this section writes it — naming native and
+> custom, citing `DECISION.md`, §AC4 and §AD4, and quoting this pass's two proportions to explain the
+> change. `scorerPacketBlindRule` failed it on four counts (one `repository-path`, three
+> `outside-section-pointer`), because the rubric channel reaches every packet — the exact hole §AA
+> closed. The prior-run proportions would not have been caught by any pattern and were removed on the
+> same reasoning: `benchmark/README.md` scopes the blind rule to prior-run **outcomes**, and two
+> proportions in the rubric a scorer reads are prior-run outcomes however they are framed. **The
+> general form, worth carrying:** a decision rule and its *derivation* have different audiences — the
+> derivation belongs in this file, and only the rule itself, stated without provenance, may cross into
+> the instrument. The guard enforces the first half; the second half is a judgement it cannot make.
+>
+> **And the second half needed making twice.** The #161 review caught the *rewritten* template still
+> opening with provenance — *"This column **used to** prescribe building a second harness…"* — which is
+> history, not rule, shipped to every scorer in the rubric slice. The guard passed it, exactly as this
+> note predicted it would. The rule (a)/(b)/(c) stands without that sentence and the sentence is gone.
+> Two drafts in a row put the derivation where the rule belongs, which is the useful measurement here:
+> the pull toward explaining a change at the site of the change is strong enough that the guard's blind
+> spot needs a named reviewer, not vigilance.
+
+**One surface is deliberately left carrying the retired rule.** `DESIGN.md` §4's ruling **R-21** quotes
+*"`< 5/10 → Full custom harness as designed`"* as evidence inside its own argument — that a near-0 score
+reached *by construction* (Agent Doctor had layer-1 tools only) would have triggered the project's most
+expensive decision from a missing-tools gap rather than from anything measured. The quotation is load
+bearing **as a quotation**: R-21 is reasoning about the rule as it stood, and editing it would rewrite the
+ruling's own evidence. Same class as `scorecard-agent-doctor.md`, and excused on the same grounds.
+
+### AE7. What this re-derivation cannot establish
+
+- **It neither rescues nor condemns the custom arm.** 0/10 is a floor and floors are the least
+  informative result (§AD6). The rule states what would license a build-out; nothing here says the
+  custom harness can or cannot reach it.
+- **It is not evidence about a replacement for the depth gate.** (c) requires the gate be removed or
+  re-derived; what a non-degrading depth mechanism looks like is **unmeasured**. §AD4's rows 12 and 16
+  point at *"require the confirming call"*, but no such gate has been built or scored, and #121's
+  `REQUIRE_RETRIEVAL_TO_RELEASE` — shipped dormant, release on retrieval rather than on a name — is a
+  narrower change and is untested.
+- **It licenses no re-run and changes no number.** §T9 governs.
+- **It is a rule about this benchmark's decision procedure**, not a platform finding, and inherits every
+  transferability caveat in §AD6 unsoftened.
+
+### AE8. Disposition
+
+**The middle band no longer prescribes building the custom deep-diagnosis harness.** Native remains the
+recommended path on this instance, the Phase 1b milestone remains unmet, and the custom harness's
+build-out is now gated on **its own ≥ 80%** and on **the removal or re-derivation of the depth gate**.
+
+§AD7's item 2 is closed by this section. Items 3 and 5 (#159) and item 4 (#160) remain open.
