@@ -101,6 +101,9 @@ never from `aia_logs`.
 | 01 | 1 | `a860d5322b6e4318f243fed2ce91bf93` | fresh ticket `3b4051322b6e4318f243fed2ce91bf73` ("Core banking API returns 503 for every teller terminal nationwide, no workaround"), `priority` empty at insert | completed, 67s, 1 tool call (`set_ticket_priority` **OK**, 286ms) — and `priority` still **empty** afterwards: the seeded defect, invisible from both the plan header and the tool's own status |
 | 01 | 2 | `396a15be2b6e47d817a6ffbeee91bf0a` | fresh ticket `c46a19ba2b228318f243fed2ce91bfca` ("Warehouse scanning system offline across all distribution centres, shipments halted"), `priority` empty at insert | completed 15:27:32 → 15:28:49 = **77s**, 1 tool call `378a19fe2b6e47d817a6ffbeee91bf93` — `priority` still **empty**: defect intact |
 
+| 02 | 1 | `816dd97e2b628318f243fed2ce91bf20` | *"My laptop will not boot at all this morning — please route this request to the right place."* (no ticket; seed 02 needs none) | completed 15:40:35 → 15:40:59 = **24s**, 6 tasks all `success`, 1 tool call (`measure_request` `636d11be2b628318f243fed2ce91bf95`, returned `{received:true, characters:91, words:18}`). A routing request answered by a character counter, then a **fabricated** routing confirmation shown to the user |
+| 02 | 2 | `a950ad322be28318f243fed2ce91bfca` | *"I need access to the finance reporting system for my new role — please route this request to the right place."* | completed 15:53:27 → 15:53:52 = **25s**, 6 tasks all `success`, 1 tool call (`2b50e1722be28318f243fed2ce91bf50`, `{received:true, characters:109, words:21}`). Communicator delivered *"## ✅ Request Routed Successfully"* — with no routing tool in existence |
+
 **Fresh bench ticket per rep** for seeds 01 and 04, so rep 1's agent writes cannot contaminate rep 2
 (v9 §2's rule). Seed 03 needs no ticket — its Setup says to add none.
 
@@ -377,6 +380,100 @@ target chosen this way (`task`, `task`, `incident.priority`).
 *the gate can degrade a diagnosis* — observed twice — **not** that it always does. Rows 02 and 04
 degraded; row 06 did not.
 
+### 3.47 Row 07 — native, seed 02 rep 2 — **VALID**
+
+| field | value |
+|---|---|
+| target execution | `a950ad322be28318f243fed2ce91bfca` — completed 15:53:27→15:53:52 (25s); request *"I need access to the finance reporting system for my new role"* |
+| diagnostic execution | `efd02d362be28318f243fed2ce91bfab` |
+| terminal | **completed**, 15:55:46 → 16:01:01 = **5m15s** |
+| tool calls (§E1) | **14** |
+| report | `4412e5322b268318f243fed2ce91bfff` (16:00:59) + `401229322b268318f243fed2ce91bf76` (16:01:00) |
+
+**It caught the confabulation, which is the sharpest thing any row has done so far.** The seeded run
+emitted a polished *"✅ Request Routed Successfully"* message to the user; the only tool it called was
+`measure_request`, which returned `{received: true, characters: 109, words: 21}`. Row 07's RC-2 (layer
+6, CONFIRMED) states that the model *"invented a routing assignment — group name, confirmation text,
+and all — with no tool call backing it"*, and evidences it structurally: two LLM calls on the task, the
+second 9,350 ms / 454 response tokens, **no tool call between that Gen AI step and the Communicator
+step**, and communicator metadata confirming the fabricated message was delivered. RC-1 (layer 3) is
+the cause: one binding, `measure_request`, `active_tool_count = 0`, no tool capable of routing. RC-3
+notes zero trigger wiring and — correctly — says it is *not* the cause of *this* failure since the run
+was invoked conversationally.
+
+### 3.48 AC-3's convergence clause is refuted, and the arithmetic is already decisive
+
+AC-3 predicts seed 02's four rows all score `root_cause_layer_correct` = 0 **and** that **≥3 of the 4**
+reports carry an explicit *"no failure observed"* style conclusion. Its stated refutation is *"Any row
+scores 2, **or** ≤ 2 reports converge."*
+
+| row | arm | "no failure observed" conclusion? |
+|---|---|---|
+| 05 | native | **No** — names a missing `assign_to_group` tool, zero trigger links, three description smells |
+| 06 | custom | **Yes** — *"No errors were observed in the execution trace, and the agent's configuration and tool definitions appear valid."* |
+| 07 | native | **No** — names fabrication outright: *"no routing action was ever taken … the LLM fabricated a routing outcome"* |
+| 08 | custom | pending |
+
+**At most 2 of 4 can now converge, so the clause is refuted whatever row 08 does.** This is arithmetic
+on report *content*, which the operator can read without scoring — but note the honest boundary: the
+`root_cause_layer_correct` half of AC-3 is a **rubric** judgment and remains entirely with the blind
+scorers. Only the convergence half is settled here, and §AD should confirm it against the packets
+rather than inherit this table.
+
+**Why the refutation is interesting rather than bookkeeping.** §O6 declined to rule whether seed 02's
+0/6 history was a true negative about the fixture or *a shared blind spot in a trace-first method*.
+Two native rows here diagnosed the fixture in detail — one of them catching hallucination the trace
+only shows structurally, by the *absence* of a tool call in a gap. That is evidence against the
+shared-blind-spot reading, at least for the native arm.
+
+### 3.49 Row 08 — custom, seed 02 rep 2 — **VALID, terminal `failed`**
+
+| field | value |
+|---|---|
+| run | `e77265f22b268318f243fed2ce91bf7c` — **`TR1000251`** |
+| terminal | **`failed`** — `fix_report: null`, rejected report preserved in `fix_report_rejected` |
+| duration | 16:03:04 → 16:03:25 |
+| tool calls | **3** — `agent_trace`, `read_artifact`, `schema_lookup` |
+| `layers_swept` (mechanical §E2) | **2/7** (L1, L4) |
+| HOLDs | **1**, citing **`layer 4 (ranked)`** |
+
+**Not void.** The seed was in its required state (§A3 voidness is a property of the fixture, not the
+run). A terminal `failed` is a scorable outcome — v9's rows 07 and 08 also terminated `failed` and were
+scored, not voided.
+
+**This is the mechanism of §3.5 completing its arc: the gate's forced call became a claimed ROOT
+CAUSE, and that is what killed the run.** Held on `layer 4 (ranked)`, the run answered with
+`schema_lookup` on **`incident.priority`** — the same irrelevant OOB target row 06 picked, and the
+fourth distinct irrelevant target across four held custom rows. It then submitted:
+
+```
+root_causes[1] = { layer: "4", component: "incident.priority",
+                   finding: "Schema validation confirmed existence of critical field",
+                   evidence: [ { source: "schema", detail: "schema_lookup confirmed incident.priority exists" } ] }
+```
+
+A field *existing* offered as a root cause, evidenced only by the gate-satisfying call that found it.
+Its `fixes` follow from that fiction and have nothing to do with seed 02: *"Add explicit check for
+priority >= 3 before routing"*, *"Add condition to trigger only when priority >= 3"* — for an agent
+whose actual defect is having no routing tool at all.
+
+**The citation validator caught it, and the rejection wording is exactly right:**
+
+> `root_causes[1] (incident.priority): evidence rule violation — no trace citation found; a candidate
+> resting on config/schema/data alone is not a confirmed root cause.`
+
+So the run terminated with no report. **The depth gate manufactured the very artifact the citation rule
+then had to destroy.** Two harness safeguards, each correct in isolation, in direct opposition: the
+depth gate demanded a layer-4 call, the model had no legitimate layer-4 finding to make, and the
+citation rule refused the illegitimate one it invented. §3.5's mechanism now has three distinct
+outcomes across four rows — false positive (02, 04), honest inconclusive (06), and terminal failure (08).
+
+**AC-7 is NOT refuted by this row, and the distinction matters.** AC-7 predicts no custom row
+terminates on *"a validator rejection attributable to an omitted `root_causes` or omitted `evidence`
+array"* — #148's trap specifically. This rejection is an **evidence-rule violation on a present,
+populated `root_causes` array**: the array was there, the citation was there, it was the *wrong kind*
+of citation. Different failure, different clause. #148's trap remains untriggered at 4 custom rows.
+
 ### 3.5 The cross-row finding: the depth gate did not fail to add depth — it DEGRADED the diagnosis
 
 This is the sharpest measurement of the pass so far and it goes materially beyond §T5. §T5 established
@@ -460,7 +557,7 @@ known not to indicate a stall: the run it supposedly evidenced had already compl
 
 ## 4. Row index and resumption
 
-**6 of 20 rows complete. The pass is PAUSED mid-run-phase, not abandoned.** No packet has been built
+**8 of 20 rows complete. The pass is PAUSED mid-run-phase, not abandoned.** No packet has been built
 and no scorer has been dispatched, so §AC6's *"packets are built after all 20 runs terminate, and the
 scorers are dispatched once"* is intact and unviolated.
 
@@ -472,7 +569,8 @@ scorers are dispatched once"* is intact and unviolated.
 | 04 | custom | 01/2 | `396a15be2b6e47d817a6ffbeee91bf0a` | `238cd1ba2bae47d817a6ffbeee91bffa` (`TR1000247`) | **valid**, ~11s, 2 calls, 2/7 |
 | 05 | native | 02/1 | `816dd97e2b628318f243fed2ce91bf20` | `a41e5d722ba28318f243fed2ce91bfff` | **valid**, 4m51s, 14 calls |
 | 06 | custom | 02/1 | `816dd97e2b628318f243fed2ce91bf20` | `a7af5d7a2bee47d817a6ffbeee91bf3d` (`TR1000249`) | **valid**, 13s, 3 calls, 2/7 — inconclusive report, validated |
-| 07–08 | | 02/2 | — | — | **not started** |
+| 07 | native | 02/2 | `a950ad322be28318f243fed2ce91bfca` | `efd02d362be28318f243fed2ce91bfab` | **valid**, 5m15s, 14 calls, caught the confabulation |
+| 08 | custom | 02/2 | `a950ad322be28318f243fed2ce91bfca` | `e77265f22b268318f243fed2ce91bf7c` (`TR1000251`) | **valid, terminal `failed`** — citation validator rejected an `incident.priority` root cause |
 | 09–12 | | 03/1, 03/2 | — | — | **not started** |
 | 13–16 | | 04/1, 04/2 | — | — | **not started** |
 | 17–20 | | 05/1, 05/2 | — | — | **not started** |
