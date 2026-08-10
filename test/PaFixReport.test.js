@@ -2715,3 +2715,131 @@ describe('#148 review — a PRESENT but wrong-typed `fixes` is not relaxed', () 
         expect(res.problems).toContain('verification is required and must be a non-empty string')
     })
 })
+
+// ===========================================================================
+// validate — `layers_swept` given as flat status strings (#151 / §AD5, row 20)
+//
+// A model that writes `{"1": "UNAVAILABLE", "2": "SWEPT", ...}` instead of
+// `{"1": {status: "UNAVAILABLE"}, ...}` chose a shape the validator's OWN error
+// text invites -- "an object mapping each of the seven layers (1-7) to a
+// status". Eight separate sites in this file read those entries as objects and
+// test `.status`, so the flat form was misread by every one of them at once.
+//
+// Two consequences, and the second is the damaging one:
+//   1. every layer reported as "missing" although all seven were present;
+//   2. `_isTraceUnavailable` returned false, silently withdrawing the layer-1
+//      UNAVAILABLE relaxation (route B of the evidence rule) -- so the rule
+//      fell through to the no-trace-citation branch and told the run to "mark
+//      layer 1 UNAVAILABLE", which it had already done.
+//
+// Measured live on gpinst01 as v12 row 20 (`TR1000265`): the run produced the
+// pass's best custom diagnosis of seed 05 -- the correct layer and the specific
+// gate -- and was rejected with a remedy it already satisfied. Same family as
+// #148, where an OMITTED key withdrew a relaxation; here a MALFORMED one does.
+// ===========================================================================
+
+describe('PaFixReport.validate — layers_swept as flat status strings (#151)', () => {
+    /** The seven layers as bare strings, the shape row 20 actually sent. */
+    function flatLayers(overrides) {
+        const ls = {
+            1: 'SWEPT',
+            2: 'SWEPT',
+            3: 'SWEPT',
+            4: 'SWEPT',
+            5: 'SWEPT',
+            6: 'SWEPT',
+            7: 'SWEPT',
+        }
+        return Object.assign(ls, overrides || {})
+    }
+
+    test('a present-but-flat entry is not reported as MISSING', () => {
+        const res = load().validate(validReport({ layers_swept: flatLayers() }))
+
+        // All seven are present. Whatever else is wrong, "missing" is a lie
+        // that sends a repair turn looking for absent keys. `problems` is
+        // absent entirely on the valid path, hence the guard.
+        expect((res.problems || []).join('\n')).not.toContain('layers_swept is missing')
+    })
+
+    test('a flat all-SWEPT report validates — the status is the whole entry', () => {
+        const res = load().validate(validReport({ layers_swept: flatLayers() }))
+
+        expect(res.valid).toBe(true)
+        expect(res.problems).toBeUndefined()
+    })
+
+    test('the canonical shape is what lands in `normalized`, so downstream readers see one shape', () => {
+        const res = load().validate(validReport({ layers_swept: flatLayers() }))
+
+        expect(res.valid).toBe(true)
+        expect(res.normalized.layers_swept[1]).toEqual({ status: 'SWEPT' })
+        expect(res.normalized.layers_swept[7]).toEqual({ status: 'SWEPT' })
+    })
+
+    test('flat layer 1 UNAVAILABLE still engages the evidence rule\'s route B', () => {
+        // Row 20's situation: nothing ran, layer 1 declared UNAVAILABLE, and the
+        // cause corroborated by two DISTINCT non-trace sources. Route B exists
+        // for exactly this and must not be withdrawn by the entry's shape.
+        const res = load().validate(
+            validReport({
+                layers_swept: flatLayers({ 1: 'UNAVAILABLE' }),
+                root_causes: [
+                    {
+                        layer: 'layer 7',
+                        component: 'sn_aia_trigger_configuration',
+                        finding: 'active is 0, so the trigger never installs its business rule.',
+                        evidence: [
+                            { source: 'config', detail: 'sn_aia_trigger_configuration.active = 0, sys_id bfb77d6c' },
+                            { source: 'schema', detail: 'x_snc_tsbench_ticket exists with 8 fields' },
+                        ],
+                        confidence: 'CONFIRMED',
+                    },
+                ],
+            })
+        )
+
+        // The bug: this asked the run to mark layer 1 UNAVAILABLE when it had.
+        expect(res.problems.join('\n')).not.toContain('mark layer 1 UNAVAILABLE')
+        expect(res.problems.join('\n')).not.toContain('no trace citation found')
+    })
+
+    test('a flat non-SWEPT entry is rejected for the REAL reason — no reason text', () => {
+        // The flat form cannot carry a `reason`, and NOT_SWEPT/UNAVAILABLE
+        // require one. That rejection is correct and, unlike the old message,
+        // actionable: the model can switch to the object form and supply it.
+        const res = load().validate(validReport({ layers_swept: flatLayers({ 2: 'NOT_SWEPT' }) }))
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.join('\n')).toContain('layer 2')
+        expect(res.problems.join('\n')).toContain('has no reason')
+    })
+
+    test('an unknown flat status is still rejected as unknown, not as missing', () => {
+        const res = load().validate(validReport({ layers_swept: flatLayers({ 3: 'PARTIAL' }) }))
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.join('\n')).toContain('unknown status')
+    })
+
+    test('a genuinely absent layer is STILL reported as missing', () => {
+        const ls = flatLayers()
+        delete ls[4]
+        const res = load().validate(validReport({ layers_swept: ls }))
+
+        expect(res.valid).toBe(false)
+        expect(res.problems.join('\n')).toContain('layers_swept is missing layer 4')
+    })
+
+    test('the object form is untouched — mixed shapes both read correctly', () => {
+        const res = load().validate(
+            validReport({
+                layers_swept: flatLayers({ 5: { status: 'NOT_SWEPT', reason: 'no data read was needed' } }),
+            })
+        )
+
+        expect(res.valid).toBe(true)
+        expect(res.problems).toBeUndefined()
+        expect(res.normalized.layers_swept[5]).toEqual({ status: 'NOT_SWEPT', reason: 'no data read was needed' })
+    })
+})

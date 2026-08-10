@@ -119,6 +119,13 @@ PaFixReport.prototype = {
             return { valid: false, problems: ['fix report must be a JSON object'], evidenceProblems: [] }
         }
 
+        // #151: canonicalise a bare-string `layers_swept` entry to
+        // `{status}` BEFORE anything reads it, so all eight readers below —
+        // and the returned `normalized` — see one shape. See
+        // `_withCanonicalLayersSwept` for why this belongs here and not at
+        // each reader. Returns `report` untouched when there is nothing to do.
+        report = this._withCanonicalLayersSwept(report)
+
         var ctx = this._buildCheckContext(report, context)
 
         // #81: `problems` stays EXACTLY what it has always been — same
@@ -277,6 +284,76 @@ PaFixReport.prototype = {
         var ls = this._isPlainObject(report.layers_swept) ? report.layers_swept : {}
         var entry = ls[1]
         return this._isPlainObject(entry) && entry.status === 'UNAVAILABLE'
+    },
+
+    /**
+     * #151 (§AD5). Accept `layers_swept` entries written as a BARE STATUS
+     * STRING — `{"1": "UNAVAILABLE", "2": "SWEPT", …}` — by canonicalising
+     * each one to `{status: <string>}` before any check reads it.
+     *
+     * WHY THIS IS A ROOT FIX AND NOT A COURTESY. Eight separate sites in this
+     * file read a layers_swept entry and test `.status`: this method's
+     * neighbour `_isTraceUnavailable`, `_unsweptGaps`, `_checkLayersSwept`,
+     * `_checkSweptClaims`, the `would_confirm` contradiction check, the
+     * inconclusive citation pricing, and `repairPrompt`'s renderer. The flat
+     * form is misread by ALL of them at once, so patching them individually
+     * would be eight symptom fixes for one cause. Canonicalising at the single
+     * point where the report enters `validate` fixes every reader together.
+     *
+     * WHY THE SHAPE IS REASONABLE RATHER THAN WRONG. `_checkLayersSwept`'s own
+     * rejection text describes the field as "an object mapping each of the
+     * seven layers (1-7) to a status" — which reads as an invitation to write
+     * exactly this. The contract block does say `{status, reason?}`, so the two
+     * disagree; a model picking the shape the error message describes was not
+     * being careless. `_hasLayerValue` sets the precedent: `root_causes[].layer`
+     * accepts a number OR a string because "rejecting it was validator
+     * pedantry, not a real defect".
+     *
+     * WHAT THIS DELIBERATELY DOES NOT DO. It does not invent a home for the
+     * `reason` that the flat form cannot carry. NOT_SWEPT and UNAVAILABLE still
+     * require one, so a flat non-SWEPT entry is still rejected — but now for
+     * the true reason ("layer 2 is NOT_SWEPT but has no reason"), which a
+     * repair turn can act on by switching to the object form. Before this fix
+     * the same report was told to "mark layer 1 UNAVAILABLE" when it already
+     * had: the malformed key made `_isTraceUnavailable` return false, silently
+     * withdrawing the evidence rule's route B, and the rule then fell through
+     * to the no-trace branch. That is #148's failure shape — a key silently
+     * withdrawing a relaxation — with a malformed key instead of an omitted
+     * one. Measured live as v12 row 20 (`TR1000265`), which produced that
+     * pass's best custom diagnosis of seed 05 and was rejected by a remedy it
+     * already satisfied.
+     *
+     * Returns the SAME object when there is nothing to canonicalise, so the
+     * overwhelmingly common object-form path allocates nothing and behaves
+     * byte-identically to before.
+     */
+    _withCanonicalLayersSwept: function (report) {
+        var ls = report.layers_swept
+        if (!this._isPlainObject(ls)) return report
+
+        var defs = this._layerDefs()
+        var found = false
+        var canonical = {}
+        var key
+
+        for (key in ls) {
+            if (Object.prototype.hasOwnProperty.call(ls, key)) canonical[key] = ls[key]
+        }
+        for (var i = 0; i < defs.length; i++) {
+            key = defs[i].number
+            if (typeof canonical[key] === 'string') {
+                canonical[key] = { status: canonical[key] }
+                found = true
+            }
+        }
+        if (!found) return report
+
+        var out = {}
+        for (key in report) {
+            if (Object.prototype.hasOwnProperty.call(report, key)) out[key] = report[key]
+        }
+        out.layers_swept = canonical
+        return out
     },
 
     /** Matches PaToolRegistry._normName / PaAuditLogger._normToolName. */

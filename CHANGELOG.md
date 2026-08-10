@@ -17,6 +17,75 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1003 — 2026-08-10
+
+### Fixed
+
+- **`PaFixReport`: a malformed `layers_swept` no longer withdraws the layer-1 UNAVAILABLE
+  relaxation (#155).** A model writing the field as bare status strings —
+  `{"1":"UNAVAILABLE","2":"SWEPT",…}` rather than `{"1":{"status":"UNAVAILABLE"},…}` — hit two
+  consequences at once. `_checkLayersSwept` requires `_isPlainObject(entry)`, so all seven
+  *present* layers were reported **missing**; and `_isTraceUnavailable` requires the same, so it
+  returned false and silently withdrew the evidence rule's **route B** (#78's absence-diagnosis
+  path). The rule then fell through to the no-trace branch and told the run to *"mark layer 1
+  UNAVAILABLE"* — which it had already done. **This is #148's failure shape with a malformed key
+  instead of an omitted one.**
+
+  Fixed with a single canonicalisation where the report enters `validate`, so all **eight** sites
+  that read a `layers_swept` entry and test `.status` — plus the returned `normalized` — see one
+  shape. Per-reader patches were rejected as eight symptom fixes for one cause. The shape is
+  treated as reasonable rather than wrong because `_checkLayersSwept`'s own rejection text
+  describes the field as *"an object mapping each of the seven layers (1-7) to a status"*, which
+  invites exactly this, while the contract block says `{status, reason?}` — and `_hasLayerValue`
+  already tolerates number-or-string for `root_causes[].layer` on the stated grounds that
+  *"rejecting it was validator pedantry, not a real defect"*.
+
+  It deliberately does **not** invent a home for the `reason` the flat form cannot carry: a flat
+  non-SWEPT entry is still rejected, now for the true reason (*"layer 2 is NOT_SWEPT but has no
+  reason"*), which a repair turn can act on by switching to the object form.
+
+  Found live by the v12 scored pass (#151) as row 20, `TR1000265` — the pass's best custom
+  diagnosis of seed 05, correct layer and correct gate, rejected by a remedy it already satisfied.
+  **Seed 05 is the only seed that can surface it**, being the only one where nothing runs and
+  route B is live. Replaying row 20's real payload against the fix: both defect signatures gone,
+  route B engages, and the run is still rejected on three accurate grounds — including an
+  `unsupported sweep claim` on layers 5 and 6 that the shape error had been **masking entirely**,
+  so the fix also un-skips checks that were being silently bypassed. Recorded at `DECISION.md`
+  §AD5. `npm test` 1461 passed, 29 suites; `now-sdk build` clean on SDK 4.9.2.
+
+## 2026.08.1002 — 2026-08-10
+
+### Added
+
+- **The v12 scored pass — verdict (#151).** Pre-registered at `DECISION.md` §AC before any run
+  fired; result at §AD, rows at `benchmark/scorecard-v12.md`, measurements at
+  `benchmark/raw-evidence-v12-scored-pass.md`, packets exactly as scored at
+  `benchmark/scoring-v12/`, each blind scorer's reasoning at `benchmark/scoring-v12/results/`.
+
+  **Native 6/10 · 60.0% · middle band. Custom 0/10 · 0.0% · bottom band.** Rubric totals 51/60
+  and 9/60. Twenty rows, five seeds, two reps, two arms, **zero voids** — both arms finished with
+  all ten valid and neither used any of its three permitted re-runs. Twenty independent blind
+  scorers, one per packet, dispatched once after all twenty runs terminated (§AC6), with
+  byte-identical prompts because the prompt is part of the instrument.
+
+  **The Phase 1b milestone is NOT met** — AC4's Ruling 3 fixed the criterion in advance as the
+  custom arm reaching ≥80%; it reached 0.0%. Predictions: seven confirmed (AC-1, AC-2, AC-4, AC-6,
+  AC-7, AC-8, AC-9), two refuted (AC-3, AC-5). AC-9 was filed against the project's own preferred
+  outcome and held.
+
+  Two findings beyond the scoreline. **AC-5's refutation** (8 of 20 unambiguous against a predicted
+  ≥14) says §Z's rubric repair made the rubric *reproducible* without making it *determinate*, with
+  `fix_usable_unedited` — a gate term — the most-flagged column. And **the depth gate can degrade a
+  diagnosis**: across nine held custom rows not one gate-forced call touched anything connected to
+  its seed's defect, producing two confident false positives that replaced partly-correct drafts,
+  one terminal validation failure, and three validated reports with invented fixes. §AD4 declines
+  to adopt the middle band's "custom deep-diagnosis harness" prescription on that evidence.
+
+  Also added: `benchmark/scripts/build-v12-packets.js`, which generates the packets, asserts the
+  rubric section byte-identical across all twenty, and re-scans every emitted packet with a copy
+  of the blind-rule path patterns, refusing to write if one survives. `scoring-v12` declared to
+  `test/scorerPacketBlindRule.test.js` with `scanned: true` and a packet count of 20.
+
 ## 2026.08.1001 — 2026-08-10
 
 ### Added — the v12 scored pass is pre-registered (#151, DECISION.md §AC)
