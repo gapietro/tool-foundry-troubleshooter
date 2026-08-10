@@ -4219,8 +4219,16 @@ a permissive across-pass reading exists. **This section settles it for this pass
 that binds harder, and it settles it before any row exists.** That ordering is the entire point: a
 floor consulted after the void count is known is a degree of freedom, not a criterion, and it is
 resolvable by someone who can already see which reading flatters which arm (§W5's standard, and the
-gap logged in `LEARNING.md` on 2026-08-09). At 10 rows per arm the floor leaves **2 void rows of
-margin per arm**; a third void in one arm takes that arm below its floor.
+gap logged in `LEARNING.md` on 2026-08-09).
+
+**The floor counts valid rows at the close of the pass, not voids encountered along the way.** §A3
+requires voids to be re-run rather than absorbed, and a void that is successfully replaced costs the
+denominator nothing — `scorecard-template.md` §A3.4 bites only on voids that **cannot be made
+valid**. So the margin is: an arm may finish with up to **2 unrecoverable voids** (8 valid rows) and
+still be evaluable; a third unrecoverable void takes that arm below its floor. A pass that voids six
+rows and recovers all six has 10 valid rows per arm and is fully evaluable — it is a costly pass,
+not an under-powered one. AC6 states the cost stop separately, and AC-8 predicts on voids
+*encountered* for exactly this reason.
 
 **What 10 rows per arm buys, stated against this pass's own interest.** The gate is a binomial read
 against §A3.3's proportional bands, so its resolution is computable and it is not high:
@@ -4232,7 +4240,7 @@ against §A3.3's proportional bands, so its resolution is computable and it is n
 | 0.50 | 5.5% | 37.7% |
 | 0.65 | 26.2% | 9.5% |
 | **0.80** | **67.8%** | 0.6% |
-| 0.90 | 93.0% | 0.02% |
+| 0.90 | 93.0% | 0.01% |
 
 **A harness whose true pass rate is exactly the top band's own threshold lands in the top band only
 about two times in three.** That is inherent to reading a point threshold off ten runs and it is not
@@ -4320,10 +4328,10 @@ refutation is not one.
 | **AC-2** | Custom scores `root_cause_layer_correct` = 0 on **≥ 8 of its 10 rows** — §T3's six-of-six standing on a larger and broader sample | ≤ 7 rows at 0 |
 | **AC-3** | Seed 02 — **all four** rows (2 native + 2 custom) score `root_cause_layer_correct` = 0, and ≥ 3 of the 4 reports contain an explicit "no failure observed" style conclusion | Any row scores 2, **or** ≤ 2 reports converge. Either half refutes it, and the first half is the one that would rule §O6's open question toward *shared blind spot* being wrong |
 | **AC-4** | Seed 05 — native passes the gate on **≥ 1 of 2** rows (Task 12: both 6/6); custom passes on **0 of 2** | Native 0 of 2, or custom ≥ 1 of 2. Ruling 1 applies to both arms identically |
-| **AC-5** | **≥ 14 of 20** rows produce an unambiguous `passes_gate` from the packet alone — the first test of §A2.1 and §Z's rubric repair, against §T8's measured 3 of 12 | ≤ 13 unambiguous. This is the prediction most likely to fail and the most useful if it does |
-| **AC-6** | Custom's audit-derived sweep breadth is **at or below** native's on every row (§T9 held at 12 of 12) | Any custom row exceeds its seed-matched native rows |
-| **AC-7** | **0 of 10** custom rows are lost to #148's trap — no row terminates on a validator rejection attributable to an omitted `root_causes` or omitted `evidence` array | ≥ 1 such row. See AC7 on why a clean result here is weak evidence |
-| **AC-8** | **0 void rows in each arm**, and ≤ 2 in total across the pass | ≥ 3 void in one arm — which by AC2 also takes that arm below its floor |
+| **AC-5** | **≥ 14 of 20** rows produce an unambiguous `passes_gate` from the packet alone — the first test of §A2.1 and §Z's rubric repair, against the v9 baseline of 3 of 12 recorded at §T2's prediction T8. **"Unambiguous" means the scorer's packet-level `ambiguous` flag reads `no`** — the broad reading, counting ambiguity anywhere in the row. The narrower gate-only reading that §T2 also records (4 of 12 there) is **not** the one measured, and may not be substituted afterwards | ≤ 13 rows with `ambiguous = no`. This is the prediction most likely to fail and the most useful if it does |
+| **AC-6** | Custom's audit-derived sweep breadth is **at or below** native's on every row — §T2's prediction T9 held at 12 of 12 | Any custom row exceeds **either** of its seed-matched native rows |
+| **AC-7** | **0 of 10** custom rows are lost to #148's trap — no row terminates on a validator rejection attributable to an omitted `root_causes` or omitted `evidence` array | ≥ 1 such row. §AC8's third bullet states why a clean result here is weak evidence |
+| **AC-8** | **≤ 2 void rows encountered across the whole pass**, and every arm finishes with **10 valid rows** | ≥ 3 voids encountered, **or** any arm closing below 10 valid rows. Stated on voids *encountered* rather than surviving, because AC6 re-runs them: a pass that voids six rows and recovers all six is not the clean run this predicts |
 | **AC-9** | **The milestone is NOT met** under Ruling 3 — custom lands below 80% | Custom ≥ 80% of its valid runs |
 
 **AC-9 is a prediction against the project's own preferred outcome**, and it is filed that way on
@@ -4349,7 +4357,7 @@ is optional stopping at the most result-sensitive moment there is."*
 | Situation | Action |
 |---|---|
 | A row is void under §A3 | Re-run that seed/rep, per §A3's *"void runs should be re-run, not absorbed"*. Record both the void and its replacement |
-| Re-runs reach **3 in one arm** | Stop re-running. Report *gate not evaluable — insufficient data* for that arm per §A3.4, state the void reasons, and **do not compute a verdict from the survivors** |
+| Re-runs reach **3 in one arm** | **A cost stop, not a verdict.** Stop re-running that arm and close the pass with what is valid. Then apply §A3.4 to the arm's **valid row count**: at 10 valid rows it is evaluable normally; at 9 or 8 it is evaluable with the void reasons stated; **below 8** report *gate not evaluable — insufficient data* and **do not compute a verdict from the survivors**. The re-run cap bounds instance time; the floor is what bounds the verdict, and the two are not the same test |
 | A void is caused by an operator error rather than fixture state | Still a void, still re-run, and the error is recorded in the raw-evidence file. §O5's controller error is the precedent for recording rather than quietly correcting |
 
 **Packets are built after all 20 runs terminate, and the scorers are dispatched once.** No packet is
@@ -4391,12 +4399,28 @@ constant or the comparison to v9 is meaningless. Packets are built by the §Z4 p
 
 **The blind-rule guard must be told about `scoring-v12/` as part of building the packets, not
 after.** One correction to the qualification file's §4 item 4, which said the suite "stays green
-while it is": it does not. `test/scorerPacketBlindRule.test.js:709` compares `PACKET_SETS` against
-the directories actually on disk, so a new `scoring-v12/` turns the suite **red** until it is
-declared — the guard fails closed on *declaration*. **The residual hole is narrower and real:**
+while it is": it does not. The `declares every committed packet set` test compares `PACKET_SETS`
+against the directories actually on disk, so a new `scoring-v12/` turns the suite **red** until it
+is declared — the guard fails closed on *declaration*. **The residual hole is narrower and real:**
 `scanned` is consumed as `PACKET_SETS.filter((s) => s.scanned)`, so a set declared `scanned: false`
-with a written reason is accepted and never scanned. Declare `scoring-v12` with **`scanned: true`**;
-the `scanned: false` route exists for `scoring-v4`'s historical record and for nothing in this pass.
+with a written reason is accepted and never scanned.
+
+**Declaring it takes three edits, not one, and all three are needed before the suite goes green
+again.** Naming only the first would leave an operator debugging the guard in the middle of the one
+procedure §AC6 says must not be interrupted:
+
+1. **Add the `PACKET_SETS` entry** with `dir: 'scoring-v12'`, **`scanned: true`** (the
+   `scanned: false` route exists for `scoring-v4`'s historical record and for nothing in this pass),
+   a `why`, and a **`packets:` count** — the per-set test asserts the number of `row-NN-*.md` files
+   on disk equals that count, so it must be the real number.
+2. **Update the hardcoded membership literal** in the same test —
+   `expect(PACKET_SETS.map((s) => s.dir)).toEqual(['scoring-v4', 'scoring-v9'])` — to include
+   `'scoring-v12'`. This is documentation of declared order; the disk-derived assertion above it is
+   the one that binds, but both must pass.
+3. **Run `npm test`** and confirm green before the first packet is handed to a scorer.
+
+Line numbers are deliberately omitted here: they drift on any edit to that file, and the earlier
+draft of this section pinned `:709` when the assertion is at `:722`. Navigate by test name.
 
 **Artefacts.** Measurements → `benchmark/raw-evidence-v12-scored-pass.md`. Rows →
 `benchmark/scorecard-v12.md`. Packets exactly as scored → `benchmark/scoring-v12/`. Operator records

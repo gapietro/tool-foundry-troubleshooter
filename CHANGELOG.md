@@ -42,6 +42,10 @@ chosen because v4 is the only prior pass to run all five seeds against both arms
    native* — the latter makes the milestone a function of native's measured intra-day drift, so a
    bad native day could carry it without the custom harness improving.
 
+§AC also separates two things §A3.4 leaves adjacent: the **floor** counts valid rows at the close of
+the pass, while the **re-run cap** bounds instance time. A void that is successfully re-run costs the
+denominator nothing, so a pass that voids six rows and recovers all six is costly, not under-powered.
+
 **Nine predictions with stated refutation criteria**, including AC-9 — *the milestone is NOT met* —
 filed against the project's own preferred outcome so the standing prior is exposed rather than
 restated. AC-5 (≥14 of 20 rows unambiguous) is the first live test of §Z's rubric repair against
@@ -55,10 +59,14 @@ top band only 67.8% of the time. Tabulated in §AC2 rather than discovered after
 
 `raw-evidence-seed-qualification-02-05.md` §4 item 4 said a new `scoring-v<n>/` directory leaves the
 blind-rule suite green until someone declares it. It does not:
-`test/scorerPacketBlindRule.test.js:709` compares `PACKET_SETS` against the directories on disk, so
-an undeclared set turns the suite **red** — the guard fails closed on declaration. The residual hole
-is narrower and real: `scanned` is consumed as `PACKET_SETS.filter((s) => s.scanned)`, so a set
-declared `scanned: false` is accepted and never scanned. Corrected in §AC7.
+the `declares every committed packet set` test in `test/scorerPacketBlindRule.test.js` compares
+`PACKET_SETS` against the directories on disk, so an undeclared set turns the suite **red** — the
+guard fails closed on declaration. The residual hole is narrower and real: `scanned` is consumed as
+`PACKET_SETS.filter((s) => s.scanned)`, so a set declared `scanned: false` is accepted and never
+scanned. Corrected in §AC7, which also lists the three edits a declaration actually needs — the
+entry with a matching `packets:` count, the hardcoded membership literal in the same test, and a
+green `npm test`. Declaring only the entry, as the first draft of §AC7 said, still leaves the suite
+red.
 
 ## 2026.08.0903 — 2026-08-09
 
