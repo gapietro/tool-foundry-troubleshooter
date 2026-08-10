@@ -156,13 +156,11 @@ reason is honest; a `0` is a measurement that did not happen.
    |---|---|---|
    | Top (`≥ 8/10`) | **≥ 80%** | This arm is the front door |
    | Middle (`5–7/10`) | **≥ 50% and < 80%** | This arm is lightweight triage only |
-   | Bottom (`< 5/10`) | **< 50%** | This arm is not a path |
+   | Bottom (`< 5/10`) | **< 50%** | This arm does not clear triage on this evidence |
 
-   **A band classifies ONE arm and prescribes about that arm only.** This column
-   used to prescribe *building a second harness* from the **first** arm's band — a
-   two-arm prescription carried by a single-arm classification, which holds only
-   while the second arm is unmeasured. Where two harnesses are compared, each arm
-   is banded on its own proportion and:
+   **A band classifies ONE arm and prescribes about that arm only.** A band says
+   nothing about any other arm — including whether an alternative should be built.
+   Where two harnesses are compared, each is banded on its own proportion and:
 
    > **(a) The other arm is UNMEASURED on this seed set** — this arm's shortfall is
    > the only evidence available, and building the alternative is the only
@@ -179,6 +177,11 @@ reason is honest; a `0` is a measurement that did not happen.
    > diagnosis** is removed or re-derived before any further build, whatever the arm
    > proportions say. Arm-level proportions can hide component-level harm: an arm can
    > clear a band while containing a component that damages a subset of its rows.
+
+   **The bottom band is a floor, and floors are the least informative result.** It
+   does not establish how far below the band the arm sits, and it does not establish
+   that the arm cannot reach a higher band later. Read it as *this arm did not clear
+   triage in this pass*, never as *this arm is finished*.
 
    **Scorers: this note is for whoever reads the completed scorecard.** It asks
    nothing of you — score the rubric columns and leave the banding alone.

@@ -39,22 +39,29 @@ two-digit daily counter. Incremented on every merge to `main`.
   diagnosis is removed or re-derived before any further build, since arm-level proportions can hide
   component-level harm.
 
-  The **bottom band carried the identical defect** (`< 50% → full custom harness as designed`) and is
-  repaired by the same rule; the **top band is untouched** — *"native is the front door"* rests on
-  native's own number.
+  **All three bands carried the defect, not just the middle one.** The bottom band
+  (`< 50% → full custom harness as designed`) is claim-(3) end to end; and three copies of the **top**
+  band attach a custom-side clause too (*"the custom harness shrinks to the Evidence Bundle path +
+  measured gaps"*), which is the same shape in the row that looked clean. What is untouched is the
+  **native-side half of every band**, not the top band. The repaired bottom cell reads *"this arm does
+  not clear triage on this evidence"* — never *"not a path"*: a bottom-band score is a floor, silent on
+  how far below the band an arm sits and on whether it could clear one later.
 
   Applied across every surface carrying the stale prescription: `benchmark/scorecard-template.md`
   §A3.3 (the live instrument) and `README.md` get the corrected rule; `docs/ARCHITECTURE_DECISIONS.md`
   Decision 0.5, `docs/IMPLEMENTATION_PLAN.md` Task 12 and `docs/AGENT_DOCTOR_ARCHITECTURE.md` §8 take
   supersession notes rather than rewrites, because each is a record of a decision as it was made.
-  `benchmark/scorecard-agent-doctor.md`'s copy is left untouched — a historical scorecard must state
-  the rule it was scored under.
+  Two surfaces deliberately keep the retired rule: `benchmark/scorecard-agent-doctor.md` (a historical
+  scorecard must state the rule it was scored under) and `DESIGN.md` §4's ruling **R-21**, which quotes
+  the `< 5/10` cell as evidence in its own argument — editing it would rewrite the ruling's reasoning.
 
   **`scorerPacketBlindRule` failed the first cut of the instrument edit** (one `repository-path`,
   three `outside-section-pointer`) — the rubric channel reaches every packet, so the *derivation*
   cannot cross into the template even when the *rule* must. The two prior-run proportions in that
-  draft were removed on the same reasoning and would not have been caught by any pattern. Recorded at
-  §AE6.
+  draft were removed on the same reasoning and would not have been caught by any pattern. **The #161
+  review then caught the rewrite still opening with provenance** (*"This column used to prescribe…"*),
+  which the guard also passed — two drafts in a row put the derivation at the site of the change, so
+  the guard's blind spot needs a named reviewer rather than vigilance. Recorded at §AE6.
 
   **v12's numbers are unchanged and no re-run is licensed** (§T9). Both halves of §AD7's disposition
   that rest on measurement stand — native remains the recommended path on this instance, and the

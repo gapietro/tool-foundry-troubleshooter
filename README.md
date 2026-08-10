@@ -32,18 +32,24 @@ The diagnostic tools and playbook are built **harness-agnostic**, then wrapped f
 |-----------|---------|
 | ≥ 8/10 correct root causes, usable fixes | That arm is the front door |
 | 5–7/10 | That arm is lightweight triage only |
-| < 5/10 | That arm is not a path |
+| < 5/10 | That arm does not clear triage on this evidence |
 
-**A band prescribes about the arm it was read on.** These bands originally read the *native* score and
-prescribed *building the custom harness* — sound only while the custom arm was unmeasured. Both arms are
-now measured (v12: **native 6/10 · 60%**, **custom 0/10 · 0%**), so that inference is retired: the custom
-harness is built out only on **its own ≥ 80%**, and a component measured to *degrade* a diagnosis is
-removed or re-derived first. Re-derivation and the reasoning: `benchmark/DECISION.md` §AE (binds on passes
-after v12).
+**A band prescribes about the arm it was read on, and about no other.** These bands originally read the
+*native* score and prescribed what to do with the **custom** arm — *"build the custom deep-diagnosis
+harness"* at 5–7/10, *"full custom harness"* below 5, and *"the custom harness shrinks to the Evidence
+Bundle path + measured gaps"* at ≥ 8/10. All three are the same shape, and all three held only while the
+custom arm was unmeasured. Both arms are now measured (v12: **native 6/10 · 60%**, **custom 0/10 · 0%**),
+so those clauses are retired: the custom harness is built out only on **its own ≥ 80%**, and a component
+measured to *degrade* a diagnosis is removed or re-derived first. Re-derivation and the reasoning:
+`benchmark/DECISION.md` §AE (binds on passes after v12).
 
-**Current standing:** native remains the recommended path on this instance; the Phase 1b milestone is not
-met. Quote the result as **native 6/10 · 60% · middle band** with **custom 0/10 · 0% · bottom band** —
-never one arm without the other.
+**A bottom-band result is a floor** — it does not say how far below the band the arm sits, nor that it
+cannot reach a higher band later.
+
+**Current standing:** native is the recommended path **as triage** on this instance — that is what its
+middle band prescribes and no more — and the Phase 1b milestone is not met. Quote the result as
+**native 6/10 · 60% · middle band** with **custom 0/10 · 0% · bottom band** — never one arm without the
+other.
 
 See `docs/ARCHITECTURE_DECISIONS.md` (Decision 0.5, partially superseded) and the benchmark protocol in `docs/IMPLEMENTATION_PLAN.md`.
 

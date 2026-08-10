@@ -4749,8 +4749,31 @@ tells you native is not the answer; it does not tell you the custom harness is. 
 under (b) it does not. The rule above governs both rows, and the extension is recorded here rather than
 left for a later reader to trip over one cell away from the one that was fixed.
 
-**The top band is untouched.** *"Native is the front door"* is a native-side claim resting on native's
-own number — claim (2), not claim (3).
+**Note what the bottom row did NOT contain: a claim about native at all.** Unlike the middle row, whose
+*"native for lightweight triage"* is claim (2), the bottom row is claim (3) end to end. Withdrawing claim
+(3) therefore leaves it **empty**, and the repaired cell has to *state* a native-side outcome that was
+never previously written down. It is worded **`this arm does not clear triage on this evidence`** —
+scoped to the evidence and to the role, and deliberately **not** *"this arm is not a path"*, which would
+condemn an arm §AE7 explicitly refuses to condemn and which no measurement supports: a bottom-band score
+is a floor (§AD6), silent both on how far below the band the arm sits and on whether it could clear a
+band later. The instrument carries that caveat beside the table.
+
+**Correction, from the #161 review: the top band is untouched only in the scorecard's copy.**
+`scorecard-template.md`'s top row reads *"Native is the front door"* and nothing else — claim (2),
+correctly left alone. But three other copies attach a **custom-side clause to that same band**: Decision
+0.5's *"Phase 1b shrinks to the Evidence Bundle path and whatever the scorecard showed native can't do"*,
+`AGENT_DOCTOR_ARCHITECTURE.md` §8's *"the custom harness shrinks to the Evidence Bundle path + measured
+gaps"*, and `README.md`'s *"custom harness shrinks to Evidence Bundle + gaps"*. Each is a claim about the
+**custom** arm read off a **native** number — claim (3) sitting in the top row — and each therefore falls
+under the same rule: it stands under (a), and is withdrawn under (b). **The accurate statement is that the
+native-side half of EVERY band is untouched**, not that the top band is. All three copies are annotated
+accordingly, and this section's first draft was wrong on that point.
+
+**Cell-level record, so this file and the instrument agree on what moved.** In `scorecard-template.md`
+§A3.3 the Outcome header gained *"— the arm this band was read on"*; the top cell became `This arm is the
+front door` (arm-neutral wording, unchanged claim); the middle became `This arm is lightweight triage
+only`, where **`only`** is a new and deliberate restriction carrying (b)'s *"and nothing else"*; the
+bottom became `This arm does not clear triage on this evidence` for the reason above.
 
 ### AE6. What binds, and when
 
@@ -4778,6 +4801,21 @@ own number — claim (2), not claim (3).
 > general form, worth carrying:** a decision rule and its *derivation* have different audiences — the
 > derivation belongs in this file, and only the rule itself, stated without provenance, may cross into
 > the instrument. The guard enforces the first half; the second half is a judgement it cannot make.
+>
+> **And the second half needed making twice.** The #161 review caught the *rewritten* template still
+> opening with provenance — *"This column **used to** prescribe building a second harness…"* — which is
+> history, not rule, shipped to every scorer in the rubric slice. The guard passed it, exactly as this
+> note predicted it would. The rule (a)/(b)/(c) stands without that sentence and the sentence is gone.
+> Two drafts in a row put the derivation where the rule belongs, which is the useful measurement here:
+> the pull toward explaining a change at the site of the change is strong enough that the guard's blind
+> spot needs a named reviewer, not vigilance.
+
+**One surface is deliberately left carrying the retired rule.** `DESIGN.md` §4's ruling **R-21** quotes
+*"`< 5/10 → Full custom harness as designed`"* as evidence inside its own argument — that a near-0 score
+reached *by construction* (Agent Doctor had layer-1 tools only) would have triggered the project's most
+expensive decision from a missing-tools gap rather than from anything measured. The quotation is load
+bearing **as a quotation**: R-21 is reasoning about the rule as it stood, and editing it would rewrite the
+ruling's own evidence. Same class as `scorecard-agent-doctor.md`, and excused on the same grounds.
 
 ### AE7. What this re-derivation cannot establish
 
