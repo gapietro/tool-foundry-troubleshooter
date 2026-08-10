@@ -76,11 +76,22 @@ function redact(text) {
     let out = text
     for (const [from, to] of REDACTIONS) out = out.split(from).join(to)
 
-    // Generic sweep for anything the explicit map missed. A bare markdown
-    // filename becomes a description of its kind rather than a name, because
-    // the name itself is the navigable pointer.
-    out = out.replace(/`?\.{0,2}\/?(?:benchmark|docs|src|test|seed-app|seeds|history|results)\/[A-Za-z0-9_./*-]+`?/g,
-        (m) => (/\.now\.ts/.test(m) ? 'the seed\'s Fluent source file' : 'a repository file'))
+    // Generic sweep for anything the explicit map missed. Uses the SAME stem
+    // list as the guard, because a narrower list here is exactly how a path
+    // slips through — the first run of this script missed a bare `dist/` for
+    // that reason and the self-check caught it.
+    const stemAlt = '(?:benchmark|docs|src|test|seed-app|node_modules|dist|\\.claude|\\.superpowers|' +
+        'seeds|history|results|scoring-v[0-9]+|scorecard-[A-Za-z0-9_-]+|raw-evidence-[A-Za-z0-9_-]+)'
+
+    // A stem plus a slash and any path tail. Ordered before the bare-stem rule
+    // so the longer match wins.
+    out = out.replace(new RegExp('`?\\.{0,2}/?' + stemAlt + '/[A-Za-z0-9_./*-]*`?', 'g'),
+        (m) => (/\.now\.ts/.test(m) ? 'the seed\'s Fluent source file' : 'the build output directory'))
+
+    // A ./ or ../ prefix followed by a bare stem with no trailing slash.
+    out = out.replace(new RegExp('`?\\.{1,2}/' + stemAlt + '`?', 'g'), 'a repository location')
+
+    // Any bare markdown filename — the name itself is the navigable pointer.
     out = out.replace(/`?[A-Za-z0-9_-]+\.md`?/g, 'a repository document')
 
     return out
@@ -109,22 +120,89 @@ const ARM_LABEL = {
     custom: 'custom (`POST /api/x_snc_troubleshoot/v1/troubleshooter/analyze`)',
 }
 
-function measurementsTable(row) {
+/**
+ * Section 4, matching the v9 packet layout so the two passes can be read side
+ * by side. Bullet list rather than a table: v9 used bullets, several values are
+ * long, and a table cell that wraps is harder for a scorer to read.
+ */
+function measurements(row) {
     const lines = [
-        '| Measurement | Value |',
-        '|---|---|',
-        '| Terminal state | ' + row.terminal + ' |',
-        '| Wall clock | ' + row.wall_clock + ' |',
-        '| Tool calls (audit-derived) | ' + row.tool_calls + ' |',
-        '| Distinct tools, first-use order | ' + row.distinct_tools.join(', ') + ' |',
-        '| `layers_swept` (mechanical map) | ' + row.layers_swept + ' |',
-        '| `layers_available` | ' + row.layers_available + ' |',
-        '| Harness HOLDs | ' + (row.holds === 0 ? 'none' : row.holds) + ' |',
-        '| `continuous_tool_execution_limit` | ' + row.tool_limit + ' |',
+        'Derived from the diagnostic run\'s own audit trail (`action_type=result`) per §E1–§E2,',
+        'independently of the report text — never inferred from the report\'s own prose.',
+        '',
+        '- **`layers_swept` (audit-trail-derived):** ' + row.layers_swept +
+            ' — mechanical §E2 map of the distinct tool set (`agent_trace`→L1, `agent_config`→L2/L3/L7, `schema_lookup`→L4, `query_table`→L5, `genai_log`→L6; `read_artifact` and `log_analysis` map to no layer)',
+        '- **Tool-call count:** ' + row.tool_calls + ' result rows',
+        '- **Distinct tool names:** ' + row.distinct_tools.length + ' — ' + row.distinct_tools.map((t) => '`' + t + '`').join(', '),
+        '- **`layers_available`:** **' + row.layers_available + ' (L1–L7)** — read per §E3 before run 1 by two independent paths that agreed: `sn_aia_agent_tool_m2m` (`agent=e1392946828940e5a708fc51b0a5e954^active=true`) and the harness\'s own tool registry. All seven attached and active, `max_auto_executions = 10` on every one.',
+        '- **`continuous_tool_execution_limit`:** ' + row.tool_limit + ' — read live during this pass, not carried forward',
+        '- **Terminal state:** **' + row.terminal + '**',
+        '- **Wall clock:** ' + row.wall_clock,
+        '- **Harness HOLDs:** ' + (row.holds === 0 ? 'none' : String(row.holds)),
     ]
-    if (row.hold_text) lines.push('| HOLD text (verbatim) | ' + row.hold_text.replace(/\|/g, '\\|') + ' |')
-    if (row.note) lines.push('| Operator note | ' + row.note.replace(/\|/g, '\\|') + ' |')
+
+    if (row.hold_text) {
+        lines.push('')
+        lines.push('The HOLD, recorded on the transcript by actor `system`, verbatim:')
+        lines.push('')
+        lines.push('```')
+        lines.push(row.hold_text)
+        lines.push('```')
+    }
+
+    lines.push('')
+    lines.push(
+        '**One stated omission.** The per-call ordered list with timestamps and full arguments is not' +
+            ' reproduced here. Where the argument of a held call bears on whether a layer was genuinely' +
+            ' reached, that argument is named in section 5 instead. Every packet in this pass carries the' +
+            ' same fields, so the instrument is constant across rows.'
+    )
+
     return lines.join('\n')
+}
+
+/** Section 3 header — run identity and how the run was invoked. */
+function reportHeader(row) {
+    const lines = [
+        '**Harness arm:** ' + ARM_LABEL[row.arm],
+        '**How this run was invoked:** ' + row.invocation,
+        '**Execution under diagnosis:** ' + (/^\(/.test(row.target_execution) ? row.target_execution : '`' + row.target_execution + '`'),
+    ]
+    if (row.triggering_record) lines.push('**Triggering record:** `' + row.triggering_record + '`')
+    lines.push('**This run\'s own identity:** ' + (row.arm === 'custom' ? 'run_id ' : 'diagnostic execution ') + '`' + row.run_id + '` (' + row.run_number + ')')
+    lines.push('**Terminal state:** **' + row.terminal + '**')
+    lines.push('**Wall clock:** ' + row.wall_clock)
+    lines.push('**Tool-call count:** ' + row.tool_calls)
+    return lines.join('  \n')
+}
+
+/**
+ * The report body. Custom runs store a structured `fix_report`; native runs
+ * emit markdown prose. Both are reproduced in the form the arm produced —
+ * v9 did the same, and normalising one into the other would edit the artifact
+ * under test rather than present it.
+ */
+function reportBody(row, raw) {
+    const isJson = raw.trimStart().startsWith('{')
+    const out = []
+
+    if (/failed/.test(row.terminal)) {
+        out.push(
+            'This run terminated with **no accepted report**. What follows is the report body the model' +
+                ' produced, verbatim, followed by the harness validator\'s verbatim rejection. **A rejected' +
+                ' report is still scored** — it is the only record of what the model produced.'
+        )
+        out.push('')
+    }
+
+    if (isJson) {
+        out.push('```json')
+        out.push(raw)
+        out.push('```')
+    } else {
+        out.push(raw)
+    }
+    return out.join('\n')
 }
 
 function buildPacket(row, rubric) {
@@ -162,19 +240,26 @@ function buildPacket(row, rubric) {
         '',
         '## 3. This run\'s report',
         '',
-        fs.readFileSync(path.join(REPORTS, 'row-' + n + '.md'), 'utf8').trimEnd(),
+        reportHeader(row),
+        '',
+        reportBody(row, fs.readFileSync(path.join(REPORTS, 'row-' + n + '.md'), 'utf8').trimEnd()),
         '',
         '---',
         '',
         '## 4. This run\'s audit-trail measurements',
         '',
-        'Derived from the diagnostic run\'s own audit trail, not from the report\'s prose.',
-        '',
-        measurementsTable(row),
+        measurements(row),
         '',
         '---',
         '',
-        '## 5. What to return',
+        '## 5. Notes specific to this run',
+        '',
+        (row.note ? '- ' + row.note : '- No run-specific notes.'),
+        '- This run reached a terminal state and was not re-run. No row in this pass was void, and no arm used any of its permitted re-runs.',
+        '',
+        '---',
+        '',
+        '## 6. What to return',
         '',
         'Score the four rubric columns, then compute `passes_gate` by the rule in section 1.',
         'State your reasoning for each column. If a column is under-determined by the material',
