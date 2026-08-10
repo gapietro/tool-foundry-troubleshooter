@@ -26,11 +26,11 @@ could not express, leaving the scorer to round arbitrarily in either direction. 
 
 > **Superseded 2026-08-10, issue #164.** This note used to continue: *"Seed 5 is
 > the only seed that currently defines a partial case; for the others, 1 is
-> available but must be justified in `notes` if used."* That sentence located the
-> 1/2 and 1/0 boundaries nowhere, and two v12 rows were flagged on it. **§A2.3
-> Case 2 now fixes both boundaries for every seed**, and a `notes` justification
-> is no longer what makes the band available. The seed-5 case above is now one
-> instance of that general rule rather than the only defined one.
+> available but must be justified in `notes` if used."* That sentence made the
+> band available without locating either boundary. **§A2.3 Case 2 now fixes both
+> boundaries for every seed**, and a `notes` justification is no longer what makes
+> the band available. The seed-5 case above is now one instance of that general
+> rule rather than the only defined one.
 
 ## A1. `evidence_cites_trace_and_config` — five cases the column definition does not otherwise determine
 
@@ -301,6 +301,22 @@ describes the seed's layer-2 mechanism scores **0**, and a root cause filed unde
 the expected layer whose prose is thin, hedged or wrong about the mechanism
 scores **2**.
 
+**A declared layer naming more than one layer** — `Layer: 3 (Tool definition) + 4
+(Data schema) + 5 (Data)`, `Layer: 3 / 7` — is read on **the conjunct that names
+the expected layer**, if one does, and scores **2**; a compound naming no
+expected conjunct scores **0**. The other conjuncts are neither credited nor
+charged. This is the ordinary shape of a multi-layer causal claim — a type
+mismatch genuinely spanning the tool contract, the column type and the stored
+data — and a report making it is committing to every layer it names, which is
+falsifiable in a way that listing separate hedged entries is not. That is why
+this differs from Case 2, which refuses enumeration **across entries**: the
+cheapness is in the list, not in the compound.
+
+*The residual exposure, recorded rather than closed: a primary entry declaring
+all seven layers at once would earn 2 on any seed. No rule here reaches it,
+because every reading that would is a judgement about how sincere a compound is.
+It is a bound to watch, not a defence.*
+
 *The distinction, stated so it is not re-derived: the column is named for the
 layer and asks only whether the diagnosis reached it. "Reaching a layer is not
 diagnosing at it" is a standing finding of this project, not a defect in the
@@ -312,12 +328,15 @@ under-determination these clauses exist to remove. **The cost is stated rather
 than argued away:** a run that understood the defect and mis-numbered it scores 0
 here.*
 
-Where the report declares **no** layer anywhere, and only there, score **2** if
-the root-cause statement names the expected layer by the **name or the number the
-seed spec prints** — `genai_stack`, or "layer 6" — and **0** otherwise. The
-packet carries no layer-to-artifact map, so a scorer is never asked to work out
-which layer an unlabelled artifact belongs to; that inference has no mechanical
-answer here and the column does not need one.
+Where **the entry selected under Case 2** declares no layer, score **2** if its
+root-cause statement names the expected layer by the **name or the number the
+seed spec prints** — `genai_stack`, or "layer 6" — and **0** otherwise. This
+holds whether or not *other* entries declare layers: a report whose primary is
+unlabelled prose and whose secondaries carry `Layer:` rows is read on the primary
+alone, and reaching into a secondary for a label is the scan-the-list reading
+Case 2 forbids. The packet carries no layer-to-artifact map, so a scorer is never
+asked to work out which layer an unlabelled artifact belongs to; that inference
+has no mechanical answer here and the column does not need one.
 
 **Case 2 — the report states more than one root cause.** Evaluate the column
 **against one root cause: the report's primary**, selected by the same rule §A1
@@ -329,7 +348,7 @@ cause and the column scores **0**.
 Do **not** scan the list for an entry that happens to carry the expected layer. A
 report enumerating five or seven layers as candidate hypotheses would otherwise
 score 2 on every seed automatically, which would make the column measure list
-length rather than diagnosis, and a run has been observed doing exactly that.
+length rather than diagnosis.
 
 *Two things this case deliberately does not do.* It does not require the primary
 entry to be swept, confirmed or unhedged — a `layers_swept` table marking the
@@ -346,10 +365,9 @@ same defect twice.
 *Added 2026-08-10, issue #164. The rationale is in the project's decision
 record.* This column is **not** in §A2's gate expression, but it binds the gate
 through §A's constraint — `fix_usable_unedited` may not be 1 while this column is
-0 — which is the subsection above this one, and is why its clauses sit under §A2
-rather than beside §A1's. Every case below is decided by the seed spec's header
-table (`Expected fix target`) plus the fix text. **Neither asks the scorer to
-weigh anything.**
+0 — and that constraint governs the column at **§A2.1**, which is why these
+clauses sit under §A2 rather than beside §A1's. Every case below is decided by
+the seed spec plus the fix text. **Neither asks the scorer to weigh anything.**
 
 **Case 1 — the fix's declared target and its body disagree.** Where a proposed
 fix declares its target — a `target_type` / `target` field, a **Target type**
@@ -367,15 +385,25 @@ report. Where a fix declares no target, read the target from the artifact its
 operation writes to; where its operation names no artifact, the column scores
 **0**.*
 
-**Case 2 — where the 1/2 and 1/0 boundaries fall.** Compare the target selected
-by Case 1 against the seed spec's `Expected fix target` row:
+**A declared target naming more than one area** — `Target type: Tool definition +
+wiring` — is read on **the conjunct that names the seed's expected area**, if one
+does, and scores whatever band Case 2 then gives it. The other conjuncts are
+neither credited nor charged. A compound naming no expected-area conjunct scores
+**0**, exactly as a single wrong target does.
 
-- **2** — the target names what that row names as the **specific** target (the
-  record, field, table or mapping), or what the row defers to the seed's
-  *Expected diagnosis* section to name.
-- **1** — the target falls in the **same one of §A's five areas** as the expected
-  target (tool schema / instruction text / data seeding / capability mapping /
-  activation) but does not name the specific target.
+**Case 2 — where the 1/2 and 1/0 boundaries fall.** Two things in the seed spec
+decide this, and **they are two different places in the document**: the
+`Expected fix target` header row gives the **area**, and the seed's *Expected
+diagnosis* section names the **specific** target — the record, field, table or
+mapping. Read both. Four of the five seeds print only an area in the header row,
+so a scorer who consults the row alone will find the 2 band unreachable and
+mis-award every full-credit fix as partial.
+
+- **2** — the target names the specific target the seed's *Expected diagnosis*
+  section names, in whatever terms that section uses.
+- **1** — the target falls in the **same one of §A's five areas** as the
+  `Expected fix target` row (tool schema / instruction text / data seeding /
+  capability mapping / activation) but does not name the specific target.
 - **0** — the target falls in a different area; **or** it is a target the seed
   spec's expected-target row explicitly excludes. Where a seed rules a reading
   out in as many words — "**Not** the tool input schema" — that reading scores 0
@@ -387,16 +415,46 @@ be used; recording *why* in `notes` remains good practice and is no longer what
 authorises it.
 
 **Where the report proposes several fixes**, the column takes **the highest value
-any single proposed fix earns**, excluding entries the report itself marks as
-alternative, hedged, optional or follow-on hardening. **The fix that earns that
-value is the one §A2.1 Case 5 then evaluates** — the two columns must be read
-against the same fix, or §A's constraint relates a target drawn from one fix to a
-usability judgement drawn from another and stops meaning anything.
+any single non-hedged proposed fix earns** — skipping any entry the report itself
+marks alternative, hedged, optional or follow-on hardening — with **one
+restriction: the 1 band is available only from the report's primary fix** (the
+one it labels primary or ranks first, on the same skip rule). A later fix can
+lift the column to **2** by naming the specific target; it cannot lift it to
+**1** by naming only the area.
 
-*The residual exposure, recorded rather than closed: a report proposing one fix
-in each of the five areas earns 1 on any seed. It cannot earn 2, since 2 requires
-the specific target, and it will normally fail §A2.1 on the fix that earned the
-1. That is a bound, not a defence, and it is the case to watch in the next pass.*
+*Why this is NOT §A2.2 Case 2's primary-only rule, since the asymmetry is
+deliberate and the reason is the whole of its justification.* Naming a layer is
+free: it is a label on a list entry, and enumerating all seven guarantees a hit
+at no cost, which is why the other column reads the primary alone. Naming an
+**area** is equally free — five areas exist and a report can list all five — so
+the 1 band gets the same treatment. Naming the **specific** target is not free:
+it requires having identified the record, field, table or mapping the seed's
+*Expected diagnosis* names, and a report that does that in its second fix has
+done the thing this column measures. Scoring it 0 because it ordered its fixes
+differently would charge a report for its layout, not its aim. **The enumeration
+hole is therefore closed at the band where enumeration is cheap, and left open at
+the band where it is not.**
+
+Where several fixes tie at the top value, the column takes that value; no
+tie-break is needed, because this column scores a **value** and does not
+designate a fix for any other column to use.
+
+> **This column selects its own subject, and does not redirect §A2.1 Case 5.**
+> That case picks its subject by a different test — the fix that addresses the
+> seeded defect — and may land on a different fix, or on several. The two columns
+> are joined by §A's constraint, which relates their **values** (a
+> `fix_target_correct` of 0 forces `fix_usable_unedited` to 0) and not their
+> subjects. Where the two select different fixes, that is the design rather than a
+> conflict, and neither case overrides the other.
+
+*The residual exposure, recorded rather than closed: a report proposing five
+distinct fixes that each name a **specific** target, one per area, earns 2 on any
+seed. The restriction above does not reach that case, and no rule here does —
+because such a report has, in fact, named the seeded target, and a rule that
+scored it 0 would be scoring the report's confidence rather than its aim. What
+protects the pass is that the other three columns are unmoved by it: the shotgun
+still has to survive §A2.2 Case 2 on its root causes and §A2.1 on the fix. It is
+a bound, not a defence, and it is the case to watch in the next pass.*
 
 ## A3. Void runs — a run that measured nothing
 

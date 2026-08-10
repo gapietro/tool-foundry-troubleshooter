@@ -5325,11 +5325,13 @@ worth a point. Case 2's third band therefore scores 0 for any reading the seed s
 excludes: a seed that names its decoy is naming a miss, and drawing that line is the seed spec's job,
 not the scorer's.
 
-**And the two fix columns are pinned to the same fix.** Where a report proposes several, this column
-takes the highest value any single non-hedged fix earns, **and that fix is the one §A2.1 Case 5 then
-evaluates.** Without that sentence, §A's constraint — `fix_usable_unedited` may not be 1 while
-`fix_target_correct` is 0 — could relate a target drawn from one fix to a usability judgement drawn
-from another, and stop meaning anything.
+**And the multi-fix rule splits the bands rather than picking a fix.** Where a report proposes
+several, the column takes the highest value any single non-hedged fix earns, **with the 1 band
+available only from the primary fix.** A later fix can lift the column to 2 by naming the specific
+target; it cannot lift it to 1 by naming only the area. The asymmetry with §A2.2 Case 2 — which reads
+the primary root cause and nothing else — is deliberate and §A2.3 states its reason: naming a *layer*
+or an *area* is free and enumerable, naming the *specific* target is not. §AH5a records what the
+first cut of this rule got wrong and how the rows caught it.
 
 ### AH5. Two published rows would score differently, and this is stated instead of recomputed
 
@@ -5363,6 +5365,62 @@ explained away. The defence available is the same one §AG5 offered and no stron
 mechanical, they are written before any pass that will be scored against them, and the ordering is
 checkable in git.
 
+### AH5a. What this section's own review round changed, and what the rows changed after that
+
+**Ten findings came back on the branch, and every one of them was a real defect.** They are recorded
+here rather than folded silently into the clauses, because three of them falsified a claim this
+section had already written down.
+
+**Two provenance leaks were sitting inside the packet slice.** §A's supersession note said *"two v12
+rows were flagged on it"* and §A2.2 Case 2 said *"a run has been observed doing exactly that"*. Both
+land between `## A.` and `## B.` — copied verbatim into every packet — and both tell a model scorer
+that a prior pass exists and that this very rule already moved rows in it. **Neither tripped any of
+the four `RUBRIC_PATTERNS`**: they are not score-shaped, not path-shaped, and not section pointers.
+The prose was removed, and three patterns were added — `pass-version-token`, `empirically-observed`,
+`rows-were-flagged` — each verified to fire on the exact string it was written for and verified inert
+on the slice as it now stands. **This is the second blind-rule defect this one section produced**
+(§AH6 records the first, the "§E" pointer), and the two together are the argument for #143's guard
+being pattern-based *and* for it being widened every time a miss is found.
+
+**§A2.3's first cut contradicted §A2.1 Case 5, on a gate term.** It claimed to designate which fix
+Case 5 evaluates. Case 5 already selects its own subject by a different test and, where several fixes
+address the seeded defect, requires **all** of them to satisfy its cases — so the two clauses handed
+a scorer opposite `fix_usable_unedited` values for the same report. §A2.3 now disclaims the redirect
+explicitly: each column selects its own subject, and §A's constraint relates their **values**, not
+their subjects.
+
+**§A2.3's 2 band was unreachable on four of the five seeds.** It was defined against the seed spec's
+`Expected fix target` header row, and only seed 01's row names a specific target — the other four
+print an area verbatim (*"the instruction text"*, *"data seeding"*, *"capability mapping"*,
+*"activation"*). Read literally, every full-credit fix on seeds 02–05 would have dropped to the
+partial band. The specific target lives in each seed's *Expected diagnosis* section, and the clause
+now sends the scorer to both places and says why.
+
+> **And then the rows falsified the repair.** The review's sharpest finding was that §A2.3 adopted a
+> highest-value reading while §A2.2 refused the equivalent for root causes, *"with no stated reason
+> for the asymmetry"*. The first response was to remove the asymmetry — apply §A2.2's primary-only
+> rule to fixes as well. **Re-checking the rows before shipping it showed that rule scores row 07's
+> `fix_target_correct` = 0.** That row's FIX-2 names `sn_aia_agent[…].instructions` — seed 02's
+> expected target at full specificity — and its scorer called the column determinate at full credit;
+> it is only the *second* fix listed. A rule that scores that report 0 is charging it for its layout.
+> **The asymmetry was right and the missing thing was its reason**, which is now written into §A2.3:
+> naming a layer or an area is free and enumerable, naming the specific target is not, so the
+> enumeration hole is closed at the 1 band and left open at the 2 band.
+
+**The largest hole in the section was found by neither the review nor the original pass.** It surfaced
+only from re-verifying every `rc = 2` row against the new clauses: **compound declared layers are the
+native report format's norm.** Row 01 declares `Layer: 3 (tool script) + 4 (schema)`, row 03 declares
+`3 (Tool definition) + 4 (Data schema) + 5 (Data)`, row 13 carries a `3 / 7`. §A2.2 as first written
+had no rule for them, so **eight published full-credit rows had no decidable value under the very
+clause meant to make the column determinate** — a bigger gap than the two flags the section was filed
+to close. A compound is now read on the conjunct naming the expected layer, with the reason it does
+not reopen Case 2 stated: the cheapness is in the list, not in the compound.
+
+**The counterfactual in §AH5 was re-derived after all of this and is unchanged** — still two flips,
+still one per arm, still no `passes_gate` movement. Every `rc = 2` row's primary root cause and every
+nonzero `fix_target_correct` row was checked against the final clauses, not only the four flagged
+ones. That the table survived a rule rewrite is worth more than the table did on first writing.
+
 ### AH6. What this cannot establish
 
 - **Nothing here measures diagnostic quality, for either arm.** §AD's verdict stands as published:
@@ -5377,11 +5435,13 @@ checkable in git.
   learned this about itself the hard way and the lesson is not spent: a pass with different seeds or
   an unseen report shape will find more, and the correct response is another clause, not a scorer's
   judgement call.
-- **One residual exposure is known and left open on purpose.** A report proposing one fix in each of
-  §A's five areas earns `fix_target_correct` = 1 on any seed. It cannot earn 2 — that needs the
-  specific target — and it will normally fail §A2.1 on the fix that earned the 1. The bound is stated
-  in §A2.3 itself rather than closed with a rule no observed row motivates, and it is the case to
-  watch in the next pass.
+- **Two residual exposures are known and left open on purpose**, both stated in the clauses
+  themselves rather than closed with rules no observed row motivates. A report proposing five
+  *specific* fixes, one per area, earns `fix_target_correct` = **2** on any seed — it has in fact
+  named the seeded target, and a rule scoring it 0 would be scoring the report's confidence rather
+  than its aim. And a primary root cause declaring all seven layers at once earns
+  `root_cause_layer_correct` = **2**, since every reading that would refuse it is a judgement about
+  how sincere a compound is. Both are bounds to watch in the next pass, not defences.
 - **This section had a defect its own guard caught, which is the argument for the guard.** The first
   cut of §A2.2 pointed a scorer at "§E" for how `layers_swept` is scored. §E sits **outside** the
   `## A.` → `## B.` slice the packet generator copies, so the pointer led out of the packet and

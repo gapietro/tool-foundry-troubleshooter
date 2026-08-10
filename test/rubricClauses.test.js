@@ -311,6 +311,22 @@ describe('the root_cause_layer_correct clauses exist (issue #164)', () => {
         expect(range).toContain('Do not score the substance of the finding text')
     })
 
+    it('clause 1 rules on a compound declared layer', () => {
+        // Compound layers are the NATIVE report format's norm, not an edge
+        // case: row 01 declares `3 (tool script) + 4 (schema)` and row 03
+        // declares `3 (Tool definition) + 4 (Data schema) + 5 (Data)`. Without
+        // this rule eight published full-credit rows have no decidable value,
+        // which is a larger hole than the four flags this section was filed to
+        // close.
+        const range = packetReachingRange(source)
+
+        expect(range).toContain('A declared layer naming more than one layer')
+        expect(range).toContain('conjunct that names the expected layer')
+        // The reason the compound is treated differently from a LIST, which is
+        // what stops this reading from reopening case 2.
+        expect(range).toContain('the cheapness is in the list, not in the compound')
+    })
+
     it('clause 1 gives the no-declared-layer fallback without inventing a layer map', () => {
         // The scorer packet carries the seed spec and the rubric -- it does
         // NOT carry a layer-to-artifact map. A fallback that asked which layer
@@ -320,6 +336,13 @@ describe('the root_cause_layer_correct clauses exist (issue #164)', () => {
 
         expect(range).toContain('name or the number the seed spec prints')
         expect(range).toContain('no layer-to-artifact map')
+        // The fallback must be scoped to the SELECTED ENTRY, not the report.
+        // Scoped to the report ("declares no layer anywhere"), a report whose
+        // primary is unlabelled prose and whose secondaries carry Layer rows
+        // falls through both branches -- and the nearest reading pulls a
+        // secondary's label in, which is the scan-the-list reading case 2 bans.
+        expect(range).toContain('Where the entry selected under Case 2 declares no layer')
+        expect(range).toContain('is read on the primary alone')
     })
 
     it('clause 2 evaluates the primary only, and refuses the scan-the-list reading', () => {
@@ -378,14 +401,24 @@ describe('the fix_target_correct clauses exist (issue #164)', () => {
         expect(range).toContain('rewards breadth over aim')
     })
 
-    it('clause 2 fixes all three bands against the seed spec header row', () => {
+    it('clause 2 fixes all three bands, and sources the 2 band OFF the header row', () => {
         // The superseded note located neither boundary. Each band must be
         // pinned, or a rewrite can drop one and stay green.
+        //
+        // The second half is the sharper guard. Four of the five seed specs
+        // print only an AREA in their `Expected fix target` row -- "activation",
+        // "data seeding" -- so a 2 band defined against that row alone is
+        // unreachable on those four, and every full-credit fix silently
+        // becomes a partial. The specific target lives in the seed's
+        // `Expected diagnosis` section, and the clause must send the scorer
+        // to both places.
         const range = packetReachingRange(source)
 
         expect(range).toContain('Expected fix target')
         expect(range).toContain('same one of §A\'s five areas')
         expect(range).toContain('does not name the specific target')
+        expect(range).toContain('two different places in the document')
+        expect(range).toContain('Expected diagnosis section names')
     })
 
     it('clause 2 scores 0 for a reading the seed spec explicitly excludes', () => {
@@ -425,13 +458,61 @@ describe('the fix_target_correct clauses exist (issue #164)', () => {
         expect(flattened.split(stale).length - 1).toBe(1)
     })
 
-    it('the multi-fix rule ties this column to the SAME fix §A2.1 case 5 scores', () => {
-        // If the two columns pick different fixes, §A's constraint relates a
-        // target from one to a usability judgement from another.
+    it('the multi-fix rule caps enumeration at the 1 band without capping the 2 band', () => {
+        // Both halves are load-bearing and they pull opposite ways.
+        //
+        // Highest-value-wins alone lets a report list one area-only fix per
+        // area and collect the partial band on every seed. Primary-fix-only
+        // -- the rule §A2.2 case 2 uses -- would score row 07 a 0, though its
+        // FIX-2 names `sn_aia_agent[...].instructions`, the seed's expected
+        // target at full specificity, because its FIX-1 is listed first. The
+        // rule has to split: cheap band restricted, expensive band open.
         const range = packetReachingRange(source)
 
-        expect(range).toContain('highest value any single proposed fix earns')
-        expect(range).toContain('the one §A2.1 Case 5 then evaluates')
+        expect(range).toContain('highest value any single non-hedged proposed fix earns')
+        expect(range).toContain('the 1 band is available only from the report\'s primary fix')
+        expect(range).toContain('cannot lift it to')
+    })
+
+    it('§A2.3 states WHY it does not use §A2.2 case 2\'s primary-only rule', () => {
+        // An undocumented asymmetry between two adjacent clause sets reads as
+        // an oversight and invites a future editor to "fix" it by making them
+        // match, which would silently re-score every multi-fix report.
+        const range = packetReachingRange(source)
+
+        expect(range).toContain('Naming a layer is free')
+        expect(range).toContain('Naming the specific target is not free')
+    })
+
+    it('§A2.3 disclaims redirecting §A2.1 case 5, which selects its own subject', () => {
+        // The first cut claimed this column designated case 5's subject. Case
+        // 5 already picks its own by a different test, and where several
+        // fixes address the seeded defect it requires ALL of them to pass --
+        // so the claim contradicted an unamended clause on a gate term.
+        const range = packetReachingRange(source)
+
+        expect(range).toContain('does not redirect §A2.1 Case 5')
+        expect(range).toContain('relates their')
+    })
+
+    it('clause 1 rules on a compound declared target', () => {
+        // Row 05's declared value is literally `Tool definition + wiring`, so
+        // the shape the clause was written against is itself compound.
+        const range = packetReachingRange(source)
+
+        expect(range).toContain('A declared target naming more than one area')
+        expect(range).toContain('conjunct that names the seed\'s expected area')
+    })
+
+    it('the residual note does NOT claim the enumeration case cannot earn 2', () => {
+        // It can: five specific fixes, one per area, name the seeded target on
+        // any seed. An earlier cut asserted the opposite and bounded the
+        // exposure at 1, which is a false reassurance in the one place the
+        // section is supposed to be honest about what it leaves open.
+        const range = packetReachingRange(source)
+
+        expect(range).toContain('earns 2 on any seed')
+        expect(range).not.toContain('It cannot earn 2')
     })
 
     it('the fix_target_correct row points a scorer at §A2.3', () => {

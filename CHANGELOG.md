@@ -53,10 +53,14 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ### Changed
 
-- **`test/rubricClauses.test.js` grew two describe blocks (14 tests)** pinning both clause sets inside
+- **`test/rubricClauses.test.js` grew two describe blocks (21 tests)** pinning both clause sets inside
   the `## A2.` → `## A3.` window a packet copies, each load-bearing decision term, and the
   supersession note — including that the superseded sentence survives **exactly once and only as a
-  quotation**, so a second live occurrence cannot reappear. Suite: **31 files, 1561 tests, green.**
+  quotation**, so a second live occurrence cannot reappear. Suite: **31 files, 1566 tests, green.**
+- **`test/scorerPacketBlindRule.test.js` gained three `RUBRIC_PATTERNS`** — `pass-version-token`,
+  `empirically-observed`, `rows-were-flagged` — after the review of this PR found two provenance
+  leaks inside the packet slice that all four existing patterns walked past (see Notes). Each is
+  verified to fire on the exact string it was written for and inert on the slice as it now stands.
 
 ### Notes
 
@@ -74,6 +78,24 @@ two-digit daily counter. Incremented on every merge to `main`.
   working tree** — the first cut of §A2.2 pointed a scorer at "§E", which sits outside the
   `## A.` → `## B.` packet slice and would have led a model scorer out of the packet toward prior
   passes' rows and grades. A rubric clause is a blind-rule surface like any other channel (#143).
+- **Code review found ten findings on this branch and all ten were real** (`DECISION.md` §AH5a).
+  Three were consequential: **two further provenance leaks inside the packet slice** that every
+  existing pattern walked past ("two v12 rows were flagged on it"; "a run has been observed doing
+  exactly that") — removed, with three new guard patterns added; **§A2.3's first cut contradicted
+  §A2.1 Case 5** by claiming to designate which fix that case evaluates, handing a scorer opposite
+  values on a gate term; and **§A2.3's 2 band was unreachable on four of five seeds**, because only
+  seed 01's `Expected fix target` row names a specific target while the rest print an area.
+- **The review's asymmetry finding was right about the gap and wrong about the fix, and the rows
+  settled it.** Making §A2.3 use §A2.2's primary-only rule scores row 07's `fix_target_correct` = 0,
+  though its FIX-2 names `sn_aia_agent[…].instructions` at full specificity and is merely listed
+  second. The asymmetry is kept and its reason is now stated in the clause.
+- **The largest hole was found by re-verifying the rows, not by the review: compound declared layers
+  are the native format's norm** (`Layer: 3 (tool script) + 4 (schema)`). §A2.2 had no rule for them,
+  leaving **eight published full-credit rows undecidable** under the clause meant to make the column
+  determinate. Now read on the conjunct naming the expected layer.
+- **The §AH5 counterfactual was re-derived after every rule change and is unchanged** — two flips,
+  one per arm, no `passes_gate` movement. Every `rc = 2` row and every nonzero `fix_target_correct`
+  row was re-checked, not only the four flagged ones.
 - **The Phase 1b milestone remains unmet** — the sixth consecutive section to close that way. The next
   scored pass is still not scheduled, sized or pre-registered.
 

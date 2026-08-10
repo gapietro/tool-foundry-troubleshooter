@@ -447,6 +447,42 @@ const RUBRIC_PATTERNS = [
         re: /\b(?:moved|swung|flipped|shifted)\s+(?:a|an|the)\s+(?:whole\s+|entire\s+)?(?:arm|verdict|gate|pass)\b/i,
         why: 'what a prior pass score did to the verdict -- "moved a whole arm between 6/6 and 0/6"',
     },
+    // The three below were added by #164, after a review of that PR found TWO
+    // provenance leaks sitting in the slice that every pattern above walked
+    // past: "two v12 rows were flagged on it" and "a run has been observed
+    // doing exactly that". Both tell a MODEL scorer that a prior pass exists
+    // and that this very rule already moved rows in it -- which is the whole
+    // of what the blind rule withholds -- and neither is score-shaped,
+    // path-shaped, or a section pointer, so nothing fired.
+    //
+    // The lesson is #143's restated: these patterns are a record of leaks
+    // someone found, not a derivation of the leaks that are possible. A green
+    // suite means the declared patterns did not fire.
+    {
+        name: 'pass-version-token',
+        // A pass is named by version everywhere in this project -- v9, v12.
+        // Naming one inside the rubric tells the scorer which pass came
+        // before, and usually what it found. Verified inert on the slice as
+        // it stands, so it costs nothing today.
+        re: /\bv\d+\b/i,
+        why: 'a prior pass named by its version token -- "two v12 rows were flagged on it"',
+    },
+    {
+        name: 'empirically-observed',
+        // The tell is the perfect/past tense: a rule may say what a report
+        // WOULD score, and may not say that one already DID.
+        re: /\b(?:has|have|had|was|were)\s+been\s+observed\b|\b(?:a|one|some)\s+runs?\s+(?:has|have|had)\s+\w+ed\b/i,
+        why:
+            'a claim that some earlier run actually did this -- "a run has been observed doing ' +
+            'exactly that" -- which dates the rubric to after a pass the scorer is not to know about',
+    },
+    {
+        name: 'rows-were-flagged',
+        // The version-free phrasing of the same leak, so dropping the version
+        // token is not a way around the pattern above.
+        re: /\b(?:rows?|runs?)\s+(?:were|was|have\s+been|has\s+been)\s+flagged\b/i,
+        why: 'how many prior rows tripped this very rule -- "two rows were flagged on it"',
+    },
 ]
 
 /**
