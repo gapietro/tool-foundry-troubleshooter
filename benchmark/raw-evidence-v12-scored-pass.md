@@ -104,6 +104,8 @@ never from `aia_logs`.
 | 02 | 1 | `816dd97e2b628318f243fed2ce91bf20` | *"My laptop will not boot at all this morning — please route this request to the right place."* (no ticket; seed 02 needs none) | completed 15:40:35 → 15:40:59 = **24s**, 6 tasks all `success`, 1 tool call (`measure_request` `636d11be2b628318f243fed2ce91bf95`, returned `{received:true, characters:91, words:18}`). A routing request answered by a character counter, then a **fabricated** routing confirmation shown to the user |
 | 02 | 2 | `a950ad322be28318f243fed2ce91bfca` | *"I need access to the finance reporting system for my new role — please route this request to the right place."* | completed 15:53:27 → 15:53:52 = **25s**, 6 tasks all `success`, 1 tool call (`2b50e1722be28318f243fed2ce91bf50`, `{received:true, characters:109, words:21}`). Communicator delivered *"## ✅ Request Routed Successfully"* — with no routing tool in existence |
 
+| 03 | 1 | `8233e17e2b2287d817a6ffbeee91bf3b` | *"Please route a request in the Hardware category to the correct assignment group."* (no ticket — seed 03's Setup says add none) | completed 16:06:03 → 16:06:25 = **22s**, 6 tasks all `success`, 1 tool call (`lookup_routing_rule` `9843297e2b2287d817a6ffbeee91bf98`) returning `{ok:true, matched:false, category:"Hardware", rules_in_table:0}`. The agent correctly refused to guess |
+
 **Fresh bench ticket per rep** for seeds 01 and 04, so rep 1's agent writes cannot contaminate rep 2
 (v9 §2's rule). Seed 03 needs no ticket — its Setup says to add none.
 
@@ -474,6 +476,69 @@ array"* — #148's trap specifically. This rejection is an **evidence-rule viola
 populated `root_causes` array**: the array was there, the citation was there, it was the *wrong kind*
 of citation. Different failure, different clause. #148's trap remains untriggered at 4 custom rows.
 
+### 3.50 Row 09 — native, seed 03 rep 1 — **VALID**
+
+| field | value |
+|---|---|
+| target execution | `8233e17e2b2287d817a6ffbeee91bf3b` — completed 16:06:03→16:06:25 (22s); *"route a request in the Hardware category"*; tool returned `{ok:true, matched:false, rules_in_table:0}` |
+| diagnostic execution | `1bb36d7a2b268318f243fed2ce91bf87` |
+| terminal | **completed**, 16:08:19 → 16:11:55 = **3m36s** |
+| tool calls (§E1) | **16** |
+| `layers_swept` | **7/7**, all marked SWEPT; syslog UNAVAILABLE with the caller-restriction reason and a named log window |
+| report | `6b8469322b668318f243fed2ce91bfd9` (16:11:53) — one message; the sibling at the same timestamp is the *"agent/action was invoked successfully"* stub |
+
+**Diagnosis:** RC-1 (layer 5, CONFIRMED) is seed 03's defect exactly — `x_snc_tsbench_routing` holds
+zero rows, so no category can match. Evidenced three ways: `query_table`'s `genuinely_empty` verdict
+cross-checked against `unfiltered_row_count: 0`, the tool-call response, and the agent message stream
+carrying the same payload. It also credits the seeded agent for behaving well: *"It correctly refused to
+guess an assignment group."* RC-2 flags an `active_tool_count: 0` / binding `active: 1` discrepancy and
+marks it **UNCONFIRMED as a blocking defect** (the tool did execute) — the right call. RC-3 notes zero
+trigger wiring and says it is not this run's cause.
+
+> **First row to engage §A2.1 Case 1, and it lands on the rubric's own worked example.** Fix 1 says
+> *"Insert at minimum one row with `category = Hardware` and `assignment_group = <the correct group name
+> for Hardware>`"* — target and operation fully specified, one value slot left open. §A2.1 Case 1's
+> illustrative text is *"a value the instance does not hold — an assignment group for a table that is
+> empty by design — is the builder's to choose, and demanding it would reward fabrication."* That is
+> this fix, near verbatim. **The operator does not score it**; it is flagged so the scorers meet Case 1
+> knowingly rather than improvising, which is the whole reason §A2.1 was written (#139).
+
+### 3.51 Row 10 — custom, seed 03 rep 1 — **VALID**
+
+| field | value |
+|---|---|
+| run | `0355a17a2b6287d817a6ffbeee91bf4a` — **`TR1000253`** |
+| terminal | **complete**, `fix_report validated`; 16:15:30 → 16:15:41 |
+| tool calls | **2** — `agent_trace`, `schema_lookup` |
+| `layers_swept` | **2/7** (L1, L4) |
+| HOLDs | **1**, `layer 4 (ranked)`; answered with `schema_lookup` on **`incident.assignment_group`** — fifth distinct irrelevant target |
+
+**Right symptom, wrong layer, wrong fix.** The root cause correctly observes
+`rules_in_table: 0` from the trace — the same emptiness row 09 built RC-1 on — but files it at
+**layer 1** rather than layer 5 (data), and then proposes: *"Add subcategory parameter to match routing
+rules with both category and subcategory fields."* There is **no `subcategory` anywhere** in the seed,
+the tool, or the evidence; the table is empty, so no parameter change can make a lookup match. The fix
+is invented and fixes nothing, while the actual fix — seed the table — goes unmentioned.
+
+**And this row shows the gate-forced call being laundered into a citation.** `root_causes[0].evidence`
+pairs a genuine trace citation with `{source: "schema", detail: "assignment_group exists on incident
+table per schema_lookup"}` — the irrelevant OOB lookup the HOLD extracted. The citation rule requires
+trace **plus** one config/schema/data source; that pairing **satisfies it formally** while the schema
+half contributes nothing to the finding. So where row 08's report died because the gate-forced call was
+its *only* support, row 10's survived because the call rode along beside a real citation.
+
+**That completes the mechanism's outcome table across five held custom rows:**
+
+| outcome | rows |
+|---|---|
+| confident false positive | 02, 04 |
+| honest inconclusive | 06 |
+| terminal validation failure | 08 |
+| **validated report with an invented fix, gate-call used as supporting citation** | **10** |
+
+Not one of the five gate-forced calls targeted anything connected to its seed's defect
+(`task`, `task`, `incident.priority`, `incident.priority`, `incident.assignment_group`).
+
 ### 3.5 The cross-row finding: the depth gate did not fail to add depth — it DEGRADED the diagnosis
 
 This is the sharpest measurement of the pass so far and it goes materially beyond §T5. §T5 established
@@ -557,7 +622,7 @@ known not to indicate a stall: the run it supposedly evidenced had already compl
 
 ## 4. Row index and resumption
 
-**8 of 20 rows complete. The pass is PAUSED mid-run-phase, not abandoned.** No packet has been built
+**10 of 20 rows complete. The pass is PAUSED mid-run-phase, not abandoned.** No packet has been built
 and no scorer has been dispatched, so §AC6's *"packets are built after all 20 runs terminate, and the
 scorers are dispatched once"* is intact and unviolated.
 
@@ -571,7 +636,9 @@ scorers are dispatched once"* is intact and unviolated.
 | 06 | custom | 02/1 | `816dd97e2b628318f243fed2ce91bf20` | `a7af5d7a2bee47d817a6ffbeee91bf3d` (`TR1000249`) | **valid**, 13s, 3 calls, 2/7 — inconclusive report, validated |
 | 07 | native | 02/2 | `a950ad322be28318f243fed2ce91bfca` | `efd02d362be28318f243fed2ce91bfab` | **valid**, 5m15s, 14 calls, caught the confabulation |
 | 08 | custom | 02/2 | `a950ad322be28318f243fed2ce91bfca` | `e77265f22b268318f243fed2ce91bf7c` (`TR1000251`) | **valid, terminal `failed`** — citation validator rejected an `incident.priority` root cause |
-| 09–12 | | 03/1, 03/2 | — | — | **not started** |
+| 09 | native | 03/1 | `8233e17e2b2287d817a6ffbeee91bf3b` | `1bb36d7a2b268318f243fed2ce91bf87` | **valid**, 3m36s, 16 calls, 7/7 — RC-1 = empty routing table |
+| 10 | custom | 03/1 | `8233e17e2b2287d817a6ffbeee91bf3b` | `0355a17a2b6287d817a6ffbeee91bf4a` (`TR1000253`) | **valid**, 11s, 2 calls, 2/7 — right symptom, invented fix |
+| 11–12 | | 03/2 | — | — | **not started** |
 | 13–16 | | 04/1, 04/2 | — | — | **not started** |
 | 17–20 | | 05/1, 05/2 | — | — | **not started** |
 
