@@ -1,0 +1,18 @@
+{
+  "_why": "The under-determined column named by each flagged v12 verdict, curated once from the twelve `### ambiguity` sections in scoring-v12/results/. It exists because those sections are PROSE that argues both readings of a column, so every column gets mentioned and no regex can safely tell 'named as under-determined' from 'discussed'. Attempting that parse is what produced the miscount this file now prevents: the first draft of scorecard-v12.md counted row 13 against fix_usable_unedited when its scorer flagged evidence_cites_trace_and_config, turning a 5-5 tie into a false 'six of twelve' superlative. This is the SINGLE source both scorecard-v12.md and DECISION.md §AD3 must agree with, and test/scorecardV12Tallies.test.js binds all three together.",
+  "_verified": "2026-08-10, read from each verdict's own ambiguity section. Rows 07 and 14 name two columns each, so 14 flags fall across 12 rows.",
+  "rows": {
+    "1": ["fix_usable_unedited"],
+    "5": ["fix_target_correct"],
+    "6": ["evidence_cites_trace_and_config"],
+    "7": ["root_cause_layer_correct", "fix_usable_unedited"],
+    "8": ["evidence_cites_trace_and_config"],
+    "10": ["evidence_cites_trace_and_config"],
+    "12": ["fix_target_correct"],
+    "13": ["evidence_cites_trace_and_config"],
+    "14": ["root_cause_layer_correct", "evidence_cites_trace_and_config"],
+    "17": ["fix_usable_unedited"],
+    "19": ["fix_usable_unedited"],
+    "20": ["fix_usable_unedited"]
+  }
+}

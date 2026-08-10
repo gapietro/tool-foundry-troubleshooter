@@ -4457,3 +4457,187 @@ Everything in §T8, §Z5 and §AB5 stands, unsoftened.
 Phase 1b milestone is not met.** §Z6's quoting rule stands — **34/36 · 4/6** only with the derived
 file beside it, and **9/36 or 8/36** for the custom total, never a bare figure. This section changes
 none of that, because it contains no measurement.
+
+## AD. The v12 scored pass — verdict (`2026.08.1001`, #151)
+
+**§AC through §AC8 are unmodified.** `git log -p benchmark/DECISION.md` is the check, in the form §W,
+§Z and §AC all used, and the DECISION.md diff for this branch is **append-only** — the pre-branch file
+is an exact byte prefix of this one.
+
+> **One citation corrected after review.** §AC was authored at `a342311` and then **amended at
+> `8ab2c00`** ("apply code review findings to §AC"), which changed 50 lines including three scored
+> refutation criteria: AC-5 gained the binding *"'Unambiguous' means the scorer's packet-level
+> `ambiguous` flag reads `no`"* clause, AC-6 gained *"either of"* its seed-matched native rows, and AC-8
+> was loosened from "0 void rows in each arm" to "≤2 encountered, every arm finishes with 10 valid rows".
+> **The pre-registration property is intact** — both commits, and the merge `4bcf43c`, precede the first
+> scored run by ~40 minutes, and §AC is byte-identical from that merge to HEAD — but the commit that
+> contains the criteria these predictions were scored against is **`8ab2c00`/`4bcf43c`, not `a342311`**.
+> A pre-registration is only as good as the commit it names, so the right one is named here. §AC claimed no result; this section reports the result it pre-registered, and
+nothing here amends the pre-registration retroactively.
+
+The measurements are in `benchmark/raw-evidence-v12-scored-pass.md`, the rows in
+`benchmark/scorecard-v12.md`, the packets exactly as scored in `benchmark/scoring-v12/`, and each blind
+scorer's full reasoning in `benchmark/scoring-v12/results/`.
+
+### AD1. The result in the form §Z6 requires
+
+**Native 6/10 · 60.0% · middle band. Custom 0/10 · 0.0% · bottom band.** Rubric totals **51/60** and
+**9/60**. Twenty rows, five seeds, two reps, two arms, one instance, one day, one app version, **zero
+void rows** — both arms finished with all ten rows valid and neither used any of its three permitted
+re-runs.
+
+> **The Phase 1b milestone is NOT met.** AC4's Ruling 3 fixed the criterion in advance as *the custom
+> arm reaching §A3.3's top band (≥80%)*. It reached 0.0%.
+
+**This is the fifth consecutive section to close with the milestone unmet** (§Z6, §AA, §AB, §AC's
+standing statement, now §AD) — but it is the first to close on **a full five-seed scored measurement of
+both arms on a probe-verified build**, rather than on a recompute, a derived re-reading, or an
+unblocked-but-unscheduled note.
+
+### AD2. Predictions: seven confirmed, two refuted
+
+AC-1, AC-2, AC-4, AC-6, AC-7, AC-8 and AC-9 confirmed; **AC-3 and AC-5 refuted.** The table with each
+number is at `scorecard-v12.md` §3 and is not duplicated here.
+
+**AC-9 was filed against the project's own preferred outcome and it held.** §AC5 filed it that way
+deliberately, because §Z6, §AA and §AB had each closed carrying "the milestone is not met" and the prior
+deserved exposure to refutation rather than restatement. It was exposed and it survived.
+
+**AC-2 confirmed by one row.** Custom scored `root_cause_layer_correct` = 0 on exactly **8** of 10 —
+the refutation threshold was ≤7. Rows 14 and 20 scored 2. So §T3's six-of-six became eight-of-ten on a
+larger and broader sample, and the prediction that it would not move was correct, narrowly. **Reaching a
+layer is still not diagnosing at it** (§T3): row 14 named layer 6 and proposed fixes aimed at tool
+schema and error handling, and row 20 named layer 7 correctly and died at the citation validator.
+
+### AD3. AC-5's refutation is the most consequential finding, and it is about the rubric
+
+AC-5 predicted **≥14 of 20** rows would return `ambiguous = no` on the broad packet-level flag — the
+first real test of §A2.1 and §Z's rubric repair. It returned **8 of 20**, against a v9 baseline of 3 of
+12. §AC5 called it *"the prediction most likely to fail and the most useful if it does."* Both halves
+came true.
+
+**What §Z's repair actually achieved, stated precisely.** It made the rubric **reproducible** without
+making it **determinate**. Rows 13 and 15 — near-identical seed-04 diagnoses — were scored identically
+by two scorers who never communicated, both landing on §A2.1 Case 1's obtainability test. Both seed-05
+native rows likewise. That consistency did not exist before #139. But twelve of twenty rows still
+carried a column a careful scorer could defend two ways — 14 flags over those 12 rows, since rows 07 and
+14 each name two — and **a gate term (`fix_usable_unedited`) and `evidence_cites_trace_and_config` drew
+them equally often, five rows each** (`fix_usable_unedited` on 01, 07, 17, 19, 20;
+`evidence_cites_trace_and_config` on 06, 08, 10, 13, 14; `root_cause_layer_correct` on 07, 14;
+`fix_target_correct` on 05, 12).
+
+> **Corrected after review, before merge.** An earlier draft of this subsection said
+> `fix_usable_unedited` was "the most frequently flagged column, in six of the twelve", counting row 13
+> against it; row 13's scorer flagged `evidence_cites_trace_and_config` only. Re-derived from all twenty
+> verdict files. **The load-bearing claim survives** — a gate term is under-determined on a quarter of
+> all rows, so §A2.1 did not close its exposure — but the superlative does not, and §AD7's open item 3
+> should be read as covering *both* columns rather than the evidence column alone.
+
+**§AC8's caveat was right and should now be promoted to a standing limit:** AC-5 tests whether the
+clauses *determine* an answer, which is a different property from whether the answer is *right*. This
+pass says they frequently determine nothing. Row 10 is the sharp case — both a trace and a schema
+citation are formally present, but the schema citation is the irrelevant `incident.assignment_group`
+lookup that answered the depth HOLD, so a relevance-minded scorer defends 0 and a formalist defends 1,
+and the rubric does not say which. That is not a scorer failing; it is a missing clause.
+
+### AD4. The finding this pass produced that no prediction anticipated
+
+**The depth gate can degrade a diagnosis, and it did so measurably.** §T5 established that the gate's
+release counts a layer-4 tool being *called* rather than *reached* — a gate that adds nothing. Ten
+custom rows on a probe-verified build show something stronger: across the nine held rows, **not one
+gate-forced call targeted anything connected to its seed's defect** (`task`, `task`,
+`incident.priority` ×3, `incident.assignment_group` ×2, `sn_aia_tools_execution`,
+`sn_aia_execution_plan`), and the consequences were not merely neutral:
+
+| outcome of the forced call | rows |
+|---|---|
+| a confident **false positive** that replaced a partly-correct draft | 02, 04 |
+| an honest inconclusive | 06 |
+| **terminal validation failure** — the forced call offered *as a root cause* and killed by the citation rule | 08 |
+| a validated report with an **invented fix**, the forced call laundered into a supporting citation | **10** |
+| a validated report with a **non-actionable fix**, the forced call cited nowhere | 12, 16 |
+
+> **Corrected after review, before merge.** An earlier draft grouped rows 10, 12 and 16 together as
+> having laundered the forced call into a supporting citation. The packets refute that for two of the
+> three: row 10's root cause cites `trace` + `schema` — the `schema` half being the forced
+> `incident.assignment_group` lookup — whereas rows 12 and 16 cite `trace` twice and never cite their
+> forced call at all, which is exactly why both scored `evidence_cites_trace_and_config` = 0. Only row
+> 10 laundered it. Rows 12 and 16 spent the call and produced a non-actionable fix, which is a different
+> failure and is now recorded as one.
+
+**Rows 02 and 04 carry the proof in the transcript.** In both, the pre-HOLD draft the gate *refused*
+was closer to correct than the post-HOLD report it *accepted* — row 04's refused draft had already
+reached `priority_stored`, the exact null read-back on which both native rows built their CONFIRMED root
+cause. And rows 12 and 16 each wrote a `would_confirm` naming the call they actually needed (a layer-5
+`query_table` against the routing table; a layer-3 `agent_config`) and then spent their one held call
+elsewhere, because the gate asked for *a* layer-4 call rather than *the* confirming one.
+
+**Every component behaved as designed.** The tools were correct and even warned about nonexistent
+fields. The gate enforced exactly the rule it encodes. The citation validator correctly destroyed the
+one report that rested on a forced call alone. **The harm is emergent from the composition, which is
+why no component's own test suite could have caught it** — and it is the mechanism §AB was circling
+when it concluded the evidence return had *"steered them into a trap"*.
+
+This bears directly on the middle band's prescription. §A3.3 reads native's 60% as *"native for
+lightweight triage + custom deep-diagnosis harness"* — but **the custom deep-diagnosis harness scored
+0/10, and the component intended to produce its depth is the component producing its worst answers.**
+The band's stated outcome cannot be adopted as written on this evidence.
+
+### AD5. Two process defects, and one new defect to file
+
+**Ruling 1 never reached the scorers.** §AC4 ruled in advance, blind, on seed 05's
+`fix_usable_unedited` exposure — precisely so that no scorer would improvise it. The ruling lives in
+this file, which no scorer may read, and the packet build did not carry it across. Both seed-05 native
+scorers flagged that column as under-determined for exactly that reason, and one named the absence.
+**It changed no score** — both independently landed on the value Ruling 1 mandates — but that is luck,
+not compliance. **The rule this produces: an advance ruling on a scoring column must be written into
+the packets, not only into the pre-registration.** §AC4's own sentence — *"before the scorers meet
+it"* — was satisfied in time and defeated in delivery.
+
+**Two packets were built wrong and repaired before dispatch**, carrying raw tool-output envelopes ahead
+of the report. Caught by reading the built file back rather than by any test. Recorded at
+`scorecard-v12.md` §4 with the reusable discriminator.
+
+**New defect, to be filed: `PaFixReport` lets a malformed `layers_swept` suppress the layer-1
+UNAVAILABLE escape clause.** Row 20 emitted `layers_swept` as flat strings with reasons in a separate
+key, and the consequences compounded: the completeness check saw all seven layers as missing, and
+because the validator could not see layer 1 marked UNAVAILABLE, the *"nothing ever ran"* clause never
+engaged — so the evidence rule fired demanding a trace citation for a run where nothing ran. **The
+rejection instructed the run to do what it had already done.** This is the same family as #148 (§AB:
+"an omitted key silently withdrew the relaxations") with a malformed key in place of an omitted one.
+Seed 05 is the only seed that can surface it.
+
+### AD6. What this pass cannot establish
+
+§T8, §Z5, §AB5 and §AC8 stand unsoftened. Specifically:
+
+- **Not a rate.** Two reps per seed per arm measures a flip. §AC2's resolution table gives a
+  true-80% harness only a ~68% chance of reaching the top band from ten rows, so native's 60% and a
+  true 60% are not the same claim.
+- **Custom's 0/10 is a floor, and floors are the least informative result.** A 0% proportion cannot
+  distinguish "just below the band" from "nowhere near it". Nine rows never reached the seeded layer;
+  the tenth reached it and failed on citations.
+- **AC-7's clean result is weak** — three custom rows died at the validator on *other* clauses, so
+  #148's specific trap was never exercised. AD5's new defect is the adjacent trap firing.
+- **The rubric is not validated.** AC-5 says it frequently does not determine an answer.
+- **No transferability.** One instance, one model, one day, one app version, one ceiling
+  (`continuous_tool_execution_limit` = 25, read live this pass — closing §T1's gap).
+- **It does not license a re-run.** §T9 governs: 60% and 0% are properties of ten rows each.
+
+### AD7. Disposition
+
+**Native remains the recommended path on this instance, and the Phase 1b milestone is not met.**
+Quote this pass as **native 6/10 · 60% · middle band** with **custom 0/10 · 0% · bottom band** and the
+rubric totals **51/60 / 9/60** beside them — never a bare figure, never one arm without the other.
+
+Open items this section creates, none of which it resolves:
+
+1. **File the `layers_swept` malformed-key defect** (AD5).
+2. **The middle band's prescription needs re-derivation** (AD4): its "custom deep-diagnosis harness"
+   half is contradicted by the depth gate's measured behaviour, and adopting the band as written would
+   prescribe the component this pass found most harmful.
+3. **§A2.1 needs a third clause** for a formally-present-but-irrelevant citation (AD3, row 10), or
+   `evidence_cites_trace_and_config` will keep drawing ambiguity flags.
+4. **Advance rulings must ship in packets** (AD5).
+5. **Row 10's §A2.1 open case from §Z5 — a target identified by kind rather than by name — did not
+   recur** in a form this pass had to adjudicate, and remains unresolved.

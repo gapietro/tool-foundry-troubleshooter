@@ -120,7 +120,20 @@ const PACKET_SETS = [
         dir: 'scoring-v9',
         packets: 12,
         scanned: true,
-        why: 'The current pass. Built path-clean by hand (§T7) and kept that way by this scan.',
+        why: 'Built path-clean by hand (§T7) and kept that way by this scan.',
+    },
+    {
+        dir: 'scoring-v12',
+        packets: 20,
+        scanned: true,
+        why:
+            'The current pass (§AC). Unlike v9 these packets are generated rather than ' +
+            'hand-built: scripts/build-v12-packets.js redacts paths mechanically and then ' +
+            're-scans every emitted packet with a copy of the patterns below, refusing to ' +
+            'write anything if one survives. That copy is deliberate rather than an import -- ' +
+            'two independent copies disagreeing is a signal, one shared copy being wrong is ' +
+            'invisible. This scan is still the binding check, because the generator could be ' +
+            'edited and this cannot be.',
     },
 ]
 
@@ -723,7 +736,7 @@ describe('no repository path reaches a scorer packet (issue #140)', () => {
 
         // Kept as documentation of the declared order/membership -- the
         // disk-derived assertion above is the one that has to bind.
-        expect(PACKET_SETS.map((s) => s.dir)).toEqual(['scoring-v4', 'scoring-v9'])
+        expect(PACKET_SETS.map((s) => s.dir)).toEqual(['scoring-v4', 'scoring-v9', 'scoring-v12'])
     })
 
     it('holds scoring-v4 out of scope with a written reason, rather than omitting it', () => {

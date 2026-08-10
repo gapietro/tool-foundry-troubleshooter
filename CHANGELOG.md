@@ -17,6 +17,133 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1003 — 2026-08-10
+
+### Fixed
+
+- **`PaFixReport`: a malformed `layers_swept` no longer withdraws the layer-1 UNAVAILABLE
+  relaxation (#155).** A model writing the field as bare status strings —
+  `{"1":"UNAVAILABLE","2":"SWEPT",…}` rather than `{"1":{"status":"UNAVAILABLE"},…}` — hit two
+  consequences at once. `_checkLayersSwept` requires `_isPlainObject(entry)`, so all seven
+  *present* layers were reported **missing**; and `_isTraceUnavailable` requires the same, so it
+  returned false and silently withdrew the evidence rule's **route B** (#78's absence-diagnosis
+  path). The rule then fell through to the no-trace branch and told the run to *"mark layer 1
+  UNAVAILABLE"* — which it had already done. **This is #148's failure shape with a malformed key
+  instead of an omitted one.**
+
+  Fixed with a single canonicalisation where the report enters `validate`, so all **eight** sites
+  that read a `layers_swept` entry and test `.status` — plus the returned `normalized` — see one
+  shape. Per-reader patches were rejected as eight symptom fixes for one cause. The shape is
+  treated as reasonable rather than wrong because `_checkLayersSwept`'s own rejection text
+  describes the field as *"an object mapping each of the seven layers (1-7) to a status"*, which
+  invites exactly this, while the contract block says `{status, reason?}` — and `_hasLayerValue`
+  already tolerates number-or-string for `root_causes[].layer` on the stated grounds that
+  *"rejecting it was validator pedantry, not a real defect"*.
+
+  It deliberately does **not** invent a home for the `reason` the flat form cannot carry: a flat
+  non-SWEPT entry is still rejected, now for the true reason (*"layer 2 is NOT_SWEPT but has no
+  reason"*), which a repair turn can act on by switching to the object form.
+
+  Found live by the v12 scored pass (#151) as row 20, `TR1000265` — the pass's best custom
+  diagnosis of seed 05, correct layer and correct gate, rejected by a remedy it already satisfied.
+  **Seed 05 is the only seed that can surface it**, being the only one where nothing runs and
+  route B is live. Replaying row 20's real payload against the fix: both defect signatures gone,
+  route B engages, and the run is still rejected on three accurate grounds — including an
+  `unsupported sweep claim` on layers 5 and 6 that the shape error had been **masking entirely**,
+  so the fix also un-skips checks that were being silently bypassed. Recorded at `DECISION.md`
+  §AD5.
+
+### Fixed in review, before merge
+
+- **C1 — the #155 fix had a hole that disarmed the depth gate.** `unsweptGaps` is a **public**
+  entry point that `PaAgentLoop._depthGate` calls on the RAW draft, deliberately bypassing
+  `validate`, so the canonicalisation inside `validate` never reached it. A flat-form
+  `layers_swept` made it return `[]`, `PaAgentLoop` reads an empty gap list as "nothing left to
+  sweep" and sets `_gateReleased = true`, and that short-circuits every later gate check — so one
+  flat-form draft disarmed the depth gate for the rest of the run, with no later draft able to
+  re-arm it. The blindness predates the fix (this method always read the raw draft), but the fix is
+  what makes the shape reachable in a run that COMPLETES rather than one rejected at validation.
+  `unsweptGaps` now canonicalises for itself; five tests added. `PaAgentLoop.test.js` stubs
+  `unsweptGaps` out entirely, so nothing in the suite would have caught this.
+- **C2 — a false superlative in the v12 record.** `scorecard-v12.md` and §AD3 called
+  `fix_usable_unedited` "the most frequently under-determined column, six of twelve" by counting
+  row 13 against it; row 13's scorer flagged `evidence_cites_trace_and_config`. It is a **5-5 tie**.
+  The load-bearing claim survives — a gate term is under-determined on a quarter of all rows, so
+  §A2.1 did not close its exposure — the superlative does not.
+- **C3 — a false attribution in §AD4.** Rows 10, 12 and 16 were grouped as having laundered a
+  gate-forced call into a supporting citation. Only row 10 cites it (`trace` + `schema`); rows 12
+  and 16 cite `trace` twice and never cite their forced call, which is exactly why both scored that
+  column 0. Recorded now as two distinct outcomes.
+- **I5 — the pre-registration citation was wrong.** §AC was authored at `a342311` and **amended at
+  `8ab2c00`**, which changed three scored refutation criteria (AC-5's binding definition of
+  "unambiguous", AC-6's "either of", and AC-8's loosening to "≤2 encountered"). The
+  pre-registration property is intact — both commits and the merge precede the first scored run by
+  ~40 minutes, and §AC is byte-identical from merge to HEAD — but a pre-registration is only as
+  good as the commit it names, so §AD now names `8ab2c00`/`4bcf43c`.
+- **I1 — the packet generator was not fail-closed despite saying so.** Scan and write shared one
+  loop with write last, so a leak at row 15 threw with 14 packets already on disk, and a re-run
+  after an edit left 20 complete-looking files silently mixing fresh and stale ones. It now builds
+  all twenty in memory, scans all twenty, checks rubric identity, and only then writes.
+- **I2 — the generator's `.md` pattern was case-blind where the guard is not.** The guard fixed
+  `DECISION.MD` escaping (with its own control test); this copy never inherited it. No leak
+  shipped — the guard's patterns return 0 hits on all 20 committed packets — and regenerating after
+  the fix reproduces all twenty byte-identically.
+- **I7 — the fix's own docstring misdescribed its coverage**, naming a private `_unsweptGaps` that
+  is public and listing `repairPrompt` as covered when it reads no `.status`. Corrected to seven
+  sites, six covered via `validate` and `unsweptGaps` canonicalising for itself.
+
+### Added in review
+
+- **`test/scorecardV12Tallies.test.js` — a ledger guard.** Re-derives every published v12 figure
+  from the twenty verdict files: per-row column sums, the §A2 gate expression, §A2's decoy
+  constraint, both arms' proportions and rubric totals, the void count, and AC-2/AC-4/AC-5's
+  numbers. `scorerPacketBlindRule.test.js` guards what goes INTO the scorers; nothing guarded what
+  came out, and both C2 and C3 were authoring errors in that unguarded layer.
+
+  The ambiguity attribution is curated in `benchmark/v12-ambiguity-flags.json` rather than parsed:
+  each verdict's ambiguity section argues BOTH readings, so every column name appears in the prose
+  and no regex can tell "named as under-determined" from "discussed" — attempting that parse is
+  what produced C2. The test binds the curated source to the derived flag set and to both
+  write-ups. An earlier version banned the retracted phrase and tripped on the corrections
+  themselves, which quote it verbatim because this repo retains retracted claims; the assertion is
+  positive instead.
+
+  `npm test` 1477 passed, 30 suites; `now-sdk build` clean on SDK 4.9.2.
+
+## 2026.08.1002 — 2026-08-10
+
+### Added
+
+- **The v12 scored pass — verdict (#151).** Pre-registered at `DECISION.md` §AC before any run
+  fired; result at §AD, rows at `benchmark/scorecard-v12.md`, measurements at
+  `benchmark/raw-evidence-v12-scored-pass.md`, packets exactly as scored at
+  `benchmark/scoring-v12/`, each blind scorer's reasoning at `benchmark/scoring-v12/results/`.
+
+  **Native 6/10 · 60.0% · middle band. Custom 0/10 · 0.0% · bottom band.** Rubric totals 51/60
+  and 9/60. Twenty rows, five seeds, two reps, two arms, **zero voids** — both arms finished with
+  all ten valid and neither used any of its three permitted re-runs. Twenty independent blind
+  scorers, one per packet, dispatched once after all twenty runs terminated (§AC6), with
+  byte-identical prompts because the prompt is part of the instrument.
+
+  **The Phase 1b milestone is NOT met** — AC4's Ruling 3 fixed the criterion in advance as the
+  custom arm reaching ≥80%; it reached 0.0%. Predictions: seven confirmed (AC-1, AC-2, AC-4, AC-6,
+  AC-7, AC-8, AC-9), two refuted (AC-3, AC-5). AC-9 was filed against the project's own preferred
+  outcome and held.
+
+  Two findings beyond the scoreline. **AC-5's refutation** (8 of 20 unambiguous against a predicted
+  ≥14) says §Z's rubric repair made the rubric *reproducible* without making it *determinate*, with
+  `fix_usable_unedited` — a gate term — the most-flagged column. And **the depth gate can degrade a
+  diagnosis**: across nine held custom rows not one gate-forced call touched anything connected to
+  its seed's defect, producing two confident false positives that replaced partly-correct drafts,
+  one terminal validation failure, one validated report with an invented fix that cited the forced call,
+  and two more whose fixes were non-actionable. §AD4 declines
+  to adopt the middle band's "custom deep-diagnosis harness" prescription on that evidence.
+
+  Also added: `benchmark/scripts/build-v12-packets.js`, which generates the packets, asserts the
+  rubric section byte-identical across all twenty, and re-scans every emitted packet with a copy
+  of the blind-rule path patterns, refusing to write if one survives. `scoring-v12` declared to
+  `test/scorerPacketBlindRule.test.js` with `scanned: true` and a packet count of 20.
+
 ## 2026.08.1001 — 2026-08-10
 
 ### Added — the v12 scored pass is pre-registered (#151, DECISION.md §AC)
