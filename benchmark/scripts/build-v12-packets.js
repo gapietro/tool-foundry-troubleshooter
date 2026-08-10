@@ -18,11 +18,17 @@
  *
  * OUTPUT: scoring-v12/row-NN-<arm>-seed-NN-run-N.md
  *
- * FAIL-CLOSED. The final step re-scans every emitted packet with the same
- * patterns test/scorerPacketBlindRule.test.js uses. A surviving repository path
- * throws and no packet is written, because a leak that ships is unrecoverable
- * once a scorer has read it (§O5 is the precedent: a leaked round cost a whole
- * pass's comparability).
+ * FAIL-CLOSED, AND LITERALLY SO. Every packet is built in memory and scanned
+ * with the same patterns test/scorerPacketBlindRule.test.js uses, and the
+ * rubric-identity check runs, all BEFORE anything is written. A surviving
+ * repository path throws with nothing on disk — because a leak that ships is
+ * unrecoverable once a scorer has read it (§O5 is the precedent: a leaked round
+ * cost a whole pass's comparability).
+ *
+ * The first version interleaved scan and write in one loop, which was not
+ * fail-closed at all: a leak at row 15 threw with 14 packets already written,
+ * and a re-run after an edit left 20 complete-looking files silently mixing
+ * fresh and stale ones. Caught in review (#155 review, I1).
  */
 
 'use strict'
@@ -33,6 +39,9 @@ const path = require('path')
 const BENCH = path.resolve(__dirname, '..')
 const OUT = path.join(BENCH, 'scoring-v12')
 const REPORTS = path.join(BENCH, 'v12-reports')
+
+const RUBRIC_START = '## A. The 6-point rubric'
+const SEED_SECTION = '## 2. Seed specification'
 
 // ---------------------------------------------------------------------------
 // The guard's own pattern set, copied deliberately rather than imported.
@@ -48,7 +57,7 @@ const PATH_STEMS =
 const LEAK_PATTERNS = [
     new RegExp('(?:' + PATH_STEMS + ')/[A-Za-z0-9_./-]*', 'g'),
     new RegExp('\\.{1,2}/(?:' + PATH_STEMS + ')', 'g'),
-    /[A-Za-z0-9_-]+\.md\b/g,
+    /[A-Za-z0-9_-]+\.[mM][dD]\b/g,
 ]
 
 /**
@@ -92,7 +101,7 @@ function redact(text) {
     out = out.replace(new RegExp('`?\\.{1,2}/' + stemAlt + '`?', 'g'), 'a repository location')
 
     // Any bare markdown filename — the name itself is the navigable pointer.
-    out = out.replace(/`?[A-Za-z0-9_-]+\.md`?/g, 'a repository document')
+    out = out.replace(/`?[A-Za-z0-9_-]+\.[mM][dD]`?/g, 'a repository document')
 
     return out
 }
@@ -276,35 +285,50 @@ function main() {
 
     if (!fs.existsSync(OUT)) fs.mkdirSync(OUT)
 
-    const written = []
+    // FAIL-CLOSED FOR REAL: build every packet and scan every packet BEFORE
+    // writing any of them. The first version of this script interleaved scan
+    // and write in one loop, so a leak at row 15 threw with 14 packets already
+    // on disk — and a re-run after an edit left a directory of 20
+    // complete-looking files silently mixing fresh and stale ones, with the
+    // rubric check never reached. Caught in review (I1). Nothing touches the
+    // filesystem until all 20 are known clean.
+    const built = []
+    const leaks = []
     for (const row of rows) {
         const n = String(row.row).padStart(2, '0')
         const name = 'row-' + n + '-' + row.arm + '-seed-' + row.seed + '-run-' + row.rep + '.md'
         const body = buildPacket(row, rubric)
 
-        const leaks = []
         for (const re of LEAK_PATTERNS) {
             const hits = body.match(re)
-            if (hits) leaks.push(...hits)
+            if (hits) hits.forEach((h) => leaks.push(name + ': ' + h))
         }
-        if (leaks.length) {
-            throw new Error(
-                'REFUSING TO WRITE ' + name + ' — ' + leaks.length + ' repository path(s) survived redaction:\n  ' +
-                    [...new Set(leaks)].slice(0, 20).join('\n  ')
-            )
-        }
-
-        fs.writeFileSync(path.join(OUT, name), body)
-        written.push(name)
+        built.push({ name: name, body: body })
     }
 
-    // The rubric must be identical in all of them, not merely generated once.
-    const first = fs.readFileSync(path.join(OUT, written[0]), 'utf8')
-    const marker = first.slice(first.indexOf('## A. The 6-point rubric'), first.indexOf('## 2. Seed specification'))
-    for (const name of written.slice(1)) {
-        const body = fs.readFileSync(path.join(OUT, name), 'utf8')
-        const mine = body.slice(body.indexOf('## A. The 6-point rubric'), body.indexOf('## 2. Seed specification'))
-        if (mine !== marker) throw new Error('rubric section differs in ' + name + ' — packets are not a constant instrument')
+    if (leaks.length) {
+        throw new Error(
+            'REFUSING TO WRITE ANY PACKET — ' + leaks.length + ' repository path(s) survived redaction:\n  ' +
+                [...new Set(leaks)].slice(0, 20).join('\n  ')
+        )
+    }
+
+    // The rubric must be identical across all twenty. Checked on the built
+    // bodies, before writing, for the same reason as the leak scan.
+    const marker = (body) => body.slice(body.indexOf(RUBRIC_START), body.indexOf(SEED_SECTION))
+    const reference = marker(built[0].body)
+    if (!reference) throw new Error('rubric section markers not found — a heading was renamed')
+    for (const p of built.slice(1)) {
+        if (marker(p.body) !== reference) {
+            throw new Error('REFUSING TO WRITE ANY PACKET — rubric section differs in ' + p.name +
+                ' — packets are not a constant instrument')
+        }
+    }
+
+    const written = []
+    for (const p of built) {
+        fs.writeFileSync(path.join(OUT, p.name), p.body)
+        written.push(p.name)
     }
 
     console.log('wrote ' + written.length + ' packets to scoring-v12/')

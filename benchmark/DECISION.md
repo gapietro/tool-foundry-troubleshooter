@@ -4461,7 +4461,18 @@ none of that, because it contains no measurement.
 ## AD. The v12 scored pass — verdict (`2026.08.1001`, #151)
 
 **§AC through §AC8 are unmodified.** `git log -p benchmark/DECISION.md` is the check, in the form §W,
-§Z and §AC all used. §AC claimed no result; this section reports the result it pre-registered, and
+§Z and §AC all used, and the DECISION.md diff for this branch is **append-only** — the pre-branch file
+is an exact byte prefix of this one.
+
+> **One citation corrected after review.** §AC was authored at `a342311` and then **amended at
+> `8ab2c00`** ("apply code review findings to §AC"), which changed 50 lines including three scored
+> refutation criteria: AC-5 gained the binding *"'Unambiguous' means the scorer's packet-level
+> `ambiguous` flag reads `no`"* clause, AC-6 gained *"either of"* its seed-matched native rows, and AC-8
+> was loosened from "0 void rows in each arm" to "≤2 encountered, every arm finishes with 10 valid rows".
+> **The pre-registration property is intact** — both commits, and the merge `4bcf43c`, precede the first
+> scored run by ~40 minutes, and §AC is byte-identical from that merge to HEAD — but the commit that
+> contains the criteria these predictions were scored against is **`8ab2c00`/`4bcf43c`, not `a342311`**.
+> A pre-registration is only as good as the commit it names, so the right one is named here. §AC claimed no result; this section reports the result it pre-registered, and
 nothing here amends the pre-registration retroactively.
 
 The measurements are in `benchmark/raw-evidence-v12-scored-pass.md`, the rows in
@@ -4509,8 +4520,18 @@ came true.
 making it **determinate**. Rows 13 and 15 — near-identical seed-04 diagnoses — were scored identically
 by two scorers who never communicated, both landing on §A2.1 Case 1's obtainability test. Both seed-05
 native rows likewise. That consistency did not exist before #139. But twelve of twenty rows still
-carried a column a careful scorer could defend two ways, and **`fix_usable_unedited` — one of the gate's
-two terms — was the most frequently flagged column, in six of the twelve.**
+carried a column a careful scorer could defend two ways — 14 flags over those 12 rows, since rows 07 and
+14 each name two — and **a gate term (`fix_usable_unedited`) and `evidence_cites_trace_and_config` drew
+them equally often, five rows each** (`fix_usable_unedited` on 01, 07, 17, 19, 20;
+`evidence_cites_trace_and_config` on 06, 08, 10, 13, 14; `root_cause_layer_correct` on 07, 14;
+`fix_target_correct` on 05, 12).
+
+> **Corrected after review, before merge.** An earlier draft of this subsection said
+> `fix_usable_unedited` was "the most frequently flagged column, in six of the twelve", counting row 13
+> against it; row 13's scorer flagged `evidence_cites_trace_and_config` only. Re-derived from all twenty
+> verdict files. **The load-bearing claim survives** — a gate term is under-determined on a quarter of
+> all rows, so §A2.1 did not close its exposure — but the superlative does not, and §AD7's open item 3
+> should be read as covering *both* columns rather than the evidence column alone.
 
 **§AC8's caveat was right and should now be promoted to a standing limit:** AC-5 tests whether the
 clauses *determine* an answer, which is a different property from whether the answer is *right*. This
@@ -4533,7 +4554,16 @@ gate-forced call targeted anything connected to its seed's defect** (`task`, `ta
 | a confident **false positive** that replaced a partly-correct draft | 02, 04 |
 | an honest inconclusive | 06 |
 | **terminal validation failure** — the forced call offered *as a root cause* and killed by the citation rule | 08 |
-| a validated report with an **invented fix**, the forced call laundered into a supporting citation | 10, 12, 16 |
+| a validated report with an **invented fix**, the forced call laundered into a supporting citation | **10** |
+| a validated report with a **non-actionable fix**, the forced call cited nowhere | 12, 16 |
+
+> **Corrected after review, before merge.** An earlier draft grouped rows 10, 12 and 16 together as
+> having laundered the forced call into a supporting citation. The packets refute that for two of the
+> three: row 10's root cause cites `trace` + `schema` — the `schema` half being the forced
+> `incident.assignment_group` lookup — whereas rows 12 and 16 cite `trace` twice and never cite their
+> forced call at all, which is exactly why both scored `evidence_cites_trace_and_config` = 0. Only row
+> 10 laundered it. Rows 12 and 16 spent the call and produced a non-actionable fix, which is a different
+> failure and is now recorded as one.
 
 **Rows 02 and 04 carry the proof in the transcript.** In both, the pre-HOLD draft the gate *refused*
 was closer to correct than the post-HOLD report it *accepted* — row 04's refused draft had already

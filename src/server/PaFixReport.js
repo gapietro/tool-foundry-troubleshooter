@@ -217,7 +217,23 @@ PaFixReport.prototype = {
      *          malformed.
      */
     unsweptGaps: function (report) {
-        var rep = this._isPlainObject(report) ? report : {}
+        // #155 review (C1). This is a PUBLIC entry point reached WITHOUT
+        // `validate` — `PaAgentLoop._depthGate` calls it on the raw draft, by
+        // design (see that method's note on why the gate lives there). So it
+        // must canonicalise for itself; the call in `validate` does not cover
+        // it.
+        //
+        // Why this is load-bearing rather than tidiness: a flat-form
+        // `layers_swept` made this method return `[]`, and `PaAgentLoop` reads
+        // an empty gap list as "nothing left to sweep" and sets
+        // `_gateReleased = true` — which short-circuits every later gate check
+        // for the rest of the run. One flat-form draft therefore disarmed the
+        // depth gate permanently, and a later object-form draft declaring an
+        // unswept layer could not re-arm it. The blindness predates the #155
+        // fix (this method always read the raw draft), but that fix is what
+        // makes the shape reachable in a run that COMPLETES rather than one
+        // rejected at validation, so the consequence lands here.
+        var rep = this._withCanonicalLayersSwept(this._isPlainObject(report) ? report : {})
         var ls = this._isPlainObject(rep.layers_swept) ? rep.layers_swept : {}
         var defs = this._layerDefs()
         var map = this._layerToolMap()
@@ -291,14 +307,20 @@ PaFixReport.prototype = {
      * STRING — `{"1": "UNAVAILABLE", "2": "SWEPT", …}` — by canonicalising
      * each one to `{status: <string>}` before any check reads it.
      *
-     * WHY THIS IS A ROOT FIX AND NOT A COURTESY. Eight separate sites in this
-     * file read a layers_swept entry and test `.status`: this method's
-     * neighbour `_isTraceUnavailable`, `_unsweptGaps`, `_checkLayersSwept`,
+     * WHY THIS IS A ROOT FIX AND NOT A COURTESY. Seven sites in this file read
+     * a layers_swept entry and test `.status`: this method's neighbour
+     * `_isTraceUnavailable`, the public `unsweptGaps`, `_checkLayersSwept`,
      * `_checkSweptClaims`, the `would_confirm` contradiction check, the
-     * inconclusive citation pricing, and `repairPrompt`'s renderer. The flat
-     * form is misread by ALL of them at once, so patching them individually
-     * would be eight symptom fixes for one cause. Canonicalising at the single
-     * point where the report enters `validate` fixes every reader together.
+     * inconclusive citation pricing, and the `repairPrompt` layer table. The
+     * flat form is misread by ALL of them at once, so patching them
+     * individually would be seven symptom fixes for one cause. Canonicalising
+     * where the report enters `validate` covers six of the seven.
+     *
+     * `unsweptGaps` is the exception and canonicalises for ITSELF: it is a
+     * public entry point that `PaAgentLoop._depthGate` calls on the raw draft
+     * without going through `validate`. That was missed on the first pass of
+     * this fix and caught in review (C1) — see the note at that method for why
+     * missing it disarmed the depth gate for a whole run.
      *
      * WHY THE SHAPE IS REASONABLE RATHER THAN WRONG. `_checkLayersSwept`'s own
      * rejection text describes the field as "an object mapping each of the

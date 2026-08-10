@@ -120,11 +120,26 @@ previously had no stated answer. That is progress on consistency and none on com
 that AC-5 *"tests whether they determine an answer, which is a different property from whether the
 answer is the right one"* — this result says they often do not determine one at all.
 
-Which column drew the flag, across the twelve flagged rows: `fix_usable_unedited` (rows 01, 07, 13,
-17, 19, 20), `evidence_cites_trace_and_config` (rows 06, 08, 10, 13, 14), `root_cause_layer_correct`
-(rows 07, 14), `fix_target_correct` (rows 05, 12). **`fix_usable_unedited` — a gate term — is the most
-frequently under-determined column**, which is exactly the exposure §A2.1 was written to close and did
-not.
+Which column drew the flag, across the twelve flagged rows — **14 flags over 12 rows**, because rows 07
+and 14 each name two:
+
+| column | rows | n |
+|---|---|---|
+| `fix_usable_unedited` | 01, 07, 17, 19, 20 | **5** |
+| `evidence_cites_trace_and_config` | 06, 08, 10, 13, 14 | **5** |
+| `root_cause_layer_correct` | 07, 14 | 2 |
+| `fix_target_correct` | 05, 12 | 2 |
+
+**A gate term (`fix_usable_unedited`) and `evidence_cites_trace_and_config` were flagged equally often,
+five rows each.** So the exposure §A2.1 was written to close is still open on a gate term in a quarter
+of all rows — but it is not uniquely the worst column, and the evidence column is flagged just as much.
+
+> **Corrected after review.** An earlier draft of this section claimed
+> `fix_usable_unedited` was "the most frequently under-determined column … in six of the twelve", by
+> counting row 13 against it. Row 13's scorer flagged `evidence_cites_trace_and_config` only
+> (`scoring-v12/results/row-13-result.md`). The corrected count is the 5–5 tie above, re-derived from
+> all twenty verdict files. The claim that survives is the one that matters — a **gate term** is
+> under-determined on five of twenty rows — and the superlative does not.
 
 ---
 

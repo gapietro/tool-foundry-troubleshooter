@@ -2843,3 +2843,64 @@ describe('PaFixReport.validate — layers_swept as flat status strings (#151)', 
         expect(res.normalized.layers_swept[5]).toEqual({ status: 'NOT_SWEPT', reason: 'no data read was needed' })
     })
 })
+
+// ===========================================================================
+// unsweptGaps — the SECOND entry point (#155 review, C1)
+//
+// `PaAgentLoop._depthGate` calls `unsweptGaps` on the RAW draft, deliberately
+// bypassing `validate`. So the canonicalisation inside `validate` does not
+// reach it and it has to do its own. Getting this wrong is not cosmetic:
+// `PaAgentLoop` reads an empty gap list as "nothing left to sweep" and sets
+// `_gateReleased = true`, which short-circuits every later gate check for the
+// rest of the run. A single flat-form draft therefore disarmed the depth gate
+// permanently, and a later object-form draft declaring an unswept layer could
+// not re-arm it.
+//
+// `PaAgentLoop.test.js` stubs `unsweptGaps` out entirely, so nothing else in
+// the suite covers this path.
+// ===========================================================================
+
+describe('PaFixReport.unsweptGaps — flat status strings (#155 review)', () => {
+    test('a flat NOT_SWEPT entry yields the same gap as the object form', () => {
+        const pfr = load()
+        const objectForm = pfr.unsweptGaps({ layers_swept: { 2: { status: 'NOT_SWEPT', reason: 'no budget' } } })
+        const flatForm = pfr.unsweptGaps({ layers_swept: { 2: 'NOT_SWEPT' } })
+
+        expect(objectForm.map((g) => g.layer)).toEqual([2])
+        expect(flatForm.map((g) => g.layer)).toEqual([2])
+    })
+
+    test('a flat UNAVAILABLE is NOT a gap, exactly as the object form is not', () => {
+        // Deliberate, and documented at the top of `unsweptGaps`: UNAVAILABLE
+        // is the honest report of a layer that cannot be read, so it is not an
+        // open gap and must not hold the run. Asserted on the flat form so the
+        // canonicalisation cannot accidentally widen what counts as a gap —
+        // only NOT_SWEPT does.
+        const gaps = load().unsweptGaps({ layers_swept: { 5: 'UNAVAILABLE', 6: 'NOT_SWEPT' } })
+
+        expect(gaps.map((g) => g.layer)).toEqual([6])
+    })
+
+    test('a flat all-SWEPT report yields no gaps — releasing the gate is correct here', () => {
+        const ls = {}
+        for (let i = 1; i <= 7; i++) ls[i] = 'SWEPT'
+
+        expect(load().unsweptGaps({ layers_swept: ls })).toEqual([])
+    })
+
+    test('each flat gap still carries the tools that would close it', () => {
+        const gaps = load().unsweptGaps({ layers_swept: { 4: 'NOT_SWEPT' } })
+
+        expect(gaps).toHaveLength(1)
+        expect(gaps[0].layer).toBe(4)
+        expect(gaps[0].tools.length).toBeGreaterThan(0)
+    })
+
+    test('malformed input is still absorbed — [] for anything unusable (R-9)', () => {
+        const pfr = load()
+
+        expect(pfr.unsweptGaps(null)).toEqual([])
+        expect(pfr.unsweptGaps({})).toEqual([])
+        expect(pfr.unsweptGaps({ layers_swept: 'SWEPT' })).toEqual([])
+    })
+})
