@@ -5010,3 +5010,213 @@ terminal to the presence of a validator rejection, so a packet could promise one
 open. Sections are renumbered in the generator's output (advance rulings became section 3, so the
 report is now section 4), which affects the **next** pass only — `benchmark/scoring-v12/` is frozen
 and untouched by this work.
+
+## AG. Both flagged columns are made determinate (`2026.08.1006`, #159)
+
+**§A through §AF are unmodified and this section appends to them** — `git log -p
+benchmark/DECISION.md` is the check, in the form §W, §Z, §AC, §AD, §AE and §AF all used. This closes
+§AD7's open items **3 and 5**, which were the last two §AD left open.
+
+**No run was fired, no packet was re-scored, no instance was touched, and no v12 number moves.** It
+repairs the rubric that the next pass will be scored against.
+
+Artefacts: `benchmark/scorecard-template.md` §A1 (new) and §A2.1 Cases 3–4 (new) ·
+`test/rubricClauses.test.js`.
+
+### AG1. The item as filed named one gap; the verdict files hold seven
+
+§AD7 item 3 asks for *"a third clause for a formally-present-but-irrelevant citation"*, and §AD3's
+own correction widens it — *"item 3 should be read as covering both columns rather than the evidence
+column alone."* Read against the twenty verdict files rather than against the summary, **the ten
+flags that fall on those two columns decompose into eight distinct questions**, of which the filed
+one is a single case:
+
+| # | question the packet did not answer | rows |
+|---|---|---|
+| **E-a** | does the column apply at all when the report offers no root cause | 06 |
+| **E-b** | per-root-cause or whole-report, when the root causes disagree | 08, 14 |
+| **E-c** | a citation formally present but unconnected to the diagnosis — **the filed item** | 10 |
+| **E-d** | citations split across report sections rather than sitting in the root-cause entry | 13 |
+| **E-e** | a citation to a tool the run never called, and whether the validator settles it | 14 |
+| **F-a** | the operation is named and the supplied edit does not perform it | 01 |
+| **F-b** | the target is named by kind rather than by name | 20 |
+| **F-c** | a report proposing several fixes — score the union, or the repair | 07 |
+
+**Two of the five `fix_usable_unedited` flags were already closed by §AF4 and are not clauses here.**
+Rows 17 and 19 flagged that column because §AC4's Ruling 1 was authored blind and then not
+delivered; both scorers said so in as many words, and one named the absence. The ruling now ships in
+the packet. That leaves F-a, F-b and F-c as the live residue on that column — which is why this
+section writes **three** clauses there rather than the none item 3 implies.
+
+Writing E-c alone would have closed one row of five on the column the item names.
+
+**The other four of §AD3's fourteen flags are NOT closed here, and saying so is the point of this
+paragraph.** They fall on `root_cause_layer_correct` (rows 07, 14) and `fix_target_correct` (rows 05,
+12) — two columns item 3 does not name and this section does not touch. **One of them is a gate
+term**, so it carries the same verdict-moving exposure that motivated §A2.1 in the first place. Filed
+as **#164** with the four rows' actual questions transcribed, rather than folded in here on the
+strength of a resemblance.
+
+> **Corrected during this section's own review round, before merge.** The first cut of §AG1 said the
+> fourteen flags decomposed into seven questions and that F-a and F-b were the whole residue. Row 07
+> carries **two** flags — §AD3 lists it under `root_cause_layer_correct` *and* `fix_usable_unedited`
+> — and only the first was accounted for, so a gate-term flag went missing and the coverage claim
+> was overstated on the column §AD3 called the most consequential. F-c is the clause that closes it;
+> #164 is where the four genuinely-out-of-scope flags now live. The count that matters, stated once:
+> **14 flags — 10 on the two named columns, all 10 now closed; 4 on two unnamed columns, all 4 open.**
+
+### AG2. E-c is the hard one, and the test is structural rather than semantic
+
+The filed case is a citation that is *real* — a genuine tool call, a genuine artifact, present in the
+evidence array — and hollow, because the artifact it names has nothing to do with the cause being
+argued. "Irrelevant" is the most judgement-shaped word available, and §A2.1's standing claim is that
+its clauses ask the scorer to weigh nothing. A clause that reads *"discount a citation the scorer
+judges irrelevant"* would have re-imported the judgement it was written to remove.
+
+Three discriminators were available and the choice among them is the substance of this section:
+
+1. **Connection** — the citation counts only if the root-cause statement it is offered under **names
+   the artifact cited**. Chosen.
+2. **Provenance** — a call the packet records as answering the harness depth HOLD is excluded.
+3. **Formalism** — declare the column a presence test and say relevance is not scored.
+
+**Provenance was rejected because it is a rule about this harness, not about evidence.** It fires only
+on the arm that takes a HOLD, which is one arm today and possibly neither tomorrow; it would have
+written a property of the instrument into the rubric that measures the instrument. It is also, and
+this is the sharper objection, *correct for the wrong reason* — the citation in the filed case is
+hollow because it is disconnected, and its being HOLD-forced is how it came to be disconnected, not
+what makes it so.
+
+**Formalism was rejected because it closes the item by conceding it.** The column exists to score the
+diagnostic agent's own evidence rule, and an evidence rule that any call satisfies is not a rule.
+
+**What connection buys, stated as the general shape:** the predicate points at something a reader can
+*see* — two passages of one report, and whether a name appearing in one appears in the other. It
+never asks whether the citation is *good* evidence, only whether it is evidence for *this* claim. The
+clause says outright that the reason a call was made is not part of the test: a call made for some
+unrelated purpose that nonetheless names an artifact the root cause names **counts**, and a call made
+in perfect good faith that names nothing the root cause names **does not**. That asymmetry is
+deliberate and it is what keeps the clause mechanical.
+
+**What it costs.** A diagnosis that is correctly grounded but *loosely worded* — one that reasons from
+an artifact without naming it — now scores 0 on this column. That is a real false negative and it is
+accepted: naming what you relied on is the cheapest thing a report can do, and a rubric that rewards
+it is not asking much.
+
+### AG3. §A1 is a section, not a third case in §A2.1, and the reason generalises
+
+§A2.1's clauses sit under §A2 — *"`passes_gate`, the column the gate actually consumes"* — because
+`fix_usable_unedited` is one of the gate's two terms. `evidence_cites_trace_and_config` is not in the
+gate expression at all. Filing its clauses in the same place would have made §A2's heading false in
+exchange for a smaller diff, and would have told every future scorer that a wrong value on this column
+moves the verdict, which it does not.
+
+The five clauses land in a new **§A1**, between §A's column table and §A2. **The binding constraint is
+not taxonomy but reach**: the packet generator slices `## A.` to `## B.`, so §A1 ships, and §Z2's rule
+holds unchanged — *a clause outside that range is a clause the scorers never see*. §A1 also says in as
+many words that the column is **not** a gate term, because a scorer who reads §A2.1 first will
+otherwise carry "this changes the verdict" across to a column where it is false.
+
+The ordering problem is real and is fixed in the text: Case 1 asks whether the column has a subject,
+Case 2 fixes which root cause is the subject, Cases 3–5 then ask whether a given citation counts.
+Entered in the other order, Case 2 and Case 3 can disagree about the same report.
+
+### AG3a. The two sections order their cases differently, and that is deliberate
+
+Both sections now state how their cases combine, and the two statements are **not** the same rule.
+The review round found §A2.1 with no combination rule at all — five cases and nothing saying what to
+do when two of them point opposite ways, which is under-determination of exactly the kind the section
+exists to remove, sitting inside a gate term.
+
+- **§A1 is a pipeline.** Cases 1–2 settle *which root cause* is under evaluation and are never
+  revisited; Cases 3–5 alone award the point. The failure mode it guards is a scorer reaching a value
+  at Case 2 and stopping, before the tests that do the work have run.
+- **§A2.1 is a conjunction.** Case 5 selects *which fix* is under evaluation, and Cases 1–4 are then
+  each **necessary** on that fix — the first failure decides, and passing a later case never lifts an
+  earlier bar. The failure mode it guards is a fix that names exactly one record and every field it
+  changes (Case 2) and still hands the builder a snippet that does not perform the change (Case 3).
+
+**The asymmetry is not an inconsistency; it follows from what the two columns ask.** Evidence is a
+property of one claim, so the work is choosing the claim and then testing its citations. Usability is
+a conjunction of independent properties of one fix — addressed, specified, applicable, complete — and
+any one of them failing makes the fix unusable. Writing one rule for both would have forced the wrong
+shape on one of them.
+
+The conjunctive reading is not new law: §Z2 already recorded it for Cases 1–2 — *"Case 1 is phrased
+as a **necessary** condition and governs: passing Case 2's address test does not lift Case 1's bar"*
+— and noted that reading was load-bearing for two changed cells and *"stated in the derived file
+rather than left implicit."* It is now stated in the template, where the scorers are.
+
+### AG4. Item 5 is closed by F-b, and the clause overrides a fact about the run
+
+§AD7 item 5 — *"a target identified by kind rather than by name"* — was left open because it *"did not
+recur in a form this pass had to adjudicate."* It did recur, in a shape close enough to decide: row 20
+carries both halves of it at once, a value given as a class (`run_as: valid_user`) and a target named
+as a table rather than a record.
+
+The clause splits them, and the split is the part worth carrying:
+
+- **A kind-named TARGET scores 0.** Choosing a member of the class is the edit the column asks whether
+  the builder can skip.
+- **A kind-named VALUE is sent back to Case 1**, not decided here. If the instance holds a value
+  answering the description it was obtainable and the run declined to look it up (0); if it holds none,
+  Case 1 condition 2 is met and the slot is the builder's to fill (1). Deciding values inside Case 4
+  would have contradicted Case 1's explicit finding that demanding an unobtainable value rewards
+  fabrication.
+
+**And the withheld-name defence is refused, explicitly.** §Z3 recorded the open case as turning on a
+blind-rule token: the run could not name the table because the packet deliberately withheld it. The
+clause holds that this changes nothing — *the column scores what the builder AI receives, not what the
+run could reasonably have known.* A run that cannot name its target is free to say so; what it may not
+do and still score 1 is hand the builder a class.
+
+**This is the one place in §A2.1 where a fact about the run is excluded from the test**, and the
+template says so rather than leaving it to be noticed. The ground is that the column's stated consumer
+sits downstream of the run and inherits none of its constraints. **It is also, stated plainly, a
+harshness**: the blind rule is the instrument's choice, and this clause makes the run carry its cost.
+The alternative — a defence available whenever the answer was withheld — makes the column's value a
+function of the redaction map, which is worse.
+
+### AG5. What this cannot establish
+
+- **Nothing here measures diagnostic quality, for either arm, in either direction.** §AD's verdict
+  stands exactly as published: native 6/10 · 60% · middle band, custom 0/10 · 0% · bottom band, rubric
+  totals 51/60 and 9/60, quoted together and never singly.
+- **No v12 row is re-scored, and this is a decision rather than an omission.** §T9 governs and §AF7
+  restated it. The published values were produced under the rubric as it stood; seven clauses written
+  afterwards would re-decide rows whose scorers resolved them by judgement — including at least one
+  gate term, where the alternate reading moves an arm's gate figure. Recomputing after seeing the
+  flags is the with-rows-in-hand decision §AC4 exists to prevent, and a derived re-reading in §Z3's
+  style is available to any future section that wants it, on the same discipline: every cell sourced
+  to something a scorer already recorded, no fresh judgement.
+- **Determinacy is not correctness.** §AC8's caveat, promoted to a standing limit by §AD3, applies to
+  this section without amendment: these clauses decide what the answer *is*, which is a different
+  property from whether the answer is *right*. A rubric can be perfectly mechanical and perfectly
+  wrong.
+- **Nothing establishes that these are the right clauses.** They are mechanical, they were written
+  before any pass that will be scored against them, and the ordering is checkable in git. That is the
+  whole of the claim. Unlike §Z3, this section does not even have a recompute to point at as evidence
+  the clauses were not selected for their result — which is the price of the no-recompute decision
+  above, and is recorded here rather than argued away.
+- **Eight questions answered is not the count of questions that exist**, and this section learned that
+  about itself the hard way. These eight are the ones twenty verdict files exposed **on two columns**;
+  four flags on two other columns are untouched (#164), and its own review round found the first cut
+  claiming otherwise. A pass with different seeds, a different terminal shape, or a report format not
+  yet seen will find more, and the correct response is another clause, not a scorer's judgement call.
+
+### AG6. Disposition
+
+**§AD7 is closed — all five items.** Items 1 and 2 at §AE, item 4 at §AF, items 3 and 5 here.
+
+**That is not the same as "every v12 ambiguity flag is answered", and the two must not be quoted
+interchangeably.** §AD7 closed means the items §AD *filed* are disposed of. Ten of §AD3's fourteen
+flags are now decided by a clause; the other four are open at **#164**. The correct sentence is *ten
+of fourteen, on the two columns item 3 names* — never a bare "the rubric is determinate".
+
+**Unchanged: native remains the recommended path on this instance, and the Phase 1b milestone is not
+met.** Quote §AD1's figures, both arms, as §AD7 requires.
+
+**The next scored pass is not scheduled, sized or pre-registered by this section**, and running one
+against it as though it were would be §U's confound. What it inherits is a rubric whose two most
+frequently flagged columns now decide themselves, a stated rule in each for how its cases combine,
+and a suite that reddens if either clause set is edited away.

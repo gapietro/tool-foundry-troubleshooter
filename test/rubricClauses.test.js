@@ -1,6 +1,6 @@
 /**
- * The rubric's two decision clauses must exist, and must sit where a scorer
- * can read them (issue #139).
+ * The rubric's decision clauses must exist, and must sit where a scorer
+ * can read them (issues #139, #159).
  *
  * ---------------------------------------------------------------------------
  * WHY A TEST GUARDS A MARKDOWN FILE
@@ -16,13 +16,25 @@
  * WHAT IS PINNED, AND WHAT DELIBERATELY IS NOT
  * ---------------------------------------------------------------------------
  * PINNED: that each clause exists, that its load-bearing decision terms are
- * present, and that it sits between the §A2 and §A3 headings -- because only
- * §A/§A2/§A3 are copied into a scorer packet, so a clause outside that range
- * is a clause no scorer reads.
+ * present, and that it sits inside the slice copied into a scorer packet --
+ * §A through §B -- because a clause outside that range is a clause no scorer
+ * reads. §A2.1 is pinned to the narrower §A2..§A3 window it has always
+ * occupied; §A1 is pinned to §A..§A2.
  *
  * NOT PINNED: the prose. A test asserting a paragraph verbatim would fail on
  * every copy-edit and teach the next reader to update the fixture rather than
  * think about the rule.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY §A1 IS A SECTION AND NOT A THIRD CASE IN §A2.1 (issue #159)
+ * ---------------------------------------------------------------------------
+ * §A2.1's clauses decide `fix_usable_unedited`, which is a gate term, and they
+ * live under §A2 for that reason -- §A2 is the section about what the gate
+ * consumes. `evidence_cites_trace_and_config` is NOT in the gate expression, so
+ * filing its clauses under §A2 would have made that heading false while adding
+ * nothing. They sit in their own section between §A and §A2 instead: still
+ * inside the packet-copied slice, adjacent to the column table a scorer starts
+ * from, and honest about which column moves the verdict.
  */
 
 const fs = require('fs')
@@ -31,15 +43,51 @@ const path = require('path')
 const TEMPLATE = path.join(__dirname, '..', 'benchmark', 'scorecard-template.md')
 const source = fs.readFileSync(TEMPLATE, 'utf8')
 
-/** The slice of the template that gets copied into a scorer packet. */
-function packetReachingRange(text) {
-    const start = text.indexOf('## A2. ')
-    const end = text.indexOf('## A3. ')
+/**
+ * Collapse runs of whitespace to single spaces.
+ *
+ * The template is hard-wrapped prose, so a phrase this file pins can sit
+ * across a line break -- and which break depends on where the paragraph was
+ * last re-wrapped. Without this, a pure copy-edit reddens the suite and the
+ * next reader learns to shorten the assertion until it passes, which is how a
+ * guard becomes vacuous. Bold/code markers are dropped for the same reason:
+ * whether a word is bolded is not what these tests are about.
+ *
+ * UNDERSCORES ARE KEPT. They are markdown emphasis too, but they are also in
+ * every tool name this file pins -- `log_analysis`, `schema_lookup` -- and
+ * stripping them would quietly turn those assertions into matches against
+ * `loganalysis`, which the template never contains.
+ */
+function flat(text) {
+    return text.replace(/[*`]/g, '').replace(/\s+/g, ' ')
+}
 
+/** A named slice of the template, with both bounds proven to exist. */
+function between(text, startHeading, endHeading) {
+    const start = text.indexOf(startHeading)
+    const end = text.indexOf(endHeading)
+
+    // indexOf returns -1 on a miss and slice(-1, -1) is the empty string,
+    // which passes every `toContain` below vacuously. Assert both bounds.
     expect(start).toBeGreaterThan(-1)
     expect(end).toBeGreaterThan(start)
 
-    return text.slice(start, end)
+    return flat(text.slice(start, end))
+}
+
+/** The §A2.1 window: the slice §A2.1 has always occupied. */
+function packetReachingRange(text) {
+    return between(text, '## A2. ', '## A3. ')
+}
+
+/** The §A1 window: after the column table, before the gate section. */
+function evidenceClauseRange(text) {
+    return between(text, '## A1. ', '## A2. ')
+}
+
+/** Everything a scorer packet copies -- the generator's own two markers. */
+function packetSlice(text) {
+    return between(text, '## A. ', '## B. ')
 }
 
 describe('the fix_usable_unedited clauses exist (issue #139)', () => {
@@ -86,5 +134,162 @@ describe('the fix_usable_unedited clauses exist (issue #139)', () => {
 
         expect(row).toBeDefined()
         expect(row).toContain('§A2.1')
+    })
+
+    it('clause 3 states that the snippet, not only the address, must be applicable', () => {
+        // Cases 1 and 2 both pass on a fix whose address is perfect and whose
+        // supplied edit does not perform the change. That gap is the clause.
+        //
+        // Both strings are DISTINCTIVE on purpose. An earlier cut asserted the
+        // bare word 'describes', which any future paragraph in this window
+        // would satisfy -- the clause could then be deleted and the guard stay
+        // green, which is the failure mode this file exists to prevent.
+        const range = packetReachingRange(source)
+
+        expect(range).toContain('produces the change the fix describes')
+        expect(range).toContain('exactly as given')
+    })
+
+    it('§A2.1 says how its cases combine, and that they are not a cascade', () => {
+        // Without this, Case 2 (address resolves, fields named -> 1) and Case 3
+        // (snippet does not perform the change -> 0) give opposite verdicts on
+        // the same fix, and the scorer picks by reading order. That is the
+        // under-determination on a gate term the whole section removes.
+        const range = packetReachingRange(source)
+
+        expect(range).toContain('necessary conditions')
+        expect(range).toContain('the first case that fails')
+    })
+
+    it('clause 5 scores the fix aimed at the seeded defect, not the union', () => {
+        // A multi-part fix report otherwise scores either as its best part or
+        // its worst, and nothing said which.
+        const range = packetReachingRange(source)
+
+        expect(range).toContain('addresses the defect the seed carries')
+        expect(range).toContain('neither credited nor charged')
+    })
+
+    it('clause 4 rules on a target named by kind, and on the withheld-name defence', () => {
+        const range = packetReachingRange(source)
+
+        // Both halves are load-bearing. Without the first, a class-valued
+        // target is undecided; without the second, the blind rule reads as an
+        // excuse that lifts the bar, which is the open case this clause closes.
+        expect(range).toContain('by kind rather than by name')
+        expect(range).toContain('is not a defence')
+    })
+
+    it('clause 4 routes a kind-named VALUE back to clause 1 rather than deciding it', () => {
+        // Clause 1 already disposes of unfilled values by obtainability, and
+        // says an unobtainable one scores 1. A clause 4 that swallowed values
+        // whole would contradict it.
+        expect(packetReachingRange(source)).toContain('decided by Case 1, not here')
+    })
+})
+
+describe('the evidence_cites_trace_and_config clauses exist (issue #159)', () => {
+    it('§A1 exists and sits between the column table and the gate section', () => {
+        expect(source).toContain('## A1. ')
+        expect(evidenceClauseRange(source)).toContain('Case 1')
+    })
+
+    it('§A1 falls inside the slice the packet generator copies', () => {
+        // The generator slices §A. .. §B. -- the same two markers. A clause
+        // outside that slice reaches no scorer, and nothing else would notice.
+        expect(packetSlice(source)).toContain('## A1. ')
+    })
+
+    it('§A1 fixes the order the cases are applied in', () => {
+        // Without an order, case 2 (which root cause) and case 3 (does this
+        // citation count) can be entered in either sequence and disagree.
+        expect(evidenceClauseRange(source)).toContain('Apply them in order')
+    })
+
+    it('clause 1 scores a report with no root cause 0, not blank', () => {
+        // "Not applicable" is the reading that leaves the cell empty and the
+        // /6 short, which is a different defect from the one being closed.
+        const range = evidenceClauseRange(source)
+
+        expect(range).toContain('no root cause')
+        expect(range).toContain('a blank is not a value')
+    })
+
+    it('clause 2 names the primary root cause as the single subject', () => {
+        const range = evidenceClauseRange(source)
+
+        // The two rejected readings must both be named, or a scorer meeting a
+        // multi-cause report re-derives the choice.
+        expect(range).toContain('primary')
+        expect(range).toContain('the report as a whole')
+        expect(range).toContain('every entry')
+    })
+
+    it('clause 2 selects the subject without awarding the point', () => {
+        // "Score 1 if that entry carries both citations" read alone lets a
+        // scorer stop at case 2 -- before case 3 is reached to disqualify a
+        // citation the primary carries but does not connect to.
+        expect(evidenceClauseRange(source)).toContain('it does not award the point')
+    })
+
+    it('clause 2 skips a primary entry that asserts no defect exists', () => {
+        // Case 1 fires on a report with no root causes. A report whose FIRST
+        // root cause is itself a non-diagnosis passes case 1 and would then be
+        // scored against the non-diagnosis.
+        expect(evidenceClauseRange(source)).toContain('asserts no defect exists')
+    })
+
+    it('clause 3 makes relevance a structural test, not a judgement', () => {
+        const range = evidenceClauseRange(source)
+
+        // The whole clause turns on the root cause NAMING the cited artifact.
+        // Drop that and "irrelevant" becomes the scorer's opinion again.
+        expect(range).toContain('names the artifact cited')
+    })
+
+    it('clause 4 gives the audit trail authority over the validator', () => {
+        const range = evidenceClauseRange(source)
+
+        expect(range).toContain('audit trail')
+        expect(range).toContain('trail decides, the validator does not')
+    })
+
+    it('clause 4 enumerates the two tool families instead of leaving them judged', () => {
+        // "the corresponding tool family" is a judgement call unless the
+        // membership is written down -- one config claim is reachable through
+        // four of the six tools, and asking which one it "really" came from
+        // reintroduces exactly what the preamble disclaims.
+        const range = evidenceClauseRange(source)
+
+        expect(range).toContain('enumerated rather than judged')
+        expect(range).toContain('and by nothing else')
+        // The trace family has one member; the config/schema family has six.
+        // Naming two of the six catches a rewrite that drops the list.
+        expect(range).toContain('schema_lookup')
+        expect(range).toContain('read_artifact')
+    })
+
+    it('clause 5 requires co-location, with an explicit-reference escape', () => {
+        const range = evidenceClauseRange(source)
+
+        // Co-location without the escape would score 0 a report that cites its
+        // own failure summary by name, which is a reference and not a gap.
+        expect(range).toContain('co-located')
+        expect(range).toContain('refers to')
+    })
+
+    it('§A1 says the column is not a gate term', () => {
+        // A scorer who reads §A2.1 first will carry "this changes the verdict"
+        // across to a column where it is false. Say so where it is false.
+        expect(evidenceClauseRange(source)).toContain('not a gate term')
+    })
+
+    it('the evidence_cites_trace_and_config row points a scorer at §A1', () => {
+        const row = source
+            .split('\n')
+            .find((l) => l.startsWith('| `evidence_cites_trace_and_config`'))
+
+        expect(row).toBeDefined()
+        expect(row).toContain('§A1')
     })
 })
