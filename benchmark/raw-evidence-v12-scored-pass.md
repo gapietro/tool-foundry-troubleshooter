@@ -315,6 +315,68 @@ on table **`task`** with the bench ticket's sys_id — same honest `genuinely_em
 cause at layer 5 (*"The ticket record required by the agent does not exist"*, `CONFIRMED`), same fix
 (*"Create the ticket record with valid data"*). Two of two custom rows on seed 01.
 
+### 3.45 Row 05 — native, seed 02 rep 1 — **VALID**
+
+| field | value |
+|---|---|
+| target execution | `816dd97e2b628318f243fed2ce91bf20` — completed 15:40:35→15:40:59 (24s), 6 tasks all `success`, **1** tool call (`measure_request` `636d11be2b628318f243fed2ce91bf95`). A routing request answered by a measuring tool, nothing erroring: seed 02's condition, intact |
+| diagnostic execution | `a41e5d722ba28318f243fed2ce91bfff` |
+| terminal | **completed**, 15:43:34 → 15:48:25 = **4m51s** |
+| tool calls (§E1) | **14** |
+| report | **two** messages — `000f917a2ba28318f243fed2ce91bfcb` (15:47:37, part 1) + `c32f19ba2ba28318f243fed2ce91bfc0` (15:48:22, *"Continuing Fix Report — remaining sections"*) |
+
+**Relevant to AC-3, and recorded without scoring it.** AC-3 predicts all four seed-02 rows score
+`root_cause_layer_correct` = 0 **and** that ≥3 of the 4 reports carry an explicit *"no failure
+observed"* style conclusion. **Row 05 carries no such conclusion.** It names concrete defects: FIX-1
+creates and binds an `assign_to_group` Script tool, on the reasoning *"The LLM cannot act on data it
+has no tool to write. Without an assignment tool every routing decision is text-only and leaves no
+durable record"*; FIX-2 adds trigger wiring (`trigger_links: 0`); FIX-3 expands the `measure_request`
+description against three logged smells (`description_thin`,
+`description_no_negative_guidance`, `description_no_input_guidance`). It also flags an
+`active_tool_count` discrepancy for a human to confirm.
+
+Whether that earns the expected layer is the scorers' call. What is recorded here is that **the
+second half of AC-3 — the "no failure observed" convergence — did not occur on this row.** Three
+seed-02 rows remain.
+
+### 3.46 Row 06 — custom, seed 02 rep 1 — **VALID**
+
+| field | value |
+|---|---|
+| run | `a7af5d7a2bee47d817a6ffbeee91bf3d` — **`TR1000249`** |
+| terminal | **complete**, `fix_report validated` at seq 10; 15:50:44 → 15:50:57 |
+| tool calls | **3** — `agent_trace`, `read_artifact`, `schema_lookup` |
+| `layers_swept` (mechanical §E2) | **2/7** (L1, L4) |
+| HOLDs | **1**, citing **`layer 4 (ranked)`** |
+
+**Three things this row establishes, and one it does not.**
+
+**1. It is the first row bearing on AC-7, and AC-7 holds here.** The accepted report carries
+`root_causes: []`, `fixes: []`, `verification: ""` and an `inconclusive` block naming what it read and
+what it would need — and the validator **accepted** it (`fix_report validated`). §AB5 recorded that all
+six observed drafts sent `root_causes: []`; this is precisely the shape #148's fix exists to let
+through. It terminated cleanly, so **no row has yet been lost to #148's trap.** §AC8's caveat still
+binds: a clean AC-7 is weak evidence, consistent with the fix working *and* with the trap never being
+triggered.
+
+**2. It is an explicit "no failure observed" conclusion — the thing AC-3 predicts.** Verbatim: *"No
+errors were observed in the execution trace, and the agent's configuration and tool definitions appear
+valid."* So on seed 02 rep 1 the two arms diverge sharply: native (row 05) named a missing
+`assign_to_group` tool, zero trigger links and three description smells; custom concluded inconclusive.
+AC-3's second clause now has one row for and one against, with two seed-02 rows left.
+
+**3. The gate produced another irrelevant call — but this time it did NOT manufacture a false
+positive.** Held on `layer 4 (ranked)`, the run answered with `schema_lookup` on
+**`incident.priority`** — an OOB table and field with no connection whatsoever to seed 02's routing
+defect — and then recorded layer 4 as SWEPT on the reason *"schema_lookup confirmed incident.priority
+exists"*. Same meaningless-call-satisfies-the-gate shape as rows 02 and 04, and the third distinct
+target chosen this way (`task`, `task`, `incident.priority`).
+
+**What it does not establish:** that the §3.5 degradation mechanism is uniform. Here the gate led to an
+**honest inconclusive** rather than a confident falsehood. §3.5's claim must therefore be stated as
+*the gate can degrade a diagnosis* — observed twice — **not** that it always does. Rows 02 and 04
+degraded; row 06 did not.
+
 ### 3.5 The cross-row finding: the depth gate did not fail to add depth — it DEGRADED the diagnosis
 
 This is the sharpest measurement of the pass so far and it goes materially beyond §T5. §T5 established
@@ -398,7 +460,7 @@ known not to indicate a stall: the run it supposedly evidenced had already compl
 
 ## 4. Row index and resumption
 
-**4 of 20 rows complete. The pass is PAUSED mid-run-phase, not abandoned.** No packet has been built
+**6 of 20 rows complete. The pass is PAUSED mid-run-phase, not abandoned.** No packet has been built
 and no scorer has been dispatched, so §AC6's *"packets are built after all 20 runs terminate, and the
 scorers are dispatched once"* is intact and unviolated.
 
@@ -408,7 +470,9 @@ scorers are dispatched once"* is intact and unviolated.
 | 02 | custom | 01/1 | `a860d5322b6e4318f243fed2ce91bf93` | `4aa911b62b228318f243fed2ce91bf39` (`TR1000245`) | **valid**, 25s, 2 calls, 2/7 |
 | 03 | native | 01/2 | `396a15be2b6e47d817a6ffbeee91bf0a` | `cb0b15be2b228318f243fed2ce91bf21` | **valid**, 5m08s, 16 calls, 7/7 |
 | 04 | custom | 01/2 | `396a15be2b6e47d817a6ffbeee91bf0a` | `238cd1ba2bae47d817a6ffbeee91bffa` (`TR1000247`) | **valid**, ~11s, 2 calls, 2/7 |
-| 05–08 | | 02/1, 02/2 | — | — | **not started** |
+| 05 | native | 02/1 | `816dd97e2b628318f243fed2ce91bf20` | `a41e5d722ba28318f243fed2ce91bfff` | **valid**, 4m51s, 14 calls |
+| 06 | custom | 02/1 | `816dd97e2b628318f243fed2ce91bf20` | `a7af5d7a2bee47d817a6ffbeee91bf3d` (`TR1000249`) | **valid**, 13s, 3 calls, 2/7 — inconclusive report, validated |
+| 07–08 | | 02/2 | — | — | **not started** |
 | 09–12 | | 03/1, 03/2 | — | — | **not started** |
 | 13–16 | | 04/1, 04/2 | — | — | **not started** |
 | 17–20 | | 05/1, 05/2 | — | — | **not started** |
