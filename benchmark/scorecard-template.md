@@ -11,8 +11,8 @@ column below exists for a stated reason — read the reason before skipping a co
 
 | Column | Points | What it scores |
 |---|---|---|
-| `root_cause_layer_correct` | 0 or 2 | Diagnosis names the seed's expected root-cause layer (see the seed's own spec file for the expected value) |
-| `fix_target_correct` | 0, 1 or 2 | Diagnosis names the correct fix target (tool schema / instruction text / data seeding / capability mapping / activation). **1 = partial**: the right area, without the specific target. See the partial-credit note below |
+| `root_cause_layer_correct` | 0 or 2 | Diagnosis names the seed's expected root-cause layer (see the seed's own spec file for the expected value). See **§A2.2** for the two cases this definition does not otherwise determine — a declared layer contradicted by the finding text, and a report stating several root causes |
+| `fix_target_correct` | 0, 1 or 2 | Diagnosis names the correct fix target (tool schema / instruction text / data seeding / capability mapping / activation). **1 = partial**: the right area, without the specific target. See **§A2.3** for the two cases this definition does not otherwise determine — a declared target contradicted by the fix body, and where the 1/2/0 boundaries fall |
 | `evidence_cites_trace_and_config` | 0 or 1 | Root cause cites BOTH the execution trace AND at least one config/schema source — the evidence rule from the diagnostic agent's own instructions. See **§A1** for the five cases this definition does not otherwise determine — a report with no root cause, a report with several, a citation unconnected to the cause it supports, a citation no tool call backs, and citations split across the report |
 | `fix_usable_unedited` | 0 or 1 | The Fix Report's proposed fix could be applied by the builder AI as written, with no manual editing first — **and it addresses the defect the seed actually carries.** A well-formed fix aimed at the wrong target is a no-op, not a usable fix, so **`fix_usable_unedited` may not be 1 while `fix_target_correct` is 0.** See the note under the gate rule for why this constraint lives here rather than in the gate expression, and **§A2.1** for the five cases this definition does not otherwise determine — an unfilled value slot, a fix that addresses a runtime record, an incomplete edit, a target named by kind rather than by name, and a report proposing several fixes |
 
@@ -22,8 +22,15 @@ column below exists for a stated reason — read the reason before skipping a co
 specification instructs the scorer to award *partial* credit for naming "inactive"
 without naming which of the two activation gates is off — an instruction the scale
 could not express, leaving the scorer to round arbitrarily in either direction. The
-1 band resolves it. Seed 5 is the only seed that currently defines a partial case;
-for the others, 1 is available but must be justified in `notes` if used.
+1 band resolves it.
+
+> **Superseded 2026-08-10, issue #164.** This note used to continue: *"Seed 5 is
+> the only seed that currently defines a partial case; for the others, 1 is
+> available but must be justified in `notes` if used."* That sentence located the
+> 1/2 and 1/0 boundaries nowhere, and two v12 rows were flagged on it. **§A2.3
+> Case 2 now fixes both boundaries for every seed**, and a `notes` justification
+> is no longer what makes the band available. The seed-5 case above is now one
+> instance of that general rule rather than the only defined one.
 
 ## A1. `evidence_cites_trace_and_config` — five cases the column definition does not otherwise determine
 
@@ -270,6 +277,126 @@ scores this column 0 regardless.*
 All five cases are subordinate to the constraint already stated in §A —
 `fix_usable_unedited` may not be 1 while `fix_target_correct` is 0. **Check that
 first**; if it binds, no case above arises.
+
+### A2.2 `root_cause_layer_correct` — two cases the column definition does not otherwise determine
+
+*Added 2026-08-10, issue #164. The rationale is in the project's decision
+record.* The column reads *"Diagnosis names the seed's expected root-cause
+layer."* **This is §A2's other gate term**, so an under-determined reading of it
+moves the verdict exactly as §A2.1's does — which is why these clauses sit here,
+beside §A2.1, rather than in a section of their own. The expected value is
+printed in the seed spec's own header table (`Expected root-cause layer`, as a
+name and a number). Two shapes of report leave the sentence without an answer.
+**Neither case below asks the scorer to weigh anything.**
+
+**Apply Case 2 first**, since it selects *which* root cause Case 1 is then read
+against. Where the report states exactly one root cause, Case 2 does not arise.
+
+**Case 1 — the report's declared layer and its finding text disagree.** Where the
+report declares a layer — a `layer` field, a **Layer** row, an explicit "layer N"
+in the entry — **score the declared value.** Compare it against the seed spec's
+expected layer and score **2** on a match, **0** otherwise. Do **not** score the
+substance of the finding text: a root cause filed under layer 3 whose prose
+describes the seed's layer-2 mechanism scores **0**, and a root cause filed under
+the expected layer whose prose is thin, hedged or wrong about the mechanism
+scores **2**.
+
+*The distinction, stated so it is not re-derived: the column is named for the
+layer and asks only whether the diagnosis reached it. "Reaching a layer is not
+diagnosing at it" is a standing finding of this project, not a defect in the
+column — the quality of what was found there is what `fix_target_correct`,
+`evidence_cites_trace_and_config` and `fix_usable_unedited` are for. A substance
+reading would make this column a second `fix_target_correct` and would require
+the scorer to judge whether prose "names the mechanism", which is the
+under-determination these clauses exist to remove. **The cost is stated rather
+than argued away:** a run that understood the defect and mis-numbered it scores 0
+here.*
+
+Where the report declares **no** layer anywhere, and only there, score **2** if
+the root-cause statement names the expected layer by the **name or the number the
+seed spec prints** — `genai_stack`, or "layer 6" — and **0** otherwise. The
+packet carries no layer-to-artifact map, so a scorer is never asked to work out
+which layer an unlabelled artifact belongs to; that inference has no mechanical
+answer here and the column does not need one.
+
+**Case 2 — the report states more than one root cause.** Evaluate the column
+**against one root cause: the report's primary**, selected by the same rule §A1
+Case 2 uses — (a) the entry the report itself labels primary or ranks first, else
+(b) the first entry in the list, **skipping, in either branch, any entry that
+asserts no defect exists.** If every entry is one, the report has stated no root
+cause and the column scores **0**.
+
+Do **not** scan the list for an entry that happens to carry the expected layer. A
+report enumerating five or seven layers as candidate hypotheses would otherwise
+score 2 on every seed automatically, which would make the column measure list
+length rather than diagnosis, and a run has been observed doing exactly that.
+
+*Two things this case deliberately does not do.* It does not require the primary
+entry to be swept, confirmed or unhedged — a `layers_swept` table marking the
+layer `NOT_SWEPT` is not consulted here, because the column asks what the
+diagnosis **named**, and `layers_swept` is a column of its own, scored on its own
+terms and not a modifier on this one. And a
+**validator rejection** of an entry's citation does not bear on this column at
+all: rejected evidence is decided by §A1 Case 4, which governs
+`evidence_cites_trace_and_config` alone. Importing either test would score the
+same defect twice.
+
+### A2.3 `fix_target_correct` — two cases the column definition does not otherwise determine
+
+*Added 2026-08-10, issue #164. The rationale is in the project's decision
+record.* This column is **not** in §A2's gate expression, but it binds the gate
+through §A's constraint — `fix_usable_unedited` may not be 1 while this column is
+0 — which is the subsection above this one, and is why its clauses sit under §A2
+rather than beside §A1's. Every case below is decided by the seed spec's header
+table (`Expected fix target`) plus the fix text. **Neither asks the scorer to
+weigh anything.**
+
+**Case 1 — the fix's declared target and its body disagree.** Where a proposed
+fix declares its target — a `target_type` / `target` field, a **Target type**
+row — **score the declared value.** Prose elsewhere in the fix that touches a
+different area does not move the column: an instruction edit described as a step
+*inside* a fix declared against the tool definition is not a fix targeting the
+instruction, and a fix declared against a tool's configuration whose `proposed`
+text mentions verifying a table is not a fix targeting the data.
+
+*The distinction, stated so it is not re-derived: the declared field is the
+report's own answer to "what is wrong". Crediting an area a fix merely brushes
+past in its body rewards breadth over aim, in a column whose whole purpose is
+aim — the same degeneracy Case 2 of §A2.2 closes on the other side of the
+report. Where a fix declares no target, read the target from the artifact its
+operation writes to; where its operation names no artifact, the column scores
+**0**.*
+
+**Case 2 — where the 1/2 and 1/0 boundaries fall.** Compare the target selected
+by Case 1 against the seed spec's `Expected fix target` row:
+
+- **2** — the target names what that row names as the **specific** target (the
+  record, field, table or mapping), or what the row defers to the seed's
+  *Expected diagnosis* section to name.
+- **1** — the target falls in the **same one of §A's five areas** as the expected
+  target (tool schema / instruction text / data seeding / capability mapping /
+  activation) but does not name the specific target.
+- **0** — the target falls in a different area; **or** it is a target the seed
+  spec's expected-target row explicitly excludes. Where a seed rules a reading
+  out in as many words — "**Not** the tool input schema" — that reading scores 0
+  though it sits in the expected area. A seed that names its decoy is naming a
+  miss, and the exclusion is the seed spec's to make, not the scorer's.
+
+The 1 band is available on **every** seed and needs no `notes` justification to
+be used; recording *why* in `notes` remains good practice and is no longer what
+authorises it.
+
+**Where the report proposes several fixes**, the column takes **the highest value
+any single proposed fix earns**, excluding entries the report itself marks as
+alternative, hedged, optional or follow-on hardening. **The fix that earns that
+value is the one §A2.1 Case 5 then evaluates** — the two columns must be read
+against the same fix, or §A's constraint relates a target drawn from one fix to a
+usability judgement drawn from another and stops meaning anything.
+
+*The residual exposure, recorded rather than closed: a report proposing one fix
+in each of the five areas earns 1 on any seed. It cannot earn 2, since 2 requires
+the specific target, and it will normally fail §A2.1 on the fix that earned the
+1. That is a bound, not a defence, and it is the case to watch in the next pass.*
 
 ## A3. Void runs — a run that measured nothing
 
