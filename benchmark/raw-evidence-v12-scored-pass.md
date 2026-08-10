@@ -108,6 +108,9 @@ never from `aia_logs`.
 
 | 03 | 2 | `704ca97e2be68318f243fed2ce91bf61` | *"Please route a request in the Software category to the correct assignment group."* | completed 16:45:33 → 16:46:03 = **30s**, 6 tasks all `success`, 1 tool call (`lookup_routing_rule` `a05ca1be2be68318f243fed2ce91bfb1`) returning `{ok:true, matched:false, category:"Software", rules_in_table:0}` |
 
+| 04 | 1 | `27eea5be2b2687d817a6ffbeee91bff2` | fresh ticket `0aee61be2b2687d817a6ffbeee91bf40` ("Conference room projector shows a green tint...") | completed 16:57:13 → 16:57:23 = **10s**; `summarise_ticket` returned `ok:false, status:error, result:null` — the unmapped-capability defect |
+| 04 | 2 | `6bd175722ba687d817a6ffbeee91bf91` | fresh ticket `b4d1b9be2b6a8318f243fed2ce91bf30` ("Payroll export job silently drops the last row...") | completed 17:10:04 → 17:10:14 = **10s**; same `ok:false, status:error` shape |
+
 **Fresh bench ticket per rep** for seeds 01 and 04, so rep 1's agent writes cannot contaminate rep 2
 (v9 §2's rule). Seed 03 needs no ticket — its Setup says to add none.
 
@@ -600,6 +603,139 @@ scored here.
 > than the app's own `/runs/<id>` route, which re-serialises the transcript with full `prompt_digest`
 > blobs. Same data, far less of it.
 
+### 3.54 Row 13 — native, seed 04 rep 1 — **VALID**
+
+| field | value |
+|---|---|
+| target execution | `27eea5be2b2687d817a6ffbeee91bff2` — completed 16:57:13→16:57:23 (**10s**); ticket `0aee61be2b2687d817a6ffbeee91bf40`; tool returned `ok: false, status: error, result: null` |
+| diagnostic execution | `ca9fe1b22b6687d817a6ffbeee91bf40` |
+| terminal | **completed**, 17:00:08 → 17:03:49 = **3m41s** |
+| tool calls (§E1) | **10** — the lowest native count of the pass so far |
+| `layers_swept` | **7/7** all SWEPT; syslog UNAVAILABLE |
+| report | `3b60bd3a2b6687d817a6ffbeee91bfca` + `7b60fd3a2b6687d817a6ffbeee91bf4d` |
+
+**The R-22 decoy was resisted.** §A2 describes the trap precisely: seed 04 carries an empty `connection`
+deliberately, as a normal state dressed as a defect, and a run that falls for it names the right layer and
+proposes *"bind a connection alias"* — a well-formed fix that repairs nothing. **Row 13 does not do
+that.** RC-1 (PRIMARY, layer 6, CONFIRMED) names the real break: `api` =
+`00000000000000000000000000000000` with `api_type = sys_hub_flow` and no matching `sys_hub_flow` row,
+evidenced by `genai_log check_config`'s `api_dangling` finding quoting the field and value. FIX-1 repoints
+`api`. `connection` is never mentioned.
+
+**Two internal inconsistencies, recorded because a scorer will meet them and should not have to
+re-derive them:**
+
+1. **RC-2 claims the tool record and binding are both inactive** (`binding_active = false`,
+   `tool_active = false`, `active_tool_count = 0`) and says the tool *"would be unavailable even if the
+   capability were repaired"* — yet the same report's failure summary has the tool **executing** and
+   returning `ok: false`. Both cannot be straightforwardly true. Whether this is a real post-hoc state, a
+   stale denormalised counter (rows 09 and 11 both flagged an `active_tool_count` anomaly on a *different*
+   seed), or a misread is **not established here**.
+2. **Two fixture details in the report do not match the fixture.** It names the table
+   `x_snc_tsbench_bench_ticket` — the real table is `x_snc_tsbench_ticket` — and its DATA MARKERS quote a
+   `short_description` of *"Test bench ticket for summarisation"*, whereas this rep's ticket reads
+   *"Conference room projector shows a green tint on every input after the firmware update"*. The
+   non-existent `…_bench_ticket` name is the **same fabricated table name v9 row 07 produced**
+   (`sn_tsbench_bench_ticket`), which makes it a recurring confusion rather than a one-off slip.
+
+Neither observation is scored here. Both bear on `evidence_cites_trace_and_config` and on how much weight
+a scorer gives citations that are individually well-formed but collectively inconsistent.
+
+### 3.55 Row 14 — custom, seed 04 rep 1 — **VALID, terminal `failed`**
+
+| field | value |
+|---|---|
+| run | `424135be2b6687d817a6ffbeee91bf39` — **`TR1000257`** |
+| terminal | **`failed`** at 17:07:53 |
+| rejection | `root_causes[0].evidence[1]: unsupported citation — cites "config" but this run never invoked a tool that reads it (agent_config, genai_log)` |
+| `layers_swept` | **2/7** (L1, L4) |
+| gate-forced call | `schema_lookup` on **`incident.priority`** — seventh such call, and the third time this exact target |
+
+**#81's unsupported-citation classifier caught fabricated evidence.** The submitted report cited
+`{source: "config", detail: "agent_config shows no override for error handling in tool schema"}` — a claim
+about what `agent_config` shows, on a run that **never called `agent_config`**. The classifier names both
+tools that could have supported it and refuses the citation. This is the guard working exactly as designed,
+and it is the second custom row killed at the validator (with row 08).
+
+**The report it rejected is worth recording, because its shape is new: a shotgun.** Five root causes, four
+of them hedged into meaninglessness — *"Ticket record **may** not exist or be invalid"*, *"GenAI stack
+configuration **may** be misaligned"*, *"Trigger configuration **may** be invalid"* — on a seed whose real
+defect row 13 pinned exactly. Two details stand out:
+
+- **It cites the absence of a call as evidence.** `root_causes[1].evidence` includes
+  `{source: "data", detail: "No query_table call made to verify existence"}`. A `data` citation whose
+  content is *"no data was read"* is a category error, and it sat one array slot away from the citation
+  that actually got the report rejected.
+- **The gate-forced lookup reappears as a root cause, with a false attribution.** `root_causes[2]` is
+  *"incident.priority field — Schema validation required for critical fields"*, evidenced as
+  *"schema_lookup confirmed incident.priority exists **in ticket table**"*. It does not exist in the ticket
+  table; the lookup was against `incident`. Row 08 did the same thing with the same field and was rejected
+  for it; here the same manoeuvre survived into the submitted report and a *different* fabricated citation
+  killed it first.
+
+**AC-7 still holds at 7 custom rows.** Like row 08's, this rejection is not attributable to an omitted
+`root_causes` or `evidence` array — both were present and populated. #148's trap remains untriggered.
+
+### 3.56 Row 15 — native, seed 04 rep 2 — **VALID**
+
+| field | value |
+|---|---|
+| target execution | `6bd175722ba687d817a6ffbeee91bf91` — completed 17:10:04→17:10:14 (10s); ticket `b4d1b9be2b6a8318f243fed2ce91bf30` |
+| diagnostic execution | `21627d722baa8318f243fed2ce91bfca` |
+| terminal | **completed**, 17:12:22 → 17:17:24 = **5m02s** |
+| tool calls (§E1) | **12** |
+| `layers_swept` | **7/7** all SWEPT; syslog UNAVAILABLE, with the explicit warning *"This layer was **not** swept and must not be assumed clean."* |
+| report | `7683f1fa2baa8318f243fed2ce91bfd1` + `8f8335fa2baa8318f243fed2ce91bf0b` |
+
+**Decoy resisted again.** RC-1 (PRIMARY, layer 6, CONFIRMED) is the dangling `api` nil sentinel with
+`api_type = sys_hub_flow` and no matching row, and it is confirmed *"two independent sources (layer 6
+config check + layer 1 runtime response) agree"* — pairing `genai_log check_config`'s `api_dangling`
+finding with the runtime `raw_response.status = "error"`, empty `requestPayload` and empty `capabilities`.
+`connection` is never mentioned. **Both native seed-04 rows found the real defect rather than the decoy.**
+
+**The same table-name gap as row 13, handled the opposite way — and this is the more interesting
+comparison of the pass.** Row 15 probed **two** candidate names (`sn_aia_bench_ticket`,
+`x_snc_tsbench_bench_ticket`), found neither in `sys_db_object`, and filed RC-3 as **UNCONFIRMED** with
+*"the correct table name for bench tickets in this scope is unknown"* — while correctly noting the
+capability failure occurs before any record read, so it cannot explain the failure anyway. Row 13, on the
+same fixture, **asserted** `x_snc_tsbench_bench_ticket` as SWEPT and confirmed. Same missing knowledge,
+one row hedged it and one row stated it as fact. That pair is a clean natural experiment for
+`evidence_cites_trace_and_config`, and it is left entirely to the scorers.
+
+**A platform observation that now spans three seeds and is probably real.** `active_tool_count = 0` while
+the binding reads `active = 1` has now appeared on seeds 03 (rows 09, 11) and 04 (rows 13, 15). Row 15's
+RC-2 is internally contradictory about it — the Finding says binding `active = 0`, its own Evidence says
+binding `active = "1"` — and row 13's RC-2 claimed both tool and binding inactive while the tool demonstrably
+executed. **The most likely reading is that `active_tool_count` is an unreliable denormalised counter and
+every row that leaned on it inherited the confusion.** Recorded as an observation about the instance, not a
+scored judgment, and not established: no operator probe has been run against it, deliberately — probing it
+mid-pass would change fixture state.
+
+### 3.57 Row 16 — custom, seed 04 rep 2 — **VALID**
+
+| field | value |
+|---|---|
+| run | `dc1431be2baa8318f243fed2ce91bfbd` — **`TR1000259`** |
+| terminal | **complete**, validated at 17:20:03 |
+| `layers_swept` | **2/7** (L1, L4) |
+| gate-forced call | `schema_lookup` on **`sn_aia_tools_execution`** — eighth such call, a platform table (the custom smoke run picked `sn_aia_agent_tool_m2m`, the same family) |
+
+**Row 12's pattern, repeated on a different seed.** The root cause is filed at layer 1 with
+`confidence: UNCONFIRMED` and `would_confirm: "layer 3 - agent_config to verify tool schema"`. Both native
+rows reached the real defect (the dangling `api`) partly *through* `genai_log check_config` — a layer-6
+call. This run named layer 3 as its own next step, and the HOLD then spent its one extra call on a layer-4
+`schema_lookup` against a platform table. **Third time now (rows 12, 16, and arguably 10) that the run
+identified a confirming action and the gate's release condition was satisfied by a different one.**
+
+**One genuine observation it did make, and it is a good one:** it flagged
+*"execution_status: Success (conflict with error response)"* — spotting that the tool call's own status
+reads Success while its response carries `status: "error"`. That is a real inconsistency in the platform's
+tool-execution record and neither native row called it out. Recorded because it is the clearest case in the
+pass of the custom arm noticing something the native arm did not.
+
+Its fix names a specific target (`sn_aia_agent_tool_m2m` `3c72dab2668c4ba5a6080a5cd5fb2b91`) but with
+`current: "unknown"` and a proposal to *"validate input schema"* — an instruction to inspect, not a change.
+
 ### 3.5 The cross-row finding: the depth gate did not fail to add depth — it DEGRADED the diagnosis
 
 This is the sharpest measurement of the pass so far and it goes materially beyond §T5. §T5 established
@@ -683,7 +819,7 @@ known not to indicate a stall: the run it supposedly evidenced had already compl
 
 ## 4. Row index and resumption
 
-**12 of 20 rows complete. The pass is PAUSED mid-run-phase, not abandoned.** No packet has been built
+**16 of 20 rows complete. The pass is PAUSED mid-run-phase, not abandoned.** No packet has been built
 and no scorer has been dispatched, so §AC6's *"packets are built after all 20 runs terminate, and the
 scorers are dispatched once"* is intact and unviolated.
 
@@ -701,7 +837,10 @@ scorers are dispatched once"* is intact and unviolated.
 | 10 | custom | 03/1 | `8233e17e2b2287d817a6ffbeee91bf3b` | `0355a17a2b6287d817a6ffbeee91bf4a` (`TR1000253`) | **valid**, 11s, 2 calls, 2/7 — right symptom, invented fix |
 | 11 | native | 03/2 | `704ca97e2be68318f243fed2ce91bf61` | `5aac69fe2be287d817a6ffbeee91bf4b` | **valid**, 4m51s, 15 calls, 7/7 — RC-1 PRIMARY = empty routing table |
 | 12 | custom | 03/2 | `704ca97e2be68318f243fed2ce91bf61` | `544ea5ba2b2a8318f243fed2ce91bf24` (`TR1000255`) | **valid**, 12s, 2 calls, 2/7 — named the right next step, gate sent it elsewhere |
-| 13–16 | | 04/1, 04/2 | — | — | **not started** |
+| 13 | native | 04/1 | `27eea5be2b2687d817a6ffbeee91bff2` | `ca9fe1b22b6687d817a6ffbeee91bf40` | **valid**, 3m41s, 10 calls, 7/7 — **decoy resisted**, RC-1 = dangling `api` |
+| 14 | custom | 04/1 | `27eea5be2b2687d817a6ffbeee91bff2` | `424135be2b6687d817a6ffbeee91bf39` (`TR1000257`) | **valid, terminal `failed`** — unsupported `config` citation, 5 speculative root causes |
+| 15 | native | 04/2 | `6bd175722ba687d817a6ffbeee91bf91` | `21627d722baa8318f243fed2ce91bfca` | **valid**, 5m02s, 12 calls, 7/7 — **decoy resisted**, two independent sources |
+| 16 | custom | 04/2 | `6bd175722ba687d817a6ffbeee91bf91` | `dc1431be2baa8318f243fed2ce91bfbd` (`TR1000259`) | **valid**, 2 calls, 2/7 — UNCONFIRMED, named layer 3, gate forced layer 4 |
 | 17–20 | | 05/1, 05/2 | — | — | **not started** |
 
 **Void budget: 0 of 3 used per arm.** No row has hit the 12-minute threshold. The row-01 void was
