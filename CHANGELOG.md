@@ -17,6 +17,113 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1005 — 2026-08-10
+
+### Fixed
+
+- **The scorer packet generator pre-judged a rubric column, on one arm only (#157, `DECISION.md`
+  §AF2).** All ten custom rows took a harness HOLD and no native row did, so the `note` field —
+  rendered as packet §5 — landed almost entirely on one arm, **and it carried a verdict**: *"an
+  out-of-box table unrelated to this seed's fixture"* told the scorer the layer-4 sweep was hollow,
+  which is precisely the `layers_swept` credibility judgement the scorer exists to reach. The other
+  arm's shortfall was annotated with the run's own excuse (*"the report states L4 and L5 were skipped
+  deliberately"*) — and that one sat inside the **measurement** field, whose own preamble states it is
+  derived from the audit trail *"independently of the report text."*
+
+  Scorer-facing fields now **name the argument of a call and stop there**; relevance is the scorer's
+  to judge. The operator's reading moved to a new `operator_note` field that renders nowhere, and a
+  build-time lint over a declared phrase list fails the build when a scorer-facing field carries a
+  verdict. **No v12 score moves and no row is re-scored** (§T9) — this is an instrument repair for the
+  next pass.
+
+- **The redaction damaged meaning in five places, contradicting the packets' own guarantee (#157,
+  §AF3).** Every packet asserts its redaction *"touches paths only … no sentence has lost its
+  meaning."* It was false: all twenty rendered setup step 1 as `cd the build output directory &&
+  now-sdk install` (unrunnable); rows 05–08 turned a named unit test into *"the build output
+  directory (main repo) guards the construction"*; rows 17–20 read *"a repository a repository
+  document §3"* from one substitution cascading into another; a golden SDK example and the SDK
+  build-rule reference were both described as a build directory; and every seed's Fluent-source row
+  kept a bare filename and a dangling backtick — a navigable pointer the guard cannot see, since
+  `.now.ts` is not `.md`. Same text within each seed, so no cross-arm bias.
+
+  Fixed structurally rather than case by case: redaction now runs over **frozen segments**, so text a
+  rule produces is invisible to every later rule and a cascade is unreachable; and the generic sweep
+  **no longer emits prose** — it removes the path and plants a sentinel that fails the build, so every
+  real redaction is a line a human read in context. Replacements are written lower-case and
+  capitalised automatically where they open a sentence.
+
+- **A rejected run's validator message was labelled as JSON (#157).** `reportBody()` picked its fence
+  from the body's first character, so on rows 08/14/20 the `---` rule and the `VALIDATOR REJECTION`
+  prose ended up inside the ` ```json ` fence. No content was lost; the label was wrong.
+
+- **Running the generator silently rewrote twenty dispatched packets (#157, §AF1).** `scoring-v12/`
+  no longer reproduces from its own generator — §AE re-derived the band table after the pass was
+  scored — and those files are the only record of what the scorers read. An inspection `require()`
+  ran `main()` and overwrote all twenty with nothing failing. Two repairs: `main()` runs only under
+  `require.main === module`, and the writer refuses to clobber an existing packet without `--force`.
+
+### Added
+
+- **Advance rulings on scoring columns now ship in the packets (#160, §AD7 item 4, §AF4).** §AC4's
+  Ruling 1 fixed seed 05's `fix_usable_unedited` exposure in advance and blind, then lived only in
+  `DECISION.md`, which no scorer may read. Both seed-05 native scorers flagged the column
+  under-determined for exactly that reason; they landed on the ruled value independently, so it
+  changed no score, **but that is luck, not compliance.** The generator now reads
+  `benchmark/v12-advance-rulings.json` and renders section 3 in **every** packet — empty ones
+  included, so its presence carries no signal — with three build-time checks: a ruling matching no
+  row fails, a ruling missing from a packet it claims fails, and the ruling's pointer back into the
+  decision record must never render.
+
+- **`test/packetGeneratorParity.test.js` (50 tests).** The generator carries a deliberate copy of the
+  packet guard's path patterns, justified as *"two independent copies disagreeing is a signal."* That
+  holds only if something looks — nothing did, and the copies drifted (#155 review, I2: the guard's
+  `.md` alternation became case-insensitive and the copy did not inherit it). This compares them
+  without merging them, **two ways**: the stem list as source text, and the composed matchers as
+  behaviour over a corpus (planted routes plus every token of every seed spec), the guard's regex
+  rebuilt from its own source. Both are needed — the drift lived in the alternations, so a stem-only
+  diff would have stayed green through it. The rest pins each #157/#160 repair against the exact
+  input that produced the defect.
+
+### Changed
+
+- **The arm stays visible in scorer packets, and that is now a ruling (#157, §AF5).** Packets state
+  the arm in plain text and carry three structural tells (JSON versus markdown body, a custom-only
+  HOLD block, `run_id` versus `diagnostic execution`). Not a blind-rule violation — `README.md` scopes
+  that rule to prior-run *outcomes* — but §AC1's headline is a cross-arm comparison, so it was decided
+  explicitly rather than inherited. The tells are inherent to what each arm produces; blinding the
+  label alone would be theatre, and normalising the bodies would edit the artefact under test. **The
+  cost, stated:** a scorer who knows the arm can bring a prior to a row, and nothing measures whether
+  one did. A future arm-blind pass must normalise the report bodies first.
+
+### Review round (§AF6a)
+
+`/code-review` at high effort returned nine findings against the first cut; all nine were taken. The
+three worth naming all repeat this work's own lesson — **a guard that cannot fail is worse than no
+guard, because it also stops anyone looking**:
+
+- **The freeze guard failed open**, keying on the twenty filenames *this run computes* rather than on
+  what the directory holds. Any manifest edit changing `row`/`arm`/`seed`/`rep` — all in the filename
+  — slipped it and wrote twenty fresh packets beside twenty stale.
+- **The freeze test was itself the accident:** it drove the real writer at the real `scoring-v12/` and
+  trusted the guard under test to stop it. Measured in a sandbox — with the directory absent,
+  `npm test` wrote all twenty. The writer now takes `--out` so the guard is exercised on a throwaway
+  directory.
+- **The require-side-effect test could not fail**, because the module was already loaded and the
+  `require()` under test hit the module cache. Now run in a child process, and **verified to go red**
+  against a generator with `main(['--force'])` at module scope.
+
+Also fixed: a catch-all regex that would attribute another seed's Fluent file to the row under
+scoring (now checked against the packet's own seed, falling through to the sentinel rather than
+guessing); an empty-rulings line telling the scorer to score *"by section 1 alone"* when the packet
+directs them to sections 1 **and** 2; advance rulings bypassing the register lint despite being the
+largest block of operator-authored scorer-facing prose in the packet; `hold_text` being *subject* to
+that lint with no available remedy, since it is transcribed verbatim rather than authored — **the
+boundary is now declared: the lint governs what the operator writes, never what the harness said**;
+and nothing tying a `failed` terminal to the presence of a validator rejection, so a packet could
+promise one and show none.
+
+---
+
 ## 2026.08.1004 — 2026-08-10
 
 ### Changed

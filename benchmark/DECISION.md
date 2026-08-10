@@ -4838,3 +4838,175 @@ recommended path on this instance, the Phase 1b milestone remains unmet, and the
 build-out is now gated on **its own ≥ 80%** and on **the removal or re-derivation of the depth gate**.
 
 §AD7's item 2 is closed by this section. Items 3 and 5 (#159) and item 4 (#160) remain open.
+
+## AF. The packet generator's instrument defects, repaired (`2026.08.1005`, #157 + #160)
+
+**§A through §AE are unmodified and this section appends to them** — `git log -p
+benchmark/DECISION.md` is the check, in the form §W, §Z, §AC, §AD and §AE all used. This closes
+§AD7's open item 4 and the two findings deferred from the #156 review.
+
+**No run was fired, no packet was re-scored, no instance was touched, and no v12 number moves.** It
+records repairs to the measuring instrument for the pass that comes next.
+
+Artefacts: `benchmark/scripts/build-v12-packets.js` · `benchmark/v12-advance-rulings.json` ·
+`benchmark/v12-rows.json` · `test/packetGeneratorParity.test.js`.
+
+### AF1. The twenty dispatched packets are frozen, and the generator now says so in code
+
+`benchmark/scoring-v12/` no longer reproduces from its own generator: §AE re-derived
+`scorecard-template.md` §A3.3's band table after the pass was scored, so a rebuild emits twenty files
+that differ from the twenty that were read. **Those files are the only record of what the scorers
+actually saw**, which is the same ground on which §140's guard exempts `scoring-v4` from its scan.
+
+This was found the way such things are found — by accident. An inspection `require()` of the
+generator ran `main()` and silently rewrote all twenty; nothing failed, and only `git status`
+showed it. Two independent repairs, because either alone would have let that through: `main()` now
+runs only under `require.main === module`, and the writer **refuses to clobber an existing packet**
+unless `--force` is passed. Both are pinned by tests.
+
+**The general shape, which is the part worth carrying:** a generator whose inputs are living
+documents produces evidence that stops being reproducible the moment an input moves, and the
+evidence — not the generator — is the artefact. Freeze the output, not the inputs.
+
+### AF2. §5's operator commentary pre-judged a rubric column, on one arm only
+
+All ten custom rows took a harness HOLD and no native row did, so the `note` field landed almost
+entirely on one arm — **and it carried a verdict**: *"an out-of-box table unrelated to this seed's
+fixture"* tells the scorer the layer-4 sweep was hollow, which is precisely the `layers_swept`
+credibility judgement the scorer exists to reach. The other arm's shortfall was annotated with the
+run's own excuse instead (*"the report states L4 and L5 were skipped deliberately"*), and that one
+sat inside the **measurement** field — a field whose own preamble states it is derived from the audit
+trail *"independently of the report text — never inferred from the report's own prose."* One arm's
+shortfall pre-judged as a defect, the other's excused, in a field every v12 scorer read.
+
+**It changed no v12 score and it is not being re-scored** (§T9 governs). It is recorded because it is
+a property of the *instrument*, not of a row, and an instrument defect that ships once ships every
+time it is reused.
+
+**The rule this produces: a scorer-facing field NAMES the argument of a call and stops there.**
+Relevance is the scorer's to judge — and the scorer needs the argument to judge `layers_swept`
+credibility at all, so naming it is not optional. The operator's own reading is preserved in a new
+`operator_note` field that renders nowhere, and a build-time lint over a declared phrase list fails
+the build when a scorer-facing field carries a verdict. As with the blind-rule guards, **a phrase
+list too broad simply reddens the build, and that reddening is the signal to write a better phrase**;
+there is deliberately no exemption list, because an exemption is a second and silent way to be
+unguarded.
+
+### AF3. The redaction damaged meaning in five places, and the fix is structural
+
+Every packet asserts its redaction *"touches paths only … no sentence has lost its meaning."* That
+was false in five places, all of them paths the explicit map missed and the **generic sweep** then
+substituted prose for, silently:
+
+- all twenty packets rendered setup step 1 as `cd the build output directory && now-sdk install` — a
+  command that cannot be run;
+- rows 05–08 turned a named unit test into *"the build output directory (main repo) guards the
+  construction"*;
+- rows 17–20 read *"a repository a repository document §3"*, one substitution cascading into another;
+- a golden SDK example and the SDK build-rule reference were both described as a build directory;
+- every seed's Fluent-source table row lost its path but kept the bare filename and a dangling
+  backtick — cosmetic damage **and** a navigable pointer the guard's patterns cannot see, because
+  `.now.ts` is not `.md` and no stem remained to anchor on.
+
+Same text within each seed, so **no cross-arm bias** — quality damage rather than instrument bias.
+
+Three repairs, and the second and third are the ones that matter:
+
+1. Explicit reviewed replacements for each case, written lower-case and capitalised automatically
+   where they open a sentence, because the same phrase lands sentence-initial in one seed and
+   mid-sentence in another.
+2. **Redaction runs over frozen segments** — text a rule produces is invisible to every later rule,
+   so a cascade is unreachable rather than absent-for-now. The old chained `String.replace` let rule
+   N match inside rule N-1's output, and no amount of care in any single rule prevents that.
+3. **The generic sweep no longer emits prose.** It removes the path (so nothing leaks) and plants a
+   sentinel that **fails the build** (so no unreviewed sentence ships). A net that quietly
+   substitutes is how all five defects shipped: *"the build output directory"* is right for `dist/`
+   and wrong for a test file, and nothing distinguished them. Every real redaction is now a line a
+   human read in context.
+
+### AF4. Advance rulings now ship in the packets (§AD7 item 4)
+
+§AC4's Ruling 1 fixed seed 05's `fix_usable_unedited` exposure in advance and blind, precisely so no
+scorer would improvise it. It lived only in this file, which no scorer may read. Both seed-05 native
+scorers flagged the column under-determined for exactly that reason and one named the absence; they
+landed on the ruled value independently, so it changed no score, **but that is luck, not compliance**.
+§AC4's own *"before the scorers meet it"* was satisfied in time and defeated in delivery.
+
+The generator now reads `v12-advance-rulings.json` and renders **section 3 in every packet** — empty
+ones included, so the section's presence carries no signal about the row (§AC7). Three build-time
+checks: a ruling matching no row fails the build (declared but shipped to nobody — the #160 failure
+mode, one typo away and silent); a ruling missing from a packet it claims fails the build (the defect
+was *delivery*, so authorship alone is not the check); and the ruling's `source` pointer into this
+file must never render, because a scorer following it lands in the answer key.
+
+### AF5. The scorer is told which arm produced the run, and that is a ruling, not an oversight
+
+Packets state the arm in plain text and carry three structural tells — a JSON body versus markdown
+prose, a HOLD block that appears on custom rows only, and `run_id` versus `diagnostic execution`.
+`benchmark/README.md` scopes the blind rule to a prior run's **outcomes**, so this is not a violation
+of it, and `scoring-v9` carried the identical label. But §AC1's headline is a cross-arm comparison,
+so the question deserves an answer rather than an inheritance.
+
+**Ruling: the arm stays visible.** The three structural tells are inherent to what each arm
+*produces*. Blinding the label while the body still gives the arm away buys no blindness and costs
+the honesty of the claim — a partial blind that is not declared reads as a full one. Normalising the
+bodies would remove the tells, and that is worse: it would edit the artefact under test rather than
+present it, which the generator already rejects as a design principle for the same reason.
+
+**What this costs, stated plainly.** A scorer who knows the arm can bring a prior about the arm to a
+row, and nothing in this pass's design measures whether one did. That exposure is accepted, in
+exchange for the label matching what the packet already reveals. **A future pass that wants arm-blind
+scoring must normalise the report bodies first** — the label is the cheapest of the four tells and
+removing it alone would be theatre.
+
+### AF6. Two copies of the guard's patterns, and now something that looks at both
+
+The generator carries a deliberate copy of the packet guard's path patterns, justified as *"two
+independent copies disagreeing is a signal; one shared copy being wrong is invisible."* **The
+justification has a hole and the hole was measured:** disagreeing is only a signal if something
+looks. Nothing did, and the copies drifted — #143's M4 made the guard's `.md` alternation
+case-insensitive and the generator's copy did not inherit it (#155 review, I2).
+
+`test/packetGeneratorParity.test.js` is the thing that looks. It does **not** merge the copies —
+both stay independently authored and neither imports the other. It compares them **two ways**, and
+both are load-bearing: the stem list as **source text**, and the composed matchers as **behaviour**
+over a corpus, the guard's regex rebuilt from its own source. The drift that actually happened lived
+in the *alternations*, not in the stem list, so a stem-only diff would have stayed green through the
+very defect that motivated the test — a point the review caught before this section could ship the
+overclaim. The next divergence reddens the suite instead of surfacing in a packet.
+
+### AF6a. What the review round changed, and the one finding worth generalising
+
+`/code-review` at high effort returned nine findings against the first cut of this work, and all nine
+were taken. Three are worth recording because they repeat this section's own lesson — **a guard that
+cannot fail is worse than no guard, because it also stops anyone looking**:
+
+- **The freeze guard failed open.** It keyed on the twenty filenames *this run computes*, so a
+  manifest edit that changes any of `row`/`arm`/`seed`/`rep` — all of which are in the filename —
+  would find nothing existing and write twenty fresh packets beside twenty stale. Re-keyed on what
+  the directory *holds* (`row-*.md`), checked before the `mkdir`.
+- **The freeze TEST was the accident.** It called the real writer against the real
+  `benchmark/scoring-v12/` and relied on the guard under test to stop it. Measured in a sandbox: with
+  the directory absent, `npm test` wrote all twenty. The writer now takes `--out` so the guard is
+  exercised on a throwaway directory.
+- **The require-side-effect test could not fail.** The module was already loaded, so the `require()`
+  under test hit the module cache and executed nothing. Now run in a child process, and *verified to
+  go red* against a generator with `main(['--force'])` at module scope — the check the first version
+  never received.
+
+The other six: the parity overclaim above; a catch-all regex that would attribute *another* seed's
+Fluent file to the row under scoring (now checked against the packet's own seed, falling through to
+the sentinel rather than guessing); an empty-rulings line telling the scorer to score "by section 1
+alone" when the packet directs them to sections 1 **and** 2; rulings themselves bypassing the register
+lint — the largest block of operator-authored scorer-facing prose in the packet, and the shipped
+ruling already contained a listed phrase; `hold_text` being *subject* to that lint with no available
+remedy, since it is transcribed verbatim rather than authored (**the boundary is now declared: the
+lint governs what the operator writes, never what the harness said**); and nothing tying a `failed`
+terminal to the presence of a validator rejection, so a packet could promise one and show none.
+
+### AF7. Disposition
+
+**No v12 number moves and no row is re-scored.** §AD7's item 4 is closed; items 3 and 5 (#159) remain
+open. Sections are renumbered in the generator's output (advance rulings became section 3, so the
+report is now section 4), which affects the **next** pass only — `benchmark/scoring-v12/` is frozen
+and untouched by this work.
