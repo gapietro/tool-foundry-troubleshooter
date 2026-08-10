@@ -4968,8 +4968,41 @@ looks. Nothing did, and the copies drifted — #143's M4 made the guard's `.md` 
 case-insensitive and the generator's copy did not inherit it (#155 review, I2).
 
 `test/packetGeneratorParity.test.js` is the thing that looks. It does **not** merge the copies —
-both stay independently authored, and it compares them as source text rather than importing one into
-the other. The next divergence reddens the suite instead of surfacing in a packet.
+both stay independently authored and neither imports the other. It compares them **two ways**, and
+both are load-bearing: the stem list as **source text**, and the composed matchers as **behaviour**
+over a corpus, the guard's regex rebuilt from its own source. The drift that actually happened lived
+in the *alternations*, not in the stem list, so a stem-only diff would have stayed green through the
+very defect that motivated the test — a point the review caught before this section could ship the
+overclaim. The next divergence reddens the suite instead of surfacing in a packet.
+
+### AF6a. What the review round changed, and the one finding worth generalising
+
+`/code-review` at high effort returned nine findings against the first cut of this work, and all nine
+were taken. Three are worth recording because they repeat this section's own lesson — **a guard that
+cannot fail is worse than no guard, because it also stops anyone looking**:
+
+- **The freeze guard failed open.** It keyed on the twenty filenames *this run computes*, so a
+  manifest edit that changes any of `row`/`arm`/`seed`/`rep` — all of which are in the filename —
+  would find nothing existing and write twenty fresh packets beside twenty stale. Re-keyed on what
+  the directory *holds* (`row-*.md`), checked before the `mkdir`.
+- **The freeze TEST was the accident.** It called the real writer against the real
+  `benchmark/scoring-v12/` and relied on the guard under test to stop it. Measured in a sandbox: with
+  the directory absent, `npm test` wrote all twenty. The writer now takes `--out` so the guard is
+  exercised on a throwaway directory.
+- **The require-side-effect test could not fail.** The module was already loaded, so the `require()`
+  under test hit the module cache and executed nothing. Now run in a child process, and *verified to
+  go red* against a generator with `main(['--force'])` at module scope — the check the first version
+  never received.
+
+The other six: the parity overclaim above; a catch-all regex that would attribute *another* seed's
+Fluent file to the row under scoring (now checked against the packet's own seed, falling through to
+the sentinel rather than guessing); an empty-rulings line telling the scorer to score "by section 1
+alone" when the packet directs them to sections 1 **and** 2; rulings themselves bypassing the register
+lint — the largest block of operator-authored scorer-facing prose in the packet, and the shipped
+ruling already contained a listed phrase; `hold_text` being *subject* to that lint with no available
+remedy, since it is transcribed verbatim rather than authored (**the boundary is now declared: the
+lint governs what the operator writes, never what the harness said**); and nothing tying a `failed`
+terminal to the presence of a validator rejection, so a packet could promise one and show none.
 
 ### AF7. Disposition
 

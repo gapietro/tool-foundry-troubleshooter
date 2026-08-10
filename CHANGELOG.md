@@ -74,12 +74,15 @@ two-digit daily counter. Incremented on every merge to `main`.
   row fails, a ruling missing from a packet it claims fails, and the ruling's pointer back into the
   decision record must never render.
 
-- **`test/packetGeneratorParity.test.js` (28 tests).** The generator carries a deliberate copy of the
+- **`test/packetGeneratorParity.test.js` (50 tests).** The generator carries a deliberate copy of the
   packet guard's path patterns, justified as *"two independent copies disagreeing is a signal."* That
   holds only if something looks — nothing did, and the copies drifted (#155 review, I2: the guard's
-  `.md` alternation became case-insensitive and the copy did not inherit it). This diffs them as
-  source text without merging them, and pins each #157/#160 repair against the exact input that
-  produced the defect.
+  `.md` alternation became case-insensitive and the copy did not inherit it). This compares them
+  without merging them, **two ways**: the stem list as source text, and the composed matchers as
+  behaviour over a corpus (planted routes plus every token of every seed spec), the guard's regex
+  rebuilt from its own source. Both are needed — the drift lived in the alternations, so a stem-only
+  diff would have stayed green through it. The rest pins each #157/#160 repair against the exact
+  input that produced the defect.
 
 ### Changed
 
@@ -91,6 +94,33 @@ two-digit daily counter. Incremented on every merge to `main`.
   label alone would be theatre, and normalising the bodies would edit the artefact under test. **The
   cost, stated:** a scorer who knows the arm can bring a prior to a row, and nothing measures whether
   one did. A future arm-blind pass must normalise the report bodies first.
+
+### Review round (§AF6a)
+
+`/code-review` at high effort returned nine findings against the first cut; all nine were taken. The
+three worth naming all repeat this work's own lesson — **a guard that cannot fail is worse than no
+guard, because it also stops anyone looking**:
+
+- **The freeze guard failed open**, keying on the twenty filenames *this run computes* rather than on
+  what the directory holds. Any manifest edit changing `row`/`arm`/`seed`/`rep` — all in the filename
+  — slipped it and wrote twenty fresh packets beside twenty stale.
+- **The freeze test was itself the accident:** it drove the real writer at the real `scoring-v12/` and
+  trusted the guard under test to stop it. Measured in a sandbox — with the directory absent,
+  `npm test` wrote all twenty. The writer now takes `--out` so the guard is exercised on a throwaway
+  directory.
+- **The require-side-effect test could not fail**, because the module was already loaded and the
+  `require()` under test hit the module cache. Now run in a child process, and **verified to go red**
+  against a generator with `main(['--force'])` at module scope.
+
+Also fixed: a catch-all regex that would attribute another seed's Fluent file to the row under
+scoring (now checked against the packet's own seed, falling through to the sentinel rather than
+guessing); an empty-rulings line telling the scorer to score *"by section 1 alone"* when the packet
+directs them to sections 1 **and** 2; advance rulings bypassing the register lint despite being the
+largest block of operator-authored scorer-facing prose in the packet; `hold_text` being *subject* to
+that lint with no available remedy, since it is transcribed verbatim rather than authored — **the
+boundary is now declared: the lint governs what the operator writes, never what the harness said**;
+and nothing tying a `failed` terminal to the presence of a validator rejection, so a packet could
+promise one and show none.
 
 ---
 

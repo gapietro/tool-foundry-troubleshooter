@@ -11,16 +11,22 @@
  * `DECISION.MD` could not escape it, and the generator's copy did not inherit
  * the fix (#155 review, I2). This file is the thing that looks.
  *
- * It does NOT merge the two copies. Both stay independently authored; this
- * asserts they still say the same thing, so the next divergence fails a build
- * instead of being discovered in a packet.
+ * It does NOT merge the two copies. Both stay independently authored, and
+ * neither imports the other; this asserts they still say the same thing by two
+ * routes -- the stem list compared as SOURCE TEXT, and the composed matchers
+ * compared as BEHAVIOUR over a corpus, the guard's rebuilt from its own source.
+ * Both routes are needed: the drift that actually happened lived in the
+ * alternations, not in the stem list, so a stem-only diff would have stayed
+ * green through it.
  *
  * The rest of the file pins the #157/#160 repairs to the generator, each
  * against the exact input that produced the defect.
  */
 
 const fs = require('fs')
+const os = require('os')
 const path = require('path')
+const { execFileSync } = require('child_process')
 
 const ROOT = path.join(__dirname, '..')
 const GENERATOR_PATH = path.join(ROOT, 'benchmark', 'scripts', 'build-v12-packets.js')
@@ -47,6 +53,40 @@ function pathStemsDeclaration(src, file) {
     return m[1].replace(/\s+/g, ' ').trim()
 }
 
+/**
+ * The guard's ACTUAL packet-path matcher, rebuilt from its source.
+ *
+ * Comparing PATH_STEMS alone would not have caught the drift this file exists
+ * for: #143's M4 made the `.md` ALTERNATION case-insensitive, and that lives in
+ * PACKET_PATTERNS, not in the stem list. So the alternations are compared too --
+ * and the only honest way to compare them is to build the guard's regex and run
+ * it. The expression is string concatenation around PATH_STEMS, so it is
+ * evaluated with that one binding supplied.
+ *
+ * Reformatting the guard's declaration breaks the extraction and reddens this
+ * file, which is the correct outcome: an unreadable guard is an unchecked one.
+ */
+function guardPacketRegex() {
+    const block = GUARD_SRC.slice(GUARD_SRC.indexOf('const PACKET_PATTERNS'))
+    const m = block.match(/re: new RegExp\(\n([\s\S]*?)\n\s*\),/)
+    if (!m) throw new Error('could not extract PACKET_PATTERNS regex from the guard -- was it reformatted?')
+    // eslint-disable-next-line no-new-func
+    return new Function('PATH_STEMS', 'return new RegExp(' + m[1] + ')')(gen.PATH_STEMS)
+}
+
+const generatorHits = (s) => gen.LEAK_PATTERNS.some((re) => new RegExp(re.source).test(s))
+
+/** Whitespace-separated tokens from every scorer-facing seed spec, deduped. */
+function seedSpecTokens() {
+    const dir = path.join(ROOT, 'benchmark', 'seeds')
+    const text = fs
+        .readdirSync(dir)
+        .filter((f) => /^seed-\d+-.*\.md$/.test(f))
+        .map((f) => fs.readFileSync(path.join(dir, f), 'utf8'))
+        .join('\n')
+    return [...new Set(text.split(/\s+/).filter(Boolean))]
+}
+
 describe('packet generator / packet guard pattern parity', () => {
     test('both files declare the same PATH_STEMS', () => {
         expect(pathStemsDeclaration(GENERATOR_SRC, 'generator')).toBe(
@@ -54,29 +94,56 @@ describe('packet generator / packet guard pattern parity', () => {
         )
     })
 
-    test('both files match a markdown filename case-insensitively', () => {
-        // The exact drift I2 found. Asserted on the guard as source text and on
-        // the generator as BEHAVIOUR, because only the generator is importable.
-        expect(GUARD_SRC).toContain('[mM][dD]')
-        expect(gen.LEAK_PATTERNS.some((re) => new RegExp(re.source).test('DECISION.MD'))).toBe(true)
+    test('the guard\'s matcher is still extractable', () => {
+        expect(guardPacketRegex()).toBeInstanceOf(RegExp)
     })
 
-    test.each([
+    const CORPUS = [
         'benchmark/DECISION.md',
-        'scoring-v9/row-01.md',
-        '../results',
+        'benchmark/seeds/seed-01.md',
+        '../scorecard-template.md',
         './seeds',
+        '../results',
+        'scoring-v9/',
+        'scoring-v12/row-01-native.md',
+        'dist/',
+        'seed-app/src/fluent/x.now.ts',
+        '.claude/context/sdk-reference.md',
         'DECISION.md',
         'DECISION.MD',
         'raw-evidence-v9-scored-pass.md',
-        'dist/',
-    ])('the generator\'s leak scan still catches %s', (route) => {
-        expect(gen.LEAK_PATTERNS.some((re) => new RegExp(re.source).test(route))).toBe(true)
+        'node_modules/foo/bar.js',
+        'src/server/PaFixReport.js',
+        '../../test/blindRule.test.js',
+        'history/seed-02.history.md',
+        'docs/PRD.md',
+        // Negative controls: the #144 boundary, and prose that merely uses a
+        // stem as a word.
+        'the results were mixed',
+        'a repository document',
+        'no paths here at all',
+        'package.json',
+        'seed-app',
+    ]
+
+    test.each(CORPUS)('the two copies agree on %s', (s) => {
+        expect(generatorHits(s)).toBe(guardPacketRegex().test(s))
     })
 
-    test('a bare stem word with no route is not a leak', () => {
-        // The boundary #144 pinned on the guard, re-pinned on the copy.
-        expect(gen.LEAK_PATTERNS.some((re) => new RegExp(re.source).test('the results were mixed'))).toBe(false)
+    test('the two copies agree on every token in every seed spec', () => {
+        // The planted corpus is what a human thought to write down. This is the
+        // real input: 22 genuine repository paths across five specs, plus a few
+        // thousand words of prose as negative controls.
+        const re = guardPacketRegex()
+        const disagreements = seedSpecTokens().filter((t) => generatorHits(t) !== re.test(t))
+        expect(disagreements).toEqual([])
+    })
+
+    test('both files match a markdown filename case-insensitively', () => {
+        // The exact drift I2 found, kept as a named test because it is the one
+        // divergence that actually happened.
+        expect(guardPacketRegex().test('DECISION.MD')).toBe(true)
+        expect(generatorHits('DECISION.MD')).toBe(true)
     })
 })
 
@@ -107,6 +174,20 @@ describe('redaction preserves meaning (#157, I3)', () => {
             .toContain(". The fixture app's shared ACL Fluent file grants")
         expect(gen.redact('ACLs in `seed-app/src/fluent/seed-tables-acl.now.ts` — Build Rule #42.', []))
             .toContain("in the fixture app's shared ACL Fluent file —")
+    })
+
+    test('"for this seed" is only claimed when the file IS this seed\'s', () => {
+        const mine = []
+        expect(gen.redact('see `../seed-app/src/fluent/seed-03-missing-data.now.ts`', mine, { seed: '03' }))
+            .toContain("the fixture app's Fluent file for this seed")
+        expect(mine).toEqual([])
+
+        // A neighbour's file must not be attributed to the row under scoring.
+        const theirs = []
+        const out = gen.redact('see `../seed-app/src/fluent/seed-01-schema-mismatch.now.ts`', theirs, { seed: '03' })
+        expect(out).toContain(gen.REVIEW_SENTINEL)
+        expect(out).not.toContain('for this seed')
+        expect(theirs).toHaveLength(1)
     })
 
     test('a path with no reviewed replacement is removed AND reported', () => {
@@ -158,6 +239,37 @@ describe('operator commentary stays in a neutral register (#157, I4)', () => {
         expect(gen.SCORER_FACING_FIELDS).toContain('layers_swept')
         expect(gen.SCORER_FACING_FIELDS).not.toContain('operator_note')
     })
+
+    test('hold_text is out of scope, because it is transcribed rather than authored', () => {
+        // A verbatim harness message has no remedy under this lint: rewriting
+        // it to satisfy a register rule falsifies the quote the packet
+        // advertises as verbatim. The boundary is declared, not implicit.
+        expect(gen.SCORER_FACING_FIELDS).not.toContain('hold_text')
+        expect(gen.registerViolations({ row: 1, hold_text: 'HOLD: layer 4 declared deliberately NOT_SWEPT' }))
+            .toEqual([])
+    })
+
+    test('advance-ruling prose is linted on the same terms', () => {
+        // The largest block of operator-authored scorer-facing prose in the
+        // packet. Exempting it would be the implicit second-and-silent
+        // exemption the lint's own note rules out.
+        expect(gen.verdictHits('a probe that deliberately left the state', 'ruling X')).toHaveLength(1)
+        const RULINGS = JSON.parse(fs.readFileSync(path.join(ROOT, 'benchmark', 'v12-advance-rulings.json'), 'utf8'))
+        for (const r of RULINGS) {
+            expect(gen.verdictHits(r.heading, r.id)).toEqual([])
+            expect(gen.verdictHits(r.text, r.id)).toEqual([])
+        }
+    })
+})
+
+describe('a row\'s terminal state and its report agree (#157)', () => {
+    test('every v12 row\'s terminal matches whether its report was rejected', () => {
+        // buildAll() throws on a mismatch; that it returns is the assertion.
+        // The packet PROMISES a validator rejection whenever the terminal reads
+        // `failed`, and shows an unexplained one if a report carries the
+        // separator on a passing row.
+        expect(gen.buildAll()).toHaveLength(20)
+    })
 })
 
 describe('advance rulings reach the packets (#160)', () => {
@@ -194,18 +306,62 @@ describe('advance rulings reach the packets (#160)', () => {
     })
 })
 
-describe('the generator has no side effect on require (#157)', () => {
-    test('requiring it does not rebuild scoring-v12/', () => {
-        // An inspection `require()` ran main() and silently rewrote all twenty
-        // dispatched packets. This file has required the generator at load; if
-        // that still wrote anything, the mtimes below moved.
-        const dir = path.join(ROOT, 'benchmark', 'scoring-v12')
-        const before = fs.readdirSync(dir).map((f) => fs.statSync(path.join(dir, f)).mtimeMs)
-        require(GENERATOR_PATH)
-        expect(fs.readdirSync(dir).map((f) => fs.statSync(path.join(dir, f)).mtimeMs)).toEqual(before)
+describe('the dispatched packets are frozen (#157)', () => {
+    const DISPATCHED = path.join(ROOT, 'benchmark', 'scoring-v12')
+    const mtimes = (dir) =>
+        fs.readdirSync(dir).sort().map((f) => f + ':' + fs.statSync(path.join(dir, f)).mtimeMs)
+
+    test('requiring the generator writes nothing', () => {
+        // An inspection `require()` ran main() and silently rewrote all twenty.
+        // This MUST run in a child process: this file already required the
+        // generator at load, so a same-process require() hits the module cache
+        // and executes nothing — a test that cannot fail. Measured: with
+        // `main(['--force'])` at module scope, the in-process version stayed
+        // green and this one goes red.
+        const before = mtimes(DISPATCHED)
+        execFileSync(process.execPath, ['-e', 'require(' + JSON.stringify(GENERATOR_PATH) + ')'], {
+            stdio: 'ignore',
+        })
+        expect(mtimes(DISPATCHED)).toEqual(before)
     })
 
-    test('main() refuses to overwrite the dispatched packets', () => {
-        expect(() => gen.main([])).toThrow(/already exist in scoring-v12/)
+    test('main() refuses to write into a directory that already holds packets', () => {
+        // Driven against a throwaway directory, NEVER the dispatched one. The
+        // earlier version of this test called main([]) against the real
+        // scoring-v12/ and relied on the guard under test to stop it: with the
+        // directory absent — or after any manifest edit that changes a filename
+        // — that test wrote twenty packets, which is the accident this whole
+        // guard exists to prevent.
+        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'packet-freeze-'))
+        const quiet = jest.spyOn(console, 'log').mockImplementation(() => {})
+        try {
+            gen.main(['--out', tmp])
+            expect(gen.existingPacketsIn(tmp)).toHaveLength(20)
+            expect(() => gen.main(['--out', tmp])).toThrow(/already exist/)
+            expect(() => gen.main(['--out', tmp, '--force'])).not.toThrow()
+        } finally {
+            quiet.mockRestore()
+            fs.rmSync(tmp, { recursive: true, force: true })
+        }
+    })
+
+    test('the guard keys on what the directory holds, not on the names this run computes', () => {
+        // The fail-open hole: keying on computed filenames means renaming a row
+        // in the manifest (arm/seed/rep are all in the filename) slips every
+        // existsSync check and writes twenty fresh packets beside twenty stale.
+        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'packet-freeze-'))
+        const quiet = jest.spyOn(console, 'log').mockImplementation(() => {})
+        try {
+            fs.writeFileSync(path.join(tmp, 'row-99-custom-seed-99-run-9.md'), 'a packet from another manifest')
+            expect(() => gen.main(['--out', tmp])).toThrow(/already exist/)
+        } finally {
+            quiet.mockRestore()
+            fs.rmSync(tmp, { recursive: true, force: true })
+        }
+    })
+
+    test('the default output directory is the dispatched one, and it is populated', () => {
+        expect(gen.OUT).toBe(DISPATCHED)
+        expect(gen.existingPacketsIn(gen.OUT)).toHaveLength(20)
     })
 })

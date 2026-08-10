@@ -71,7 +71,10 @@ const SEED_SECTION = '## 2. Seed specification'
 // "Disagreeing is a signal" only holds if something LOOKS. Nothing did, and the
 // copies drifted: the guard's `.md` alternation was made case-insensitive and
 // this copy did not inherit it (#155 review, I2). test/packetGeneratorParity.
-// test.js now diffs the two lists, which is why both are exported below.
+// test.js now compares the stem list as text AND the composed matchers as
+// behaviour over a corpus — the drift lived in the alternations, so a stem-list
+// diff alone would have stayed green through it. Both are exported below for
+// that reason.
 // ---------------------------------------------------------------------------
 const PATH_STEMS =
     'benchmark|docs|src|test|seed-app|node_modules|dist|\\.claude|\\.superpowers|' +
@@ -123,7 +126,17 @@ const REDACTIONS = [
     // DIFFERENT thing and must be described as one — describing it as "this
     // seed's Fluent source" would tell a scorer the seed declares its own ACLs.
     [/`\.{0,2}\/?seed-app\/src\/fluent\/seed-tables-acl\.now\.ts`/g, "the fixture app's shared ACL Fluent file"],
-    [/`\.{0,2}\/?seed-app\/src\/fluent\/[A-Za-z0-9._-]+`/g, "the fixture app's Fluent file for this seed"],
+    // "for this seed" is an ATTRIBUTION, so it is only emitted when the
+    // filename actually carries this packet's seed number. Every spec today
+    // cites only its own Fluent file, but a spec that one day cites a
+    // neighbour's would otherwise be redacted into telling the scorer the file
+    // belongs to the row under scoring — a false claim with a green build, and
+    // the same meaning-loss class the sentinel exists to stop. Returning null
+    // falls through to the sentinel, so the mistake fails the build instead.
+    [
+        /`\.{0,2}\/?seed-app\/src\/fluent\/[A-Za-z0-9._-]+`/g,
+        (m, ctx) => (ctx.seed && m.indexOf('seed-' + ctx.seed + '-') >= 0 ? "the fixture app's Fluent file for this seed" : null),
+    ],
     ['**DESIGN.md R-22**', '**the build contract, ruling R-22**'],
     ['`seeds/history/seed-0N-*.history.md`', 'the per-seed history file'],
     ['`seeds/seed-0N-*.md`', 'the seed specification'],
@@ -175,13 +188,22 @@ const SWEEP = [
  * amount of care in any single rule prevents it. Freezing makes the class of
  * bug unreachable rather than absent-for-now.
  *
- * `unreviewed` collects paths only the generic sweep caught, for the caller to
- * turn into a build failure.
+ * `unreviewed` collects paths the generic sweep caught, and paths an explicit
+ * rule declined to describe, for the caller to turn into a build failure.
+ * `ctx` carries what a replacement may need to know about where it is being
+ * applied — currently just `{ seed }`, so an attribution can be checked rather
+ * than assumed.
  */
-function redact(text, unreviewed) {
+function redact(text, unreviewed, ctx) {
+    const where = ctx || {}
     let segs = [{ t: text, frozen: false }]
 
-    /** Replace every match of `from` in the unfrozen segments, freezing the result. */
+    /**
+     * Replace every match of `from` in the unfrozen segments, freezing the
+     * result. `onMatch` returning null means "this rule will not describe this
+     * match" — the path is still removed, but as a sentinel that fails the
+     * build, never as a guess.
+     */
     const apply = (from, onMatch) => {
         segs = segs.flatMap((s) => {
             if (s.frozen) return [s]
@@ -192,7 +214,7 @@ function redact(text, unreviewed) {
                 if (i < 0) return [s]
                 while (i >= 0) {
                     out.push({ t: s.t.slice(last, i), frozen: false })
-                    out.push({ t: onMatch(from), frozen: true })
+                    out.push({ t: describe(from, onMatch), frozen: true })
                     last = i + from.length
                     i = s.t.indexOf(from, last)
                 }
@@ -201,7 +223,7 @@ function redact(text, unreviewed) {
                 from.lastIndex = 0
                 while ((m = from.exec(s.t)) !== null) {
                     out.push({ t: s.t.slice(last, m.index), frozen: false })
-                    out.push({ t: onMatch(m[0]), frozen: true })
+                    out.push({ t: describe(m[0], onMatch), frozen: true })
                     last = m.index + m[0].length
                     if (m.index === from.lastIndex) from.lastIndex++
                 }
@@ -212,14 +234,18 @@ function redact(text, unreviewed) {
         })
     }
 
-    for (const [from, to] of REDACTIONS) apply(from, () => to)
-
-    for (const re of SWEEP) {
-        apply(re, (hit) => {
-            if (unreviewed) unreviewed.push(hit)
-            return REVIEW_SENTINEL
-        })
+    const describe = (hit, onMatch) => {
+        const replacement = onMatch(hit)
+        if (replacement !== null && replacement !== undefined) return replacement
+        if (unreviewed) unreviewed.push(hit)
+        return REVIEW_SENTINEL
     }
+
+    for (const [from, to] of REDACTIONS) {
+        apply(from, (hit) => (typeof to === 'function' ? to(hit, where) : to))
+    }
+
+    for (const re of SWEEP) apply(re, () => null)
 
     // A replacement is a noun phrase, and a noun phrase that opens a sentence
     // needs a capital. Every entry in REDACTIONS is written lower-case and
@@ -256,7 +282,7 @@ function seedSpec(seed, unreviewed) {
     const dir = path.join(BENCH, 'seeds')
     const file = fs.readdirSync(dir).find((f) => f.startsWith('seed-' + seed + '-') && f.endsWith('.md'))
     if (!file) throw new Error('no spec found for seed ' + seed)
-    return redact(fs.readFileSync(path.join(dir, file), 'utf8').trimEnd(), unreviewed)
+    return redact(fs.readFileSync(path.join(dir, file), 'utf8').trimEnd(), unreviewed, { seed: seed })
 }
 
 const ARM_LABEL = {
@@ -283,8 +309,19 @@ const ARM_LABEL = {
  *
  * As with the blind-rule guards, a phrase list too broad simply reddens the
  * build, and that failure IS the signal to write a better phrase — there is
- * deliberately no exemption list, because an exemption would be a second and
- * silent way to be unguarded.
+ * no exemption list, because an exemption would be a second and silent way to
+ * be unguarded.
+ *
+ * WHAT IS IN SCOPE, AND THE BOUNDARY IS THE POINT. The lint governs prose the
+ * OPERATOR AUTHORS about a run: the row's `note`, the `layers_swept` reading,
+ * and (below) every advance ruling. It does NOT govern text TRANSCRIBED from
+ * the artefact under test — `hold_text` is the harness's own words, quoted
+ * verbatim and advertised as such, exactly like the report body in section 4.
+ * The lint's remedy is "name the fact and move the reading to `operator_note`",
+ * and that remedy does not exist for a field nobody wrote: editing a verbatim
+ * quote to satisfy a register rule would falsify the quote. The scorer is
+ * entitled to read what the harness said; the rule is that the operator must
+ * not add a verdict on top of it.
  */
 const VERDICT_PHRASES = [
     { re: /\bunrelated to\b/i, why: 'judges the relevance of a call\'s argument — the scorer\'s job' },
@@ -293,18 +330,28 @@ const VERDICT_PHRASES = [
     { re: /\bhollow\b|\bsuperficial\b|\bcredible\b|\bnot genuine\b/i, why: 'grades the sweep the scorer is grading' },
 ]
 
-/** Scorer-facing row fields. `operator_note` is deliberately absent. */
-const SCORER_FACING_FIELDS = ['note', 'layers_swept', 'invocation', 'terminal', 'hold_text']
+/**
+ * Operator-authored, scorer-facing row fields. `operator_note` is absent
+ * because it renders nowhere; `hold_text` is absent because it is transcribed
+ * rather than authored — see the boundary note above.
+ */
+const SCORER_FACING_FIELDS = ['note', 'layers_swept', 'invocation', 'terminal']
+
+/** Every verdict phrase in one authored string, as reportable lines. */
+function verdictHits(text, label) {
+    const hits = []
+    if (typeof text !== 'string') return hits
+    for (const p of VERDICT_PHRASES) {
+        const m = text.match(p.re)
+        if (m) hits.push(label + ': "' + m[0] + '" — ' + p.why)
+    }
+    return hits
+}
 
 function registerViolations(row) {
     const hits = []
     for (const field of SCORER_FACING_FIELDS) {
-        const v = row[field]
-        if (typeof v !== 'string') continue
-        for (const p of VERDICT_PHRASES) {
-            const m = v.match(p.re)
-            if (m) hits.push('row ' + row.row + ' `' + field + '`: "' + m[0] + '" — ' + p.why)
-        }
+        hits.push(...verdictHits(row[field], 'row ' + row.row + ' `' + field + '`'))
     }
     return hits
 }
@@ -436,7 +483,8 @@ function advanceRulings(row, rulings) {
     const mine = rulings.filter((r) => r.applies_to.seed === row.seed)
     if (!mine.length) {
         return [
-            'None for this seed. Score every column by section 1 alone.',
+            'None for this seed. Score every column from the rubric in section 1, applied to the',
+            'material in the rest of this packet.',
             '',
             'This section appears in every packet of this pass whether or not it carries a ruling,',
             'so its presence says nothing about the row.',
@@ -553,7 +601,15 @@ function buildAll() {
     }
 
     // Operator commentary must not pre-judge a rubric column, on EITHER arm.
+    // Rulings are operator-authored scorer-facing prose too — the largest block
+    // of it in the packet — so they are linted on the same terms. Exempting
+    // them would have been the implicit second-and-silent exemption the note
+    // above rules out.
     const register = rows.flatMap(registerViolations)
+    for (const r of rulings) {
+        register.push(...verdictHits(r.heading, 'ruling ' + r.id + ' `heading`'))
+        register.push(...verdictHits(r.text, 'ruling ' + r.id + ' `text`'))
+    }
     if (register.length) {
         throw new Error(
             'REFUSING TO WRITE ANY PACKET — ' + register.length + ' scorer-facing field(s) carry an ' +
@@ -585,10 +641,24 @@ function buildAll() {
     // filesystem until all 20 are known clean.
     const built = []
     const leaks = []
+    const mismatched = []
     for (const row of rows) {
         const n = String(row.row).padStart(2, '0')
         const name = 'row-' + n + '-' + row.arm + '-seed-' + row.seed + '-run-' + row.rep + '.md'
         const body = buildPacket(row, rubric, specs[row.seed], rulings)
+
+        // A `failed` terminal makes the packet PROMISE a validator rejection,
+        // and a report carrying one on a passing row shows it with nothing to
+        // explain it. Neither is visible from the built file at a glance, and
+        // both are one manifest edit away.
+        const raw = fs.readFileSync(path.join(REPORTS, 'row-' + n + '.md'), 'utf8')
+        const hasRejection = REJECTION_SPLIT.test(raw)
+        if (/failed/.test(row.terminal) !== hasRejection) {
+            mismatched.push(
+                name + ': terminal is "' + row.terminal + '" but the report ' +
+                    (hasRejection ? 'DOES' : 'does NOT') + ' carry a validator rejection'
+            )
+        }
 
         for (const re of LEAK_PATTERNS) {
             const hits = body.match(re)
@@ -596,6 +666,13 @@ function buildAll() {
         }
         if (body.includes(REVIEW_SENTINEL)) leaks.push(name + ': unreviewed-path sentinel')
         built.push({ name: name, row: row, body: body })
+    }
+
+    if (mismatched.length) {
+        throw new Error(
+            'REFUSING TO WRITE ANY PACKET — a row\'s terminal state and its report disagree about whether ' +
+                'the run was rejected:\n  ' + mismatched.join('\n  ')
+        )
     }
 
     if (leaks.length) {
@@ -644,30 +721,54 @@ function buildAll() {
     return built
 }
 
+/**
+ * Packets already in `dir`, by SHAPE rather than by the names this run happens
+ * to compute.
+ *
+ * Keying the freeze check on the computed filenames fails OPEN, which is worse
+ * than not having it: rename a row in the manifest (arm, seed and rep are all
+ * in the filename) and `existsSync` misses every one, so the guard passes and
+ * twenty stale packets sit beside twenty fresh ones. "The directory already
+ * holds packets" is the property that actually matters.
+ */
+function existingPacketsIn(dir) {
+    if (!fs.existsSync(dir)) return []
+    return fs.readdirSync(dir).filter((f) => /^row-\d+-.*\.md$/.test(f))
+}
+
 function main(argv) {
-    const force = (argv || []).includes('--force')
+    const args = argv || []
+    const force = args.includes('--force')
+    // `--out` exists so the freeze check can be exercised on a throwaway
+    // directory. Without it the only way to test the guard is to point the real
+    // writer at the real scoring-v12/ and rely on the guard under test to stop
+    // it — a test that writes twenty packets the moment it regresses.
+    const outFlag = args.indexOf('--out')
+    if (outFlag >= 0 && !args[outFlag + 1]) throw new Error('--out needs a directory')
+    const out = outFlag >= 0 ? path.resolve(args[outFlag + 1]) : OUT
+
     const built = buildAll()
 
-    if (!fs.existsSync(OUT)) fs.mkdirSync(OUT)
-
     // scoring-v12/ holds dispatched, scored evidence. See the header.
-    const existing = built.filter((p) => fs.existsSync(path.join(OUT, p.name))).map((p) => p.name)
+    const existing = existingPacketsIn(out)
     if (existing.length && !force) {
         throw new Error(
-            'REFUSING TO WRITE ANY PACKET — ' + existing.length + ' packet(s) already exist in scoring-v12/.\n' +
+            'REFUSING TO WRITE ANY PACKET — ' + existing.length + ' packet(s) already exist in ' + out + '.\n' +
                 'Those files are the only record of what the scorers actually read, and the inputs have\n' +
                 'moved since they were dispatched, so rebuilding does not reproduce them. If you genuinely\n' +
                 'mean to destroy that record, re-run with --force.'
         )
     }
 
+    if (!fs.existsSync(out)) fs.mkdirSync(out, { recursive: true })
+
     const written = []
     for (const p of built) {
-        fs.writeFileSync(path.join(OUT, p.name), p.body)
+        fs.writeFileSync(path.join(out, p.name), p.body)
         written.push(p.name)
     }
 
-    console.log('wrote ' + written.length + ' packets to scoring-v12/')
+    console.log('wrote ' + written.length + ' packets to ' + out)
     console.log('rubric section verified byte-identical across all of them')
     console.log('\nNEXT (all three, or the suite stays red):')
     console.log('  1. add a PACKET_SETS entry: dir scoring-v12, scanned true, a why, packets: ' + written.length)
@@ -686,9 +787,12 @@ module.exports = {
     REVIEW_SENTINEL,
     VERDICT_PHRASES,
     SCORER_FACING_FIELDS,
+    OUT,
     redact,
     reportBody,
     registerViolations,
+    verdictHits,
+    existingPacketsIn,
     buildAll,
     main,
 }
