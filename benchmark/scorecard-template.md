@@ -152,11 +152,36 @@ reason is honest; a `0` is a measurement that did not happen.
    Task 12 bands are `≥ 8/10`, `5–7/10` and `< 5/10`,
    which are:
 
-   | Band | Proportion of valid runs | Outcome |
+   | Band | Proportion of valid runs | Outcome — the arm this band was read on |
    |---|---|---|
-   | Top (`≥ 8/10`) | **≥ 80%** | Native is the front door |
-   | Middle (`5–7/10`) | **≥ 50% and < 80%** | Native for lightweight triage + custom deep-diagnosis harness |
-   | Bottom (`< 5/10`) | **< 50%** | Full custom harness as designed |
+   | Top (`≥ 8/10`) | **≥ 80%** | This arm is the front door |
+   | Middle (`5–7/10`) | **≥ 50% and < 80%** | This arm is lightweight triage only |
+   | Bottom (`< 5/10`) | **< 50%** | This arm is not a path |
+
+   **A band classifies ONE arm and prescribes about that arm only.** This column
+   used to prescribe *building a second harness* from the **first** arm's band — a
+   two-arm prescription carried by a single-arm classification, which holds only
+   while the second arm is unmeasured. Where two harnesses are compared, each arm
+   is banded on its own proportion and:
+
+   > **(a) The other arm is UNMEASURED on this seed set** — this arm's shortfall is
+   > the only evidence available, and building the alternative is the only
+   > inference it supports. Prescribe it.
+   >
+   > **(b) The other arm IS measured** — this band prescribes **this arm's role and
+   > nothing else**. An alternative harness is built out only when **its own**
+   > proportion reaches the **top band** on the same seed set in the same pass. A
+   > relative *"beats the other arm"* test is **not** used: it makes the decision a
+   > function of the control's intra-day drift, so a bad control day could license a
+   > build-out with no improvement in the arm being decided.
+   >
+   > **(c) Under (a) or (b) alike** — a component **measured to degrade a
+   > diagnosis** is removed or re-derived before any further build, whatever the arm
+   > proportions say. Arm-level proportions can hide component-level harm: an arm can
+   > clear a band while containing a component that damages a subset of its rows.
+
+   **Scorers: this note is for whoever reads the completed scorecard.** It asks
+   nothing of you — score the rubric columns and leave the banding alone.
 
    Edges are **inclusive at the bottom of each band** (`≥`), and the comparison
    is on the proportion — do **not** round the pass count to a /10 equivalent

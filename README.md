@@ -1,6 +1,6 @@
 # Foundry Troubleshooter
 
-![Version](https://img.shields.io/badge/version-2026.08.1003-blue)
+![Version](https://img.shields.io/badge/version-2026.08.1004-blue)
 
 An AI-powered diagnostic agent that runs **entirely within ServiceNow**. When an AI Agent built with Foundry fails on a customer instance — where external AI tools are prohibited — the Troubleshooter ingests the failing execution, systematically inspects the agent's instructions, tools, schemas, data, and GenAI stack, finds the root cause, and produces a structured **Fix Report** to feed back into the builder AI.
 
@@ -28,13 +28,24 @@ If the instance's GenAI stack is itself broken, `mode: "collect"` returns an **E
 
 The diagnostic tools and playbook are built **harness-agnostic**, then wrapped first in a native ServiceNow AI Agent (**"Agent Doctor"**, AI Agent Studio + Script tools). A blind seeded-failure benchmark — 5 deliberately broken agents × 2 runs each — decides whether the custom harness below gets built:
 
-| Scorecard | Outcome |
+| Scorecard | Outcome — for the arm the score was read on |
 |-----------|---------|
-| ≥ 8/10 correct root causes, usable fixes | Native agent is the front door; custom harness shrinks to Evidence Bundle + gaps |
-| 5–7/10 | Native for triage; build the custom deep-diagnosis harness |
-| < 5/10 | Full custom harness |
+| ≥ 8/10 correct root causes, usable fixes | That arm is the front door |
+| 5–7/10 | That arm is lightweight triage only |
+| < 5/10 | That arm is not a path |
 
-See `docs/ARCHITECTURE_DECISIONS.md` (Decision 0.5) and the benchmark protocol in `docs/IMPLEMENTATION_PLAN.md`.
+**A band prescribes about the arm it was read on.** These bands originally read the *native* score and
+prescribed *building the custom harness* — sound only while the custom arm was unmeasured. Both arms are
+now measured (v12: **native 6/10 · 60%**, **custom 0/10 · 0%**), so that inference is retired: the custom
+harness is built out only on **its own ≥ 80%**, and a component measured to *degrade* a diagnosis is
+removed or re-derived first. Re-derivation and the reasoning: `benchmark/DECISION.md` §AE (binds on passes
+after v12).
+
+**Current standing:** native remains the recommended path on this instance; the Phase 1b milestone is not
+met. Quote the result as **native 6/10 · 60% · middle band** with **custom 0/10 · 0% · bottom band** —
+never one arm without the other.
+
+See `docs/ARCHITECTURE_DECISIONS.md` (Decision 0.5, partially superseded) and the benchmark protocol in `docs/IMPLEMENTATION_PLAN.md`.
 
 ## Architecture (custom harness — contingent on the benchmark)
 

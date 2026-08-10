@@ -38,6 +38,19 @@
 - **5–7/10** → native stays as lightweight triage; build the custom deep-diagnosis harness.
 - **< 5/10** → full custom harness as designed below.
 
+> **⚠ Partially superseded (August 2026) — the custom-side half of the 5–7/10 and < 5/10 bands.**
+> Each of those two bands reads the **native** arm's score and prescribes about the **custom** arm. That
+> inference was sound while the custom harness was unbuilt and unmeasured — with one arm measured it is
+> the only inference available — but it carried *"the custom arm is unmeasured"* as a silent premise.
+> Phase 1b is now built, and the v12 scored pass measured both arms on the same day, seeds and build:
+> **native 6/10 · 60% (middle band), custom 0/10 · 0%**, with the depth gate — the component the middle
+> band's prescription names — measured to *degrade* diagnoses rather than deepen them.
+> **Re-derived in `benchmark/DECISION.md` §AE**, which binds on passes after v12: a band prescribes about
+> the arm it was read on; the custom harness is built out only on **its own ≥ 80%**; and a component
+> measured to degrade a diagnosis is removed or re-derived first. The thresholds themselves, the
+> native-side prescriptions, and the ≥ 8/10 band are unchanged. Everything above this note is left as
+> written — it is the decision as it was made, and §AE says why it was right in its own context.
+
 **What this means for the rest of this document:** Layers 1–4 (client, async REST API, custom ReAct loop, PaLlmProxy/NASK) describe the **custom harness — contingent on the gate**. Layers 5–7 (tools, state, packaging) are **harness-agnostic and get built regardless**; the tool cores never know which harness called them. Every diagnostic — native or custom — anchors to an `x_snc_pa_run` record (with a `harness` field), so artifacts, audit, and benchmark scoring work identically in both worlds.
 
 ---

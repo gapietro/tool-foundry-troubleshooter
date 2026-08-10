@@ -310,6 +310,10 @@ The five seeds cover four of the six symptoms in ServiceNow's official K26 failu
 | **5–7/10** | Native kept for lightweight triage; build the custom deep-diagnosis harness (Phase 1b) |
 | **< 5/10** | Full custom harness as designed |
 
+> **This table is Task 12's gate as executed, and is left as written.** Its custom-side prescriptions
+> (rows 2 and 3) were **partially superseded in August 2026** once Phase 1b was built and both arms were
+> measured — see `benchmark/DECISION.md` §AE. Do not apply rows 2 or 3 to a new pass without reading it.
+
 Whatever the outcome, the scorecard's *failure notes* (where it wandered, what it truncated, what it hallucinated) become requirements for Phase 1b and/or playbook v2.
 
 **Commit:** `docs: add benchmark scorecard and harness decision`
