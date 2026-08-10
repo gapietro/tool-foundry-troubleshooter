@@ -13,8 +13,8 @@ column below exists for a stated reason — read the reason before skipping a co
 |---|---|---|
 | `root_cause_layer_correct` | 0 or 2 | Diagnosis names the seed's expected root-cause layer (see the seed's own spec file for the expected value) |
 | `fix_target_correct` | 0, 1 or 2 | Diagnosis names the correct fix target (tool schema / instruction text / data seeding / capability mapping / activation). **1 = partial**: the right area, without the specific target. See the partial-credit note below |
-| `evidence_cites_trace_and_config` | 0 or 1 | Root cause cites BOTH the execution trace AND at least one config/schema source — the evidence rule from the diagnostic agent's own instructions |
-| `fix_usable_unedited` | 0 or 1 | The Fix Report's proposed fix could be applied by the builder AI as written, with no manual editing first — **and it addresses the defect the seed actually carries.** A well-formed fix aimed at the wrong target is a no-op, not a usable fix, so **`fix_usable_unedited` may not be 1 while `fix_target_correct` is 0.** See the note under the gate rule for why this constraint lives here rather than in the gate expression, and **§A2.1** for the two cases this definition does not otherwise determine — an unfilled value slot, and a fix that addresses a runtime record |
+| `evidence_cites_trace_and_config` | 0 or 1 | Root cause cites BOTH the execution trace AND at least one config/schema source — the evidence rule from the diagnostic agent's own instructions. See **§A1** for the five cases this definition does not otherwise determine — a report with no root cause, a report with several, a citation unconnected to the cause it supports, a citation no tool call backs, and citations split across the report |
+| `fix_usable_unedited` | 0 or 1 | The Fix Report's proposed fix could be applied by the builder AI as written, with no manual editing first — **and it addresses the defect the seed actually carries.** A well-formed fix aimed at the wrong target is a no-op, not a usable fix, so **`fix_usable_unedited` may not be 1 while `fix_target_correct` is 0.** See the note under the gate rule for why this constraint lives here rather than in the gate expression, and **§A2.1** for the four cases this definition does not otherwise determine — an unfilled value slot, a fix that addresses a runtime record, an incomplete edit, and a target named by kind rather than by name |
 
 **Total: 6 points per run.**
 
@@ -24,6 +24,75 @@ without naming which of the two activation gates is off — an instruction the s
 could not express, leaving the scorer to round arbitrarily in either direction. The
 1 band resolves it. Seed 5 is the only seed that currently defines a partial case;
 for the others, 1 is available but must be justified in `notes` if used.
+
+## A1. `evidence_cites_trace_and_config` — five cases the column definition does not otherwise determine
+
+*Added 2026-08-10, issue #159. The rationale is in the project's decision
+record.* The column reads *"Root cause cites BOTH the execution trace AND at
+least one config/schema source."* Five shapes of report leave that sentence
+without an answer. Each case below is decided by the report text plus the audit
+trail already in this packet. **None asks the scorer to weigh anything.**
+
+**Apply them in order.** Case 1 asks whether the column has a subject at all;
+Case 2 fixes which root cause is the subject; Cases 3–5 then ask, of that one
+root cause, whether a given citation counts. A later case never revisits an
+earlier one.
+
+**Case 1 — the report states no root cause.** If the report offers nothing as a
+cause — an `inconclusive` terminal, an empty root-cause list, a summary
+asserting there is no defect — score **0**. The column is written about a root
+cause; with none stated there is nothing for the predicate to be true of, and an
+evidence list attached to a non-diagnosis is not a citation for a diagnosis.
+Score 0 rather than leaving the cell empty: the column contributes to the /6 and
+a blank is not a value.
+
+**Case 2 — the report states more than one root cause.** Evaluate the column
+**against one root cause: the report's primary.** The primary is, in this order,
+(a) the entry the report itself labels primary or ranks first, else (b) the first
+entry in the list. Score 1 if that entry carries both citations. Do **not**
+evaluate the report as a whole, and do **not** require every entry to comply. A
+report whose primary complies scores 1 though a secondary does not; a report
+whose primary does not scores 0 though a secondary does.
+
+*The distinction, stated so it is not re-derived: no column in this rubric scores
+extra or hedged root causes, and a report that enumerates alternates alongside its
+diagnosis is not thereby less grounded. What the column asks is whether **the
+diagnosis** is evidenced, and the diagnosis is the primary.*
+
+**Case 3 — the cited source is not connected to the cause it supports.** A
+citation counts toward the conjunction only if the root-cause statement it is
+offered under **names the artifact cited** — the same table, record, field,
+script, artifact or configuration object. A citation naming something the
+root-cause statement never mentions does not count, and the column scores **0**
+unless some other cited source of that half's type does. This test applies to
+both halves, trace and config/schema alike.
+
+*Why the reason a call was made is deliberately not part of the test: a scorer is
+never asked to establish why a tool was invoked, only what the report's own words
+tie together. A call made for some unrelated purpose that nonetheless names an
+artifact the root cause names **counts**; a call made in perfect good faith that
+names nothing the root cause names **does not**. The test is a comparison between
+two passages of the report the scorer already has open. It does not ask whether
+the citation is good evidence — only whether it is evidence for **this** claim.*
+
+**Case 4 — no call in the audit trail backs the citation.** A citation counts
+only if this packet's audit trail records a call of the corresponding tool
+family. Where it records none, that half is not satisfied and the column scores
+**0**. Where the packet carries a validator rejection naming a citation
+unsupported, treat it as a pointer to the trail, **not** as the decision: the
+trail decides, the validator does not. A report may not cite its way to this
+column with a call it never made.
+
+**Case 5 — the two citations are not co-located.** Both halves must be offered
+as evidence **for the root cause identified under Case 2**. A trace or
+config/schema source appearing elsewhere — a failure summary, a sweep table, an
+appendix — does not count, **unless** that root cause's own evidence refers to
+it explicitly. Proximity in the document is not a reference; a pointer is.
+
+**This column is not a gate term** (see §A2), so a wrong value here moves the /6
+and never `passes_gate`. Score it with the same care regardless: it is the column
+that explains *why* a run landed where it did, and a pass that cannot say that
+has measured a number and learned nothing.
 
 ## A2. `passes_gate` — the column the gate actually consumes
 
@@ -73,14 +142,15 @@ mis-scored it**; the correct row is 2 / 0 / 0, `passes_gate` = 0.
 the Task 12 gate table. Record the sum explicitly in the decision record; do not
 re-derive it from the /6 totals.
 
-### A2.1 Two cases the column definition does not otherwise determine
+### A2.1 Four cases the column definition does not otherwise determine
 
-*Added 2026-08-07, issue #139, after this column was found under-determined on
-the majority of the rows it was applied to. The rationale is in the project's
+*Cases 1–2 added 2026-08-07, issue #139, after this column was found
+under-determined on the majority of the rows it was applied to; Cases 3–4 added
+2026-08-10, issue #159, for the same reason. The rationale is in the project's
 decision record.* Because `fix_usable_unedited` is one of §A2's two gate terms,
 an under-determined reading of it is not a rounding error — it changes the
-verdict. Both cases below are decided by the seed spec plus the fix text.
-**Neither asks the scorer to weigh anything.**
+verdict. Every case below is decided by the seed spec plus the fix text.
+**None asks the scorer to weigh anything.**
 
 **Case 1 — the fix leaves a value slot unfilled.** Score `fix_usable_unedited`
 = **1** only if BOTH hold:
@@ -109,9 +179,46 @@ consumer, and SDK-owns-creation is a convention of this project rather than a
 property of the diagnosis, so translating a unique runtime address into its
 Fluent source is not an edit to the fix.
 
-Both cases are subordinate to the constraint already stated in §A —
+**Case 3 — the fix names the operation but the edit is incomplete.** Where the
+fix hands over a code snippet, a script fragment or a literal replacement, score
+**1** only if applying that text exactly as given produces the change the fix
+describes. Score **0** if the builder must supply a line, a statement or a
+substitution the fix *describes* but does not *write* — a snippet that computes a
+corrected value and never writes it, a "replace this call" whose replacement is
+characterised rather than given, an edit whose surrounding context is quoted as
+current but never returned as amended. Where the fix states its operation in prose
+and supplies no snippet, this case does not arise and Cases 1–2 govern.
+
+*The distinction, stated so it is not re-derived: Case 1 is about a missing
+**value**, this one is about a missing **edit**. A fix can name its target
+perfectly, pass Case 2's address test, and still not be applicable, because the
+text it hands the builder does not perform the change when run. "As written" is
+the column's own phrase, and it governs the snippet and not only the address.*
+
+**Case 4 — the target is identified by kind rather than by name.** Where the fix
+names what to change only by category — "the routing table", "the appropriate
+group", "the relevant capability record" — score **0**. Case 1's first condition
+and Case 2's address test are not met by a description resolving to a *class* of
+records; choosing a member of that class is the edit the column asks whether the
+builder can skip.
+
+*A value named by kind is decided by Case 1, not here.* If the instance holds a
+value answering the description, it was obtainable and the run declined to look it
+up — Case 1 condition 2 fails and the score is 0. If it holds none, condition 2 is
+met and the slot is the builder's to fill.
+
+*And the name being one the run was never given is not a defence.* Where this
+packet's blind rule withheld an identifier, the run's inability to name it changes
+nothing here: the column scores what the builder AI receives, not what the run
+could reasonably have known. A run that cannot name its target is free to say so —
+what it may not do and still score 1 is hand the builder a class and leave the
+choice there. **This is the one place in §A2.1 where a fact about the run is
+explicitly excluded from the test**, and it is excluded because the column's
+stated consumer is downstream of the run and inherits none of its constraints.
+
+All four cases are subordinate to the constraint already stated in §A —
 `fix_usable_unedited` may not be 1 while `fix_target_correct` is 0. **Check that
-first**; if it binds, neither case above arises.
+first**; if it binds, no case above arises.
 
 ## A3. Void runs — a run that measured nothing
 

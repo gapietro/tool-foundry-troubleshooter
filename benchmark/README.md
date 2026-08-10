@@ -118,7 +118,7 @@ removed. A packet embeds the spec and never the history file.
 
 One file, three pattern lists, because the three channels ban different things
 and scan different files. **Two of the rule's three channels are now scanned.**
-The rubric channel — §A/§A2/§A3 of `scorecard-template.md`, the slice copied
+The rubric channel — §A/§A1/§A2/§A3 of `scorecard-template.md`, the slice copied
 into *every* packet — was the last to be covered, and covering it took two
 changes rather than one. Its four repository paths were reworded out at source
 (they were already being removed by hand at packet-build time), and its

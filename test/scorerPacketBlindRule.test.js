@@ -54,7 +54,7 @@
  *                + PACKET_PATTERNS  see RUBRIC_PATTERNS' own doc comment for
  *                                    the exact three-source composition
  *
- * The rubric channel is benchmark/scorecard-template.md §A/§A2/§A3 -- the
+ * The rubric channel is benchmark/scorecard-template.md §A/§A1/§A2/§A3 -- the
  * slice copied into EVERY packet, so a leak there reaches every row of a pass
  * at once. It was previously unscanned on a cost/benefit judgement: the
  * section legitimately explains grading with score-shaped text ("a run can
@@ -315,7 +315,7 @@ const TEMPLATE = path.join(SCORING, 'scorecard-template.md')
  * The packet-reaching slice of the rubric, as offsets into the WHOLE
  * normalized template.
  *
- * Only §A/§A2/§A3 are copied into a scorer packet, so the scanned range runs
+ * Only §A/§A1/§A2/§A3 are copied into a scorer packet, so the scanned range runs
  * from the `## A.` heading to the `## B.` heading. Derived from the headings
  * at scan time and never hardcoded to line numbers, which move.
  *
@@ -412,8 +412,8 @@ const COUNT = '\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twel
 const RUBRIC_PATTERNS = [
     {
         name: 'outside-section-pointer',
-        // EVERY § in the whole §A->§B range is a self-reference: §A, §A2,
-        // §A2.1, and nothing else. A pointer anywhere else is a pointer OUT
+        // EVERY § in the whole §A->§B range is a self-reference: §A, §A1,
+        // §A2, §A2.1, and nothing else. A pointer anywhere else is a pointer OUT
         // of the packet, into a document the scorer does not have -- which is
         // exactly what #139's two bare §O5/§T5 pointers were. §B is rejected
         // too, correctly: a packet ends at §A3.
@@ -804,7 +804,7 @@ describe('the rubric channel reaches every packet and is scanned (issue #143)', 
 
         // §A2.1 must fall inside the range. test/rubricClauses.test.js pins
         // the same placement for a different reason -- that a clause outside
-        // §A/§A2/§A3 is a clause the scorers never see. Two tests, one
+        // §A/§A1/§A2/§A3 is a clause the scorers never see. Two tests, one
         // invariant, independent derivations.
         const slice = text.slice(start, end)
         expect(slice).toContain('### A2.1')
@@ -861,12 +861,13 @@ describe('the rubric channel reaches every packet and is scanned (issue #143)', 
     })
 
     it('NEGATIVE: the rubric self-references do not fire', () => {
-        // Every § in the whole range points at §A, §A2 or §A2.1. That is what
-        // makes outside-section-pointer viable at all -- a pointer anywhere
+        // Every § in the whole range points at §A, §A1, §A2 or §A2.1. That is
+        // what makes outside-section-pointer viable at all -- a pointer anywhere
         // else is a pointer out of the packet, into a document the scorer
         // does not have. §B is correctly rejected too: a packet ends at §A3.
         const { text, lineStarts } = normalizeProse(
-            "see §A2.1 for the two cases, §A2's gate expression and §A's constraint"
+            "see §A2.1 for the four cases, §A1 for the citation clauses, " +
+                "§A2's gate expression and §A's constraint"
         )
 
         expect(scanRubric(text, lineStarts, 0, text.length)).toEqual([])
