@@ -106,6 +106,8 @@ never from `aia_logs`.
 
 | 03 | 1 | `8233e17e2b2287d817a6ffbeee91bf3b` | *"Please route a request in the Hardware category to the correct assignment group."* (no ticket — seed 03's Setup says add none) | completed 16:06:03 → 16:06:25 = **22s**, 6 tasks all `success`, 1 tool call (`lookup_routing_rule` `9843297e2b2287d817a6ffbeee91bf98`) returning `{ok:true, matched:false, category:"Hardware", rules_in_table:0}`. The agent correctly refused to guess |
 
+| 03 | 2 | `704ca97e2be68318f243fed2ce91bf61` | *"Please route a request in the Software category to the correct assignment group."* | completed 16:45:33 → 16:46:03 = **30s**, 6 tasks all `success`, 1 tool call (`lookup_routing_rule` `a05ca1be2be68318f243fed2ce91bfb1`) returning `{ok:true, matched:false, category:"Software", rules_in_table:0}` |
+
 **Fresh bench ticket per rep** for seeds 01 and 04, so rep 1's agent writes cannot contaminate rep 2
 (v9 §2's rule). Seed 03 needs no ticket — its Setup says to add none.
 
@@ -539,6 +541,65 @@ its *only* support, row 10's survived because the call rode along beside a real 
 Not one of the five gate-forced calls targeted anything connected to its seed's defect
 (`task`, `task`, `incident.priority`, `incident.priority`, `incident.assignment_group`).
 
+### 3.52 Row 11 — native, seed 03 rep 2 — **VALID**
+
+| field | value |
+|---|---|
+| target execution | `704ca97e2be68318f243fed2ce91bf61` — completed 16:45:33→16:46:03 (30s); *Software* category; tool returned `{ok:true, matched:false, category:"Software", rules_in_table:0}` |
+| diagnostic execution | `5aac69fe2be287d817a6ffbeee91bf4b` |
+| terminal | **completed**, 16:47:18 → 16:52:09 = **4m51s** |
+| tool calls (§E1) | **15** |
+| `layers_swept` | **7/7** all SWEPT; syslog UNAVAILABLE with the caller-restriction reason and the required admin action |
+| report | `f4cda13a2b2687d817a6ffbeee91bfd7` + `8dcde13a2b2687d817a6ffbeee91bf99` (both 16:52:08) |
+
+**RC-1 (PRIMARY, layer 5, CONFIRMED)** is seed 03's defect, evidenced three independent ways: the tool
+response `rules_in_table: 0`, `query_table`'s `genuinely_empty` with `unfiltered_row_count = 0`, and —
+new here — the observation that **the tool script itself runs a `GlideAggregate` COUNT before querying
+and got 0**. It states plainly that *"the agent behaved correctly given its instructions; the data it
+needed does not exist"* and notes the `Completed` plan state is *"masking the defect from a quick status
+check"*. RC-2 (layer 3) adds the non-mandatory `category` input, correctly split into CONFIRMED for the
+flag and UNCONFIRMED for whether a missing-input call has ever occurred. RC-3 is an honest OBSERVATION —
+`check_config` matched 0 definitions for "AIA ReAct Engine" while two LLM calls succeeded against
+`AIA ReAct Engine_Amazon Bedrock` — marked UNCONFIRMED with the exact query that would settle it.
+
+> **§A2.1 Case 1 again, but with a materially different shape from row 09.** Row 09's FIX-1 left the slot
+> bare: `assignment_group = <the correct group name for Hardware>`. Row 11's FIX-1 supplies an
+> **example**: `assignment_group = <correct group name, e.g. "Software Support">`. Both target the same
+> table and operation; one offers a candidate value and one does not. Whether that difference moves
+> `fix_usable_unedited` is precisely a §A2.1 Case 1 judgment and is **left to the scorers** — flagged
+> because the two rows are otherwise near-identical, which makes them a natural consistency check on
+> whether the clause is being applied uniformly.
+
+### 3.53 Row 12 — custom, seed 03 rep 2 — **VALID**
+
+| field | value |
+|---|---|
+| run | `544ea5ba2b2a8318f243fed2ce91bf24` — **`TR1000255`** |
+| terminal | **complete**, `fix_report validated`; 16:54:27 → 16:54:39 |
+| tool calls | **2** — `agent_trace`, `schema_lookup` |
+| `layers_swept` | **2/7** (L1, L4) |
+| HOLDs | **1**, `layer 4 (ranked)` — *"layer(s) 4, 7 declared NOT_SWEPT"*, a narrower list than earlier rows |
+
+**This row named the correct next step and the gate sent it somewhere else.** Its root cause is filed at
+layer 1 with `confidence: UNCONFIRMED` and — crucially — `would_confirm: "layer 5 — query_table against
+routing rules table"`. That is exactly right: `query_table` on `x_snc_tsbench_routing` is what rows 09
+and 11 used to establish the defect. The run knew it, wrote it down, and then, held for depth, spent its
+one extra call on `schema_lookup` for **`incident.assignment_group`** — the same irrelevant OOB field row
+10 chose, the sixth gate-forced call and the third against an `incident` column.
+
+**So the depth gate's release condition is satisfiable by a call the run itself did not think was the one
+it needed.** The gate asked for *a* layer-4 call; the run's own `would_confirm` asked for a layer-5
+`query_table` against a specific table. The gate got what it asked for and the diagnosis did not.
+
+Its fix reflects that: `current: "unknown"`, `proposed: "Verify routing rules table and category
+mappings"` — an instruction to go and look, not a change a builder could apply. No rubric column is
+scored here.
+
+> **A cheaper read, worth adopting for the remaining rows.** `GET /api/now/table/x_snc_troubleshoot_run/<sys_id>`
+> with `sysparm_fields=fix_report,transcript` returns both fields directly and is substantially smaller
+> than the app's own `/runs/<id>` route, which re-serialises the transcript with full `prompt_digest`
+> blobs. Same data, far less of it.
+
 ### 3.5 The cross-row finding: the depth gate did not fail to add depth — it DEGRADED the diagnosis
 
 This is the sharpest measurement of the pass so far and it goes materially beyond §T5. §T5 established
@@ -622,7 +683,7 @@ known not to indicate a stall: the run it supposedly evidenced had already compl
 
 ## 4. Row index and resumption
 
-**10 of 20 rows complete. The pass is PAUSED mid-run-phase, not abandoned.** No packet has been built
+**12 of 20 rows complete. The pass is PAUSED mid-run-phase, not abandoned.** No packet has been built
 and no scorer has been dispatched, so §AC6's *"packets are built after all 20 runs terminate, and the
 scorers are dispatched once"* is intact and unviolated.
 
@@ -638,7 +699,8 @@ scorers are dispatched once"* is intact and unviolated.
 | 08 | custom | 02/2 | `a950ad322be28318f243fed2ce91bfca` | `e77265f22b268318f243fed2ce91bf7c` (`TR1000251`) | **valid, terminal `failed`** — citation validator rejected an `incident.priority` root cause |
 | 09 | native | 03/1 | `8233e17e2b2287d817a6ffbeee91bf3b` | `1bb36d7a2b268318f243fed2ce91bf87` | **valid**, 3m36s, 16 calls, 7/7 — RC-1 = empty routing table |
 | 10 | custom | 03/1 | `8233e17e2b2287d817a6ffbeee91bf3b` | `0355a17a2b6287d817a6ffbeee91bf4a` (`TR1000253`) | **valid**, 11s, 2 calls, 2/7 — right symptom, invented fix |
-| 11–12 | | 03/2 | — | — | **not started** |
+| 11 | native | 03/2 | `704ca97e2be68318f243fed2ce91bf61` | `5aac69fe2be287d817a6ffbeee91bf4b` | **valid**, 4m51s, 15 calls, 7/7 — RC-1 PRIMARY = empty routing table |
+| 12 | custom | 03/2 | `704ca97e2be68318f243fed2ce91bf61` | `544ea5ba2b2a8318f243fed2ce91bf24` (`TR1000255`) | **valid**, 12s, 2 calls, 2/7 — named the right next step, gate sent it elsewhere |
 | 13–16 | | 04/1, 04/2 | — | — | **not started** |
 | 17–20 | | 05/1, 05/2 | — | — | **not started** |
 
