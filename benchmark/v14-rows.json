@@ -100,5 +100,53 @@
     "triggering_record": null,
     "invocation": "POST /api/x_snc_troubleshoot/v1/troubleshooter/analyze {\"execution\": \"ba4dd38b2b6e4310f243fed2ce91bf62\", \"mode\": \"diagnose\"}",
     "operator_note": "root_causes: [] and fixes: [] again, with an `inconclusive` block asserting the execution succeeded. Identical 3-call tool pattern to row 02 (agent_trace, agent_config, schema_lookup)."
+  },
+  {
+    "row": 5,
+    "arm": "native",
+    "seed": "05",
+    "rep": 1,
+    "terminal": "completed",
+    "wall_clock": "121s",
+    "tool_calls": 9,
+    "distinct_tools": [
+      "agent_trace",
+      "agent_config",
+      "genai_log (x2)",
+      "log_analysis",
+      "query_table",
+      "read_artifact (x3)"
+    ],
+    "layers_swept": "7/7 (L1, L2, L3, L4, L5, L6, L7)",
+    "layers_available": "7/7",
+    "holds": 0,
+    "tool_limit": 25,
+    "target_execution": null,
+    "run_id": "0b046f032b62431017a6ffbeee91bf6d",
+    "run_number": "TR1000299",
+    "triggering_record": "25e32b4b2b228310f243fed2ce91bf22",
+    "invocation": "servicenow_aia_execute on agent \"Agent Doctor\" \u2014 v13 \u00a73.2's verbatim seed-05 objective with ticket 25e32b4b2b228310f243fed2ce91bf22; waitForCompletion=false; session e3f3a3032b62431017a6ffbeee91bf6c -> plan bff367032b62431017a6ffbeee91bf8d",
+    "note": "The call that answered the seed-05 question was agent_config on agent Seed 05 Ticket Acknowledger, returning triggers section active=\"0\" for trigger bfb77d6c64884500a80203ee029436ee.",
+    "operator_note": "LLM P95 8,616ms, tool P95 237ms. Named sn_aia_trigger_configuration.active=false and proposed activation, which is Ruling 1's stated condition. TWO x_snc_troubleshoot_run records exist for this one conversation (TR1000298 and TR1000299); only TR1000299 carries audit rows (18 rows / 9 calls) and TR1000298 has ZERO. run_id records the one carrying the trail."
+  },
+  {
+    "row": 6,
+    "arm": "custom",
+    "seed": "05",
+    "rep": 1,
+    "terminal": "failed (LLM reasoning failed, no fix_report)",
+    "wall_clock": "~15s",
+    "tool_calls": 0,
+    "distinct_tools": [],
+    "layers_swept": "0/7",
+    "layers_available": "7/7",
+    "holds": 0,
+    "tool_limit": 25,
+    "target_execution": null,
+    "run_id": "87b4678f2b228310f243fed2ce91bf69",
+    "run_number": "TR1000300",
+    "triggering_record": "25e32b4b2b228310f243fed2ce91bf22",
+    "invocation": "POST /api/x_snc_troubleshoot/v1/troubleshooter/analyze with agent + timeframe (seed 05 has no execution sys_id; _validateAnalyze rejects agent alone)",
+    "operator_note": "NOT VOID. Error: 'LLM reasoning failed: response could not be parsed as JSON after one retry: unknown action: agent_config.' \u00a7A3 as amended by \u00a7AK draws the line at the PLATFORM failing the execution; here the RUN's own reasoning failed and the platform did its job, so it is scored, matching v13's precedent of scoring `failed (fix_report rejected)` rows. Worth noting for a later issue, NOT investigated mid-pass per \u00a7T9: agent_config is a registered tool the same harness called successfully in rows 02 and 04, so the action parser rejected an action the harness supports."
   }
 ]
