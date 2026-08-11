@@ -413,6 +413,68 @@ function registerViolations(row) {
 }
 
 /**
+ * THE OTHER HALF OF §AF2, WHICH SHIPPED UNGUARDED (#176).
+ *
+ * §AF2's rule is two-sided: a scorer-facing field NAMES the argument of a call,
+ * and the operator's reading of it lives in `operator_note`, which renders
+ * nowhere. `registerViolations` above keeps the READING out of a scorer-facing
+ * field; the delivery check in `buildAll` keeps `operator_note` out of every
+ * packet. Both guard the same direction. Nothing guarded the direction §AF2's
+ * own text calls "not optional" — that the FACT arrives at all.
+ *
+ * It then failed exactly there. v13 authored both halves into `operator_note`
+ * on six of the seven rows that took a hold and carried a reading, leaving
+ * `note` null on four of them; section 6 rendered "No run-specific notes."
+ * directly under section 5's promise that a held call's argument "is named in
+ * section 6 instead". The five off-fixture rows §AJ6 asks about are
+ * unassessable as a result, and so is the on-fixture control that would have
+ * bounded them.
+ *
+ * THE TEST. For a row that took a hold and carries a reading, every
+ * platform-identifier-shaped token in that reading must also appear in some
+ * scorer-facing field. `holds > 0` is the scoping condition and it is doing
+ * real work: a row that held nothing has no held call to name, so its
+ * `operator_note` is free to discuss run plumbing — which is what the native
+ * rows' notes legitimately do.
+ *
+ * DELIBERATELY BROAD, AND THAT IS THE SAME POSTURE AS THE LINT ABOVE. The token
+ * shape cannot tell a call argument from any other identifier, so an
+ * `operator_note` that mixes instrument commentary into a row that took a hold
+ * reddens the build (v13 row 18 is the measured case: a runbook-ambiguity note
+ * naming `body.agent` on a row held twice). The remedy is the same one the lint
+ * offers — name the fact, or keep the unrelated commentary out of a held row's
+ * note — and there is no exemption list, because an exemption would be a second
+ * and silent way to be unguarded.
+ *
+ * WHAT IT IS NOT. This is a DELIVERY FLOOR, not a proof of sufficiency: it
+ * establishes that the identifiers the operator was reading reached a scorer,
+ * not that they were the right ones or that the scorer could act on them. It
+ * catches withholding, which is the failure that actually shipped.
+ */
+const PLATFORM_IDENT = /\b[a-z][a-z0-9]*(?:[._][a-z0-9]+)+\b/g
+
+function identifiers(text) {
+    return new Set(typeof text === 'string' ? text.match(PLATFORM_IDENT) || [] : [])
+}
+
+function deliveryViolations(row) {
+    if (!(Number(row.holds) > 0) || !row.operator_note) return []
+
+    const delivered = new Set()
+    for (const field of SCORER_FACING_FIELDS) {
+        for (const t of identifiers(row[field])) delivered.add(t)
+    }
+
+    const withheld = [...identifiers(row.operator_note)].filter((t) => !delivered.has(t))
+    if (!withheld.length) return []
+
+    return [
+        'row ' + row.row + ': `operator_note` reads ' + withheld.map((t) => '`' + t + '`').join(', ') +
+            ', which no scorer-facing field names — the reading ships without the fact',
+    ]
+}
+
+/**
  * Section 5, matching the v9 packet layout so the two passes can be read side
  * by side. Bullet list rather than a table: v9 used bullets, several values are
  * long, and a table cell that wraps is harder for a scorer to read.
@@ -688,7 +750,22 @@ function buildAll(pass) {
     if (register.length) {
         throw new Error(
             'REFUSING TO WRITE ANY PACKET — ' + register.length + ' scorer-facing field(s) carry an ' +
-                'operator verdict. Name the fact, move the reading to `operator_note`:\n  ' + register.join('\n  ')
+                'operator verdict. Name the fact, move the reading to `operator_note` — and NAME IT: ' +
+                'moving BOTH halves there withholds the fact from every scorer, which is the #176 ' +
+                'defect and is checked separately:\n  ' + register.join('\n  ')
+        )
+    }
+
+    // The other half of the same rule (#176). Runs beside the register lint
+    // rather than inside it: they fail on opposite errors — a reading that
+    // reached a scorer-facing field, and a fact that never did — and reporting
+    // them together would let one remedy read as the fix for both.
+    const withheld = rows.flatMap(deliveryViolations)
+    if (withheld.length) {
+        throw new Error(
+            'REFUSING TO WRITE ANY PACKET — ' + withheld.length + ' row(s) carry a reading in ' +
+                '`operator_note` whose subject no scorer will see. Name the call and its argument in ' +
+                '`note`, then keep the reading where it is:\n  ' + withheld.join('\n  ')
         )
     }
 
@@ -883,6 +960,7 @@ module.exports = {
     redact,
     reportBody,
     registerViolations,
+    deliveryViolations,
     verdictHits,
     existingPacketsIn,
     advanceRulings,

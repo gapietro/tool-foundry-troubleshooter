@@ -262,6 +262,87 @@ describe('operator commentary stays in a neutral register (#157, I4)', () => {
     })
 })
 
+/**
+ * The OTHER direction of §AF2, which shipped unguarded and then failed (#176).
+ *
+ * §AF2's rule has two halves: a scorer-facing field NAMES the argument of a
+ * call, and the operator's reading of it lives in `operator_note`, which
+ * renders nowhere. Two guards enforced the second half — `registerViolations`
+ * keeps a verdict OUT of a scorer-facing field, and the delivery check keeps
+ * `operator_note` OUT of every packet. Nothing enforced the first half, and
+ * §AF2's own text is the one that calls it "not optional".
+ *
+ * v13 collapsed both halves into `operator_note` on six of the seven rows that
+ * had a hold and a reading, so section 6 rendered "No run-specific notes."
+ * directly beneath section 5's promise that a held call's argument "is named in
+ * section 6 instead". Four of that pass's five off-fixture rows are
+ * unassessable as a result, the on-fixture control among them.
+ *
+ * v12 is the worked example and the fixture: every one of its seven
+ * `operator_note` rows delivered the argument in `note` first.
+ */
+describe('a call argument does not hide in operator_note (#176)', () => {
+    const V12 = JSON.parse(fs.readFileSync(path.join(ROOT, 'benchmark', 'v12-rows.json'), 'utf8'))
+    const V13 = JSON.parse(fs.readFileSync(path.join(ROOT, 'benchmark', 'v13-rows.json'), 'utf8'))
+
+    test('the v12 manifest delivers every argument it reads, so the guard is non-breaking', () => {
+        // Also the reason `--pass v12` parity (#168) is unaffected: this guard
+        // adds no requirement v12 does not already meet as authored.
+        expect(V12.flatMap(gen.deliveryViolations)).toEqual([])
+    })
+
+    test('v12 row 06 is the worked example the rule is written from', () => {
+        const row = V12.find((r) => r.row === 6)
+        expect(row.note).toContain('incident.priority')
+        expect(row.operator_note).toContain('incident.priority')
+        expect(gen.deliveryViolations(row)).toEqual([])
+    })
+
+    test.each([6, 8, 10, 12, 14, 16])('v13 row %i withheld its argument and now fails the build', (n) => {
+        expect(gen.deliveryViolations(V13.find((r) => r.row === n)).length).toBeGreaterThan(0)
+    })
+
+    test('the exact v13 shape fails: a held row whose reading names a table its note does not', () => {
+        expect(
+            gen.deliveryViolations({
+                row: 1,
+                holds: 1,
+                note: null,
+                operator_note: 'Not rendered into any packet. The call that answered the layer-4 HOLD was ' +
+                    'schema_lookup on incident.priority, not this seed\'s fixture table x_snc_tsbench_ticket.',
+            })
+        ).toHaveLength(1)
+    })
+
+    test('delivering the argument in note clears it', () => {
+        expect(
+            gen.deliveryViolations({
+                row: 1,
+                holds: 1,
+                note: 'The call that answered the HOLD was schema_lookup on incident.priority.',
+                operator_note: 'incident.priority is an out-of-box table, not this seed\'s fixture.',
+            })
+        ).toEqual([])
+    })
+
+    test('a row that took no hold is out of scope, so instrument commentary is free', () => {
+        // v13 rows 11/17/19 are native, hold nothing, and their operator_notes
+        // discuss run plumbing (`x_snc_troubleshoot_run`, `conversation_ref`).
+        // There is no call argument to deliver and nothing to withhold.
+        for (const n of [11, 17, 19]) {
+            const row = V13.find((r) => r.row === n)
+            expect(row.holds).toBe(0)
+            expect(gen.deliveryViolations(row)).toEqual([])
+        }
+    })
+
+    test('operator_note is still the only field that never renders', () => {
+        // The guard must not be satisfiable by rendering operator_note — that
+        // would trade this defect for the one the delivery check already stops.
+        expect(gen.SCORER_FACING_FIELDS).not.toContain('operator_note')
+    })
+})
+
 describe('a row\'s terminal state and its report agree (#157)', () => {
     test('every v12 row\'s terminal matches whether its report was rejected', () => {
         // buildAll() throws on a mismatch; that it returns is the assertion.

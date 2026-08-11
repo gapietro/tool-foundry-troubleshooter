@@ -17,6 +17,51 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1104 — 2026-08-11
+
+### Fixed — the unguarded half of §AF2: a call argument could hide in `operator_note` (#176)
+
+- **`deliveryViolations` added to `benchmark/scripts/build-packets.js`**, failing the build before
+  any packet is written when a row with `holds > 0` carries an `operator_note` naming a
+  platform identifier that no scorer-facing field (`note`, `layers_swept`, `invocation`,
+  `terminal`) also names.
+- **What was unguarded.** §AF2's rule is two-sided — a scorer-facing field NAMES the argument of a
+  call, and the operator's reading of it lives in `operator_note`, which renders nowhere. Both
+  existing guards protected the *second* half (`registerViolations` keeps a reading out of a
+  scorer-facing field; the delivery check keeps `operator_note` out of every packet). Nothing
+  protected the half §AF2's own text calls **"not optional"** — that the fact arrives at all. Two
+  guards pointing the same way read as coverage and were not.
+- **How it failed.** v13 authored both halves into `operator_note` on **six of the seven rows**
+  that took a hold and carried a reading, leaving `note` null on four. Section 6 rendered
+  *"No run-specific notes."* directly beneath section 5's promise that a held call's argument
+  "is named in section 6 instead" (`build-packets.js:449`, `:620`). Four of the five off-fixture
+  rows §AJ6 asks about are unassessable as a result — and so is row 14, the **on-fixture control**
+  that would have bounded them.
+- **v12 is the worked example, not a casualty.** All seven of its `operator_note` rows delivered
+  the argument in `note` first (row 06: `note` names `schema_lookup on incident.priority`,
+  `operator_note` reads it), so the guard is **non-breaking** and the `--pass v12` byte-identical
+  parity check (#168) is unaffected. v13's own row 18 followed the convention too — this was an
+  authoring regression, not an ambiguous rule.
+- **Deliberately broad, per the posture the sibling lint already declares.** The token shape cannot
+  distinguish a call argument from any other identifier, so unrelated instrument commentary on a
+  held row reddens the build (v13 row 18, measured). No exemption list — an exemption would be a
+  second and silent way to be unguarded. Scoped to `holds > 0`, so a row that held nothing keeps
+  its `operator_note` free for run plumbing, as the native rows' notes legitimately use it.
+  Stated limit: a **delivery floor, not a proof of sufficiency**.
+- The register lint's remedy string now says to name the fact as well as move the reading, and
+  points at this check by number.
+- `benchmark/README.md` gains **"Authoring a row manifest: the fact and the reading are two
+  fields"** — the rule, v12 row 06 quoted as the worked example, and all three guards in one table.
+- Tests: `test/packetGeneratorParity.test.js` gains a `#176` block — v12 passes as authored, each
+  of v13's six withholding rows fails, the v13 shape fails synthetically, delivering the argument
+  clears it, and `holds: 0` rows stay out of scope. **33 suites, 1621 tests.**
+
+### Not changed
+
+- **§T9 governs.** No v12 or v13 value moves. `scoring-v13/` is not rebuilt — it remains the record
+  of what the scorers actually read, and the v13 manifest is frozen evidence that was not
+  backfilled to satisfy the new guard.
+
 ## 2026.08.1103 — 2026-08-11
 
 ### Added — the v13 scored pass, complete (#166)

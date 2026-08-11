@@ -147,6 +147,63 @@ walked past. Every guard's value here is prospective, not diagnostic: `blindRule
 slice the same way — so the next leak in any of those fails a build instead of waiting for someone to
 notice.
 
+## Authoring a row manifest: the fact and the reading are two fields
+
+`DECISION.md` §AF2 splits every operator observation about a run in two, and both
+halves are guarded. Get this wrong and the build refuses to write a packet.
+
+- **The fact** — what a call was, and what argument it carried — goes in a
+  **scorer-facing** field (`note`, `layers_swept`, `invocation`, `terminal`).
+  Naming it is **not optional**: it is what lets a scorer judge `layers_swept`
+  credibility at all.
+- **The reading** — what the fact *means* about the run — goes in
+  `operator_note`, which renders into no packet. Relevance is the scorer's to
+  judge, not the operator's to pre-judge.
+
+The v12 manifest is the worked example. Row 06:
+
+```jsonc
+"note":          "The call that answered the HOLD was schema_lookup on incident.priority.",
+"operator_note": "Not rendered into any packet. incident.priority is an out-of-box table
+                  unrelated to this seed's fixture, so the call that satisfied the layer-4
+                  HOLD did not touch the fixture. That is a reading of the evidence, and it
+                  is the scorer's to make."
+```
+
+The argument (`incident.priority`) appears in **both**. That is the shape: the
+reading may repeat the fact, but it may never be the only place the fact lives.
+
+| Guard | Catches | Origin |
+|---|---|---|
+| `registerViolations` (`build-packets.js`) | a **reading** that reached a scorer-facing field | #157 / §AF2 |
+| delivery check (`build-packets.js`) | `operator_note` **rendering** into a packet | #157 / §AF2 |
+| `deliveryViolations` (`build-packets.js`) | a **fact** that never left `operator_note` | #176 / §AJ5a |
+
+The third was added after v13 shipped without it. That pass authored both halves
+into `operator_note` on six of the seven rows that took a hold and carried a
+reading, leaving `note` null on four of them — so section 6 read *"No
+run-specific notes."* directly beneath section 5's promise that a held call's
+argument "is named in section 6 instead". The five off-fixture rows §AJ6 asks
+about cannot be assessed as a result, and neither can the on-fixture control
+that would have bounded them. **Two guards pointing the same way is not
+coverage**; both existing ones protected `operator_note`'s confidentiality and
+neither protected the scorer's entitlement.
+
+`deliveryViolations` scopes itself to rows with `holds > 0` — a row that held
+nothing has no held call to name, so its `operator_note` is free to discuss run
+plumbing, which is what the native rows' notes legitimately do. Within that
+scope it is **deliberately broad**: it compares platform-identifier-shaped
+tokens and cannot tell a call argument from any other identifier, so mixing
+unrelated instrument commentary into a held row's `operator_note` reddens the
+build (v13 row 18 is the measured case). That reddening **is** the signal — name
+the fact, or keep the unrelated commentary out of a held row's note. There is no
+exemption list, because an exemption would be a second and silent way to be
+unguarded.
+
+It is a **delivery floor, not a proof of sufficiency**: it establishes that the
+identifiers the operator was reading reached a scorer, not that they were the
+right ones. It catches withholding, which is the failure that actually shipped.
+
 ## The protocol
 
 Steps 1–2 were previously documented **only** inside the individual seed specs, so the one document
