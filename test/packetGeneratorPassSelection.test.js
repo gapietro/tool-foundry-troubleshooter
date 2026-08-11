@@ -321,6 +321,90 @@ describe('a full --pass build, end to end (the gate no test covered)', () => {
      * already dispatched, and dispatching required passing the gate that was in
      * force at the time. An exemption nobody can grant themselves is not one.
      */
+    /**
+     * reportBody() DROPS everything before a NO REPORT PRODUCED marker, which
+     * is only safe because the marker asserts there is no body to drop. Without
+     * this refusal a future author could put real content there and lose it
+     * with no error anywhere — a silent second way to be wrong, which is the
+     * shape build-packets.js's guards exist to prevent. Found reviewing #175's
+     * own change before merge.
+     */
+    test('a no-report file carrying prose BEFORE its marker is refused, not silently truncated', () => {
+        const rows = JSON.parse(fs.readFileSync(rowsFile, 'utf8'))
+        // Any row whose terminal already reads `failed` — the marker only
+        // applies to a run that ended without an accepted report.
+        const failed = rows.find((r) => /failed/.test(r.terminal))
+        expect(failed).toBeDefined()
+
+        const n = String(failed.row).padStart(2, '0')
+        const target = path.join(reportsDir, 'row-' + n + '.md')
+        const saved = fs.readFileSync(target, 'utf8')
+        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pass-noreport-'))
+        try {
+            fs.writeFileSync(
+                target,
+                'This prose would be discarded without a trace.\n\n---\nNO REPORT PRODUCED\nharness terminal error\n'
+            )
+            expect(() => gen.main(['--pass', PASS, '--out', tmp])).toThrow(/content BEFORE its no-report marker/)
+            expect(fs.readdirSync(tmp)).toEqual([])
+
+            // The marker alone, with nothing in front of it, is the legal shape.
+            fs.writeFileSync(target, '---\nNO REPORT PRODUCED\nharness terminal error\n')
+            const quiet = jest.spyOn(console, 'log').mockImplementation(() => {})
+            try {
+                gen.main(['--pass', PASS, '--out', tmp])
+            } finally {
+                quiet.mockRestore()
+            }
+            const built = fs.readFileSync(path.join(tmp, fs.readdirSync(tmp).find((f) => f.startsWith('row-' + n))), 'utf8')
+            expect(built).toMatch(/no report at all/i)
+            expect(built).toMatch(/harness terminal error/)
+        } finally {
+            fs.writeFileSync(target, saved)
+            fs.rmSync(tmp, { recursive: true, force: true })
+        }
+    })
+
+    /**
+     * A scorer-facing field must be a STRING. v14 rows 05-08 carried
+     * `target_execution: null` for seed 05, and four packets shipped
+     * "**Execution under diagnosis:** `null`" — a code-formatted identifier
+     * where the intended message was "there is none". Found by review of #175.
+     * The boundary is dispatch state, per §AM2, so this is the still-authorable
+     * half; the dispatched half is covered by the v14 build reporting instead.
+     */
+    test('a still-authorable pass REFUSES a non-string target_execution', () => {
+        const rows = JSON.parse(fs.readFileSync(rowsFile, 'utf8'))
+        const saved = JSON.stringify(rows, null, 2)
+        rows[0].target_execution = null
+        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pass-target-'))
+        try {
+            fs.writeFileSync(rowsFile, JSON.stringify(rows, null, 2))
+            expect(gen.existingPacketsIn(gen.resolvePaths(PASS).out)).toEqual([])
+            expect(() => gen.main(['--pass', PASS, '--out', tmp])).toThrow(/non-string `target_execution`/)
+            expect(fs.readdirSync(tmp)).toEqual([])
+        } finally {
+            fs.writeFileSync(rowsFile, saved)
+            fs.rmSync(tmp, { recursive: true, force: true })
+        }
+    })
+
+    test('a dispatched pass REPORTS a non-string target_execution instead of gating', () => {
+        // v14 is dispatched and rows 05-08 carry null by construction. It must
+        // build — a gate whose only remedy is forbidden by §T9 is a permanent
+        // red, not a gate.
+        const warned = []
+        const quiet = jest.spyOn(console, 'warn').mockImplementation((m) => warned.push(String(m)))
+        try {
+            expect(gen.buildAll('v14')).toHaveLength(20)
+        } finally {
+            quiet.mockRestore()
+        }
+        const report = warned.join('\n')
+        expect(report).toMatch(/target_execution/)
+        expect(report).toMatch(/dispatched/i)
+    })
+
     test('a still-authorable pass GATES on a row that names no discharging call', () => {
         const rows = JSON.parse(fs.readFileSync(rowsFile, 'utf8'))
         const saved = JSON.stringify(rows, null, 2)

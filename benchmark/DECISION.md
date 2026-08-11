@@ -6804,7 +6804,10 @@ in its opening paragraph.** The refuting fact was in front of the scorer and the
 it.
 
 Two neighbours show the same shape: **row 11** filed a co-primary "the table is genuinely empty
-(0 rows)" against a table holding **22**, and proposed "seed the table" — the exact target seed 06's
+(0 rows)" against a table holding **21 at the time its target execution ran** (19 at pre-flight, 22
+by the time the operator ran the COUNT aggregate — `v14-rows.json` records the later figure because
+that is when it was measured; the scorecard §5 reconciles the three), and proposed "seed the table"
+— the exact target seed 06's
 spec scores 0; it scored 5/6 and cleared the gate. **Row 13** listed five `u_*` columns that do not
 exist while getting the field count right.
 
@@ -6897,6 +6900,18 @@ was unnecessary.**
    a run that had already finished, and `PATCH sn_aia_execution_plan.state` turned out to be
    cosmetic. **Row 01 was proposed for voiding on that diagnosis and the proposal was withdrawn on
    measurement.**
+
+4. **A dispatched-instrument defect, found by review AFTER scoring and disclosed rather than
+   repaired.** The four seed-05 packets shipped `**Execution under diagnosis:** `null`` — the
+   manifest sets `target_execution: null` for a seed that has no execution by design, and the
+   renderer's parenthesised-description branch (v12 wrote `(none — no execution plan was created)`)
+   fires only on a string starting `(`. Nothing validated the field. **The four rows are not
+   re-scored**: the packets were dispatched, the manifest is frozen (§T9), and editing either
+   destroys the record of what the scorers read. Reach is bounded — each packet also carries seed
+   05's spec saying in its own words that the seed produces no execution plan, and all four returned
+   `ambiguous = no` — but it is an instrument defect and is recorded as one. **Fixed forward through
+   §AM2's derived boundary**, not a new mechanism: a non-string `target_execution` refuses on a pass
+   that can still comply and reports on a dispatched one, both halves pinned by tests. Scorecard §6.
 
 **Three operational corrections worth more than the pass:** terminal state comes from
 `servicenow_aia_trace`, **not** the plan row (v13 §3.3 / §AC7's "or the plan row" is wrong — they

@@ -228,8 +228,14 @@ Two neighbouring rows show the same shape:
 
 - **Row 11 (native, seed 06)** files a co-primary RC-2 asserting the table is "genuinely empty
   (0 rows, confirmed by unfiltered count)" and proposes **"seed the table"** — the exact fix target
-  seed 06's spec says scores 0. `x_snc_tsbench_ticket` held **22 rows** at that moment (COUNT
-  aggregate). Row 11 scored 5/6 and cleared the gate.
+  seed 06's spec says scores 0. **The table was never empty**: it held **19 rows at pre-flight**,
+  **21 when row 11's target execution ran** (seed 07's two tickets were inserted at 19:35, the
+  fixture ran at 19:38), and **22 when the operator ran the COUNT aggregate** at ~20:31, after seed
+  05's ticket was inserted at 20:06. `v14-rows.json` row 11's `operator_note` records the later
+  figure, 22, because that is when it was measured; **21 is the count contemporaneous with the run**.
+  Both refute a claim of 0, and the §AO2 conclusion does not turn on which is used — but the
+  distinction is stated because the finding cites a measured count. Row 11 scored 5/6 and cleared
+  the gate.
 - **Row 13 (native, seed 07)** lists the table's 8 columns as including `u_caller`, `u_description`,
   `u_impact`, `u_resolution`, `u_ticket_number`. None exist. It got the field *count* right.
 
@@ -265,6 +271,30 @@ and on this pass one did, at full marks.
 - The out-of-sample and strongly-out-of-sample figures agree exactly, so seed 06's weaker provenance
   did not carry the result.
 - The anchor arm is clean, so nothing in the pass points at platform or model drift as the driver.
+
+**A defect in the dispatched instrument, found by review after scoring and disclosed rather than
+repaired.** The four seed-05 packets (rows 05–08) shipped section 5 reading:
+
+```
+**Execution under diagnosis:** `null`
+```
+
+`v14-rows.json` sets `target_execution: null` for seed 05, which has no execution **by design**, and
+the renderer's parenthesised-description branch — the one v12 used, writing
+`(none — no execution plan was created)` — only fires on a string starting `(`. Nothing validated the
+field, so `null` fell through to the backtick branch and four scorers read a code-formatted
+identifier where the intended message was "there is none".
+
+**Not repaired, and deliberately so:** those packets were dispatched and scored, `v14-rows.json` is
+frozen evidence (§T9), and editing either would destroy the record of what the scorers actually
+read. **The four rows are not re-scored.** Its practical reach is bounded — each of those packets
+also carries seed 05's full specification, which states in its own words that the seed produces no
+execution plan, and all four rows returned `ambiguous = no` — but a scorer-facing field rendering a
+JavaScript `null` is an instrument defect and is recorded as one.
+
+**Fixed for every future pass**, through §AM2's derived boundary rather than a new mechanism: a
+non-string `target_execution` now **refuses** the build on a pass that can still comply and
+**reports** on a dispatched one. Both halves are pinned by tests.
 
 **Does not establish:**
 

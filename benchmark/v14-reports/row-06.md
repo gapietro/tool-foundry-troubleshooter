@@ -1,6 +1,3 @@
-The reasoning loop failed before any report body was produced. There is no
-model-authored report for this run.
-
 ---
 NO REPORT PRODUCED
 LLM reasoning failed: response could not be parsed as JSON after one retry: unknown action: agent_config. Retry with mode: "collect" for the Evidence Bundle floor (no LLM required), or check /status for GenAI stack health.

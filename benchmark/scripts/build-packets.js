@@ -791,8 +791,13 @@ const REJECTION_SPLIT = /\n+-{3,}\nVALIDATOR REJECTION\n/
  * before is treated differently now. §AK left the adjacent case (`genai_down`
  * with no report body) explicitly undecided; this does not decide it, it only
  * gives the artifact a truthful shape.
+ *
+ * Unlike REJECTION_SPLIT this anchors at start-of-string as well as after a
+ * newline run: a rejection ALWAYS has a body in front of it, but a no-report
+ * file has nothing in front of it by definition, so the marker is the first
+ * thing in the file and a leading `\n+` would never match.
  */
-const NO_REPORT_SPLIT = /\n+-{3,}\nNO REPORT PRODUCED\n/
+const NO_REPORT_SPLIT = /(?:^|\n+)-{3,}\nNO REPORT PRODUCED\n/
 
 /**
  * The report body. Custom runs store a structured `fix_report`; native runs
@@ -821,6 +826,12 @@ function reportBody(row, raw) {
     }
 
     if (noReportSplit) {
+        // Everything before the marker is DROPPED, and that is only safe because
+        // the marker asserts there is no report body to drop. buildAll() refuses
+        // to write a packet whose no-report file carries prose before the marker,
+        // so this branch cannot silently swallow model output -- the alternative
+        // was a discard nobody would notice, which is the shape this file's
+        // guards exist to prevent.
         out.push('**Harness terminal error, verbatim:**')
         out.push('')
         out.push('```')
@@ -1076,6 +1087,15 @@ function buildAll(pass) {
                 name + ': the report carries BOTH a validator rejection and a no-report marker; ' +
                     'a run either produced a body that was rejected or produced none at all'
             )
+        } else if (hasNoReport && raw.slice(0, raw.match(NO_REPORT_SPLIT).index).trim()) {
+            // reportBody() drops everything before the marker. That is correct
+            // ONLY because the marker means there was no body -- so anything
+            // written there would be discarded without a trace. Refuse instead.
+            mismatched.push(
+                name + ': the report carries content BEFORE its no-report marker, which reportBody() ' +
+                    'would discard silently. A no-report file carries the marker and the harness error, ' +
+                    'nothing else; if the run DID produce a body, it is a validator rejection, not a no-report'
+            )
         } else if (/failed/.test(row.terminal) !== (hasRejection || hasNoReport)) {
             mismatched.push(
                 name + ': terminal is "' + row.terminal + '" but the report ' +
@@ -1159,6 +1179,34 @@ function buildAll(pass) {
                 'argument in `note`, so section 5 promises the scorer an argument that section 6 ' +
                 'does not carry. Name the call and its argument in `note`. Deleting `operator_note` ' +
                 'is NOT the remedy — this check does not read it:\n  ' + list
+    )
+
+    // A scorer-facing field must be a STRING, or it renders as whatever
+    // String() makes of it. v14 rows 05-08 set `target_execution: null` for
+    // seed 05, which has no execution by design, and section 5 shipped
+    // "**Execution under diagnosis:** `null`" to four scorers — a code-formatted
+    // identifier where the intended message was "there is none". v12 got this
+    // right by writing the parenthesised description the `/^\(/` branch exists
+    // to render; nothing enforced it, so the next manifest simply did not.
+    //
+    // Carried through gateOrReport for §AM2's reason, not as a new mechanism:
+    // the boundary is DERIVED from dispatch state. v14 is dispatched, its
+    // manifest is frozen evidence (§T9), and this reports there; a pass still
+    // being authored can comply, so it refuses.
+    const nonString = built
+        .map((p) => p.row)
+        .filter((r) => typeof r.target_execution !== 'string')
+        .map((r) => 'row ' + r.row + ': `target_execution` is ' + JSON.stringify(r.target_execution) +
+            ', which renders into section 5 as the literal string')
+    gateOrReport(
+        nonString,
+        dispatched,
+        paths.pass,
+        (n, list) =>
+            'REFUSING TO WRITE ANY PACKET — ' + n + ' row(s) carry a non-string `target_execution`, ' +
+                'which section 5 renders verbatim into a scorer-facing field. A seed with no ' +
+                'execution takes a parenthesised description, e.g. ' +
+                '"(none — no execution plan was created)", NOT null:\n  ' + list
     )
 
     // The rubric must be identical across all twenty. Checked on the built
