@@ -156,26 +156,26 @@
     "rep": 2,
     "terminal": "completed",
     "wall_clock": "106s",
-    "tool_calls": null,
+    "tool_calls": 7,
     "distinct_tools": [
       "agent_trace",
       "agent_config",
       "genai_log",
       "log_analysis",
       "query_table",
-      "read_artifact"
+      "read_artifact (x2)"
     ],
     "layers_swept": "7/7 (L1, L2, L3, L4, L5, L6, L7)",
     "layers_available": "7/7",
     "holds": 0,
     "tool_limit": 25,
     "target_execution": null,
-    "run_id": null,
-    "run_number": null,
+    "run_id": "f4056bc72b62431017a6ffbeee91bfac",
+    "run_number": "TR1000301",
     "triggering_record": "25e32b4b2b228310f243fed2ce91bf22",
     "invocation": "servicenow_aia_execute on agent \"Agent Doctor\" \u2014 v13 \u00a73.2's verbatim seed-05 objective; waitForCompletion=false; session 85f423c72b62431017a6ffbeee91bf74 -> plan ddf4a3c72b62431017a6ffbeee91bfb0",
     "note": "The call that answered the seed-05 question was agent_config on agent Seed 05 Ticket Acknowledger, returning triggers section active=\"0\" for trigger bfb77d6c64884500a80203ee029436ee.",
-    "operator_note": "LLM P95 13,741ms, tool P95 180ms. Named the inactive trigger and proposed activation, Ruling 1's stated condition, same as row 05. tool_calls and run_id/run_number PENDING \u2014 to be filled from x_snc_troubleshoot_audit on conversation 91f4ab072b62431017a6ffbeee91bf5d before packet build."
+    "operator_note": "LLM P95 13,741ms, tool P95 180ms. Named the inactive trigger and proposed activation, Ruling 1's stated condition, same as row 05. 14 audit rows / 7 tool calls. Exactly ONE x_snc_troubleshoot_run record for this conversation, unlike row 05 which minted two (TR1000298 empty, TR1000299 carrying the trail) \u2014 so the double-anchor is intermittent, not systematic."
   },
   {
     "row": 8,
