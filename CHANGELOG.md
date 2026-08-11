@@ -17,6 +17,53 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1010 — 2026-08-10
+
+### Added
+
+- **`benchmark/raw-evidence-v13-determinacy-check.md`** — the v13 pass's measurement record, stages 1
+  and 2. Pre-flight (12 of 12, probed live), the §AI7 item-10 smoke gate (**both arms PASS**), all
+  eight execution-producing fixtures, seed 05's verified absence, and a stage-3 runbook.
+- **Stage 3 is deliberately not started.** §AI7 fixes sequencing as *"strictly sequential, one day,
+  one deployed version"*; stage 2 closed with the UTC date already rolled over. Beginning twenty rows
+  then would have split the pass across a day boundary mid-protocol — a pass that violates its own
+  pre-registration on first execution is not the pass §AI registered. §3 records the fixed row order,
+  both arms' proven invocation forms, four capture rules and three prohibitions instead.
+
+### Verified
+
+- **Smoke gate, both arms.** Native `51dadb72…` 280s / 15 tool calls / **7-of-7 tool types**; custom
+  `TR1000266` 17s. Both name `context_processing_script` **line 42**, the known answer.
+- **Seed 01's defect, end to end and sharper than the seed doc states.** `set_ticket_priority`
+  returned **`OK`** in 250ms; the ticket afterwards reads `priority` empty **and `sys_mod_count: 0`**.
+  The write never happened at all while the tool reported success — a diagnosis stopping at "the
+  priority is wrong" has not reached the defect.
+- **Seed 05's absence, proved with a positive control** rather than assumed. An empty narrow-window
+  query is exactly what this instance's staleness trap produces, so the silence query was re-run wide
+  enough to reach past the last real execution: it returned **all eight** fixture plans and nothing at
+  or after the insert. Both gates confirmed — m2m **on**, trigger config **inactive**.
+
+### Fixed
+
+- **Two claims made during the pass and withdrawn in it, recorded rather than dropped.** The
+  build-under-test version (§AI7 item 1 demanded a version string three paragraphs after §AI1 forbids
+  trusting one), and **seed 01's supposed flakiness** — rep 2 was never stalled, it was a 22-second
+  model turn read through a shorter polling window. The withdrawal carries the corrected
+  discriminator: `TOOL CALLS (0)` alone means nothing, since tool calls are recorded on completion, so
+  any run mid-turn shows zero; a real stall additionally carries an agent message whose body is an
+  input schema.
+
+### Note
+
+- **Three instance behaviours banked for every future operator.** "Access denied" here means a **bad
+  field name** — hit twice (`sn_aia_message` keys on `execution_plan`, `sn_aia_trigger_configuration`
+  on `target_table`), both on tables the same session reads fine; the discriminator is a bare
+  `limit: 1` query with no `query` and no `fields`. The seed agents are **invoked directly, not
+  trigger-driven** — only one trigger exists on the bench table and it is seed 05's, inactive by
+  design. And `POST /analyze` takes **`execution`**, not `execution_id`.
+
+---
+
 ## 2026.08.1009 — 2026-08-10
 
 ### Added
