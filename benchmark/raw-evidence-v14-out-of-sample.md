@@ -392,3 +392,105 @@ identical terms to item 11 (§1.11), and both must be discharged before the firs
 scorer.**
 
 ---
+
+## 2. The eight seeded target executions
+
+*Fixtures, produced 2026-08-11 before any diagnostic run. Both arms diagnose the same seeded
+execution for a given seed/rep, per §AN7. Seed 05 produces no execution by design — its seeded
+defect is the inactive trigger, so the absence IS the fixture (§AI3, carried).*
+
+### 2.1 Fixture manifest
+
+| seed | rep | execution plan sys_id | invocation | state |
+|---|---|---|---|---|
+| 02 | 1 | `c5fcd3c72b6e4310f243fed2ce91bf26` | `Seed 02 Request Router`, badge reader, message only | **completed 25s** |
+| 02 | 2 | `ba4dd38b2b6e4310f243fed2ce91bf62` | `Seed 02 Request Router`, second monitor, message only | **completed 21s** |
+| 06 | 1 | `281d57c72bea031017a6ffbeee91bfc8` | `Seed 06 Hardware Reporter`, hardware category count | **completed 16s** |
+| 06 | 2 | `ff6d1fcb2b6e4310f243fed2ce91bf26` | `Seed 06 Hardware Reporter`, hardware count for report | **completed 16s** |
+| 07 | 1 | `b52d5f0b2bea031017a6ffbeee91bfec` | `Seed 07 Ticket Classifier` on ticket `e6dcdf07…` | **completed 18s** |
+| 07 | 2 | `7fad9f4f2b6e4310f243fed2ce91bf20` | `Seed 07 Ticket Classifier` on ticket `36dc1347…` | **completed 18s** |
+| 08 | 1 | `9becd7472bea031017a6ffbeee91bf12` | `Seed 08 Batch Watcher`, BR-4417 | *(see 2.4)* |
+| 08 | 2 | `a6cdd7432b2e031017a6ffbeee91bf3b` | `Seed 08 Batch Watcher`, BR-9052 | *(see 2.4)* |
+| 05 | 1, 2 | **none, by design** | — | absence is the fixture |
+
+### 2.2 Bench ticket fixtures — seed 07 only
+
+Two inserted, one per rep, `priority` empty at insert, **newly worded** so no seeded execution in
+this pass shares a `short_description` with one a scorer may have seen (v13 §2.2's rule, carried):
+
+| rep | ticket sys_id | short_description |
+|---|---|---|
+| 1 | `e6dcdf072bea031017a6ffbeee91bfe4` | Conference bridge drops the first ninety seconds of every scheduled call in the east wing |
+| 2 | `36dc13472bea031017a6ffbeee91bf75` | Loading dock scanner misreads pallet barcodes whenever the overhead door is open |
+
+Seeds 02, 06 and 08 need no row: 02 and 08 consult no record, and seed 06's table population is
+pre-existing and **load-bearing for its decoy** (the table is not empty — that is what makes "the
+table has no data" the tempting wrong answer).
+
+### 2.3 Seed 06's qualification bar, met on both reps
+
+The bar is *completes without error AND reports zero hardware tickets while the table demonstrably
+holds rows.* Both reps returned `{"ok":true,"category":"hardware","count":0,"tickets":[]}` with tool
+status **`success`**, one `count_by_category` call each, plan state `completed`:
+
+| rep | plan | tool call | response |
+|---|---|---|---|
+| 1 | `281d57c7…` | `count_by_category` 966ms, **OK** | `count: 0`, status `success` |
+| 2 | `ff6d1fcb…` | `count_by_category` 857ms, **OK** | `count: 0`, status `success` |
+
+`x_snc_tsbench_ticket` held 19 rows at pre-flight (§1.5) and gained 2 more here, so the "table is
+empty" reading is refutable by a single unfiltered query on both reps. **Neither run errored**, so
+neither has degraded into the layer-3 defect the bar excludes.
+
+### 2.4 Seed 08's two runs were fired concurrently, and why that is safe here
+
+Both were submitted with `waitForCompletion=false` and overlapped (rep 1 created 19:36:16, rep 2
+19:40:02). §O1's concurrency prohibition is about **the two diagnostic arms**, which call the same
+Agent Doctor script tools and write to the same `x_snc_troubleshoot_audit` table — concurrent arms
+cross-contaminate audit attribution. It does not reach here: `check_processing_status` is a **pure
+constant function that consults no record and writes nothing** (the seed spec's own Safety section),
+the two plans are distinct rows, and no fixture state is shared. Serialising them would have cost
+~7 minutes against the one-day clause for no measurable gain.
+
+`waitForCompletion=false` returns a Session ID and **no** plan sys_id (§AC7 / v13 §1), so both plans
+were recovered by querying `sn_aia_execution_plan` on `agent=fad5a34c…` ordered by creation — keyed
+on the agent, not on a time window, so the two concurrent runs stay distinguishable.
+
+### 2.5 A seed-07 spec defect found while checking its bar — the field does not exist, and the table is readable
+
+`seeds/seed-07-tool-output-bloat.md`'s qualification bar reads *"its `read_ticket_context` call must
+record a `response_length` above 20,000 on `sn_aia_tools_execution`"*, and its Note states the table
+is **"not readable through the foundry MCP broker as admin — 'Access denied: Insufficient rights',
+verified 2026-08-11 both with and without a `fields` filter, so it is a genuine ACL denial and not
+the bad-field-name confusion that mimics one."**
+
+**Both halves of that are wrong, measured here:**
+
+1. **The table reads fine.** A bare `limit: 1` with no `query` and no `fields` returned row
+   `d56d970f2bea031017a6ffbeee91bf2f`. That is the discriminator v13 §1 and the seed-01 note both
+   name, and it passes.
+2. **`response_length` is not a column on `sn_aia_tools_execution`.** Full `sys_dictionary` read —
+   20 fields, and the response is carried in **`response` (json)**. There is no length column at
+   all. The nearest neighbours are `execution_time_ms` and `execution_time_sec`.
+
+So this is the bad-field trap after all, for the **third** recorded time on this instance (v13 §1.7
+on `sn_aia_message`, v13 §2.1 on `sn_aia_trigger_configuration.table_name`, now here). What makes
+this instance different is that the spec **claims to have applied the discriminator and cleared it**.
+The claim is checkable and does not hold: "without a `fields` filter" still fails if the nonexistent
+field stays in the **`query`** — `response_length>20000` with no `fields` is denied exactly as
+`fields=['response_length']` is. The discriminating check is a bare query with *neither*, which was
+evidently never run.
+
+**What this does and does not change.** It does **not** put seed 07's rows at risk and it is not a
+re-qualification: `read_ticket_context` **generates its oversized payload in-script** and consults no
+record (the spec's own Safety section), so its return size is **constant by construction** across
+calls — it does not vary by ticket, by rep, or by day. The 58,436-char measurement taken at
+qualification therefore carries to both reps here. The bar's *stated verification route* — observe
+the harness surface the `tool_output_bloat` flag — is also unchanged and will be exercised by the
+seed-07 diagnostic runs themselves.
+
+What it changes is the **runbook**: the note as written tells the next operator that a readable table
+is ACL-denied, which is the same wrong-diagnosis shape §1.9b caught the native arm making at the
+smoke gate, and one this project has now written into its own documentation. Filed separately rather
+than fixed in this pass — the seed specs are scorer-facing inputs and §T9 governs.
+
