@@ -12,12 +12,15 @@
 > differs. See §1.1 for the ruling and why the app was deliberately **not** rebuilt to make the log
 > literally empty.
 >
-> **Consequence for §AN1a, and it narrows it.** §AN1a states this pass is not single-variable against
-> v13 because the platform moved (Zurich P10 Hotfix 3 → **4a**). It is now established that the
-> *harness code did not move at all*: v13 and v14 execute the same `5fb7648`. The uncontrolled movers
-> across the comparison are therefore the **platform patch** and the **distribution** — not the
-> product code. §AN8's first bullet stands unamended; this note narrows what it ranges over, and does
-> not soften it.
+> **Consequence for §AN1a, and it narrows it — by ONE variable, not to two.** §AN1a states this pass
+> is not single-variable against v13 because the platform moved (Zurich P10 Hotfix 3 → **4a**). It is
+> now established that the *harness code did not move at all*: v13 and v14 execute the same `5fb7648`.
+> **What is excluded is the product code. What remains is at least three things:** the **platform
+> patch**, the **distribution**, and **fixture state** — §1.3 records seed 05's m2m gate at
+> `sys_mod_count` 4 against qualification's 3, written by something this file cannot attribute. The
+> gate's *value* is correct so no row is at risk, but a changed fixture is a mover and enumerating
+> only two would be the same over-claim this note exists to correct. §AN8's first bullet stands
+> unamended; this narrows what it ranges over and does not soften it.
 
 Pre-registered at `DECISION.md` §AN, merged in `0c4f36c` before any run of this pass fired —
 checkable in `git log -p benchmark/DECISION.md`, as §AN7 requires. §AG5's warning is met: §AN is a
@@ -41,10 +44,13 @@ and all twenty packets have been scored and returned. The verdict section is not
 >
 > **Verified on one plan read both ways, rather than inferred from the arithmetic.** Plan
 > `e7a653c32b6a031017a6ffbeee91bf88`: Table API `sys_created_on` = **`19:08:58`**;
-> `servicenow_aia_trace` on the same sys_id reports `Started: **15:08:59**` — and every message
-> timestamp maps the same way (trace `15:09:13`/`15:09:23` ↔ table `19:09:13`/`19:09:23`). Same
-> record, same fields, two access paths, a clean 4-hour offset. **The table does not have a clock;
-> the reader does.**
+> `servicenow_aia_trace` on the same sys_id reports `Started:` **`15:08:59`**. That pair is
+> **3h59m59s**, not a round four hours — the two paths read different fields (`sys_created_on` vs the
+> trace's own start reading) and disagree by a second. The **message** timestamps are the exact pair:
+> trace `15:09:13`/`15:09:23` ↔ table `19:09:13`/`19:09:23`, **4h00m00s**. The offset is 4 hours; the
+> headline pair is off by one second and the difference is stated rather than rounded away, because a
+> section whose whole point is *read it, do not infer it* cannot round its own reading.
+> **The table does not have a clock; the reader does.**
 >
 > **Rule for this file:** every timestamp below is UTC unless it is explicitly labelled as coming from
 > `servicenow_aia_trace`. Convert before comparing across sources, or compare only within one source —
@@ -55,9 +61,20 @@ and all twenty packets have been scored and returned. The verdict section is not
 ## 1. Pre-flight (§AN7) — fourteen items
 
 §AN7 items 1–9 are read-only probes, item 10 is the smoke gate, and items 11–14 are build/infrastructure
-gates. Items 12, 13 and 14 were satisfied by infrastructure merged in `0c4f36c` alongside the
-pre-registration; **item 11 is by design NOT satisfiable before run 1** and is discharged at
-packet-build time (§1.11).
+gates. **Items 11 and 14 are by design NOT satisfiable before run 1** — both need `v14-rows.json` and
+`v14-reports/`, which the pass itself produces — and are discharged at packet-build time (§1.11).
+
+**Provenance of the infrastructure, stated per item rather than in one sweep.** An earlier draft of
+this line said items 12–14 "were satisfied by infrastructure merged in `0c4f36c`". That is wrong for
+item 14 and the file's own discipline forbids it — *the commit is load-bearing, not the version
+token*, so a discharge attributed to the wrong commit is a claim a later reader will follow and find
+unsupported:
+
+| item | coverage | landed in |
+|---|---|---|
+| 12 | the three new seed specs enter the blind-rule scan | `0c4f36c` (specs + `scorerPacketBlindRule.test.js`) |
+| 13 | the v14 advance-rulings channel renders per seed | `0c4f36c` (`packetGeneratorPassSelection.test.js`, +74 lines) |
+| 14 | the full `--pass` end-to-end build | **`b36a09d`** (#166, built for v13) — **not** `0c4f36c` |
 
 Every item below was probed live against **gpinst01** (`Zurich Patch 10 Hotfix 4a`, connected as
 `admin`) on 2026-08-11. Nothing here is inferred from a prior pass.
@@ -80,8 +97,17 @@ documentation claim **measured rather than asserted**:
 | `_withCanonicalLayersSwept` present in installed `PaFixReport` | **yes** → 1 record |
 
 The last two rows together are the actual proof: the Aug-10 **behavioural** fix (`5fb7648`, #151/#155)
-**is** installed, and only the Aug-11 **comment** commit is not. Installed `src/` is therefore exactly
-`src/@5fb7648`.
+**is** installed, and only the Aug-11 **comment** commit is not.
+
+> **What these probes establish, stated at their real width.** Three marker greps across **two** of
+> the eighteen installed script includes (`PaAgentLoop`, `PaFixReport`) bracket the delta: they place
+> the installed code at or after `5fb7648` and strictly before `41c0ce6`. Since `41c0ce6` is the only
+> `src/` commit in that interval, the installed code **corresponds to** `src/@5fb7648` — but the
+> probes cannot exclude divergence in an artifact they did not read (`PaToolRegistry`,
+> `PaAuditLogger`, the Fluent-side records), and §1.1a declines the rebuild that would make the check
+> literal. **This is the one claim in the file that most needs its narrowest wording**, so: the delta
+> is bracketed, not exhaustively verified, and nothing downstream should be read as depending on more
+> than that.
 
 > **The timestamp trap re-fired here and is worth recording again.** Every `sys_script_include` row in
 > scope `13043037d3da4293904504ef30589334` reads `sys_updated_on` of **2026-08-02 or earlier**,
@@ -186,12 +212,24 @@ whose `short_description` values names the seed-05 qualification. The §O5-shape
 Name-for-name identical: `agent_trace`, `agent_config`, `schema_lookup`, `query_table`, `genai_log`,
 `log_analysis`, `read_artifact`. The two paths agree.
 
-> **This item is discharged with a stated limitation.** The custom-arm figure was read from the
-> **installed source** (established in §1.1 to equal `src/@5fb7648`), not from an executed
-> `PaToolRegistry` call. §AN7 item 8 asks for two *independent* paths and the independence is real —
-> the m2m rows and the registry are separate artefacts that could disagree — but one path is static.
-> **The live registry read is discharged by the custom arm's smoke run (§1.9)**, which exercises
-> `PaToolRegistry` for real. Stated here rather than ticked clean.
+> **This item is NOT fully discharged, and the earlier draft's claim that it was is withdrawn.** The
+> custom-arm figure was read from the **installed source** (bracketed in §1.1 to `src/@5fb7648`), not
+> from an executed `PaToolRegistry` enumeration. §AN7 item 8 asks for two *independent* paths and the
+> independence is real — the m2m rows and the registry are separate artefacts that could disagree —
+> but **one path is static and remains so.**
+>
+> An earlier draft said *"the live registry read is discharged by the custom arm's smoke run
+> (§1.9)"*. **It is not.** §1.9 records that run at **2 tool calls** (`agent_trace`, `schema_lookup`);
+> dispatching two tools through the registry proves the registry *resolves and dispatches*, which is
+> worth having, but it enumerates nothing and yields no count. The nearest live corroboration of the
+> **seven** is the HOLD text at §1.9a — *"layer(s) 2, 3, 4, 5, 6, 7 declared NOT_SWEPT"* plus the
+> ranked layer 4 — and that is the **layer** map, not the tool registry, so it is not the same
+> operand either.
+>
+> **Recorded as a standing limitation of this pass:** item 8's custom path is a source read.
+> Discharging it live needs an enumeration the smoke protocol does not perform. Written down rather
+> than closed by assertion — an item declared satisfied on a check that was not run is the #169
+> failure this file is elsewhere careful about (§1.5).
 
 ### 1.8 Item 9 — the budget knobs, read fresh
 
@@ -222,8 +260,10 @@ attribution — §O1's hazard, and the reason §AN7's protocol says strictly seq
 | custom | run `0f769f432b6a031017a6ffbeee91bff0` (**`TR1000292`**) | `complete`, 19:08:20 → 19:08:32 = **12s**, `fix_report validated` | **PASS** — `failure_summary`: *"an InternalError in the `context_processing_script` at line 42"*; `root_causes[0].component` = `sn_aia_agent.601672d32b1a83d0f243fed2ce91bf3e.context_processing_script`, layer 1 |
 | native | plan `e7a653c32b6a031017a6ffbeee91bf88`, conversation `6aa6df832b6a031017a6ffbeee91bf15`, session `92a69f832b6a031017a6ffbeee91bfbd` | `completed`, 19:08:58 → 19:12:10 = **192s**, 17 tasks, 8 tool calls | **PASS** — **RC-2**, *"InterpretError in `context_processing_script` at Line 42"*, component `sn_aia_agent[601672d32b1a83d0f243fed2ce91bf3e].context_processing_script`, confidence **CONFIRMED** |
 
-**Both arms pass. The pre-flight is complete and the pass may fire** (item 11 discharged at packet
-build, §1.11).
+**Both arms pass. Every item that CAN be discharged before run 1 is discharged, and the pass may
+fire** — items **11 and 14** are deferred to packet build (§1.11) and item **8**'s custom path
+remains a source read (§1.7). Stated as three open threads rather than as "12 of 12", because the
+count is what an earlier draft got wrong in both directions.
 
 Native's report message is `7157530b2b6a031017a6ffbeee91bfa5` — `role=agent` with an **empty `type`**,
 created 19:11:52, after the final tool call. The ten `type=conversation` rows are ReAct chatter, not
@@ -272,6 +312,13 @@ Two consequences, and they point in opposite directions:
   carries no rubric weight. Recorded here, unscored, and **not** carried into any tally (§AN6 seals
   every tally until all twenty packets are returned).
 
+**The fixture itself is now degraded, and that is filed rather than absorbed — #185.** §AN7 item 10
+requires this gate to pass on both arms before **every** scored pass, so a permanently unsweepable
+layer 2 is not a one-pass curiosity: every future pass re-runs a known-answer gate that reliably
+presents the shape which invited this wrong diagnosis. The gate still discharges its stated
+criterion (line 42, both arms), which is why v14 proceeds — but half of what it now demonstrates is
+fixture rot rather than harness behaviour, and a gate cannot teach that quietly.
+
 ### 1.10 One finding against a closed ruling — filed, not folded in
 
 The custom run's audit rows (`x_snc_troubleshoot_audit`, `run=0f769f432b6a031017a6ffbeee91bff0`) are
@@ -291,15 +338,24 @@ citation: a reader who follows that sentence to the column finds it blank. Filed
 correction against §AL, **not** a reopening of #173, and deliberately not fixed inside this pass —
 `src/` is frozen for the duration (§1.1a).
 
-### 1.11 Item 11 — `scoring-v14/` in `PACKET_SETS` (deferred BY DESIGN, not outstanding)
+### 1.11 Items 11 and 14 — deferred BY DESIGN to packet-build time, not outstanding
 
-§AN7 item 11 requires the blind-rule guard be told about `scoring-v14/` **"as part of building the
-packets, not after"**. It is **not satisfiable before run 1**, and that is a property of the guard
-rather than an oversight: `PACKET_SETS` entries carry a real `packets:` count and
+**Item 11.** §AN7 requires the blind-rule guard be told about `scoring-v14/` **"as part of building
+the packets, not after"**. It is **not satisfiable before run 1**, and that is a property of the
+guard rather than an oversight: `PACKET_SETS` entries carry a real `packets:` count and
 `scorerPacketBlindRule.test.js`'s `packetFiles()` reads the directory, so declaring a set whose
-directory does not yet exist fails the suite. The entry, the hardcoded membership literal, and a
-green `npm test` are therefore discharged at packet-build time and recorded there — **before the
-first packet reaches a scorer**, which is what the item actually protects.
+directory does not yet exist fails the suite.
+
+**Item 14.** `buildAll('v14')` needs `v14-rows.json` and `v14-reports/`, which the pass produces. It
+is deferred on identical terms — and, per the note above, was briefly ticked green on the strength of
+the synthetic `v98` path, which is the very substitution #176 made invisible.
+
+**Both are discharged at packet build, together, and BEFORE the first packet reaches a scorer** —
+which is what each item actually protects. The checklist there is: add the `PACKET_SETS` entry
+(`dir: 'scoring-v14'`, `scanned: true`, a real `why`, a real `packets:` count), update the hardcoded
+membership literal in the same test, call `buildAll('v14')` for real, confirm the v14 rulings render
+on a throwaway `--out` build (§AN7 item 13's live half), and confirm `npm test` green. Navigate by
+test name — §AC7 pinned a line number that had already drifted.
 
 ### 1.12 Items 12–14 — the infrastructure gates
 
@@ -307,11 +363,32 @@ Baseline at branch point: **33 suites, 1657 tests, all passing.**
 
 | item | requirement | status |
 |---|---|---|
-| 12 | the three new seed specs are re-scanned by the blind-rule suite | **green** — and both new specs shipped an `[answer-key-pointer]` on first authoring that `scorerPacketBlindRule.test.js` caught before merge, so the guard is demonstrated on this seed set rather than assumed |
-| 13 | `v14-advance-rulings.json` renders into every packet for seeds 05, 07, 08 | **green** — `packetGeneratorPassSelection.test.js` asserts all three rulings (`AI4-R1`, `AN4-R7`, `AN4-R8`) render into their own seed and **no other**, using a marker unique to each ruling's prose, and that seeds 01/02/03/04/06 receive `None for this seed` |
-| 14 | the generator accepts `--pass v14` and the `buildAll` path is exercised | **green** — `resolvePaths` accepts any `/^v\d+$/` token, and a full `--pass` build is exercised end to end under synthetic pass `v98` (20 packets + runbook naming its own directory). This is the test that exists because #176 left `buildAll('v13')` permanently throwing with nothing calling it |
+| 12 | the three new seed specs are re-scanned by the blind-rule suite | **green** — the guard earned its keep on arrival: an `[answer-key-pointer]` to the decision record shipped in the new specs on first authoring and was caught before the pre-registration merged, so coverage is demonstrated on this seed set rather than assumed |
+| 13 | `v14-advance-rulings.json` renders per seed | **green** — `packetGeneratorPassSelection.test.js` asserts all three rulings (`AI4-R1`, `AN4-R7`, `AN4-R8`) render into their own seed and **no other**, using a marker unique to each ruling's prose, and that seeds 01/02/03/04/06 receive `None for this seed` |
+| 14 | the generator accepts `--pass v14` and `buildAll('v14')` is exercised | **DEFERRED — see below** |
 
-> Item 13's live confirmation on a throwaway `--out` build is folded into the packet build (§1.11),
-> since it needs `v14-rows.json` and `v14-reports/`, which the pass itself produces.
+> **A count discrepancy carried upstream, recorded rather than repeated.**
+> `test/scorerPacketBlindRule.test.js` says *"**both** new specs shipped an `[answer-key-pointer]`"*,
+> but **three** specs were added in `0c4f36c` (`seed-06-schema-field-missing.md`,
+> `seed-07-tool-output-bloat.md`, `seed-08-nonterminating-tool.md`). Two and three cannot both be
+> right. This file does **not** assert which specs were involved, because it has not checked — it
+> records that the guard fired on the new specs and that the upstream count is unreconciled. Flagging
+> a copy-forward at §1.5 and silently reproducing one here would be the same defect wearing the other
+> hat.
+
+#### Item 14 is DEFERRED, not green — and the earlier draft ticking it is the defect item 14 names
+
+`buildAll('v14')` **is never called by anything.** The suite exercises `buildAll('v12')` and
+`buildAll('v13')` (`packetGeneratorPassSelection.test.js`) plus a full `--pass` build under the
+synthetic pass **`v98`**. `resolvePaths` accepts any `/^v\d+$/` token, so `v14` resolves — but
+resolution is not execution, and `buildAll('v14')` cannot run before the pass produces
+`v14-rows.json` and `v14-reports/`.
+
+**This is exactly the failure class item 14 cites as its own reason for existing**: #176 left
+`buildAll('v13')` permanently throwing and nothing noticed, *because a parallel path stayed green*.
+An earlier draft of this table ticked item 14 green on the strength of the `v98` path — the same
+substitution, one pass later. **Item 14 is therefore recorded as deferred to packet-build time on
+identical terms to item 11 (§1.11), and both must be discharged before the first packet reaches a
+scorer.**
 
 ---
