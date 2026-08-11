@@ -83,7 +83,22 @@ two-digit daily counter. Incremented on every merge to `main`.
 - **`test/blindRule.test.js` and `test/scorerPacketBlindRule.test.js` rosters extended to eight
   seeds**, pinned by name as both files require. The guard earned its keep on arrival: both new
   specs shipped an `[answer-key-pointer]` to the decision record — a relative link a model scorer
-  could have followed into the answer key — and it caught them before merge. 1,654 tests pass.
+  could have followed into the answer key — and it caught them before merge.
+- **Three answer leaks removed from the new agent `description` fields**, found in code review.
+  Each named its own seeded defect ("the column it filters on does not exist"), and
+  `PaToolAgentConfig` returns `sn_aia_agent.description` verbatim to both harnesses — so a run could
+  have named seed 06's layer-4 root cause without a single `schema_lookup` call, inflating
+  `root_cause_layer_correct` on exactly the twelve out-of-sample rows that are this pass's primary
+  outcome. All three now use seeds 01–04's non-revealing "deliberately broken". **Note the blind-rule
+  suite excludes `benchmark/seed-app/**` from its scan, so no guard fires on this class** — the
+  model-facing surface of a fixture agent is currently unguarded.
+- **`../raw-evidence-seed-qualification-06-08.md` added to `REDACTIONS`.** Without it the generic
+  sweep strips the citation, plants `REVIEW_SENTINEL`, and `buildAll` refuses to write **any** v14
+  packet — a failure that would have surfaced only after the twenty runs were spent. Verified by
+  exercising `redact()` on all five pass seeds: zero unreviewed paths, no sentinel.
+- **`v14-advance-rulings.json` given the coverage the v13 channel already had** — shape, per-seed
+  rendering with cross-leak assertions, and the verdict/path lint that makes the generator refuse a
+  build. 1,657 tests pass.
 - **Build Rule #21 re-confirmed live on a new artifact.** The direct role sys_id survived verbatim
   into all nine emitted `sys_security_acl_role` records and resolved on the instance to
   `x_snc_tsbench.bench` by name, for both `securityAcl.roles[]` and `dataAccess.roleList[]`.

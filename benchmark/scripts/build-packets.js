@@ -170,6 +170,11 @@ const REDACTIONS = [
     ['`../scorecard-template.md`', 'the scoring template'],
     ['`../../test/blindRule.test.js`', 'the blind-rule guard test'],
     ['`../raw-evidence-seed-qualification-02-05.md`', 'the seed-qualification evidence record'],
+    // Seeds 06-08's qualification record (#175). Without this entry the generic
+    // SWEEP strips the path and plants REVIEW_SENTINEL, and buildAll REFUSES to
+    // write any packet in the pass — which would surface only after the twenty
+    // runs had already been spent.
+    ['`../raw-evidence-seed-qualification-06-08.md`', 'the seed-qualification evidence record'],
     ['`.claude/context/sdk-examples/now-assist-skill.now.ts`', 'the Now Assist skill golden example'],
     ['`.claude/context/sdk-reference.md`', "the project's SDK build-rule reference"],
     // The parenthetical goes with the path because the sentence reads

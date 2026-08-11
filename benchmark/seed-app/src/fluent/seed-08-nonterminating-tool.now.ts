@@ -11,7 +11,7 @@ import { AiAgent } from '@servicenow/sdk/core'
  * Taxonomy provenance: K26 CCL6230 taxonomy T6 (infinite loops), specified as
  * candidate seed 8 in docs/LOW_LEVEL_DESIGN.md section 7 on 2026-08-01 - before
  * the DECISION.md section AG/AH clauses existed. See the provenance note in
- * seed-06-access-misalignment.now.ts.
+ * seed-06-schema-field-missing.now.ts.
  *
  * ===================== DELIBERATE DEVIATION FROM LLD SECTION 7 ==============
  * LLD section 7 specifies seed 8 as EITHER "no completion criteria and
@@ -32,18 +32,30 @@ import { AiAgent } from '@servicenow/sdk/core'
  * than unmap a real one).
  *
  * The conflicting-directives construction is rejected because it puts the
- * defect in the INSTRUCTION, and seed 7 already owns layer 2 in this pass. Two
- * of three new seeds at the same expected layer would waste the distribution
- * change this pass exists to make.
+ * defect in the INSTRUCTION, and layer 2 is held by ANCHOR seed 2 in this pass.
+ * A new seed duplicating an anchor's layer would spend an out-of-sample slot on
+ * the layer the AG/AH clauses were MOST fit to, which is the opposite of what
+ * the distribution change is for.
+ *
+ * (An earlier draft of this paragraph said "seed 7 already owns layer 2". That
+ * was true when written and is not now - seed 7 moved to layer 3 when its
+ * instruction-bloat half proved unreachable. Corrected rather than deleted,
+ * because the rejection still stands and only its stated reason had gone
+ * stale.)
  *
  * WHAT IS BUILT INSTEAD, and why it is the same taxonomy entry: the agent
- * polls a status tool that has no terminal state to report. The ReAct loop
- * re-calls the same tool until sn_aia.continuous_tool_execution_limit stops it
- * (read live on gpinst01 2026-08-11: 25). That is T6's observable - a run that
- * never converges and is cut off by a platform ceiling rather than by its own
- * logic - reached through a bounded, deterministic, fixture-local mechanism
- * that writes no records and fires no triggers. The ceiling is doing the work
- * the recursion guard would have done, at a fraction of the risk.
+ * polls a status tool that has no terminal state to report, so the ReAct loop
+ * re-calls the same tool and the run never converges. That is T6's observable,
+ * reached through a bounded, deterministic, fixture-local mechanism that writes
+ * no records and fires no triggers.
+ *
+ * THE CEILING DOES NOT BIND, MEASURED - do not rely on it. This paragraph first
+ * claimed the loop is stopped by sn_aia.continuous_tool_execution_limit (read
+ * live 2026-08-11: 25). The qualification run made 27 calls and then ended by
+ * MODEL GIVE-UP, not by any ceiling. LLD section 7's claim that this
+ * construction is "guarded by" that property is therefore not reliable as a
+ * bound - which is a second, independent reason the recursive-trigger variant
+ * was not built on a shared instance: its stated guard does not hold either.
  *
  * ===================== WHY THE INSTRUCTION IS CLEAN =========================
  * The instruction below is CORRECT and states a real stop condition: poll until
@@ -69,16 +81,27 @@ import { AiAgent } from '@servicenow/sdk/core'
  * contract: what the tool says it does and what it does are different, and
  * nothing in the schema is inspectably wrong.
  *
- * QUALIFICATION BAR, empirical: a real execution must show the same tool called
- * repeatedly and terminate on the tool ceiling rather than completing. If a
- * qualification run instead COMPLETES - the model gives up and answers from the
- * non-terminal status - the seed has not reproduced T6 and its rows are void;
- * record that and do not score through it. Measured in
- * benchmark/raw-evidence-seed-qualification-06-08.md.
+ * QUALIFICATION BAR, empirical and REVISED AFTER MEASUREMENT: a real execution
+ * must show the same tool called repeatedly with no change in its result - as a
+ * threshold, AT LEAST 10 CALLS TO ONE TOOL in a single run. The stopping
+ * mechanism is NOT part of the bar. If a run instead terminates after one or two
+ * calls, the seed has not reproduced and its rows are void.
+ *
+ * The revision is stated rather than absorbed, because relaxing a bar after
+ * seeing the result is exactly the move this project's record is vigilant about.
+ * As first written the bar required termination ON THE TOOL CEILING and made a
+ * COMPLETED run void. The measured run completed, at 27 calls over 7m18s. T6's
+ * observable is NON-CONVERGENCE, and 27 identical calls is that observable
+ * whichever mechanism finally stopped it, so the bar now tests the phenomenon
+ * rather than the stopping mechanism. Nothing about the fixture changed - only
+ * the sentence describing what counts as reproducing it. An operator reading the
+ * OLD bar would have voided four scored rows on a condition that is not the bar.
+ * Measured in benchmark/raw-evidence-seed-qualification-06-08.md.
  *
  * COST NOTE, stated because it is unusual for this app: this seed burns one LLM
- * assist per ReAct turn and is designed to run to a 25-call ceiling, so it is
- * the most expensive seed in the set per execution. That is inherent to the
+ * assist per ReAct turn and runs until the model gives up - 27 calls over 7m18s
+ * when measured - so it is the most expensive seed in the set per execution, and
+ * it has no platform ceiling bounding it. That is inherent to the
  * taxonomy entry, not an accident of the construction.
  *
  * Rules: #32 no $id on tools[]. #34 description mandatory. #19 trailing
@@ -88,7 +111,7 @@ import { AiAgent } from '@servicenow/sdk/core'
 export const seed08Agent = AiAgent({
     $id: Now.ID['seed-08-agent'],
     name: 'Seed 08 Batch Watcher',
-    description: `Watches a bench batch job to completion and reports its final status. Benchmark seed - the status tool has no final status to report.`,
+    description: `Watches a bench batch job to completion and reports its final status. Benchmark seed - deliberately broken.`,
     agentRole: `You are a batch job monitoring assistant.`,
     securityAcl: {
         $id: Now.ID['seed-08-acl'],

@@ -20,10 +20,13 @@
 > Qualification bar.
 
 `read_ticket_context` returns the ticket correctly **and** appends
-`raw_context_feed`: **58,436 characters** of unfiltered operational event lines
-with no bearing on the classification — nearly 3× the threshold.
-`PaToolAgentTrace` flags `tool_output_bloat` when a tool response exceeds
-`RESPONSE_BLOAT_CHARS = 20000`.
+`raw_context_feed`: **57,650 characters** of unfiltered operational event lines
+with no bearing on the classification. The measured **whole response** — the
+quantity the threshold is read against — was **58,436 chars**, nearly 3× the
+20,000 at which `PaToolAgentTrace` flags `tool_output_bloat`
+(`RESPONSE_BLOAT_CHARS`). The two figures are distinguished because a later
+tuning of the loop bound would be reasoned from the field size, not the
+response size.
 
 Nothing errors. The classification is **correct**. The run completes. The cost
 is that every later ReAct turn re-reads the whole blob from the scratchpad —
@@ -114,7 +117,7 @@ classify a bench ticket by sys_id. Capture the resulting
 
 ## Expected diagnosis
 
-Root cause in `tool_definition`: `read_ticket_context` returns 58,436
+Root cause in `tool_definition`: `read_ticket_context` returns 57,650
 characters of unfiltered feed the task never consults. Fix target: the tool's
 return contract. A diagnosis naming the instruction (layer 2), the ticket data
 (layer 5) or the model is a **miss**.

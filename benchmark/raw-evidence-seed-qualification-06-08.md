@@ -55,6 +55,17 @@ seeds 01–05 still report `sys_updated_on ≤ 2026-08-02` while demonstrably ca
 **`sys_updated_on` cannot be used to detect install-induced drift on this instance** — which is what
 §W7 already denies timestamps in principle, now measured.
 
+> **Observed a second time, and the second observation is stronger.** Two further installs followed
+> (a code-review remediation build). The gate read `active=false` again, with `sys_updated_on` still
+> reading **17:48:31** — the timestamp of the *previous* PATCH — **and `sys_mod_count` still reading
+> 3**. So the install wrote the value while touching **neither** audit field, not merely the
+> timestamp. A second PATCH moved both (18:42:50, `sys_mod_count` 4) and was verified by re-read.
+>
+> The operational consequence is sharper than the first observation implied: **neither
+> `sys_updated_on` nor `sys_mod_count` can detect that an install has reset this gate.** The only
+> reliable check is reading `active` itself, which is what §AI3.1's "read, then act" already
+> required and what §AN3 condition 2 now states as a rule rather than a habit.
+
 ### 0.3 Fixture row added
 
 `x_snc_tsbench_ticket` `ac64074f2baa0310f243fed2ce91bfe5` — *"Laptop screen cracked after drop,

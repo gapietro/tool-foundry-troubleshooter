@@ -6562,9 +6562,11 @@ distribution asks, and it is not the primary outcome.
    **`active=false`** during qualification and restored by PATCH, verified by re-read
    (`ba30d8775b0c4cebb960c58830590d5d`, `active=true`, `sys_mod_count=3`). **Read it again anyway** —
    five installs happened during qualification and any further install resets it.
-2. **`sys_updated_on` may not be used to decide whether it reset.** The install path writes record
-   values **without touching audit fields** — measured during qualification, and the confirmation of
-   the anomaly §AI1 carried unexplained as pre-flight item 11. A gate that reset will look untouched.
+2. **No audit field may be used to decide whether it reset — read `active` itself.** The install
+   path writes record values while touching **neither `sys_updated_on` nor `sys_mod_count`**,
+   observed twice during qualification, and the confirmation of the anomaly §AI1 carried unexplained
+   as pre-flight item 11. **A gate that reset looks completely untouched**, so the only reliable
+   check is the value.
 3. **The seed-05 probe-row deletion (§AI3.2) and the trigger-activation wait (§AI3.3) carry
    unchanged.** Neither applies to the protocol as written; both are recorded so a mid-pass repair
    does not re-commit qualification §3.1's void.

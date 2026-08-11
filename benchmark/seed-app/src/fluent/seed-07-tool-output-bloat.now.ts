@@ -43,7 +43,7 @@ import { AiAgent } from '@servicenow/sdk/core'
  *
  * ===================== THE DEFECT, ON PURPOSE =============================
  * read_ticket_context returns the ticket correctly AND appends
- * `raw_context_feed`, roughly 52,000 characters of unfiltered operational
+ * `raw_context_feed`, 57,650 characters of unfiltered operational
  * event lines with no bearing on the task. Nothing errors, the classification
  * is CORRECT, and the run completes - the cost is that every later ReAct turn
  * re-reads the whole blob from the scratchpad, which is precisely the
@@ -91,7 +91,7 @@ import { AiAgent } from '@servicenow/sdk/core'
 export const seed07Agent = AiAgent({
     $id: Now.ID['seed-07-agent'],
     name: 'Seed 07 Ticket Classifier',
-    description: `Classifies a bench ticket into a support category. Benchmark seed - its context tool returns far more than it needs to.`,
+    description: `Classifies a bench ticket into a support category. Benchmark seed - deliberately broken.`,
     agentRole: `You are a support ticket classification assistant.`,
     securityAcl: {
         $id: Now.ID['seed-07-acl'],
@@ -119,7 +119,7 @@ export const seed07Agent = AiAgent({
             active: true,
             recordType: 'custom',
             // THE SEEDED DEFECT is raw_context_feed. Everything above it in the
-            // return is correct, bounded and useful; the feed is ~52,000 chars
+            // return is correct, bounded and useful; the feed is 57,650 chars
             // of material the classification never consults. Do NOT "fix" this
             // by trimming the feed - it is the fixture.
             script: `(function (inputs) {

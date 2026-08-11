@@ -93,7 +93,7 @@ import { AiAgent } from '@servicenow/sdk/core'
 export const seed06Agent = AiAgent({
     $id: Now.ID['seed-06-agent'],
     name: 'Seed 06 Hardware Reporter',
-    description: `Reports how many bench tickets fall in a given category. Benchmark seed - the column it filters on does not exist.`,
+    description: `Reports how many bench tickets fall in a given category. Benchmark seed - deliberately broken.`,
     agentRole: `You are a reporting assistant for the bench ticket queue.`,
     securityAcl: {
         $id: Now.ID['seed-06-acl'],
