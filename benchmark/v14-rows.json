@@ -22,8 +22,8 @@
     "run_id": "226e9b072bae4310f243fed2ce91bf7b",
     "run_number": "TR1000294",
     "triggering_record": null,
-    "invocation": "servicenow_aia_execute on agent \"Agent Doctor\" — objective: \"Diagnose the failing AI Agent execution with plan sys_id c5fcd3c72b6e4310f243fed2ce91bf26. Sweep all seven layers and produce a Fix Report with root causes, evidence citations, and proposed fixes.\" waitForCompletion=false; session c46e93072bae4310f243fed2ce91bfae -> plan 986ed3072bae4310f243fed2ce91bf5d",
-    "operator_note": "LLM P95 4,090ms, tool P95 297ms. Ran concurrently with the two discarded seed-08 fixture runs; §2.6 records why this row is NOT void — 279s against v13's ~280s native expectation, no contention signature. Report declares layer 4 and 5 NOT SWEPT with stated reasons, and platform logs UNAVAILABLE (syslog cross-scope denial)."
+    "invocation": "servicenow_aia_execute on agent \"Agent Doctor\" \u2014 objective: \"Diagnose the failing AI Agent execution with plan sys_id c5fcd3c72b6e4310f243fed2ce91bf26. Sweep all seven layers and produce a Fix Report with root causes, evidence citations, and proposed fixes.\" waitForCompletion=false; session c46e93072bae4310f243fed2ce91bfae -> plan 986ed3072bae4310f243fed2ce91bf5d",
+    "operator_note": "LLM P95 4,090ms, tool P95 297ms. Ran concurrently with the two discarded seed-08 fixture runs; \u00a72.6 records why this row is NOT void \u2014 279s against v13's ~280s native expectation, no contention signature. Report declares layer 4 and 5 NOT SWEPT with stated reasons, and platform logs UNAVAILABLE (syslog cross-scope denial)."
   },
   {
     "row": 2,
@@ -48,5 +48,57 @@
     "triggering_record": null,
     "invocation": "POST /api/x_snc_troubleshoot/v1/troubleshooter/analyze {\"execution\": \"c5fcd3c72b6e4310f243fed2ce91bf26\", \"mode\": \"diagnose\"}",
     "operator_note": "Returned root_causes: [] and fixes: [] with an `inconclusive` block asserting the execution completed normally. 6 audit rows for 3 tool calls (the known intent+result 2x shape); target_table EMPTY on all six, re-confirming #183 live."
+  },
+  {
+    "row": 3,
+    "arm": "native",
+    "seed": "02",
+    "rep": 2,
+    "terminal": "completed",
+    "wall_clock": "328s",
+    "tool_calls": 17,
+    "distinct_tools": [
+      "agent_trace",
+      "read_artifact (x10)",
+      "log_analysis",
+      "agent_config",
+      "genai_log (x2)",
+      "schema_lookup",
+      "query_table"
+    ],
+    "layers_swept": "7/7 (L1, L2, L3, L4, L5, L6, L7)",
+    "layers_available": "7/7",
+    "holds": 0,
+    "tool_limit": 25,
+    "target_execution": "ba4dd38b2b6e4310f243fed2ce91bf62",
+    "run_id": "9c22af0f2bee4310f243fed2ce91bf52",
+    "run_number": "TR1000296",
+    "triggering_record": null,
+    "invocation": "servicenow_aia_execute on agent \"Agent Doctor\" \u2014 objective: \"Diagnose the failing AI Agent execution with plan sys_id ba4dd38b2b6e4310f243fed2ce91bf62. Sweep all seven layers and produce a Fix Report with root causes, evidence citations, and proposed fixes.\" waitForCompletion=false; session a112e70f2bee4310f243fed2ce91bfbb -> plan 35122b0f2bee4310f243fed2ce91bf5c",
+    "operator_note": "LLM P95 15,486ms against row 01's 4,090ms on identical work \u2014 the 4.8s-22s native variance v13 recorded, and it sits ABOVE the 15,000ms instruction_bloat threshold Ruling 7 concerns itself with. Recorded because Ruling 7 governs seed 07, not seed 02, and no flag was charged here. Swept all seven layers; used query_table on sys_user_group to refute the hallucinated group."
+  },
+  {
+    "row": 4,
+    "arm": "custom",
+    "seed": "02",
+    "rep": 2,
+    "terminal": "complete",
+    "wall_clock": "~10s",
+    "tool_calls": 3,
+    "distinct_tools": [
+      "agent_trace",
+      "agent_config",
+      "schema_lookup"
+    ],
+    "layers_swept": "3/7 (L1, L3, L4)",
+    "layers_available": "7/7",
+    "holds": 0,
+    "tool_limit": 25,
+    "target_execution": "ba4dd38b2b6e4310f243fed2ce91bf62",
+    "run_id": "79a3670b2b228310f243fed2ce91bf5a",
+    "run_number": "TR1000297",
+    "triggering_record": null,
+    "invocation": "POST /api/x_snc_troubleshoot/v1/troubleshooter/analyze {\"execution\": \"ba4dd38b2b6e4310f243fed2ce91bf62\", \"mode\": \"diagnose\"}",
+    "operator_note": "root_causes: [] and fixes: [] again, with an `inconclusive` block asserting the execution succeeded. Identical 3-call tool pattern to row 02 (agent_trace, agent_config, schema_lookup)."
   }
 ]
