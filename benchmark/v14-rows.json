@@ -247,5 +247,56 @@
     "triggering_record": null,
     "invocation": "POST /api/x_snc_troubleshoot/v1/troubleshooter/analyze {\"execution\": \"281d57c72bea031017a6ffbeee91bfc8\", \"mode\": \"diagnose\"}",
     "operator_note": "First NON-EMPTY custom fix_report of the pass (rows 02/04 returned root_causes: [], rows 06/08 failed outright). Files two root causes at layers 1 and 5. tool_calls PENDING from the audit table."
+  },
+  {
+    "row": 11,
+    "arm": "native",
+    "seed": "06",
+    "rep": 2,
+    "terminal": "completed",
+    "wall_clock": "284s",
+    "tool_calls": null,
+    "distinct_tools": [
+      "agent_trace",
+      "agent_config",
+      "schema_lookup",
+      "query_table",
+      "genai_log",
+      "log_analysis",
+      "read_artifact"
+    ],
+    "layers_swept": "6/7 SWEPT + platform logs UNAVAILABLE (L1-L7 claimed; syslog DENIED)",
+    "layers_available": "7/7",
+    "holds": 0,
+    "tool_limit": 25,
+    "target_execution": "ff6d1fcb2b6e4310f243fed2ce91bf26",
+    "run_id": null,
+    "run_number": null,
+    "triggering_record": null,
+    "invocation": "servicenow_aia_execute on agent \"Agent Doctor\"; waitForCompletion=false; session 4d086f032be2431017a6ffbeee91bf92 -> plan 9108af032be2431017a6ffbeee91bf98",
+    "operator_note": "LLM P95 30,626ms \u2014 the highest of the pass; four of six native runs so far sit at or above the 15,000ms instruction_bloat threshold. Files RC-1 at layer 4 (missing category column) AND a co-primary RC-2 asserting the table is 'genuinely empty (0 rows)', with Fix 2 'seed the table'. OPERATOR-VERIFIED FIXTURE FACT, recorded NOT as a score: x_snc_tsbench_ticket held 22 rows at this moment (COUNT aggregate). UNRESOLVED and needing its own investigation after the pass: the report attributes the zero to query_table itself returning unfiltered_row_count: 0 / verdict: genuinely_empty. If the TOOL returned that, this is a harness defect rather than a model fabrication \u2014 plausible mechanism is a cross-scope read (query_table runs in x_snc_troubleshoot; the bench table is owned by x_snc_tsbench, and Build Rule #42 says a Fluent Table() installs with zero ACLs). Not investigated mid-pass per \u00a7T9."
+  },
+  {
+    "row": 12,
+    "arm": "custom",
+    "seed": "06",
+    "rep": 2,
+    "terminal": "failed (fix_report rejected by validation)",
+    "wall_clock": "~30s",
+    "tool_calls": null,
+    "distinct_tools": [
+      "agent_trace",
+      "schema_lookup"
+    ],
+    "layers_swept": "2/7 claimed SWEPT (L1, L4)",
+    "layers_available": "7/7",
+    "holds": 0,
+    "tool_limit": 25,
+    "target_execution": "ff6d1fcb2b6e4310f243fed2ce91bf26",
+    "run_id": "a199ab8b2ba28310f243fed2ce91bf44",
+    "run_number": "TR1000306",
+    "triggering_record": null,
+    "invocation": "POST /api/x_snc_troubleshoot/v1/troubleshooter/analyze {\"execution\": \"ff6d1fcb2b6e4310f243fed2ce91bf26\", \"mode\": \"diagnose\"}",
+    "operator_note": "NOT VOID \u2014 this is v13's `failed (fix_report rejected)` shape, which \u00a7A3/\u00a7AK scores. The report was produced and then rejected: an UNCONFIRMED trace-only root cause cited 1 evidence item against 2 layers marked SWEPT. The rejected report is preserved verbatim in v14-reports/row-12.md. Like row 10, it reasons about the `incident` table rather than the bench table."
   }
 ]
