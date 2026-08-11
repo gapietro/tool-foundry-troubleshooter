@@ -29,7 +29,7 @@ const path = require('path')
 const { execFileSync } = require('child_process')
 
 const ROOT = path.join(__dirname, '..')
-const GENERATOR_PATH = path.join(ROOT, 'benchmark', 'scripts', 'build-v12-packets.js')
+const GENERATOR_PATH = path.join(ROOT, 'benchmark', 'scripts', 'build-packets.js')
 const GUARD_PATH = path.join(__dirname, 'scorerPacketBlindRule.test.js')
 
 const gen = require(GENERATOR_PATH)

@@ -17,6 +17,56 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1009 — 2026-08-10
+
+### Added
+
+- **`benchmark/v13-advance-rulings.json`** — the delivery channel §AI7 item 11 requires, carrying
+  §AI4 Ruling 1 (seed-05 `fix_usable_unedited`) in the `v12-advance-rulings.json` shape. §AD5's
+  standing rule is that an advance ruling on a scoring column ships **in the packets**, not only in
+  the pre-registration (#160); §AG1 records that rows 17 and 19 flagged that column in v12 precisely
+  because the ruling never reached the scorer, and two such flags land AI-3 exactly on its
+  refutation boundary — an undelivered ruling would refute a prediction about the rubric using a
+  defect in the delivery of the rubric.
+- **`test/packetGeneratorPassSelection.test.js`** — 11 tests over pass resolution and the v13 rulings
+  channel: all four inputs move together, no pass can resolve onto another's output directory,
+  malformed tokens (`../..`, `v12/..`, `V12`, `v12 `) are refused rather than resolved, a missing
+  input names the artefact instead of throwing ENOENT out of a `JSON.parse`, and the v13 ruling
+  renders into seed-05 packets, is absent from the other four seeds, and carries no operator verdict.
+
+### Changed
+
+- **`build-v12-packets.js` → `build-packets.js`, with the pass as data (`--pass v13`).** §AI7 item 12:
+  the generator hardcoded `scoring-v12`, `v12-reports`, `v12-rows.json` and `v12-advance-rulings.json`
+  and declared `scoring-v12/` frozen, so the v13 pre-registration named `scoring-v13/` as an artefact
+  that **no tool on disk could produce** — and §AI6 forbids touching packets until all twenty runs
+  terminate, so the gap would have surfaced after an hour of instance time.
+- **Parameterised, not forked.** The generator is the blind-rule boundary *and* the redaction layer;
+  two copies drifting apart would make v12's 8-of-20 and v13's tally incomparable with nothing to
+  flag it — the shape of §AD3's miscount. One code path, the pass as data.
+- **The default pass stays `v12`.** `packetGeneratorParity.test.js` drives the freeze guard through
+  `main(['--out', tmp])` with no pass argument; requiring the flag would have changed v12's
+  reproducibility to buy nothing. `--out` still wins over the pass's directory so the freeze guard
+  stays exercisable on a throwaway.
+
+### Verified
+
+- **v12's output is byte-identical across the change.** The pre-rename generator (from `HEAD`) and
+  the parameterised one were each run to a scratch directory and `diff -r` reports no difference
+  across all twenty packets. This is the check that matters: a parameterisation that quietly altered
+  packet bytes would invalidate the v12↔v13 comparison that is v13's entire primary outcome.
+- `npm test` → **32 suites, 1577 tests, all passing** (was 31/1566).
+
+### Note
+
+- **§AI is not edited.** Items 11 and 12 are *satisfied* by this work, not amended by it. §AI is a
+  merged pre-registration and §AD's rule stands — a pre-registration is only as good as the commit
+  it names, so retroactively marking its own gates green would destroy the property it exists for.
+  §AI7 item 12's description of `build-v12-packets.js` remains a true statement about the state at
+  pre-registration time.
+
+---
+
 ## 2026.08.1008 — 2026-08-10
 
 ### Added
