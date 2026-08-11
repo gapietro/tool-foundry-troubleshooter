@@ -27,6 +27,12 @@ two-digit daily counter. Incremented on every merge to `main`.
   intact. One fact the issue did not carry and which decided the options: **the plan's own `agent`
   and `usecase` reference fields are empty too**, so the agent sys_id survives only inside the error
   JSON in the agent-role message.
+- **The degradation is wider than the issue reported, and code review caught it: layers 2, 3 AND 7
+  are unsweepable, not layer 2 alone.** `agent_config` is the only tool for all three, and the
+  specimen's `sn_aia_tool` (`de06be5f…`) and `sn_aia_agent_tool_m2m` (`3e16b69f…`) rows went in the
+  same Phase 0 cleanup (both live-verified at 0 records), while the probe run created no
+  `sn_aia_usecase` at all. **This gate can never demonstrate a layer-2/3/7 sweep** — it demonstrates
+  layer-1 error mining, which is what it was chosen for.
 - **The binding criterion is unchanged and singular** — `script_error` citing
   `context_processing_script` line 42, both arms. The deleted-agent shape becomes a documented
   second known answer that is **explicitly unscored**: an arm reading `empty` as a privilege gap is
@@ -43,8 +49,8 @@ two-digit daily counter. Incremented on every merge to `main`.
   ("run to terminal with valid outputs, not that they diagnose correctly") is marked as that pass's
   own reading rather than protocol; v13 and v14 both applied the known answer.
 - Cross-references added where the specimen is cited: `DESIGN.md` R-16, `docs/LOW_LEVEL_DESIGN.md`
-  §5 smoke-test block, `docs/PREFLIGHT_FINDINGS.md` probe-cleanup table, and
-  `docs/BUILD_BRIEF_PaToolAgentTrace.md`.
+  §5 smoke-test block, `docs/PREFLIGHT_FINDINGS.md` probe-cleanup table, and **both** build briefs
+  (`PaToolAgentTrace`, `Phase1a_VerticalSlice`).
 
 ## 2026.08.1110 — 2026-08-11
 

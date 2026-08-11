@@ -73,6 +73,12 @@ Then: remaining tool cores (Tasks 7, 8), then the benchmark (11, 12).
   `InternalError`. It is **invisible from the plan header** — `state=Completed`, empty
   `state_reason`, all 11 tasks and 5 tool calls `Success` — so it tests whether a shallow diagnosis
   gets caught, not merely whether rows were read.
+  ⚠ **Updated 2026-08-11 (#185) — do not try to read that agent.** `sn_aia_agent` `601672d3…`, its
+  `sn_aia_tool` row and its `sn_aia_agent_tool_m2m` row were all deleted as Phase 0 probe cleanup,
+  and the run created no `sn_aia_usecase`, so the specimen is unsweepable on **layers 2, 3 and 7**:
+  `agent_config` returns `empty` against it **by construction** — absence, not a permission gap.
+  The expected diagnosis above is unaffected; it is mined from the message stream. Ruling:
+  `benchmark/DECISION.md` §AP; operating rules and the control probe: `benchmark/README.md` step 3.
 - **keynexus01 is unreachable** (no `now-sdk auth` entry) and its plugin state is unverified.
   Everything happens on gpinst01.
 - `_agentic_context_` is a **JSON string** global available to script tools, carrying `agent_id`,

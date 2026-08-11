@@ -311,14 +311,25 @@ the per-seed specs remain authoritative for the detail.
    valid outputs, not that they diagnose correctly"* — that is **that pass's own reading, kept as
    history and not to be re-derived as protocol.**
 
-   **Layer 2 reads `empty` on this fixture BY CONSTRUCTION — that is the fixture, not a fault.**
-   The agent the execution ran under — `sn_aia_agent` `601672d32b1a83d0f243fed2ce91bf3e`, "PA GP
-   Probe Agent" — was deleted as Phase 0 probe cleanup (`docs/PREFLIGHT_FINDINGS.md`, "Probe
-   records — created and deleted"). The plan's own `agent` and `usecase` reference fields are empty
+   **The WHOLE `agent_config` surface — layers 2, 3 AND 7 — reads `empty` on this fixture BY
+   CONSTRUCTION. That is the fixture, not a fault.** `agent_config` is the only tool for those
+   three layers (instructions, tool definitions, trigger wiring), and every record it would read is
+   gone or was never created. Re-verified live on gpinst01 2026-08-11 (#185):
+
+   | layer | record `agent_config` would read | state | why |
+   |---|---|---|---|
+   | **2** instructions | `sn_aia_agent` `601672d32b1a83d0f243fed2ce91bf3e` ("PA GP Probe Agent") | **0 records** | deleted as Phase 0 probe cleanup |
+   | **3** tool definitions | `sn_aia_tool` `de06be5f2b9a8b9417a6ffbeee91bfa2` (`pa_gp_probe`) + `sn_aia_agent_tool_m2m` `3e16b69f2b9a8b9417a6ffbeee91bf0e` | **0 records each** | deleted in the same cleanup |
+   | **7** trigger wiring | `sn_aia_usecase` | **never existed** | the probe run created no usecase record at all |
+
+   All three deletions are the "Probe records — created and deleted" table in
+   `docs/PREFLIGHT_FINDINGS.md`. The plan's own `agent` and `usecase` reference fields are empty
    too, so the agent sys_id survives *only* inside the error JSON in the agent-role message.
    `agent_config` against this target therefore returns `sn_aia_agent: "empty"` and
-   `sn_aia_usecase: "empty"` — correctly — and will on every future pass. Re-verified live on
-   gpinst01 2026-08-11 (#185).
+   `sn_aia_usecase: "empty"` — correctly — and will on every future pass.
+
+   **Consequence worth stating plainly: this gate can never demonstrate a layer-2/3/7 sweep.** It
+   demonstrates layer-1 error mining, which is what it was chosen for.
 
    Two consequences, deliberately asymmetric:
 
@@ -330,7 +341,7 @@ the per-seed specs remain authoritative for the detail.
      denied, **stop** — the scored seeds are at risk. Two look-alikes to rule out first: a bad
      **field** name on this instance is reported as `Access denied` (v13 evidence §1.7), and a
      table with no ACLs denies admin too (Build Rule #42).
-   - **For the arm — calling that `empty` a privilege gap is a wrong diagnosis, and it is RECORDED,
+   - **For the arm — calling any of those `empty` reads a privilege gap is a wrong diagnosis, and it is RECORDED,
      not gate-failing.** The tools' own contract states that *"a section that is empty with status
      ok or empty means the data is genuinely absent; DENIED means a permission gap"*. v14's native
      arm inverted it — *"likely a cross-scope privilege gap"*, and built FIX-2 around granting read

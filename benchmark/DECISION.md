@@ -6925,8 +6925,8 @@ by a bare query carrying neither `query` nor `fields`.
 
 The known-answer smoke gate (`benchmark/README.md` step 3, made a pre-flight item by §AN7 item 10)
 targets execution `c9d63a932bda8b9417a6ffbeee91bfd0`. The agent that execution ran under has been
-deleted, so layer 2 is permanently unsweepable on the fixture and `agent_config` returns `empty`
-for every arm on every future pass. Filed from v14 stage 1 (`raw-evidence-v14-out-of-sample.md`
+deleted, so the fixture is permanently unsweepable on **layers 2, 3 and 7** — the whole
+`agent_config` surface — and that tool returns `empty` for every arm on every future pass. Filed from v14 stage 1 (`raw-evidence-v14-out-of-sample.md`
 §1.9b) rather than absorbed.
 
 ### AP1. The finding, re-verified live before ruling on it
@@ -6972,7 +6972,7 @@ does each arm diagnose". §AN7 item 10 is unchanged in force and unchanged in te
   means authoring a script and *declaring* line 42 to be its answer — a fixture that looks
   authentic and is not, hand-built on the instance against the SDK-owns-creation boundary.
 - **Re-point the gate at a live-agent specimen — rejected as disproportionate and circular.** The
-  answer is cited in DESIGN.md R-16, LLD §5 and §477, two build briefs and the README, so
+  answer is cited in DESIGN.md R-16, LLD §5, two build briefs and the README, so
   re-pointing is a documentation cascade; and a new known answer would have to be established using
   the instrument the gate exists to check.
 - **Document it — accepted, and it is not the null option.** The rot is converted into signal: a
@@ -6981,8 +6981,8 @@ does each arm diagnose". §AN7 item 10 is unchanged in force and unchanged in te
 
 ### AP4. What a future pass does differently
 
-1. Reads the gate section knowing layer 2 is `empty` **by construction**, so an unexplained empty
-   read is not re-diagnosed as an instance regression mid-pre-flight.
+1. Reads the gate section knowing **layers 2, 3 and 7** are `empty` **by construction**, so an
+   unexplained empty read is not re-diagnosed as an instance regression mid-pre-flight.
 2. Runs the **control probe** (seed 02's agent) before concluding anything about permissions. Seed
    agent readable + gate target empty = fixture rot, proceed. Seed agent *also* empty or denied =
    **stop**, the scored seeds are at risk. Two look-alikes are named in the section: a bad field
