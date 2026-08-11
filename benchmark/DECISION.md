@@ -6001,3 +6001,138 @@ Everything in §T8, §Z5, §AB5, §AC8, §AG5, §AH6 and §AI8 stands unsoftened
 
 **The next pass should change the distribution, not the clauses.** §AI8 said an out-of-sample check
 is what would make AI-1 mean what a reader will want it to mean; v13 has now spent the in-sample one.
+
+---
+
+## AK. §A3 carries the terminated-run void condition (`2026.08.1105`, #174)
+
+**§A through §AJ are unmodified and this section appends to them** — `git log -p benchmark/DECISION.md`
+is the check, in the form §W, §Z, §AC, §AD, §AE and §AF all used.
+
+**§T9 governs: no v12 or v13 value moves.** No run was fired, no packet was re-scored, no instance
+was touched. Row 05's void ruling stands exactly as it was made; this section records the promotion
+of the rule that governed it, and does not re-decide the row.
+
+Artefacts: `benchmark/scorecard-template.md` §A3.
+
+### AK1. The gap, and what closes it
+
+§AJ4 recorded that v13's row 05 native terminated `state_reason: execution_failed` with no report,
+and that §A3 did not name the condition — its definition is seed-state only (*"the seed was not in
+the state its spec requires"*) and both listed conditions come from seed specs. The ruling was
+authored mid-pass at §4.1 of `benchmark/raw-evidence-v13-determinacy-check.md`, with rows in flight.
+
+§AJ4 also recorded the two properties that made that ruling sound rather than convenient: it was
+**symmetric** across arms, and it was **committed before the replacement fired** (`77d0d44`), so
+`git log -p` shows the rule predating the row it governs. Both properties are now written into §A3
+as **requirements on the operator**, not as remarks about one pass — the third bullet states the
+condition, and clauses (a) and (b) state what must hold for it to be invoked at all.
+
+The defect being closed is not the ruling. It is that a void condition lived in one pass's evidence
+file, so the next operator meets the same terminal state with nothing standing to apply, and meets
+it — as v13 did — under time pressure. A classification authored while its effect on a visible tally
+can be estimated is exactly what §AI6's seal exists to prevent; a standing rule is what removes the
+authoring step.
+
+### AK2. Why the provenance is in THIS section and not in §A3
+
+§A3 is inside the `## A.` → `## B.` slice copied verbatim into every scorer packet, and
+`test/scorerPacketBlindRule.test.js` scans that slice (§AA, #143 + #164). Four of its patterns ban
+precisely the citation #174 asked for: `outside-section-pointer` rejects any `§` that is not a
+self-reference into §A*, `pass-version-token` rejects a pass named by version, PACKET_PATTERNS
+rejects a repository path, and `empirically-observed` rejects the past tense that says a run
+actually did this. A pointer to §AJ4 inside §A3 would tell a model scorer that a prior pass exists,
+that this rule already voided a row in it, and where to go and read the grades.
+
+So the rule and its provenance are deliberately split: the standing rule is in §A3 in
+provenance-free voice; the citation is here. The general shape, stated because the next promotion
+into §A–§A3 meets it again: **a rule that reaches a scorer cannot carry its own history.** Anything
+promoted into the packet slice has to be rewritten into the standing voice first, and the audit
+trail parked outside the slice — the guard is not an obstacle to routing around, it is the
+statement of that constraint.
+
+§A3.4's floor was checked as #174 required. It reads correctly with the new condition present, and
+two clauses that were only ever stated in the decision record are promoted alongside it, because a
+run-state void makes both live for the first time: the floor is read **per arm** (§AC2, Ruling 2 at
+§AC4, carried at §AI2), and it counts **unrecoverable** voids at the close of the pass, not voids
+encountered along the way (§AC2). Under the old seed-state-only reading a void was a setup error
+found before or around a run; a terminated execution is a void that can now arise on any row of
+either arm mid-pass, so *"a void whose replacement is valid costs the denominator nothing"* stops
+being a footnote and becomes the clause an operator needs in front of them. Neither clause changes
+any value: v13 finished with 10 valid rows per arm and did not approach the floor.
+
+### AK3. What this does not claim, and one cost carried
+
+- **It does not establish that the terminated-run condition is complete.** It names the terminal
+  state v13 met and one boundary either side of it (§AK4). Cases it deliberately leaves open: a
+  terminal state producing a *partial* report, and a provider outage (`genai_down`) with no report
+  body — the latter named in §A3 itself as undecided, because a provider is neither the harness nor
+  the platform executing it. Each should be expected to need its own ruling, under the same two
+  clauses, before any replacement fires.
+- **It does not make the native arm's termination a scored fact.** §A3's new bullet says so
+  explicitly: a terminated execution is a real measurement about *operating* that harness and
+  belongs in the operator record, and it is not a measurement of diagnostic quality. §AJ4's reading
+  is carried unchanged.
+- **The cost, stated rather than left to be found.** `scoring-v13/`'s twenty packets carry the OLD
+  §A3, because the template moved after that pass was scored. This is the §AF1 shape exactly, and
+  the §AF1 repairs are what keep it harmless: the generator refuses to clobber an existing packet
+  without `--force`, so the twenty files that were read stay the record of what was read. A v13
+  packet rebuild would now differ from them, and that is expected rather than a defect.
+
+### AK4. The first draft of this rule was too wide, and review caught it against rows that exist
+
+The condition as first written voided *"any other terminal state that ends the run before a report
+exists"*. Review measured that generalisation against the record and found it reclassifying rows in
+the very pass §AK cites — which would have made this a §T9 violation inside a section asserting §T9
+compliance. Recorded because the near-miss is more instructive than the repair:
+
+1. **A rejected report is a report.** `build-packets.js` prints into every packet for a row whose
+   `terminal` matches `/failed/`: *"A rejected report is still scored — it is the only record of
+   what the model produced."* v13 rows 04 and 16 and v12 rows 08, 14 and 20 carry exactly that
+   terminal and were **scored 0, not voided**. The wide reading voids all five, which would have
+   taken v13's custom arm from 10 valid rows to 8 — the floor edge — and falsified the symmetry
+   claim §AJ4 rests on, since the custom arm plainly had not applied it. Worse, a future scorer
+   would have received both texts in one packet: §A3 saying void, §4 saying scored.
+2. **A budget death is a scored `0`, and voiding it empties `cause_of_death`.** `tool_limit`,
+   `context`, `supervision_stall` and `wandered` all end a run before a report exists. DESIGN.md
+   §2.3 put that column in the instrument precisely because *"a 0-point budget death and a 0-point
+   reasoning death are opposite verdicts on the gate"* — so voiding those rows deletes the signal
+   the column was added to carry. No scored row has yet carried a non-`completed` value, so this was
+   a forward conflict rather than a reclassification; it would have surfaced as a missing column on
+   the first pass that hit a ceiling.
+
+**The line the rule now draws: the PLATFORM failed the execution → void; the RUN failed, however it
+failed → score it.** Both boundaries are written into §A3 as named, scored cases rather than left to
+be inferred from the void's phrasing.
+
+Three further gaps, closed in the same pass:
+
+- **"Unrecoverable" had no test for a run-state void.** A seed-state void is unrecoverable when the
+  setup cannot be fixed; a terminated run has no setup and can always be re-fired, so nothing was
+  ever unrecoverable and §A3.4's floor could never bite. The bound that resolves it — §AC6's cost
+  stop at 3 re-runs in an arm — lived only in a pass record, which is the exact defect #174 set out
+  to close, reintroduced one clause over. §A3 rule 2 now requires the pass to **declare a per-arm
+  re-run cap before it starts**, and defines "cannot be made valid" as a void the cap leaves
+  unreplaced. The number stays with the pass (§AC2's standard: settle it before rows exist); the
+  requirement to have one is now standing.
+- **The per-arm floor was promoted into a template sized at 10 rows total**, where two arms means
+  five rows each and both are under the floor before anything is scored. §A3.4 now states the
+  premise it needs — each arm sized at a full 10 valid rows — and says explicitly that a pass
+  splitting 10 rows across two arms must settle its own evaluability rule in pre-registration.
+- **Clause (b) could leave a row with no valid disposition.** A terminated run on the *last* row of
+  a pass arrives when the tallies are unavoidably visible; the clause as first written then refused
+  the void, while the same bullet refused the `0`. Rewritten to bind what it was always about:
+  **authoring** a void condition, not **applying** one already standing. Applying §A3's bullet on
+  the last row is not a choice made with the effect in view — the choice was made in §A3, before the
+  pass began. Which is the argument for promoting the rule at all, now stated inside the rule.
+
+### AK5. The filled scorecards are annotated, not retrofitted
+
+`scorecard-agent-doctor.md` and `scorecard-custom-harness.md` each embed the §A3 they were scored
+against. Both now carry a note saying the standing rule has moved, what moved, that none of it
+governed their rows, and where the provenance lives — and neither has the new condition merged into
+its text. `scorecard-agent-doctor.md`'s header records a precedent for mirroring §A3 edits into it
+(PR #43); that precedent covered *corrections to a shared rule*, and a new condition is not a
+correction. Retrofitting one would silently restate which contract those rows were scored under,
+which is the §AF1 principle applied to a filled scorecard instead of a packet. Only
+`scorecard-template.md` feeds the packet generator, so neither note reaches a scorer.

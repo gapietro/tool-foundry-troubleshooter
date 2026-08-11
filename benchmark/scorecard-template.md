@@ -458,11 +458,15 @@ a bound, not a defence, and it is the case to watch in the next pass.*
 
 ## A3. Void runs — a run that measured nothing
 
-A run is **void** when the seed was not in the state its spec requires, so the
-run tested something other than the seeded defect. It is neither a hit nor a
-miss, and scoring it either way corrupts the gate.
+A run is **void** when it measured nothing about the seeded defect. That happens
+two ways: the seed was not in the state its spec requires, so the run tested
+something other than the seeded defect; or the run ended without producing a
+report, so there is nothing for the rubric to read. Either way it is neither a
+hit nor a miss, and scoring it either way corrupts the gate.
 
-Known void conditions, both from the seed specs:
+Known void conditions. The first two are **seed-state** conditions and come from
+the seed specs. The third is a **run-state** condition: it belongs to no seed,
+and it binds every seed and every harness alike.
 
 - **Seed 5** — the `sn_aia_trigger_agent_usecase_m2m` gate was not turned on
   post-install, so *both* activation gates were off and the seed isolated
@@ -477,6 +481,56 @@ Known void conditions, both from the seed specs:
   the tool tests a malformed reference rather than an unmapped provider. A
   hardcoded value that MATCHES the instance's record is a valid install, not a
   void.
+- **Any seed, any harness — the PLATFORM terminated the execution and no report
+  text was produced.** The execution closed `state: terminated` with
+  `state_reason: execution_failed`, and the run emitted no report body of any
+  kind, so there is nothing for the rubric to read. An intact fixture does
+  **not** make that a valid `0`: a `0` is a report that failed the rubric, and
+  here there is no report to fail it.
+
+  **The boundary is deliberately narrow — the platform failed the execution, as
+  against the run failing.** The two adjacent cases are both **scored**, and
+  neither is this condition:
+
+  - **A report body that was produced and then REJECTED is a report.** Score it
+    against the rubric like any other; a `0` on it is a real measurement.
+    Whether a validator accepted the body is not the test — whether the model
+    produced one is.
+  - **A run that exhausted a declared budget is a run that failed.** A death at
+    a tool ceiling, a context limit, a supervision stall or a wander is scored,
+    with `cause_of_death` recording how it died. That column exists precisely
+    because a `0` earned by running out of budget and a `0` earned by reasoning
+    badly are opposite verdicts, and voiding either deletes the signal the
+    column was added to carry.
+
+  **What this condition does not decide:** a provider outage (`genai_down`) with
+  no report body sits on the boundary — the provider is neither the harness nor
+  the platform executing it — and nothing here rules on it. A pass that meets it
+  must rule under clause (b) below, before firing any replacement.
+
+  A terminated execution is a real measurement about **operating** that harness
+  and belongs in the operator record. It is not a measurement of diagnostic
+  quality, which is what these columns grade.
+
+  Two properties make this condition safe to apply, and both are requirements on
+  the operator, not remarks:
+
+  **(a) It is symmetric.** It applies on identical terms whichever harness the
+  terminated run belongs to. A condition invoked for one harness's terminated
+  run and not another's is not this condition.
+
+  **(b) A void condition is committed before the replacement run is fired — and
+  this clause binds AUTHORING a condition, not applying one already written
+  here.** Applying the bullet above to a run that terminates on the last row of a
+  pass, when the tallies are unavoidably visible, is not a choice made with the
+  effect in view: the choice was made in this section, before the pass began.
+  That is the whole reason a void condition belongs here rather than in one
+  pass's own record. What the clause forbids is meeting a terminal state this
+  section does **not** name and ruling on it once its effect on the comparison
+  can be estimated — voiding removes a row that could only have taken a zero
+  against an absent report, and it spends one of the arm's re-runs, and which
+  effect dominates is not knowable in advance. Author the new condition, commit
+  it, then fire the replacement.
 
 **How to record one.** Put `void` in `passes_gate` — not `0` — write the reason
 in `notes`, and leave the four rubric columns blank. A blank rubric with a stated
@@ -488,7 +542,15 @@ reason is honest; a `0` is a measurement that did not happen.
    denominator is the number of **valid** runs, not 10.
 2. **Void runs should be re-run**, not absorbed. Fix the setup, run the seed
    again, and score the replacement. Voidness is a property of the run, not of
-   the seed.
+   the seed — a run-state void has no setup to fix, and is simply re-fired.
+
+   **Re-runs are capped per arm, and the pass declares the cap before it
+   starts.** Reaching the cap is a **cost stop, not a verdict**: stop re-running
+   that arm, close the pass with what is valid, and read rule 4 against the
+   valid count. Without a declared cap a flaky harness can be re-fired
+   indefinitely, so nothing is ever unrecoverable and the floor below can never
+   bite — which is the test rule 4 needs: **a void the cap leaves unreplaced is
+   what "cannot be made valid" means.**
 3. If a void run cannot be made valid, the gate is read as
    `sum(passes_gate) / <valid runs>` against the **same proportions**, and
    *all three* bands are proportional — not just the top one. The
@@ -542,6 +604,26 @@ reason is honest; a `0` is a measurement that did not happen.
    void rows already take this to exactly 8; a third puts the benchmark under its
    own floor. This is the case the whole column exists to make visible rather
    than let a low total hide it.
+
+   **Read the floor on one arm at a time — but only where the pass is sized for
+   it.** The row count this file declares is **10 rows, total**. A pass that runs
+   two harnesses must state its own size before it starts, and the per-arm
+   reading assumes each arm carries a full 10 valid rows; where it does, each arm
+   carries its own floor against its own valid rows, and one arm falling below it
+   suppresses **that arm's** gate figure and not the other's. **Where a pass
+   instead splits the 10 rows across two arms the floor's premise does not
+   hold** — 5 rows in an arm is under 8 before anything is scored — and that pass
+   must settle its own evaluability rule in its pre-registration, before any row
+   exists. Settling it afterwards is not a criterion; it is a degree of freedom,
+   exercised by someone who can already see which reading flatters which arm.
+
+   **The floor counts what could not be made valid**, not what was encountered.
+   Rule 2 requires a void to be re-run rather than absorbed, so a void whose
+   replacement is valid costs the denominator nothing, and rule 2's cap is what
+   makes "cannot be made valid" a decidable state. An arm sized at 10 may
+   therefore finish with up to two unrecoverable voids and still be evaluable,
+   however many voids it met along the way. A pass that voids many rows and
+   recovers them all is a costly pass, not an under-powered one.
 
 ## B. Four further columns — required, not optional
 
