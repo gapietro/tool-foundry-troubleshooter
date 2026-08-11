@@ -223,10 +223,10 @@ All four are newly worded rather than reused from v12, so no seeded execution in
 | 04 | 2 | `ea63a3b22b2e0bd817a6ffbeee91bfb0` | `Seed 04 Summarizer` on ticket `c5c2a77a…` | **completed** |
 | 01 | 1 | `dfa22b7a2b624718f243fed2ce91bf12` | `Seed 01 Ticket Prioritizer`, sys_id only | **VOID — stalled, see 2.4** |
 | **01** | **1** | **`c343e7be2b624718f243fed2ce91bfd3`** | `Seed 01 Ticket Prioritizer`, sys_id + urgent description | **completed 67s**, 1 tool call `set_ticket_priority` (250ms, **OK**) |
-| 01 | 2 | `1c65237e2b2e0bd817a6ffbeee91bfff` | `Seed 01 Ticket Prioritizer` on ticket `5cc267be…` | **stalled — see 2.5** |
-| 05 | 1, 2 | — | absence; **blocked**, see 2.6 | — |
+| 01 | 2 | `1c65237e2b2e0bd817a6ffbeee91bfff` | `Seed 01 Ticket Prioritizer` on ticket `5cc267be…` | **completed 67s**, 1 tool call `set_ticket_priority` (307ms, **OK**) |
+| 05 | 1, 2 | **none, by design** | ticket `0277233a2b6e0bd817a6ffbeee91bf6f` inserted 21:43:52 | **absence verified — see 2.6** |
 
-**Seven of the eight execution-producing fixtures are complete.** Seed 05 produces no execution by
+**All eight execution-producing fixtures are complete.** Seed 05 produces no execution by
 design, so the pass needs eight, not ten.
 
 ### 2.4a Seed 01's defect, confirmed live and it is sharper than "the value is wrong"
@@ -244,37 +244,80 @@ not reached the defect; the record was never updated, and the tool's own status 
 misleading. This is the schema mismatch the seed exists to plant (a word forwarded to an
 Integer-typed column), observed end to end.
 
-### 2.5 Seed 01 rep 2 stalled in a SECOND shape, and it is not the rep 1 shape
+### 2.5 Seed 01 rep 2 was NOT a second stall — it was latency, and the claim it was is withdrawn
 
-`1c65237e…` was invoked with the same corrected prose form that made rep 1 work — sys_id plus an
-urgent description. It did not ask for input. It called **`organize_general_knowledge`** — an OOB
-tool, not one of the seed's own — and then sat in `AIA ReAct Engine [ONGOING]` with **0 tool calls**
-recorded and no agent message after `21:34:45`.
+**This subsection previously reported a "second stall shape" and a flakiness finding. Both were
+wrong, and they are corrected here rather than deleted**, because the mistake is the instructive
+part.
 
-So seed 01 has now stalled twice, in two different ways, from two different invocations:
+`1c65237e…` **completed in 67s** with one `set_ticket_priority` call (307ms, `OK`) — the same
+duration and the same terminal shape as rep 1. What was read as a hang was the OOB
+`organize_general_knowledge` step followed by a slow model turn: **LLM P95 latency 22,037ms** on this
+run against 4,780ms on rep 1, a 4.6× spread on identical work.
 
-| attempt | invocation | stall shape |
-|---|---|---|
-| `dfa22b7a…` | sys_id only | emitted an input schema, waited in `collect_input_from_user` |
-| `1c65237e…` | sys_id + description | called an OOB knowledge tool, then hung |
+**The error was calling a stall from two identical polls.** Two consecutive traces showed the same
+task list, the same `0` tool calls and no new message, and that was treated as evidence of a hang.
+It is not: it is exactly what a 22-second model turn looks like through a polling window shorter
+than the turn. The genuine stall (`dfa22b7a…`) is distinguishable and stayed distinguishable — it
+carried **an agent message containing an input schema**, which is a positive signal, not an absence.
 
-Rep 1's success between them (`c343e7be…`, same prose form as the second) means **this is not a
-deterministic property of the invocation** — the same input shape both worked and hung. That makes
-it a flakiness finding about the seed-01 agent, not a recipe error, and it is the single biggest
-open risk to the pass: seed 01 supplies 4 of the 20 scored rows and its fixture is not reliably
-reproducible.
+> **The corrected discriminator, which §2.4's version got half right.** A stall is
+> `TOOL CALLS (0)` **plus a message whose body is an input schema**. `TOOL CALLS (0)` on its own
+> means nothing — tool calls are recorded on completion, so any run mid-turn shows zero. The earlier
+> wording ("`TOOL CALLS (0)` plus an input-schema message") is right only if both halves are
+> required, and this pass proved what happens when the second half is treated as optional.
 
-**Do not re-fire rep 2 blind.** Read `1c65237e…`'s terminal state first — if it eventually completes,
-the stall was latency and the row is usable; if it is still `In progress` with 0 tool calls, void it
-per §A3, re-fire, and record both.
+**Seed 01 is therefore not flaky, and the recipe is deterministic:** invoke with the ticket sys_id
+**plus** an urgent-sounding description, per the seed spec's Trigger section. One attempt out of
+three failed, and it is the one that omitted the description. The risk this subsection previously
+raised against seed 01's 4 scored rows does not exist.
+
+Rep 2's defect is confirmed on the same terms as rep 1: ticket `5cc267be…` reads `priority` **empty**
+and `sys_mod_count` **0** after a tool call that returned `OK`.
 
 ### 2.6 Seed 05 is blocked on seed 01 rep 2, and the reason is a protocol constraint
 
 Seed 05's fixture is an **absence**: insert a bench ticket, then verify **zero execution plans
 created instance-wide** across a multi-minute silence window (v12 §3.58; the qualification measured
-~1s from insert to plan when the trigger *is* active). That check cannot run while any other agent
-is executing — seed 01 rep 2 is currently creating plan rows, so the silence window would be
-contaminated by construction. **Seed 05 must be the last fixture produced.**
+~1s from insert to plan when the trigger *is* active). That check cannot run while any other agent is
+executing, so seed 05 was produced **last**, after all eight execution-producing fixtures had
+terminated.
+
+| check | result |
+|---|---|
+| ticket inserted | `0277233a2b6e0bd817a6ffbeee91bf6f` at **21:43:52**, `short_description` non-empty (satisfies the trigger's `short_descriptionISNOTEMPTY` condition) |
+| execution plans created instance-wide since | **zero**, across a 4+ minute silence window |
+| m2m gate `ba30d8775b0c4cebb960c58830590d5d` | still **`true`** |
+| trigger config `bfb77d6c64884500a80203ee029436ee` | still **Inactive** |
+
+**The empty result was proved to be an absence rather than a stale read, with a positive control.**
+§2.3's staleness note is the reason this matters: a narrow window had already returned zero for a
+plan that existed. So the silence query was re-run at `minutesAgoStart(20)`, wide enough to reach
+back past the last real execution — it returned **all eight** fixture plans, newest
+`1c65237e…` at 21:34:44, and **nothing at or after 21:43:52**. The query demonstrably sees plans in
+the window it covers; there simply are none after the insert.
+
+With the m2m gate on and only the trigger config off, the seed isolates exactly one gate — which is
+the whole point of §A3's void condition for it, and what a correct diagnosis has to name
+specifically rather than saying "the trigger is off".
+
+### 2.7 Fixture manifest — all eight execution-producing fixtures, plus seed 05's absence
+
+| seed | rep | plan | created |
+|---|---|---|---|
+| 01 | 1 | `c343e7be2b624718f243fed2ce91bfd3` | 21:25:38 |
+| 01 | 2 | `1c65237e2b2e0bd817a6ffbeee91bfff` | 21:34:44 |
+| 02 | 1 | `0913233e2b624718f243fed2ce91bf0f` | 21:24:40 |
+| 02 | 2 | `d96323b22b2e0bd817a6ffbeee91bf04` | 21:26:04 |
+| 03 | 1 | `8513233e2b624718f243fed2ce91bf6e` | 21:24:41 |
+| 03 | 2 | `656323b22b2e0bd817a6ffbeee91bfb7` | 21:26:05 |
+| 04 | 1 | `a513a33e2b624718f243fed2ce91bf4e` | 21:24:43 |
+| 04 | 2 | `ea63a3b22b2e0bd817a6ffbeee91bfb0` | 21:26:09 |
+| 05 | 1, 2 | *(none — the absence is the fixture)* | ticket 21:43:52 |
+
+Plus one void: `dfa22b7a2b624718f243fed2ce91bf12` (seed 01, invoked without a description, §2.4).
+
+**Stage 2 is complete.** Both arms diagnose the same fixture for a given seed/rep, per §AI7.
 
 Seed 02 rep 1 reproduces v12's shape exactly: a routing request answered by a character counter.
 Seed 04 rep 1 likewise fires `summarise_ticket` once, the unmapped-capability path.
