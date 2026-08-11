@@ -331,13 +331,59 @@ PaLlmProxy.prototype = {
      * failure reason and the literal phrase "JSON only" (Task 2 brief, Step
      * 4) — that is what tells the model precisely what was wrong and how to
      * fix it, rather than just repeating the original prompt verbatim.
+     *
+     * #188 — THE ADVICE MUST MATCH THE FAILURE CLASS.
+     * This used to answer every parse failure with the same FORMATTING advice
+     * ("JSON only ... no prose, no markdown fence"). That is the right remedy
+     * for a fenced or prose-wrapped response and a NO-OP for a response that
+     * is already well-formed JSON and wrong about the vocabulary.
+     *
+     * Measured live on gpinst01 (v14 rows 06/08, runs TR1000300/TR1000302):
+     * the model emitted a TOOL NAME in the action slot —
+     * `{"action":"agent_config","args":{...}}` — collapsing the two-level
+     * envelope into one. It was told to fix its formatting, which was already
+     * perfect, so it returned a BYTE-IDENTICAL response and the run failed
+     * with zero tool calls. The whole "the agent never ran" diagnostic class
+     * was unreachable because of it.
+     *
+     * The `unknown action:` branch below therefore names the offending value,
+     * restates the legal vocabulary, and shows the rewrap concretely — telling
+     * the model to match "the required schema exactly" is useless when it
+     * already believes it did.
+     *
+     * Deliberately NOT coupled to the tool registry: the guidance is phrased
+     * conditionally ("if X is a tool"), so it is correct whether X is a real
+     * tool name or a hallucinated one, and this function stays pure string
+     * logic with no dependency on `PaToolRegistry` (see the file header — the
+     * no-Glide, no-NASK guarantee covers everything above `_invokeNask`).
      */
     _buildRetryPrompt: function (originalPrompt, reason) {
+        var text = originalPrompt + '\n\nYour previous response could not be parsed: ' + reason + '.'
+
+        var unknown = /^unknown action:\s*(.+)$/.exec(this._normPrompt(reason))
+        if (unknown) {
+            var offender = unknown[1].replace(/^\s+|\s+$/g, '')
+            return (
+                text +
+                '\n\n"' +
+                offender +
+                '" is not one of the three legal values for the "action" key. ' +
+                'The legal actions are exactly: tool_call, answer, fix_report.' +
+                '\n\nIf "' +
+                offender +
+                '" is a TOOL you want to call, it belongs in the "tool" key inside a ' +
+                'tool_call envelope, not in the "action" key. Send it as:' +
+                '\n  {"action":"tool_call","tool":"' +
+                offender +
+                '","args":{...}}' +
+                '\n\nYour JSON was otherwise well formed — do not change its formatting, ' +
+                'change the envelope. Respond with JSON only, just the JSON object.'
+            )
+        }
+
         return (
-            originalPrompt +
-            '\n\nYour previous response could not be parsed: ' +
-            reason +
-            '. Respond with JSON only, matching the required schema exactly — no prose, ' +
+            text +
+            ' Respond with JSON only, matching the required schema exactly — no prose, ' +
             'no markdown fence, just the JSON object.'
         )
     },
