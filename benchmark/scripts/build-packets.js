@@ -561,7 +561,7 @@ function advanceRulings(row, rulings) {
     return out.join('\n')
 }
 
-function buildPacket(row, rubric, spec, rulings, reportsDir) {
+function buildPacket(row, rubric, spec, rulings, reportsDir, pass) {
     const n = String(row.row).padStart(2, '0')
     return [
         '# Scoring packet — Row ' + n,
@@ -605,7 +605,7 @@ function buildPacket(row, rubric, spec, rulings, reportsDir) {
         '',
         reportHeader(row),
         '',
-        reportBody(row, readInput(path.join(reportsDir, 'row-' + n + '.md'), '?', "this row's report").trimEnd()),
+        reportBody(row, readInput(path.join(reportsDir, 'row-' + n + '.md'), pass, "this row's report").trimEnd()),
         '',
         '---',
         '',
@@ -702,7 +702,7 @@ function buildAll(pass) {
     for (const row of rows) {
         const n = String(row.row).padStart(2, '0')
         const name = 'row-' + n + '-' + row.arm + '-seed-' + row.seed + '-run-' + row.rep + '.md'
-        const body = buildPacket(row, rubric, specs[row.seed], rulings, paths.reports)
+        const body = buildPacket(row, rubric, specs[row.seed], rulings, paths.reports, paths.pass)
 
         // A `failed` terminal makes the packet PROMISE a validator rejection,
         // and a report carrying one on a passing row shows it with nothing to
@@ -835,9 +835,18 @@ function main(argv) {
 
     console.log('wrote ' + written.length + ' packets to ' + out)
     console.log('rubric section verified byte-identical across all of them')
+    // The directory THIS run wrote, not a hardcoded one. When these two lines
+    // said `scoring-v12` unconditionally, a `--pass v13` build printed a runbook
+    // whose two edits were ALREADY DONE — so the operator makes two no-op
+    // changes, sees `npm test` green, and concludes the gate passed while
+    // scoring-v13/ never enters PACKET_SETS and the blind-rule scan never covers
+    // a single v13 packet. §AI6 puts the operator here after twenty runs of
+    // instance time, which is the worst possible moment to be told the wrong
+    // thing confidently.
+    const dirName = path.basename(out)
     console.log('\nNEXT (all three, or the suite stays red):')
-    console.log('  1. add a PACKET_SETS entry: dir scoring-v12, scanned true, a why, packets: ' + written.length)
-    console.log('  2. extend the declared-membership literal to include scoring-v12')
+    console.log('  1. add a PACKET_SETS entry: dir ' + dirName + ', scanned true, a why, packets: ' + written.length)
+    console.log('  2. extend the declared-membership literal to include ' + dirName)
     console.log('  3. npm test — must be green BEFORE any packet is handed to a scorer')
 }
 

@@ -85,7 +85,22 @@ describe('pass selection', () => {
     test('a missing input file names the file and the pass, not an ENOENT', () => {
         // v99 exists nowhere. The operator hits this AFTER twenty runs, so the
         // message has to say which artefact is absent.
-        expect(() => gen.main(['--pass', 'v99'])).toThrow(/v99-rows\.json/)
+        //
+        // Driven through --out into a throwaway, NEVER bare. A bare main() here
+        // would rely on the code under test throwing: if the read guard ever
+        // regressed to a default-input fallback, this test would WRITE twenty
+        // packets into benchmark/scoring-v99/ as a side effect.
+        // packetGeneratorParity.test.js documents that exact accident as one
+        // that already happened once.
+        const fs = require('fs')
+        const os = require('os')
+        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pass-missing-'))
+        try {
+            expect(() => gen.main(['--pass', 'v99', '--out', tmp])).toThrow(/v99-rows\.json/)
+            expect(fs.readdirSync(tmp)).toEqual([])
+        } finally {
+            fs.rmSync(tmp, { recursive: true, force: true })
+        }
     })
 
     test('OUT stays exported and still points at the dispatched v12 directory', () => {
@@ -142,6 +157,78 @@ describe('the v13 advance-rulings channel (DECISION.md §AI7 item 11)', () => {
         for (const r of rulings) {
             expect(gen.verdictHits(r.heading, 'heading')).toEqual([])
             expect(gen.verdictHits(r.text, 'text')).toEqual([])
+        }
+    })
+})
+
+
+describe('a full --pass build, end to end (the gate no test covered)', () => {
+    // The #168 review found the hardcoded runbook by hand-running `--pass v13`
+    // with synthetic inputs, because nothing exercised the whole path — only
+    // path resolution and the v12 default were covered. That gap is closed
+    // here: a build under a non-default pass, from staged inputs, all the way
+    // to twenty files and the printed runbook.
+    const fs = require('fs')
+    const os = require('os')
+
+    const V12_ROWS = path.join(BENCH, 'v12-rows.json')
+    const V12_REPORTS = path.join(BENCH, 'v12-reports')
+    const PASS = 'v98'
+    const rowsFile = path.join(BENCH, PASS + '-rows.json')
+    const reportsDir = path.join(BENCH, PASS + '-reports')
+    const rulingsFile = path.join(BENCH, PASS + '-advance-rulings.json')
+
+    // v98 inputs are cloned from v12's and removed in afterAll. They are
+    // scaffolding for the code path, not evidence: nothing here is scored, and
+    // the real v13 inputs arrive from the pass itself.
+    beforeAll(() => {
+        fs.writeFileSync(rowsFile, fs.readFileSync(V12_ROWS))
+        fs.copyFileSync(path.join(BENCH, 'v13-advance-rulings.json'), rulingsFile)
+        fs.mkdirSync(reportsDir, { recursive: true })
+        for (const f of fs.readdirSync(V12_REPORTS)) {
+            fs.copyFileSync(path.join(V12_REPORTS, f), path.join(reportsDir, f))
+        }
+    })
+
+    afterAll(() => {
+        fs.rmSync(rowsFile, { force: true })
+        fs.rmSync(rulingsFile, { force: true })
+        fs.rmSync(reportsDir, { recursive: true, force: true })
+    })
+
+    test('builds twenty packets and prints a runbook naming ITS OWN directory', () => {
+        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pass-e2e-'))
+        const lines = []
+        const quiet = jest.spyOn(console, 'log').mockImplementation((m) => lines.push(String(m)))
+        try {
+            gen.main(['--pass', PASS, '--out', tmp])
+            expect(gen.existingPacketsIn(tmp)).toHaveLength(20)
+
+            // The finding: an unconditional `scoring-v12` here tells the
+            // operator to make two edits that are already done, so the suite
+            // goes green while the new packets never enter the blind-rule scan.
+            const runbook = lines.join('\n')
+            expect(runbook).toContain(path.basename(tmp))
+            expect(runbook).not.toContain('scoring-v12')
+        } finally {
+            quiet.mockRestore()
+            fs.rmSync(tmp, { recursive: true, force: true })
+        }
+    })
+
+    test('a partially staged reports directory names the pass, not "?"', () => {
+        const missing = path.join(reportsDir, 'row-02.md')
+        const saved = fs.readFileSync(missing)
+        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pass-partial-'))
+        try {
+            fs.rmSync(missing)
+            expect(() => gen.main(['--pass', PASS, '--out', tmp])).toThrow(
+                new RegExp('MISSING INPUT for pass ' + PASS)
+            )
+            expect(fs.readdirSync(tmp)).toEqual([])
+        } finally {
+            fs.writeFileSync(missing, saved)
+            fs.rmSync(tmp, { recursive: true, force: true })
         }
     })
 })

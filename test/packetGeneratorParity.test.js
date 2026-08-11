@@ -1,6 +1,6 @@
 /**
  * The packet generator carries a DELIBERATE copy of the packet guard's
- * repository-path patterns (benchmark/scripts/build-v12-packets.js, and
+ * repository-path patterns (benchmark/scripts/build-packets.js, and
  * scorerPacketBlindRule.test.js's PACKET_PATTERNS). The stated justification
  * is that "two independent copies disagreeing is a signal; one shared copy
  * being wrong is invisible."

@@ -49,6 +49,32 @@ two-digit daily counter. Incremented on every merge to `main`.
   reproducibility to buy nothing. `--out` still wins over the pass's directory so the freeze guard
   stays exercisable on a throwaway.
 
+### Fixed — the #168 review round
+
+- **The post-build runbook was hardcoded to `scoring-v12`, so a `--pass v13` build printed
+  instructions for the wrong pass.** Found by the reviewer hand-running a full `--pass v13` build,
+  which no test covered. Both printed edits are already done for `scoring-v12`, so an operator
+  following the runbook makes two no-op changes, sees `npm test` green, and concludes the gate
+  passed — while `scoring-v13/` never enters `PACKET_SETS` and **the blind-rule scan never covers a
+  single v13 packet**. §AI6 puts the operator at exactly this point after twenty runs of instance
+  time. Now interpolates the directory the run actually wrote.
+- **The end-to-end gap that hid it is closed.** Only path resolution and the v12 default were
+  covered; nothing exercised a non-default pass from staged inputs through to twenty files and the
+  runbook. Two tests added, using a disposable `v98` fixture cloned from v12's inputs and removed in
+  `afterAll`. Verified adversarially: reintroducing the hardcoded string turns the new test red.
+- **`readInput` was called with `'?'` as the pass** from `buildPacket`, so a missing report — the
+  likeliest partial-staging failure, being twenty separate files — reported `MISSING INPUT for pass ?`.
+  The real pass is now threaded through, and a second test covers the partially-staged case.
+- **The missing-input test drove `main()` with no `--out`**, so its safety rested on the code under
+  test throwing; a regression to a default-input fallback would have written twenty packets into
+  `benchmark/scoring-v99/` as a test side effect — the accident `packetGeneratorParity.test.js`
+  documents as having already happened once. Now driven through a `mkdtemp`, with the directory
+  asserted empty afterwards.
+- **Two stale navigational pointers** to `build-v12-packets.js` updated in
+  `scorerPacketBlindRule.test.js` and `packetGeneratorParity.test.js`. The `CHANGELOG.md` and
+  `DECISION.md` §AC/§AI7 references are deliberately left alone — those are historical and
+  pre-registration records.
+
 ### Verified
 
 - **v12's output is byte-identical across the change.** The pre-rename generator (from `HEAD`) and
