@@ -363,3 +363,92 @@ fire on the first turn, so seed 01 is the outlier.
 ## 3. The twenty rows — measurements
 
 *(populated as the pass runs)*
+
+
+---
+
+## 3. Stage 3 runbook — the twenty scored runs
+
+**Not started, deliberately.** §AI7 fixes sequencing as *"strictly sequential, one day, one deployed
+version"*. Stage 2 closed at 21:48 instance time with the UTC date already rolled over, and the
+twenty rows each need a trace read plus a verbatim report capture. Beginning them at the end of a
+session guarantees the pass straddles a day boundary mid-protocol — so stage 3 starts fresh, in one
+sitting, or the pass is not the pass §AI pre-registered. **This section exists so that sitting
+executes rather than re-derives.**
+
+### 3.1 Order — fixed, do not improvise
+
+Interleaved by seed, per §AI7 (interleaving spreads intra-day model drift across both arms instead of
+aligning it with the arm boundary, §O1):
+
+| row | arm | seed | rep | fixture |
+|---|---|---|---|---|
+| 01 | native | 01 | 1 | `c343e7be2b624718f243fed2ce91bfd3` |
+| 02 | custom | 01 | 1 | same |
+| 03 | native | 01 | 2 | `1c65237e2b2e0bd817a6ffbeee91bfff` |
+| 04 | custom | 01 | 2 | same |
+| 05 | native | 02 | 1 | `0913233e2b624718f243fed2ce91bf0f` |
+| 06 | custom | 02 | 1 | same |
+| 07 | native | 02 | 2 | `d96323b22b2e0bd817a6ffbeee91bf04` |
+| 08 | custom | 02 | 2 | same |
+| 09 | native | 03 | 1 | `8513233e2b624718f243fed2ce91bf6e` |
+| 10 | custom | 03 | 1 | same |
+| 11 | native | 03 | 2 | `656323b22b2e0bd817a6ffbeee91bfb7` |
+| 12 | custom | 03 | 2 | same |
+| 13 | native | 04 | 1 | `a513a33e2b624718f243fed2ce91bf4e` |
+| 14 | custom | 04 | 1 | same |
+| 15 | native | 04 | 2 | `ea63a3b22b2e0bd817a6ffbeee91bfb0` |
+| 16 | custom | 04 | 2 | same |
+| 17 | native | 05 | 1 | **no plan** — agent name + ticket `0277233a2b6e0bd817a6ffbeee91bf6f` |
+| 18 | custom | 05 | 1 | same, via `agent` + `timeframe` |
+| 19 | native | 05 | 2 | same as row 17 |
+| 20 | custom | 05 | 2 | same as row 18 |
+
+### 3.2 Invocation, both arms — proven this pass
+
+**Native.** `servicenow_aia_execute`, agent `Agent Doctor`, `waitForCompletion: false`. Objective:
+
+> Diagnose the failing AI Agent execution with plan sys_id `<fixture>`. Sweep all seven layers and
+> produce a Fix Report with root causes, evidence citations, and proposed fixes.
+
+The call returns a **Session ID, not a plan sys_id** — recover the plan by querying
+`sn_aia_execution_plan` on a recent-creation window, and read `agent` to confirm it is the right one.
+Expect ~280s and ~15 tool calls.
+
+**Custom.** `POST /api/x_snc_troubleshoot/troubleshooter/analyze` with
+`{"execution": "<fixture>", "mode": "diagnose"}` — the key is **`execution`**, not `execution_id`
+(a wrong key returns a bare 400 naming no field). Returns `{run_id, status: "queued"}`. Expect ~17–25s.
+Read the result from `x_snc_troubleshoot_run.fix_report`.
+
+**Seed 05 (rows 17–20) differs on both arms**, per v12 §3.58: there is no plan sys_id, so both arms
+get the agent name plus the ticket sys_id, and the custom arm cannot take `execution` — call it with
+`agent` + `timeframe` (`_validateAnalyze` accepts `execution`, `logs`, or `agent`+`timeframe`, and
+rejects `agent` alone).
+
+### 3.3 Capture, per row — and the two traps that will cost a row each
+
+1. **Terminal state** from `servicenow_aia_trace` or the plan row — **never** from
+   `servicenow_aia_logs`, which served `In progress` for minutes after completion (§AC7).
+2. **`conversation_ref` verified distinct** per row. `PaRunAnchor`'s one-anchor-per-user-per-30-minute
+   fallback makes interleaving a hazard rather than a safeguard (§O1).
+3. **Native report** = every `sn_aia_message` row with `role=agent` created **after the final tool
+   call**, concatenated in **`sys_created_on`** order. Not `message_sequence` — it is populated on
+   only the first agent message. The smoke gate delivered its report across **three** messages after
+   one `show_output_to_user` truncated mid-`RC-2`, so taking the newest message alone silently drops
+   the failure summary.
+4. **Do not call a slow run stalled.** `TOOL CALLS (0)` alone means nothing — tool calls are recorded
+   on completion, so any run mid-turn shows zero, and LLM P95 varied 4.8s→22s on identical work in
+   this pass. A real stall additionally carries an agent message whose body is an **input schema**.
+
+### 3.4 Artefacts to write as the stage runs
+
+`v13-rows.json` (the manifest the packet generator reads — mirror `v12-rows.json`'s shape) and
+`v13-reports/row-NN.md` (each report **verbatim**). Then `build-packets.js --pass v13`, then §AI7's
+three guard edits, then `npm test` green **before** any packet reaches a scorer.
+
+### 3.5 What must not happen
+
+- **No tally, no prediction evaluated** — including AI-4 and AI-5, which read report shape — until
+  all twenty runs have terminated and all twenty packets have been scored and returned (§AI6).
+- **No edit to §AI.** It is a merged pre-registration; satisfying its gates is not amending it.
+- **No `--force`** on the packet generator, and nothing written into `scoring-v12/`.
