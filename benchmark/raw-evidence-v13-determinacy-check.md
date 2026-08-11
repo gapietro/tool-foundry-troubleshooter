@@ -1,7 +1,24 @@
-# v13 — the determinacy check (`2026.08.1009`, #166)
+# v13 — the determinacy check (build `5fb7648`, #166)
+
+> **The pass is keyed to a commit, not a version token.** §AI's heading says `2026.08.1008`, an
+> earlier title here said `2026.08.1009`, and the repo is now `2026.08.1010` — three labels for one
+> pass, none of which identifies the code under test. **The code under test is `5fb7648`**
+> (= `sys_app.version` `2026.08.1003`), and `git log 5fb7648..HEAD -- src/` is empty. §W7/§AB6 say
+> version strings are not evidence; §1.1 records an item that was wrong precisely because it trusted
+> one. Naming the commit is the same rule applied to this file's own title.
 
 Pre-registered at `DECISION.md` §AI, merged in `ed0b6c2` before any run of this pass fired.
 Infrastructure (§AI7 items 11 and 12) merged in `b36a09d`, also before run 1.
+
+> **Clock convention — read before comparing any two timestamps in this file.** Times are recorded
+> as they were returned by the tool that produced them, and **two clocks appear**. `sn_aia_message`
+> and `x_snc_troubleshoot_run` rows carry **UTC** (§1.6, §1.7: `00:48`–`00:53`). `sn_aia_execution_plan`
+> rows and `servicenow_aia_trace` carry **instance local time**, UTC−4 (§2.2 onward: `21:24`–`21:48`).
+> The same seed-01 rep-1 plan therefore appears as `01:22:54` in §2.4's staleness note and `21:25:38`
+> in §2.7's manifest — a 4-hour offset, not a discrepancy. **This matters operationally:** §3.3's
+> "messages created after the final tool call" rule compares a `sn_aia_message` timestamp (UTC)
+> against a trace tool-call time (local), and an operator who does not convert will mis-slice the
+> report by four hours. Convert before comparing, or compare only within one source.
 
 **This file records measurements only.** No prediction is evaluated here — §AI6 seals every tally,
 including AI-4 and AI-5 which read off report shape, until all twenty runs have terminated and all
@@ -16,7 +33,27 @@ gate figures are **published, applied to Ruling 3's criterion, and unpredicted**
 
 ## 1. Pre-flight (§AI7) — twelve items
 
-Ten items were verified read-only before the smoke gate; item 10 is the smoke gate itself.
+§AI7's items 1–9 are read-only probes, item 10 is the smoke gate, and items 11–12 are build gates
+satisfied in `b36a09d`. An earlier draft of this line said "ten items were verified read-only",
+which does not reconcile with the list it summarises.
+
+> **§1.4's item 6 was declared discharged on one clause out of three, and the #169 review caught it.**
+> §AI7 item 6 reads *"All five seeds' §A3 fixture conditions re-read live — including seed 05's m2m
+> gate (AI3.1) **and seed 04's capability sys_id matching the instance's `sys_one_extend_capability`
+> record**"*, that second condition being §A3's **other** void condition. Only the seed-05 gate had
+> been probed when this file declared "12 of 12 and the pass may fire". **Seed 04's capability sys_id
+> has since been probed: `92ff62af516741769c437feb88c80ef3` exists on gpinst01** (`sys_one_extend_capability`,
+> created 2026-08-02), so the fixture holds and seed 04's four scored rows are sound — but the claim
+> preceded the check, which is the thing §AI7's pre-flight exists to prevent. Recorded rather than
+> quietly back-filled.
+>
+> **One clause of item 6 remains outstanding and the pass should not fire until it is closed:**
+> §AI7's unnumbered pre-flight requirement that the **§A2.2/§A2.3 rubric slice be re-scanned**, not
+> assumed clean because the suite was green when those clauses merged (§AH6's precedent: two
+> blind-rule defects came out of that one section). `npm test` is green and includes
+> `scorerPacketBlindRule.test.js`, but **that the suite's scan actually covers the §A2.2/§A2.3 slice
+> has not been confirmed here**, and "a test exists" is not the same claim as "the slice was
+> scanned".
 
 ### 1.1 Item 1 — the build under test, and the item that was wrong
 
@@ -163,7 +200,19 @@ recovered by querying `sn_aia_execution_plan` on a recent-creation window. Sessi
 from `aia_trace` or the plan row, **never** from `aia_logs` (§AC7's tooling note).
 
 **One correction to the custom arm's invocation, for the next operator.** `POST /analyze` takes
-`execution`, not `execution_id`; the wrong key returns a bare `400 Bad Request` with no field named.
+`execution`, not `execution_id`.
+
+> **And a correction to the correction, which turns an "instance quirk" into a real defect.** This
+> file previously said the wrong key *"returns a bare `400 Bad Request` with no field named"*, and
+> banked that as something to live with. The shipped handler says otherwise:
+> `PaRestHandlers._validateAnalyze` returns `{error: 'one of execution, agent+timeframe, or logs is
+> required'}` and its docstring states *"Names the exact missing input, never a generic 'bad
+> request'"*. Re-probed with an empty body: still surfaced as `400 Bad Request` with **no body**.
+> So the handler names the field and **the message is being lost between the handler and the
+> caller** — either the REST layer or the MCP transport is discarding a non-2xx response body.
+> That is a diagnosability defect worth its own issue, not an instance behaviour to bank, and the
+> original note actively taught the next operator that `/analyze` has no error surface when the code
+> says it does.
 
 ---
 
@@ -228,6 +277,118 @@ All four are newly worded rather than reused from v12, so no seeded execution in
 
 **All eight execution-producing fixtures are complete.** Seed 05 produces no execution by
 design, so the pass needs eight, not ten.
+
+### 2.4a Seed 01's defect, confirmed live and it is sharper than "the value is wrong"
+
+Rep 1's `set_ticket_priority` returned **`[OK]` in 250ms**. The ticket afterwards:
+
+| field | value |
+|---|---|
+| `priority` | **empty** |
+| `sys_mod_count` | **0** |
+
+`sys_mod_count: 0` is the part worth having. The write did not land wrong — **it never happened at
+all**, and the tool still reported success. A diagnosis that stops at "the priority is wrong" has
+not reached the defect; the record was never updated, and the tool's own status is actively
+misleading. This is the schema mismatch the seed exists to plant (a word forwarded to an
+Integer-typed column), observed end to end.
+
+### 2.5 Seed 01 rep 2 was NOT a second stall — it was latency, and the claim it was is withdrawn
+
+**This subsection previously reported a "second stall shape" and a flakiness finding. Both were
+wrong, and they are corrected here rather than deleted**, because the mistake is the instructive
+part.
+
+`1c65237e…` **completed in 67s** with one `set_ticket_priority` call (307ms, `OK`) — the same
+duration and the same terminal shape as rep 1. What was read as a hang was the OOB
+`organize_general_knowledge` step followed by a slow model turn: **LLM P95 latency 22,037ms** on this
+run against 4,780ms on rep 1, a 4.6× spread on identical work.
+
+**The error was calling a stall from two identical polls.** Two consecutive traces showed the same
+task list, the same `0` tool calls and no new message, and that was treated as evidence of a hang.
+It is not: it is exactly what a 22-second model turn looks like through a polling window shorter
+than the turn. The genuine stall (`dfa22b7a…`) is distinguishable and stayed distinguishable — it
+carried **an agent message containing an input schema**, which is a positive signal, not an absence.
+
+> **The corrected discriminator, which §2.4's version got half right.** A stall is
+> `TOOL CALLS (0)` **plus a message whose body is an input schema**. `TOOL CALLS (0)` on its own
+> means nothing — tool calls are recorded on completion, so any run mid-turn shows zero. The earlier
+> wording ("`TOOL CALLS (0)` plus an input-schema message") is right only if both halves are
+> required, and this pass proved what happens when the second half is treated as optional.
+
+**Seed 01 is therefore not flaky, and the recipe is deterministic:** invoke with the ticket sys_id
+**plus** an urgent-sounding description, per the seed spec's Trigger section. One attempt out of
+three failed, and it is the one that omitted the description. The risk this subsection previously
+raised against seed 01's 4 scored rows does not exist.
+
+Rep 2's defect is confirmed on the same terms as rep 1: ticket `5cc267be…` reads `priority` **empty**
+and `sys_mod_count` **0** after a tool call that returned `OK`.
+
+### 2.6 Seed 05 was produced LAST, and the ordering was forced by a protocol constraint
+
+Seed 05's fixture is an **absence**: insert a bench ticket, then verify **zero execution plans
+created instance-wide** across a multi-minute silence window (v12 §3.58; the qualification measured
+~1s from insert to plan when the trigger *is* active). That check cannot run while any other agent is
+executing, so seed 05 was produced **last**, after all eight execution-producing fixtures had
+terminated.
+
+| check | result |
+|---|---|
+| ticket inserted | `0277233a2b6e0bd817a6ffbeee91bf6f` at **21:43:52**, `short_description` non-empty (satisfies the trigger's `short_descriptionISNOTEMPTY` condition) |
+| execution plans created instance-wide since | **zero**, across a 4+ minute silence window |
+| m2m gate `ba30d8775b0c4cebb960c58830590d5d` | still **`true`** |
+| trigger config `bfb77d6c64884500a80203ee029436ee` | still **Inactive** |
+
+**The empty result was proved to be an absence rather than a stale read, with a positive control.**
+§2.4's staleness note is the reason this matters: a narrow window had already returned zero for a
+plan that existed. So the silence query was re-run at `minutesAgoStart(20)`, wide enough to reach
+back past the last real execution — it returned **all eight** fixture plans, newest
+`1c65237e…` at 21:34:44, and **nothing at or after 21:43:52**. The query demonstrably sees plans in
+the window it covers; there simply are none after the insert.
+
+With the m2m gate on and only the trigger config off, the seed isolates exactly one gate — which is
+the whole point of §A3's void condition for it, and what a correct diagnosis has to name
+specifically rather than saying "the trigger is off".
+
+### 2.7 Fixture manifest — all eight execution-producing fixtures, plus seed 05's absence
+
+| seed | rep | plan | created |
+|---|---|---|---|
+| 01 | 1 | `c343e7be2b624718f243fed2ce91bfd3` | 21:25:38 |
+| 01 | 2 | `1c65237e2b2e0bd817a6ffbeee91bfff` | 21:34:44 |
+| 02 | 1 | `0913233e2b624718f243fed2ce91bf0f` | 21:24:40 |
+| 02 | 2 | `d96323b22b2e0bd817a6ffbeee91bf04` | 21:26:04 |
+| 03 | 1 | `8513233e2b624718f243fed2ce91bf6e` | 21:24:41 |
+| 03 | 2 | `656323b22b2e0bd817a6ffbeee91bfb7` | 21:26:05 |
+| 04 | 1 | `a513a33e2b624718f243fed2ce91bf4e` | 21:24:43 |
+| 04 | 2 | `ea63a3b22b2e0bd817a6ffbeee91bfb0` | 21:26:09 |
+| 05 | 1, 2 | *(none — the absence is the fixture)* | ticket 21:43:52 |
+
+Plus one void: `dfa22b7a2b624718f243fed2ce91bf12` (seed 01, invoked without a description, §2.4).
+
+**Stage 2 is complete.** Both arms diagnose the same fixture for a given seed/rep, per §AI7.
+
+Seed 02 rep 1 reproduces v12's shape exactly: a routing request answered by a character counter.
+Seed 04 rep 1 likewise fires `summarise_ticket` once, the unmapped-capability path.
+
+**All four bench tickets read `priority` empty and `sys_mod_count: 0` at handoff** — no write has
+landed on any of them, so every seed-01/04 fixture is intact and uncontaminated.
+
+### 2.4 Seed 01 will not fire from a bare sys_id — the invocation, not the agent
+
+**This subsection has been cut back to what survived review.** Its original text claimed *"both
+seed-01 attempts stalled"* and that the retry's outcome was *"unresolved and the first thing the next
+session must check"*. Both statements were already false when written — §2.4a records the retry
+completing in 67s — and the #169 review found them still standing, pointing a future operator at a
+resolved question. The stale text is removed rather than annotated in place, because a runbook
+another session executes is the one document where a superseded paragraph is a hazard rather than a
+record.
+
+**What holds:** the first attempt (`dfa22b7a…`) supplied only the ticket sys_id, and the agent
+responded by emitting an input schema (`ticket_description`, `affected_users`) and waiting in
+`collect_input_from_user` — `Mode: Interactive`, with nothing to answer it. The seed spec's Trigger
+section requires the sys_id **plus an urgent-sounding description**. Supplying both works, on every
+attempt since. The run is a **void** under §A3, recorded and replaced.
 
 ### 2.4a Seed 01's defect, confirmed live and it is sharper than "the value is wrong"
 
@@ -360,9 +521,6 @@ fire on the first turn, so seed 01 is the outlier.
 
 ---
 
-## 3. The twenty rows — measurements
-
-*(populated as the pass runs)*
 
 
 ---
@@ -425,6 +583,17 @@ get the agent name plus the ticket sys_id, and the custom arm cannot take `execu
 `agent` + `timeframe` (`_validateAnalyze` accepts `execution`, `logs`, or `agent`+`timeframe`, and
 rejects `agent` alone).
 
+**Use this objective verbatim for rows 17 and 19**, rather than improvising four of twenty prompts.
+Leaving it unwritten is the same defect §AI7 item 2 was rewritten to close, and prompt variance
+across rows is precisely what §AI7's interleaving discipline holds constant:
+
+> The agent `Seed 05 Ticket Acknowledger` did not respond to bench ticket
+> `0277233a2b6e0bd817a6ffbeee91bf6f`, which was created with a non-empty short description. No
+> execution plan exists for it. Diagnose why the agent did not run. Sweep all seven layers and
+> produce a Fix Report with root causes, evidence citations, and proposed fixes.
+
+The custom arm takes the same text as its `agent` value plus a `timeframe` covering the insert.
+
 ### 3.3 Capture, per row — and the two traps that will cost a row each
 
 1. **Terminal state** from `servicenow_aia_trace` or the plan row — **never** from
@@ -442,9 +611,19 @@ rejects `agent` alone).
 
 ### 3.4 Artefacts to write as the stage runs
 
-`v13-rows.json` (the manifest the packet generator reads — mirror `v12-rows.json`'s shape) and
-`v13-reports/row-NN.md` (each report **verbatim**). Then `build-packets.js --pass v13`, then §AI7's
-three guard edits, then `npm test` green **before** any packet reaches a scorer.
+§AI7's artefact paragraph names **four**, and an earlier draft of this line listed two — an operator
+following it literally would finish twenty runs without the artefact this pass's primary outcome is
+computed from:
+
+| artefact | what it is | when |
+|---|---|---|
+| `benchmark/v13-rows.json` | the manifest the packet generator reads — mirror `v12-rows.json`'s shape | as each row terminates |
+| `benchmark/v13-reports/row-NN.md` | each report **verbatim** | as each row terminates |
+| `benchmark/scorecard-v13.md` | the rows | after all twenty scored |
+| `benchmark/v13-ambiguity-flags.json` | **the flag tally — Ruling 4, and the primary outcome** the v12 comparison is computed against | after all twenty scored, hand-curated |
+
+Then `build-packets.js --pass v13`, then §AI7's three guard edits, then `npm test` green **before**
+any packet reaches a scorer.
 
 ### 3.5 What must not happen
 
