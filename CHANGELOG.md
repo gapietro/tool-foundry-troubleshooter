@@ -17,6 +17,81 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1107 — 2026-08-11
+
+### Fixed — a hold may not ship without its discharging call, and the rule binds a pass that can still comply (#178)
+
+- **`unnamedHoldViolations` added to `benchmark/scripts/build-packets.js`.** Unconditional on
+  `holds > 0`: the row must name a call **argument** in `note`, reading or no reading. §AL5's
+  Ruling 3 had already settled the substance — if the targeting judgement is the rubric's (§AL3
+  Ruling 2), withholding the call's argument withholds the evidence that judgement is made on.
+  What #178 owned was **which passes it binds**.
+- **The hole was live, not hypothetical.** #178 argued from a counterfactual; it did not need one.
+  **v13 row 02 took a hold and carries neither `note` nor `operator_note`**, so
+  `withheldFactViolations` — conditioned on `operator_note` — passes it in silence. It was
+  dispatched to scorers with its hold unnamed and no guard said anything. §AM1 carries the
+  cross-tab of both checks over v13's ten held rows.
+- **Ruling: the boundary is authorability, and it is DERIVED (§AM2).** A delivery guard **refuses**
+  on a pass whose `scoring-<pass>/` is empty — still being authored, so it can comply — and
+  **reports** to `console.warn` on one that already holds packets. §T9 forbids editing a frozen
+  manifest and forbids backfilling one to green a later rule, so a rule written after dispatch has
+  no legal remedy there, and a gate whose only remedy is forbidden is a permanent red rather than a
+  gate.
+- **Why this is not the pass-scoped exemption #178 distrusted.** No list, no cutoff version. The
+  reporting branch is reachable only by a pass that already dispatched its packets, and dispatching
+  them required passing whatever gate was in force at the time. **A carve-out derived from a state
+  the guarded party cannot enter at will is a different object from one written down as a name** —
+  the §AL3 move (enforce only over operands the guarded party cannot author) applied to a guard's
+  own scope.
+- **Option 1 was refused on evidence, not preference.** #176 already left `buildAll('v13')`
+  permanently throwing and nothing noticed, because no test or parity path calls it. Extending that
+  to v12 would break the freeze tests, the terminal-state check, the advance-ruling delivery tests
+  and #168's byte-identical `--pass v12` parity — to enforce a rule where nobody looks.
+- **`--force` is not an escape hatch from it.** It overwrites the freeze check; a dispatched pass
+  whose rows violate the rule cannot be rebuilt into its own directory at all, or the reporting
+  branch — granted because there is no remedy — would itself become the remedy. Scratch rebuilds
+  under `--out` are unaffected.
+- **Two bounds, both load-bearing (§AM3).** Only `note` is read: `layers_swept` and `terminal` are
+  measurements and `invocation` carries `x_snc_troubleshoot` on every row of every pass, so
+  accepting them would let boilerplate discharge the requirement. And tool names do not count —
+  section 5 prints `distinct_tools` on every packet, so *"schema_lookup answered the HOLD"* delivers
+  nothing new. That is the #177 review's F1 applied in the opposite direction.
+- **`readHolds` extracted and shared** by both delivery checks, so F6's fail-closed behaviour on an
+  unreadable `holds` cannot regress in one of them alone.
+
+### Costs, recorded rather than implied (§AM4)
+
+- **Measured residual:** v12 row 20 clears the check on the word `sys_id` in its prose — a held row
+  whose `note` names no call. Not fixed: the fix is a list of tokens that do not count, and no lists
+  is this guard family's stated posture.
+- **A warning nothing asserts is a report printed where nobody looks**, which is the failure #176's
+  two same-direction guards already demonstrated. The frozen violations are therefore pinned **by
+  row number** in the test suite: v12 rows 02/04, v13 rows 02/08/10/12/14/16.
+- **The destructive `--force` branch is unit-tested, not driven end to end.** Driving it through
+  `main()` means pointing the writer at real dispatched evidence; staging a throwaway
+  `benchmark/scoring-v9x/` would flake the blind-rule suite's disk-vs-declared membership assertion
+  from a parallel jest worker. `forceRefusal` is pure over the three facts `main()` holds and its
+  truth table is the test.
+
+### Not done, deliberately
+
+- **No v12 or v13 value moves and neither manifest is backfilled** (§T9). That two v12 rows and six
+  v13 rows fail a rule written after them is a fact about the rule's history.
+- **v13's custom arm is not made assessable.** §AJ5a's qualification and §AL6 stand: the five
+  off-fixture rows stay unassessed until a pass scores them with the argument visible. This closes
+  the gap for the next pass and repairs nothing already scored.
+- The v98 staged-pass fixture in `packetGeneratorPassSelection.test.js` patches its cloned rows 02
+  and 04 with a note marked SCAFFOLDING — cloned into a pass with no dispatched packets they are
+  authorable again, so the gate binds them. That patch is the rule working, not a workaround, and
+  v12's manifest on disk is untouched.
+
+### Verified
+
+- `npx jest` → **33 suites, 1644 tests, all passing.** `benchmark/README.md` gains the fourth guard
+  and the refuse/report table; `benchmark/DECISION.md` gains **§AM**.
+
+---
+
 ## 2026.08.1106 — 2026-08-11
 
 ### Changed — the `layers_swept` HOLD is ruled target-blind by construction (#173)

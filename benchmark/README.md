@@ -152,10 +152,14 @@ notice.
 `DECISION.md` §AF2 splits every operator observation about a run in two, and both
 halves are guarded. Get this wrong and the build refuses to write a packet.
 
-- **The fact** — what a call was, and what argument it carried — goes in a
-  **scorer-facing** field (`note`, `layers_swept`, `invocation`, `terminal`).
-  Naming it is **not optional**: it is what lets a scorer judge `layers_swept`
-  credibility at all.
+- **The fact** — what a call was, and what argument it carried — goes in
+  **`note`**. Naming it is **not optional**: it is what lets a scorer judge
+  `layers_swept` credibility at all. **Any row with `holds > 0` must name the
+  argument of the call that discharged the hold**, and `note` is the field the
+  guard reads — the other scorer-facing fields (`layers_swept`, `invocation`,
+  `terminal`) are measurements or boilerplate, and `invocation` carries
+  `x_snc_troubleshoot` on every row of every pass, so accepting them would let
+  constant text discharge the requirement.
 - **The reading** — what the fact *means* about the run — goes in
   `operator_note`, which renders into no packet. Relevance is the scorer's to
   judge, not the operator's to pre-judge.
@@ -178,6 +182,7 @@ reading may repeat the fact, but it may never be the only place the fact lives.
 | `registerViolations` (`build-packets.js`) | a **reading** that reached a scorer-facing field | #157 / §AF2 |
 | advance-ruling delivery check (`build-packets.js`) | `operator_note` **rendering** into a packet | #157 / §AF2 |
 | `withheldFactViolations` (`build-packets.js`) | a **reading that ships without its fact** | #176 / §AJ5a |
+| `unnamedHoldViolations` (`build-packets.js`) | a **hold that ships without its discharging call** | #178 / §AM |
 
 The third was added after v13 shipped without it. That pass authored both halves
 into `operator_note` on six of the seven rows that took a hold and carried a
@@ -217,13 +222,47 @@ Two limits, both measured rather than assumed:
 - It is a **delivery floor, not a proof of sufficiency**. It establishes that the
   identifiers the operator was reading reached a scorer, not that they were the
   right ones.
-- It is conditioned on `operator_note` being present, so it enforces
-  **consistency between two fields, not delivery as such** — omitting the reading
-  passes with `note` still null, and deleting the reading is the *cheapest* way
-  to green a red build. The unconditional check would redden v12 rows 02 and 04,
-  which took a hold and wrote no note, so closing it means deciding what happens
-  to a frozen fixture's contract. **Filed as #178**, to be settled before the
-  next pass runs under it.
+- It is conditioned on `operator_note` being present, so **on its own** it
+  enforces consistency between two fields rather than delivery as such. That is
+  now a division of labour rather than a hole: the fourth guard covers delivery.
+
+### The fourth guard: a hold names the call that discharged it (#178)
+
+`unnamedHoldViolations` is unconditional on `holds > 0` — the row must name a
+call **argument** in `note`, reading or no reading. It exists because deleting
+`operator_note` was otherwise the cheapest way to green a red build, which
+points the incentive at erasing the operator's record.
+
+The hole was **live, not hypothetical**: v13 row 02 took a hold and carries
+neither `note` nor `operator_note`, so the third guard passes it in silence. It
+shipped to scorers with the hold unnamed and nothing flagged.
+
+Tool names do not count. Section 5 prints `distinct_tools` on every packet, so
+*"schema_lookup answered the HOLD"* delivers a scorer nothing it did not have —
+the fact owed is the argument. Same measured-residual posture as its sibling,
+pointing the other way: the token shape cannot tell an argument from any other
+platform identifier, so v12 row 20 clears the check on the word `sys_id` in its
+prose. Recorded rather than fixed; the fix would be a list of tokens that do not
+count, and no lists is this family's stated posture.
+
+**Which passes it binds — derived, not declared.** A dispatched pass's manifest
+is frozen evidence (§T9 forbids editing it, and backfilling one to green a later
+rule is forbidden outright), so a rule written after dispatch has no legal
+remedy there and a gate with no remedy is just a permanent red. So:
+
+| The pass's `scoring-<pass>/` | Both delivery guards |
+|---|---|
+| empty — still being authored | **refuse**, and nothing is written |
+| already holds packets — dispatched | **report** to `console.warn`, and build |
+
+There is no list of exempt passes and no version cutoff. The reporting branch is
+reachable only by a pass that already dispatched its packets, and dispatching
+them required passing whatever gate was in force at the time — so it is not an
+exemption anyone can grant themselves. `--force` overwrites the freeze check,
+**not** this rule: rebuilding a dispatched violating pass in place is refused
+outright. The frozen violations (v12 rows 02/04; v13 rows 02/08/10/12/14/16) are
+pinned by name in `test/packetGeneratorParity.test.js`, because a warning that
+nothing asserts is a report printed where nobody looks.
 
 ## The protocol
 
