@@ -17,6 +17,46 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1102 — 2026-08-11
+
+### Added — the v13 scored pass, complete (#166)
+
+- **Stage 3 fired and scored in one sitting**, interleaved by seed per §AI7, on build `5fb7648`
+  verified by probe. Twenty rows terminal, twenty packets built, twenty independent scorers
+  dispatched once. Artefacts: `benchmark/v13-rows.json`, `benchmark/v13-reports/`,
+  `benchmark/scoring-v13/` (+ `results/`), `benchmark/scorecard-v13.md`,
+  `benchmark/v13-ambiguity-flags.json`, and `DECISION.md` §AJ.
+- **Primary outcome (AI-1, Ruling 4): 20 of 20 rows returned `ambiguous = no`** — against v12's
+  8 of 20. Zero column flags (AI-2, AI-3). Two independent signals agree: every verdict table reads
+  `no`, and not one verdict emitted an `### ambiguity` section.
+- **All six predictions confirmed.** §AJ3 and §AJ6 state plainly why six-for-six is weaker evidence
+  than it sounds: AI-5 was filed at ~97% prior by its own note, AI-4 and AI-6 bound shapes absent
+  from v12 too, and AI-1/2/3 are close to an in-sample check — same seeds, same report formats, same
+  instance the clauses were fit to.
+- **Gate, both arms together per §AD7: native 4/10 = 40.0% (47/60); custom 0/10 = 0.0% (5/60).**
+  Ruling 3's milestone is evaluated and **not met**. Per Ruling 6 no prediction was filed on the
+  gate, so no gate prediction is claimed in either direction.
+- **#155's fix is visible and did not move the gate.** Two custom rows were rejected by the
+  validator on two different rules (unsupported sweep claim; evidence-count shortfall). Both scored
+  0/6, as did four custom rows with accepted reports — eight of ten custom rows missed upstream, on
+  `root_cause_layer_correct`.
+
+### Fixed
+
+- **A void condition §A3 does not name.** Row 05 native's first attempt terminated
+  `state_reason: execution_failed` with no report (495s, 18 tool calls, ceiling unreached, fixtures
+  intact). §A3's definition is seed-state only. Ruled void under §4.1 of the raw-evidence file —
+  **symmetric across both arms, and committed in `77d0d44` BEFORE the replacement fired**, so
+  `git log -p` shows the rule predating the row it governs. 1 of 3 native re-runs spent.
+
+### Verified
+
+- Three guard edits made as part of building the packets, not after: `PACKET_SETS` gains
+  `scoring-v13` (`scanned: true`, `packets: 20`), the declared-membership literal lists four sets,
+  and `npm test` is green **before** any packet reached a scorer. **32 suites, 1600 tests.**
+  `scoring-v12/` untouched — no `--force`.
+- §AI7 item 11 confirmed in the artefact: Ruling 1 renders in full into all four seed-05 packets.
+
 ## 2026.08.1101 — 2026-08-11
 
 ### Fixed
