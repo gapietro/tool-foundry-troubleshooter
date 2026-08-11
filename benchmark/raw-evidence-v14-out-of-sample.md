@@ -494,3 +494,80 @@ is ACL-denied, which is the same wrong-diagnosis shape §1.9b caught the native 
 smoke gate, and one this project has now written into its own documentation. Filed separately rather
 than fixed in this pass — the seed specs are scorer-facing inputs and §T9 governs.
 
+### 2.6 §2.4 IS WITHDRAWN — the seed-08 fixtures were run concurrently, then mishandled, and both are being re-produced
+
+**This subsection supersedes §2.4.** §2.4 argued the two seed-08 runs could safely overlap and that
+serialising them would cost ~7 minutes "for no measurable gain." That was wrong on the cost side, and
+the operator response to it was wrong twice more. The whole sequence is recorded because the pass's
+own standard is that a mishandled fixture is disclosed, not quietly replaced.
+
+**What actually happened, anchored to instance timestamps rather than elapsed-time estimates.**
+
+| instance time | event |
+|---|---|
+| 19:36:16 | seed 08 rep 1 created (`9becd747…`) |
+| 19:40:02 | seed 08 rep 2 created (`a6cdd743…`) — **overlapping rep 1** |
+| 19:42:37 | **row 01 fired** (native, seed 02 rep 1, plan `986ed307…`) — overlapping BOTH |
+| 19:47:17 | **row 01 ended, 279s** |
+| 19:52:44/46 | operator `PATCH state=terminated` on rep 1 and rep 2 |
+| 19:52:50 | **rep 2 completed NATURALLY**, 766s — the platform overwrote the operator's value |
+| 19:54:12 | **rep 1 finished naturally**, 1075s — but `state` stayed `terminated` |
+
+**Error 1 — the concurrency claim.** Seed 08's defect is a tool that can never report completion, so
+its run length is bounded only by whatever undocumented mechanism stopped qualification's run at 27
+calls (its spec states outright that the stopping mechanism is **not** part of the bar). Two
+concurrent instances took **766s and 1075s** against qualification's **438s** solo. An unbounded-loop
+seed is the one fixture shape that must never be run in parallel, and §2.4 asserted the opposite.
+
+**Error 2 — a starvation diagnosis that the measurement had already refuted.** The operator sampled
+`sn_aia_execution_task` counts for row 01 twice, saw them unchanged at 21, and concluded the scored
+run was being starved. **Both samples were taken after row 01 had already finished** at 19:47:17 —
+the counts matched because the run was over, not because it was stuck. Row 01's measured numbers show
+no contention signature whatsoever:
+
+| | row 01 | comparator |
+|---|---|---|
+| duration | **279s** | v13's documented native expectation: **~280s** |
+| LLM P95 | **4,090ms** | seed 02 fixtures the same hour: 4,794ms / 6,518ms |
+| tool P95 | 297ms | — |
+| tool calls | 14 | v13 row 01: 15 |
+
+**Row 01 is NOT void and is not being re-run.** The perturbation it was going to be voided for is not
+present in it.
+
+> **The reading error is the transferable part.** The plan row's `state` column read `in_progress`
+> after the trace already showed `Completed`. v13 §3.3 and §AC7 say to read terminal state "from
+> `servicenow_aia_trace` **or the plan row**, never from `aia_logs`." That **"or" is wrong** — the two
+> disagree, and only the trace was right. Worse, the operator compounded it by reasoning from
+> *elapsed wall clock estimated in conversation* rather than from instance timestamps, and was off by
+> more than ten minutes. **Anchor every liveness judgement to an instance timestamp, and read
+> terminal state from the trace alone.**
+
+**Error 3 — the remedy did not work and was not needed.** `PATCH sn_aia_execution_plan.state` is
+**cosmetic**: rep 1 kept creating tasks after the write (19:53:10, 19:53:25, 19:54:03) and ran to its
+own `Show response to user`. The async worker does not consult the column. And rep 2 self-completed
+four seconds after the write, which proves seed 08 **does** terminate unaided — so nothing needed
+cancelling. `state_reason` did not persist on either record (returned empty), so the instance carries
+no trace of the operator's intent; this file is the only record.
+
+**Consequence for the fixtures, stated conservatively.**
+
+- **rep 1 (`9becd747…`) is DISCARDED.** The platform wrote `end_time` and `execution_time_sec: 1075`
+  at 19:54:12 but **left `state` at the operator's `terminated`**, because that is already a terminal
+  value and the completion handler does not overwrite one. Its plan row therefore reports an operator
+  artifact rather than its real outcome — and **§A3 makes a terminated run a void condition**, so any
+  arm or scorer reading this fixture would be reading the wrong thing. Not usable.
+- **rep 2 (`a6cdd743…`) is ALSO discarded**, though its case is weaker: its natural `completed` /
+  766s overwrote the operator write, leaving only an extra `sys_mod_count`. It is discarded anyway
+  because replacing it is cheap and a fixture that was written to mid-pass is not worth defending in
+  a pass whose primary outcome is about how determinate its own instrument is.
+
+**Replacement plan.** Both seed-08 fixtures are re-produced **strictly one at a time, with nothing
+else in flight**, and this is done **after rows 01–16**, which do not depend on seed 08. That
+sequencing costs no extra wall clock (rows 01–16 occupy the time either way) and it removes the
+concurrency for the one seed that cannot tolerate it. A solo seed-08 run is ~438s by qualification's
+measurement.
+
+**Nothing here touches seeds 02, 06 or 07.** Their six fixtures were produced sequentially, completed
+naturally in 16–25s, and no operator write was made to any of them.
+
