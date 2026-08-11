@@ -305,16 +305,58 @@ the per-seed specs remain authoritative for the detail.
    not merely whether the tools can read rows. This is a pass/fail gate, not one of the 10 scored
    rows.
 
+   **The single binding criterion is `script_error` citing `context_processing_script` line 42, on
+   both arms.** That is the reading v13 (§1.6) and v14 (§1.9) both applied. The Task 12 pre-flight
+   record further down this file says the gate is only that both harnesses *"run to terminal with
+   valid outputs, not that they diagnose correctly"* — that is **that pass's own reading, kept as
+   history and not to be re-derived as protocol.**
+
+   **Layer 2 reads `empty` on this fixture BY CONSTRUCTION — that is the fixture, not a fault.**
+   The agent the execution ran under — `sn_aia_agent` `601672d32b1a83d0f243fed2ce91bf3e`, "PA GP
+   Probe Agent" — was deleted as Phase 0 probe cleanup (`docs/PREFLIGHT_FINDINGS.md`, "Probe
+   records — created and deleted"). The plan's own `agent` and `usecase` reference fields are empty
+   too, so the agent sys_id survives *only* inside the error JSON in the agent-role message.
+   `agent_config` against this target therefore returns `sn_aia_agent: "empty"` and
+   `sn_aia_usecase: "empty"` — correctly — and will on every future pass. Re-verified live on
+   gpinst01 2026-08-11 (#185).
+
+   Two consequences, deliberately asymmetric:
+
+   - **For the operator — this is not an instance fault, and here is the probe that proves it.**
+     Before concluding there is a permission regression, read a seed agent:
+     `sn_aia_agent^sys_id=cd050d48e810411d9f113fd530694fe6` returns **Seed 02 Request Router**
+     (scope `TS Bench Seeds`). If that read succeeds while the gate target's does not, the
+     difference is fixture rot and the pass proceeds. If *that* read also comes back empty or
+     denied, **stop** — the scored seeds are at risk. Two look-alikes to rule out first: a bad
+     **field** name on this instance is reported as `Access denied` (v13 evidence §1.7), and a
+     table with no ACLs denies admin too (Build Rule #42).
+   - **For the arm — calling that `empty` a privilege gap is a wrong diagnosis, and it is RECORDED,
+     not gate-failing.** The tools' own contract states that *"a section that is empty with status
+     ok or empty means the data is genuinely absent; DENIED means a permission gap"*. v14's native
+     arm inverted it — *"likely a cross-scope privilege gap"*, and built FIX-2 around granting read
+     access to a record that is simply gone (v14 evidence §1.9b). **The gate does not fail an arm
+     for this, and that limit is the point:** the gate proves the *instrument* can still recover a
+     known answer; the rubric grades *diagnostic quality*. A gate that failed on quality would let
+     a poorly-performing arm veto the pass — v14 would have been blocked by it — and would bias
+     every pass toward firing only when the arms had already done well. Record the behaviour in the
+     pass's raw-evidence file, unscored, and let the scored rows measure it.
+
    The smoke gate's own answer tokens, guarded by `../test/blindRule.test.js`:
 
    ```blind-rule-tokens
    c9d63a932bda8b9417a6ffbeee91bfd0
+   601672d32b1a83d0f243fed2ce91bf3e
    line 42
    ```
 
    `context_processing_script` is deliberately **not** a token: it is this
    gate's answer *and* a field `agent_config` must read to sweep layer 4. A
    token that fires on honest tool code is a bad token, not a finding.
+   The agent sys_id was added by #185, because that change makes the deleted
+   record part of the gate's documented answer rather than incidental context —
+   and unlike the field name, a specimen-specific sys_id has no honest reason to
+   appear in tool code. Swept at declaration: zero hits across all 16 scanned
+   model-facing sources.
 4. **2 runs per seed, in fresh conversations, for all 5 seeds — 10 scored runs.** Each run is blind:
    Agent Doctor's instructions, its tools, and the playbook carry no seed knowledge. The doubling
    measures the documented "inconsistent behavior on identical inputs" failure mode, not redundancy.

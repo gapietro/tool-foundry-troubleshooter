@@ -17,6 +17,35 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1111 — 2026-08-11
+
+**The smoke gate keeps its target; its second answer is recorded, not binding (#185).** Ruling in
+`DECISION.md` §AP. Documentation and guard only — no `src/` change, no instance change.
+
+- **Premise re-verified live on gpinst01 before ruling.** `sn_aia_agent`
+  `601672d32b1a83d0f243fed2ce91bf3e` returns **0 records**; the execution plan and its 11 tasks are
+  intact. One fact the issue did not carry and which decided the options: **the plan's own `agent`
+  and `usecase` reference fields are empty too**, so the agent sys_id survives only inside the error
+  JSON in the agent-role message.
+- **The binding criterion is unchanged and singular** — `script_error` citing
+  `context_processing_script` line 42, both arms. The deleted-agent shape becomes a documented
+  second known answer that is **explicitly unscored**: an arm reading `empty` as a privilege gap is
+  recorded in raw evidence, not failed. **A gate checks instrument readiness; a rubric checks
+  subject quality** — promoting it would have let a poorly-performing arm veto the pass (v14 would
+  have been blocked) and biased every pass toward firing only when the arms had already done well.
+- **A control probe is now part of the gate.** Seed 02's agent (`cd050d48…` → `Seed 02 Request
+  Router`) distinguishes fixture rot from a real permission regression, with the two look-alikes
+  named: a bad field name reads as `Access denied` on this instance, and a table with no ACLs denies
+  admin too (Build Rule #42).
+- **Guard widened:** the agent sys_id is now a `blind-rule-tokens` entry on the gate — swept clean
+  across all 16 model-facing sources.
+- **One inconsistency fixed in passing:** the Task 12 pre-flight record's weaker reading of the gate
+  ("run to terminal with valid outputs, not that they diagnose correctly") is marked as that pass's
+  own reading rather than protocol; v13 and v14 both applied the known answer.
+- Cross-references added where the specimen is cited: `DESIGN.md` R-16, `docs/LOW_LEVEL_DESIGN.md`
+  §5 smoke-test block, `docs/PREFLIGHT_FINDINGS.md` probe-cleanup table, and
+  `docs/BUILD_BRIEF_PaToolAgentTrace.md`.
+
 ## 2026.08.1110 — 2026-08-11
 
 **v14 — the out-of-sample pass, scored (#175).** Verdict in `DECISION.md` §AO; scorecard

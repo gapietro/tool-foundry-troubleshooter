@@ -6918,3 +6918,87 @@ was unnecessary.**
 disagree); liveness is judged from instance timestamps, never from elapsed wall clock estimated in
 conversation; and a bad field name reads as "Access denied" on this instance, discriminated **only**
 by a bare query carrying neither `query` nor `fields`.
+
+---
+
+## AP. The smoke gate keeps its target; its second answer is recorded, not binding (`2026.08.1111`, #185)
+
+The known-answer smoke gate (`benchmark/README.md` step 3, made a pre-flight item by §AN7 item 10)
+targets execution `c9d63a932bda8b9417a6ffbeee91bfd0`. The agent that execution ran under has been
+deleted, so layer 2 is permanently unsweepable on the fixture and `agent_config` returns `empty`
+for every arm on every future pass. Filed from v14 stage 1 (`raw-evidence-v14-out-of-sample.md`
+§1.9b) rather than absorbed.
+
+### AP1. The finding, re-verified live before ruling on it
+
+Probed on gpinst01 (Zurich P10 Hotfix 4a) 2026-08-11, after v14 merged:
+
+| probe | result |
+|---|---|
+| `sn_aia_agent^sys_id=601672d32b1a83d0f243fed2ce91bf3e` | **0 records** — deleted as Phase 0 probe cleanup (`docs/PREFLIGHT_FINDINGS.md`, "Probe records — created and deleted") |
+| `sn_aia_execution_plan^sys_id=c9d63a93…` | **present** — `state=Completed`, `state_reason` empty |
+| `sn_aia_execution_task^execution_plan=c9d63a93…` | **11 tasks** — 4 `tool`, 4 `gen_ai`, 1 `agent`, 1 `access_verification` |
+| `sn_aia_agent^sys_id=cd050d48e810411d9f113fd530694fe6` (control) | **Seed 02 Request Router**, scope `TS Bench Seeds` |
+
+One fact the issue did not carry, and it decides the options: **the plan's own `agent` and
+`usecase` reference fields are empty too.** The fixture never pointed at the agent record by
+reference — the sys_id survives only inside the error JSON in the agent-role message. The
+header-invisible property the gate was chosen for is intact, and the line-42 answer still
+discharges: v13 §1.6 and v14 §1.9 both passed both arms on it.
+
+### AP2. Ruling — the gate is an instrument check, and quality criteria may not enter it
+
+**The target is kept. The binding criterion is unchanged and singular:** `script_error` citing
+`context_processing_script` line 42, both arms.
+
+**The deleted-agent shape becomes a documented second known answer, explicitly UNSCORED and
+NON-BINDING.** An arm that reads `empty` as a privilege gap — as v14's native arm did, producing
+FIX-2 to grant read access to a record that is gone — is recorded in that pass's raw-evidence file
+and measured nowhere else.
+
+The reasoning is the ruling's reusable half, and it is the reason the tempting stricter option was
+refused: **a gate checks instrument readiness; a rubric checks subject quality.** Promoting the
+second answer to a pass/fail criterion would let a poorly-performing arm veto the pass — v14 would
+have been blocked by it — and would bias every future pass toward firing only when the arms had
+already done well, which is measurement contaminated by its own subject. The gate answers "can a
+known answer still be recovered from this instance at all"; the twenty scored rows answer "how well
+does each arm diagnose". §AN7 item 10 is unchanged in force and unchanged in text.
+
+### AP3. What was rejected, and why the cheap option was not the weak one
+
+- **Restore the agent record — rejected as fabrication, not restoration.** The original
+  `context_processing_script` was platform-auto-populated (~2,124 chars, LLD §5) and is recorded
+  nowhere in this repo; the agent's tool and m2m rows were deleted with it. Re-creating the row
+  means authoring a script and *declaring* line 42 to be its answer — a fixture that looks
+  authentic and is not, hand-built on the instance against the SDK-owns-creation boundary.
+- **Re-point the gate at a live-agent specimen — rejected as disproportionate and circular.** The
+  answer is cited in DESIGN.md R-16, LLD §5 and §477, two build briefs and the README, so
+  re-pointing is a documentation cascade; and a new known answer would have to be established using
+  the instrument the gate exists to check.
+- **Document it — accepted, and it is not the null option.** The rot is converted into signal: a
+  deleted agent is a real diagnostic scenario with a correct answer, and it happens to exercise the
+  exact tool-contract inversion (`empty` ≠ `DENIED`) the rubric grades.
+
+### AP4. What a future pass does differently
+
+1. Reads the gate section knowing layer 2 is `empty` **by construction**, so an unexplained empty
+   read is not re-diagnosed as an instance regression mid-pre-flight.
+2. Runs the **control probe** (seed 02's agent) before concluding anything about permissions. Seed
+   agent readable + gate target empty = fixture rot, proceed. Seed agent *also* empty or denied =
+   **stop**, the scored seeds are at risk. Two look-alikes are named in the section: a bad field
+   name reads as `Access denied` on this instance (v13 §1.7), and a table with no ACLs denies admin
+   too (Build Rule #42).
+3. Records an arm's `empty`-as-privilege-gap misread in raw evidence, unscored, and does not hold
+   the pass for it.
+
+The agent sys_id `601672d32b1a83d0f243fed2ce91bf3e` is added to the gate's `blind-rule-tokens`
+block — this ruling makes the deleted record part of the documented answer, and unlike
+`context_processing_script` a specimen-specific sys_id has no honest reason to appear in tool code.
+Swept at declaration: zero hits across all 16 model-facing sources.
+
+**One inconsistency found while ruling and fixed in the same pass.** The Task 12 pre-flight record
+in `benchmark/README.md` says the gate is only that both harnesses *"run to terminal with valid
+outputs, not that they diagnose correctly"* — a weaker criterion than step 3's, and one that would
+have passed an arm that never found line 42. v13 and v14 both applied the known answer. Step 3 now
+states the binding criterion outright and marks that sentence as that pass's own reading, kept as
+history and not to be re-derived as protocol. The historical paragraph is left standing.
