@@ -314,6 +314,23 @@ describe('a full --pass build, end to end (the gate no test covered)', () => {
             const src = fs.readFileSync(path.join(BENCH, 'scripts', 'build-packets.js'), 'utf8')
             expect(src.slice(src.indexOf('function main('))).toContain('forceRefusal(')
         })
+
+        test('the refusal counts the SAME checks the gate does', () => {
+            // Review of PR #181: main() first derived its count from its own
+            // pair of flatMaps, so a third delivery check added to buildAll
+            // would reach the gate and miss the --force refusal — and that
+            // asymmetry fails OPEN, on the one path that writes over dispatched
+            // evidence. Both now read one definition.
+            const src = fs.readFileSync(path.join(BENCH, 'scripts', 'build-packets.js'), 'utf8')
+            const mainSrc = src.slice(src.indexOf('function main('))
+            expect(mainSrc).toContain('deliveryViolations(')
+            expect(mainSrc).not.toContain('withheldFactViolations(')
+            expect(mainSrc).not.toContain('unnamedHoldViolations(')
+
+            const d = gen.deliveryViolations(JSON.parse(fs.readFileSync(path.join(BENCH, 'v13-rows.json'), 'utf8')))
+            expect(d.withheld).toHaveLength(7)
+            expect(d.unnamed).toHaveLength(6)
+        })
     })
 
     test('a partially staged reports directory names the pass, not "?"', () => {

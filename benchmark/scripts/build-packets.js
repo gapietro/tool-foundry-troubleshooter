@@ -644,6 +644,24 @@ function gateOrReport(violations, dispatched, pass, refusal) {
 }
 
 /**
+ * Both delivery checks over a pass's rows, in ONE definition.
+ *
+ * `buildAll` gates on the two separately — they fail on different errors and
+ * take different remedies — while `main` needs their total to decide whether
+ * `--force` may overwrite a dispatched pass. Two consumers, but one statement
+ * of WHICH checks constitute the rule: a third check added later reaches the
+ * gate and the --force refusal together, instead of the gate alone. That
+ * asymmetry is what a duplicated list here would eventually produce, and the
+ * --force path is the one where it would fail OPEN.
+ */
+function deliveryViolations(rows) {
+    return {
+        withheld: rows.flatMap(withheldFactViolations),
+        unnamed: rows.flatMap(unnamedHoldViolations),
+    }
+}
+
+/**
  * Whether this pass's packets have already been dispatched.
  *
  * ONE definition, consulted by `buildAll` (which branch a violation takes) and
@@ -1066,8 +1084,10 @@ function buildAll(pass) {
     // fact never reached one, and a hold whose call was never named — and
     // folding them into one message would let a single remedy read as the fix
     // for all of them.
+    const delivery = deliveryViolations(built.map((p) => p.row))
+
     gateOrReport(
-        built.flatMap((p) => withheldFactViolations(p.row)),
+        delivery.withheld,
         dispatched,
         paths.pass,
         (n, list) =>
@@ -1079,7 +1099,7 @@ function buildAll(pass) {
     )
 
     gateOrReport(
-        built.flatMap((p) => unnamedHoldViolations(p.row)),
+        delivery.unnamed,
         dispatched,
         paths.pass,
         (n, list) =>
@@ -1146,9 +1166,9 @@ function main(argv) {
     // A dispatched pass whose rows violate the delivery rule was REPORTED
     // rather than refused, because §T9 leaves it no remedy. --force must not
     // convert that into a licence to rebuild it in place (#178).
+    const delivery = deliveryViolations(built.map((p) => p.row))
     const refusal = forceRefusal(
-        built.flatMap((p) => withheldFactViolations(p.row)).length +
-            built.flatMap((p) => unnamedHoldViolations(p.row)).length,
+        delivery.withheld.length + delivery.unnamed.length,
         isDispatched(paths),
         out === paths.out
     )
@@ -1206,6 +1226,7 @@ module.exports = {
     withheldFactViolations,
     unnamedHoldViolations,
     forceRefusal,
+    deliveryViolations,
     identifiers,
     verdictHits,
     existingPacketsIn,
