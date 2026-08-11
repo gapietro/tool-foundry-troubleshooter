@@ -278,22 +278,31 @@ describe('every specimen declares its answer tokens (issue #89)', () => {
         })
     })
 
-    it('covers all five seeds plus the smoke gate', () => {
+    it('covers all eight seeds plus the smoke gate', () => {
         // A new seed spec is picked up by readdirSync and immediately fails the
         // two assertions above until its tokens are declared. That is the
         // point: a seed cannot arrive unguarded.
-        expect(SPECIMENS).toHaveLength(6)
+        expect(SPECIMENS).toHaveLength(9)
 
         // The count alone does not close its own failure mode: a too-greedy
         // glob change could drop a real spec while a newly added file kept
-        // the count at six. Pin the names, so any roster change has to be
+        // the count at nine. Pin the names, so any roster change has to be
         // made here.
+        //
+        // Seeds 06-08 added 2026-08-11 (#175) for the out-of-sample pass. Seed
+        // 06 replaced a refuted ACL-trigger construction and seed 07 replaced a
+        // refuted instruction-bloat one; both refutations are recorded in
+        // raw-evidence-seed-qualification-06-08.md, and both replacements are
+        // rostered here rather than left to a glob.
         expect(SPECIMENS.map((s) => s.label)).toEqual([
             'seed-01-schema-mismatch.md',
             'seed-02-ambiguous-instruction.md',
             'seed-03-missing-data.md',
             'seed-04-genai-unmapped.md',
             'seed-05-inactive-usecase.md',
+            'seed-06-schema-field-missing.md',
+            'seed-07-tool-output-bloat.md',
+            'seed-08-nonterminating-tool.md',
             'README.md smoke gate',
         ])
     })

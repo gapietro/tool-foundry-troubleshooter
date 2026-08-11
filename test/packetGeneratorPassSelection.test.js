@@ -161,6 +161,80 @@ describe('the v13 advance-rulings channel (DECISION.md §AI7 item 11)', () => {
     })
 })
 
+describe('the v14 advance-rulings channel (DECISION.md §AN4 + §AN7 item 13)', () => {
+    const fs = require('fs')
+    const RULINGS = path.join(BENCH, 'v14-advance-rulings.json')
+
+    // Same reasoning as the v13 block above, and the same cost if it is wrong.
+    // v14 carries THREE rulings rather than one, across three seeds, and two of
+    // them (7 and 8) fix which of two competing readings is the seeded defect —
+    // exactly the calls a scorer would otherwise make at the desk with the run's
+    // most salient symptom pointing the wrong way. An undelivered Ruling 7 or 8
+    // would produce a `root_cause_layer_correct` miss caused by the delivery of
+    // the rubric rather than by the report.
+
+    test('the file exists, parses, and carries all three rulings in the v12 shape', () => {
+        const rulings = JSON.parse(fs.readFileSync(RULINGS, 'utf8'))
+        expect(Array.isArray(rulings)).toBe(true)
+        expect(rulings).toHaveLength(3)
+        for (const r of rulings) {
+            for (const k of ['id', 'source', 'column', 'applies_to', 'heading', 'text']) {
+                expect(Object.keys(r)).toContain(k)
+            }
+        }
+        expect(rulings.map((r) => r.id)).toEqual(['AI4-R1', 'AN4-R7', 'AN4-R8'])
+        expect(rulings.map((r) => r.applies_to.seed)).toEqual(['05', '07', '08'])
+        expect(rulings.map((r) => r.column)).toEqual([
+            'fix_usable_unedited',
+            'root_cause_layer_correct',
+            'root_cause_layer_correct',
+        ])
+    })
+
+    test('each ruling renders into its own seed and no other', () => {
+        const rulings = JSON.parse(fs.readFileSync(RULINGS, 'utf8'))
+
+        // A marker unique to each ruling's prose, so a ruling leaking into the
+        // wrong seed's packet is caught rather than merely counted.
+        const marker = {
+            '05': 'sn_aia_trigger_configuration.active',
+            '07': '15,154',
+            '08': 'check_processing_status',
+        }
+
+        for (const seed of ['05', '07', '08']) {
+            const rendered = gen.advanceRulings({ seed: seed }, rulings)
+            expect(rendered).toContain(marker[seed])
+
+            for (const other of ['05', '07', '08']) {
+                if (other === seed) continue
+                expect(rendered).not.toContain(marker[other])
+            }
+        }
+
+        // The out-of-sample seed with NO ruling, and the anchor that shares the
+        // pass with two that have one: neither may receive anything.
+        for (const seed of ['01', '02', '03', '04', '06']) {
+            const other = gen.advanceRulings({ seed: seed }, rulings)
+            expect(other).toContain('None for this seed')
+            for (const m of Object.values(marker)) {
+                expect(other).not.toContain(m)
+            }
+        }
+    })
+
+    test('its scorer-facing prose carries no operator verdict and no repository path', () => {
+        // The generator refuses to write ANY packet in the pass if one of these
+        // trips, so an edit to a ruling would otherwise surface only after the
+        // twenty runs had been spent.
+        const rulings = JSON.parse(fs.readFileSync(RULINGS, 'utf8'))
+        for (const r of rulings) {
+            expect(gen.verdictHits(r.heading, 'heading')).toEqual([])
+            expect(gen.verdictHits(r.text, 'text')).toEqual([])
+        }
+    })
+})
+
 
 describe('a full --pass build, end to end (the gate no test covered)', () => {
     // The #168 review found the hardcoded runbook by hand-running `--pass v13`
