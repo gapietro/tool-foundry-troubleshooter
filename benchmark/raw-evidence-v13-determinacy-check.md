@@ -543,3 +543,50 @@ any packet reaches a scorer.
   all twenty runs have terminated and all twenty packets have been scored and returned (§AI6).
 - **No edit to §AI.** It is a merged pre-registration; satisfying its gates is not amending it.
 - **No `--force`** on the packet generator, and nothing written into `scoring-v12/`.
+
+---
+
+## 4. Stage 3 — the twenty scored runs
+
+Started 2026-08-11, 08:54 instance local (12:54 UTC), one sitting, per §AI7. Rows are recorded as
+they terminate. **Nothing in this section is tallied, compared or evaluated** — §AI6's seal holds
+until all twenty packets have been scored and returned.
+
+### 4.1 A void condition §A3 does not name, ruled BEFORE the re-run fired
+
+**Row 05 (native, seed 02 rep 1) terminated without producing a report.** Plan
+`21f5868b2b6e0b18f243fed2ce91bf29`: 495s, 18 tool calls across all seven tool types, then four
+consecutive ReAct turns of **68.2s, 70.8s, 72.9s and 85.6s** — against an LLM P95 of ~13s on rows
+01–03 — and the plan closed `state: terminated`, `state_reason: execution_failed`. The only agent
+message after the last tool call is the platform's generic *"Sorry, there was a problem on my side
+trying to complete this request."* No Fix Report exists to score. The tool ceiling was not reached
+(18 of 25), and all five bench tickets read `priority` empty / `sys_mod_count: 0` immediately after,
+so no fixture was disturbed.
+
+**§A3 does not decide this.** Its definition is *"the seed was not in the state its spec requires,
+so the run measured nothing"*, and every known void condition it lists is a seed-state condition.
+Seed 02's fixture was intact and `completed`. By the letter this is a valid row whose terminal state
+happens to be `terminated`; by §A3's own title — *"a run that measured nothing"* — it is a void.
+
+**The ruling, and the reason it is written here rather than after the pass.** A run whose platform
+execution terminates `state_reason: execution_failed` with **no report produced** is a **void**:
+re-run, with both the void and its replacement recorded, under §AI6's existing cap of three re-runs
+per arm.
+
+Two things make this defensible rather than convenient, and both are conditions on it:
+
+1. **It is symmetric and it binds both arms.** If a custom-arm run terminates the same way at row 12
+   or row 18, it is void on identical terms. The rule is not "native gets a retry".
+2. **It is committed before the replacement runs.** This section is committed ahead of the re-fire,
+   so `git log -p benchmark/raw-evidence-v13-determinacy-check.md` shows the rule predating the row
+   it governs. §AI6 seals the tallies precisely so that a classification choice cannot be made once
+   its effect on the comparison is visible, and the effect here is genuinely unknown: the void
+   removes a row that would have scored zero on an absent report, which flatters native, and spends
+   one of three re-runs, which constrains it.
+
+**What the ruling deliberately does not claim.** It does not say the native arm is reliable, and it
+does not excuse the failure. A platform `execution_failed` on 1 of the first 5 native runs is a
+measurement about operating this arm, and it is recorded here as one — it is simply not a
+measurement of *diagnostic quality*, which is what the packets score. §AJ must carry the void and
+its reason; §A3.4's floor is read on the valid count per arm.
+

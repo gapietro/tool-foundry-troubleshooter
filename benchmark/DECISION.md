@@ -5827,3 +5827,177 @@ seven under any consistent rule. §AD1's "fifth" is the last one that reconciles
 ordinal**: the milestone is unmet, it has been unmet in every section since §Z6, and a running tally
 this file cannot verify is exactly the kind of decorative precision a determinacy check should not
 be introducing.
+
+---
+
+## AJ. v13 — the determinacy check, scored
+
+**Scorecard:** `scorecard-v13.md` (20 rows: 10 native + 10 custom, 0 void in the scored set) ·
+**Rows:** `v13-rows.json` · **Reports:** `v13-reports/` · **Packets as scored:** `scoring-v13/` ·
+**Verdicts:** `scoring-v13/results/` · **Flags:** `v13-ambiguity-flags.json` · **Issue:** #166
+
+Pre-registered at §AI, merged in `ed0b6c2` before run 1. Fired 2026-08-11 in one sitting, interleaved
+by seed per §AI7, on build `5fb7648` verified by probe.
+
+### AJ1. The predictions, all six resolved
+
+| | Prediction | Threshold | Measured | Verdict |
+|---|---|---|---|---|
+| **AI-1** | ≥ 80% of valid rows return `ambiguous = no` | ≥ 16 of 20 | **20 of 20 (100%)** | **CONFIRMED** |
+| **AI-2** | ≤ 0.20 column flags per valid row | ≤ 4 | **0 (0.00/row)** | **CONFIRMED** |
+| **AI-3** | ≤ 0.10 per valid row on `evidence_cites_trace_and_config` + `fix_usable_unedited` | ≤ 2 | **0** | **CONFIRMED** |
+| **AI-4** | Neither of §AH6's residual exposures occurs | 0 occurrences | **0** — max fixes in any report is 5 (row 03), spanning **three** areas not five; no primary declares seven layers | **CONFIRMED** |
+| **AI-5** | Compound declared layers recur on ≥ 1 native row | ≥ 1 | rows 01 and 03 | **CONFIRMED** (tripwire, not discriminating — §AI5's own note) |
+| **AI-6** | ≤ 2 voids encountered, both arms finish at 10 valid | ≤ 2 / 10 each | **1 void; 10 and 10** | **CONFIRMED** |
+
+Six of six confirmed. **That uniformity is itself the finding to be careful about**, and §AJ3 is
+where the care goes.
+
+### AJ2. The gate, published under Ruling 6
+
+Both figures, together, per §AD7 — **native 4/10 = 40.0% (47/60 points); custom 0/10 = 0.0%
+(5/60)**. Against v12 on the same seeds: **native 6/10 = 60.0% (51/60); custom 0/10 = 0.0% (9/60)**.
+
+**The native arm therefore DECLINED by two rows, 60.0% → 40.0%**, and the custom arm held at 0.0%
+while losing four points.
+
+> **Correction, found in review before merge.** This paragraph first published v12's native baseline
+> as 3/10 = 30.0% and called the change a one-row improvement. **3/10 is §O2's v4 figure**, not
+> v12's — v12's native result is 6/10, published at `scorecard-v12.md` and §AD1 and pinned by
+> `test/scorecardV12Tallies.test.js`. §AG/§AH fix that no v12 number moves, so there was never a
+> re-scored 3/10 to mean. The direction of the headline change was reported backwards, and the
+> resolution argument below is rewritten accordingly rather than patched.
+
+**Ruling 3's milestone criterion is evaluated and NOT met** — it requires the custom arm at ≥ 80%.
+Per Ruling 6 no prediction was filed on the gate, so v13 claims **no** confirmed or refuted
+prediction about the milestone in either direction. §A3.4's floor is satisfied on both arms.
+
+**Ruling 5 holds and is now load-bearing — and it cuts the other way from the first draft.** Custom
+changed by #155's fix *and* by the new clauses; native changed by the clauses **only**. So the
+native movement is the attributable one, and it is a **two-row decline on ten** (60.0% → 40.0%,
+51/60 → 47/60).
+
+Two rows on ten is still inside the resolution §AC2's binomial table describes, so this is not a
+demonstrated regression — but it is the opposite sign from what a pass that confirmed all six of its
+determinacy predictions might be assumed to show, and **that asymmetry is the point of separating
+the two quantities.** The clauses were written to make scoring determinate, not to make runs score
+better; a rubric that resolves more cases can resolve them *against* a run. Rows 09, 11, 13 and 15
+are where it shows: each scores `root_cause_layer_correct` = 2 and `fix_target_correct` = 2 and
+still fails the gate on `fix_usable_unedited`, three of them on §A2.1 Case 1 — a value the instance
+held and the run declined to look up. That clause is §AG's, and it is doing exactly what it says.
+
+Custom's 0.0% remains attributable to neither cause on this evidence. Neither arm's number is a
+result about capability.
+
+**#155's fix is visible in the rows and did not move the gate.** Two custom rows terminated
+`failed (fix_report rejected, could not be repaired)`, on two *different* validator rules — row 04
+an unsupported sweep claim, row 16 an evidence-count shortfall. Both scored 0/6, as did four custom
+rows whose reports were accepted. The validator rejects report *shape*; **nine of ten** custom rows
+missed on `root_cause_layer_correct`, which is upstream of shape. (An earlier draft said eight —
+v12's count. Row 12 is the sole custom row above 0 on that column.)
+
+### AJ3. Zero flags is the measured value, and three things bound what it means
+
+AI-1 was the pass's primary outcome and it cleared its threshold by 20 points. §AI8 already said how
+that must be read — *"a strong AI-1 is the MINIMUM the clauses must clear, not evidence that the
+rubric is determinate in general"* — and this pass supplies its own reasons to hold that line.
+
+- **It is close to an in-sample check.** Same five seeds, same two report formats, same instance.
+  §AG and §AH were fit to twelve flagged rows drawn from exactly this population.
+- **Two verdicts record a close call in prose and did not flag it.** Row 04's scorer states it "had
+  to choose between two readings of §A1 Case 3" and resolved on the case's own words. Row 05's works
+  through §A2.3's 1-band-primary-only restriction at length, states that applying it literally
+  yields 0, and awards 1 on the rule's stated purpose. Under Ruling 4 neither is a flag — the header
+  said `no` — and that is the rule, applied. **But a clause that a scorer has to argue itself into
+  is not obviously the same thing as a clause that is determinate**, and this pass cannot tell the
+  two apart. It is the open question v14 inherits.
+- **A count of zero cannot separate "no ambiguity" from "no ambiguity declared."** The comparison to
+  v12's twelve is worth something *because* both were produced under the same instruction; it is
+  still a comparison of two counts, not a measurement of the property.
+
+Ruling 4's scan-domain clause turned out to be moot rather than wrong: it fixes the column-flag
+denominator as the rows reading `ambiguous = yes`, and there were none. Recorded because §AI4 wrote
+it specifically so a v13 curator could not widen the denominator after the fact, and the guard held
+without ever being tested.
+
+### AJ4. The void, and a rule §A3 did not have
+
+Row 05 native's first attempt terminated `state_reason: execution_failed` with no report, after four
+consecutive ReAct turns of 68–86s against a ~13s LLM P95, with the tool ceiling unreached and every
+fixture intact. §A3's void definition is seed-state only, and the seed was in state — so the letter
+made it a valid row scoring zero on an absent report, while §A3's own title ("a run that measured
+nothing") made it a void.
+
+Ruled **void**, and the ruling was **committed before the replacement fired** (`77d0d44`), binding
+**both arms symmetrically**. §AI6 seals tallies so that a classification cannot be made once its
+effect is visible; here the effect genuinely cut both ways — the void removed a row that would have
+scored 0, and spent one of three permitted re-runs. **§A3 should carry this condition explicitly
+rather than leaving the next operator to re-derive it under time pressure**, and that is filed as
+work rather than asserted as done here.
+
+### AJ5. Five operator findings, recorded because each cost or would cost a session
+
+1. **`servicenow_query` returns UTC; `servicenow_aia_trace` returns instance-local.** §1's clock
+   convention attributed local time to plan rows generally, which holds only on the trace path.
+2. **`sn_aia_execution_plan.agent` returns the reference sys_id, not a display name.** The stale
+   evidence block claimed otherwise; plan→seed mapping is by sys_id unless `displayValue` is asked for.
+3. **§3.3's "order by `sys_created_on`" is not deterministic under ties.** On row 11 the report and
+   the platform boilerplate share a second and the boilerplate sorted first. Harmless here; a live
+   hazard on any row whose report genuinely spans two messages in the same second.
+4. **Seed-05 native runs write TWO `x_snc_troubleshoot_run` audit rows** with identical
+   `execution_ref` and `conversation_ref` (rows 17 and 19; TR1000285/286 and TR1000288/289). The
+   eight non-seed-05 native rows wrote one each. The pattern tracks the invocation shape, not the arm.
+5. **§3.2's custom-arm seed-05 instruction is ambiguous and was resolved against the handler.** Read
+   literally it puts the whole objective into `agent`; `PaRestHandlers` passes `body.agent` through as
+   the agent identifier and v12's row-18 body carried three keys (`agent`, `timeframe`, `note`).
+   Resolved by putting the agent NAME in `agent` and the prose in `note`, and confirmed at runtime —
+   the harness called `agent_trace` with `{agent, since, until}` and matched `sn_aia_agent` on name.
+
+### AJ5a. Two defects in the instrument, found in review AFTER the packets were scored
+
+Both reached all twenty blind scorers. Neither is repaired in `scoring-v13/`, on the same ground
+that freezes `scoring-v4` and `scoring-v12`: **those files are the record of what the scorers
+actually read, and editing them to satisfy a later finding destroys the only thing they preserve.**
+The generator is fixed; the packets are not.
+
+- **A false pass-level claim, hardcoded.** `build-packets.js` emitted, unconditionally, *"This run
+  reached a terminal state and was not re-run. No row in this pass was void, and no arm used any of
+  its permitted re-runs."* True of v12. **False of v13** — one row was ruled void and one native
+  re-run was spent (§AJ4) — and doubly false inside row 05's own packet, because row 05 **is** the
+  replacement. Generalising the script to `--pass` carried a v12-specific fact into a pass it did
+  not describe. The generator now states only what it can see: this row's terminal state, and
+  whether this row is a replacement (`rerun_of` in the manifest). **A generator that renders one row
+  may not assert facts about the pass.**
+- **The instrument was not constant across rows, while the packet said it was.** `buildPacket`
+  renders `row.note` and never `row.operator_note` — deliberately, and a guard enforces it. But
+  row 03's "report delivered across TWO messages, concatenated per §3.3 rule 3" was authored into
+  `note` and reached its scorer, while row 05's identical fact was authored into `operator_note`, so
+  row 05's packet reads *"No run-specific notes."* Two rows whose reports were assembled the same
+  way presented differently. That is an **authoring** inconsistency in this pass's row manifest, not
+  a generator bug, and it sits underneath boilerplate asserting *"Every packet in this pass carries
+  the same fields, so the instrument is constant across rows."* Related: the five off-fixture HOLD
+  arguments (rows 06, 08, 10, 12, 16) live in `operator_note` and are correctly withheld — but the
+  same boilerplate promises such an argument would be "named in section 6 instead", and it is not.
+
+**What this costs the pass, stated rather than minimised.** Neither defect touches a scored column:
+the false line makes a claim about voids that no rubric column reads, and the missing note concerns
+report assembly rather than diagnostic content. But *"the instrument is constant across rows"* is
+now a claim v13 cannot make without this paragraph attached, and any future pass quoting v13's
+determinacy figures inherits the qualification.
+
+### AJ6. What v13 does not establish
+
+Everything in §T8, §Z5, §AB5, §AC8, §AG5, §AH6 and §AI8 stands unsoftened. Adding two:
+
+- **Six-for-six confirmation on predictions the same author filed and then measured is weak
+  evidence, and stronger-sounding than it is.** AI-5 was filed at ~97% prior by its own note. AI-4
+  and AI-6 are bounds on shapes that did not occur in v12 either. The pass's informative content is
+  AI-1/2/3, and those three are the ones §AJ3's in-sample caveat bites hardest on.
+- **Five custom rows answered a layer HOLD off-fixture** — against `incident.priority`,
+  `incident.assignment_group`, `sn_aia_agent_tool_m2m`, or the invented `sysrule_routing` — which the
+  row notes record as measured. Whether that is a harness defect, a model defect, or a rubric that
+  rewards reaching a layer over diagnosing at it is **not** settled by this pass, and the
+  `layers_swept` HOLD mechanism is the obvious place to look next.
+
+**The next pass should change the distribution, not the clauses.** §AI8 said an out-of-sample check
+is what would make AI-1 mean what a reader will want it to mean; v13 has now spent the in-sample one.

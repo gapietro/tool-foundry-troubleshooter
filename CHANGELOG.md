@@ -17,6 +17,68 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1103 — 2026-08-11
+
+### Added — the v13 scored pass, complete (#166)
+
+- **Stage 3 fired and scored in one sitting**, interleaved by seed per §AI7, on build `5fb7648`
+  verified by probe. Twenty rows terminal, twenty packets built, twenty independent scorers
+  dispatched once. Artefacts: `benchmark/v13-rows.json`, `benchmark/v13-reports/`,
+  `benchmark/scoring-v13/` (+ `results/`), `benchmark/scorecard-v13.md`,
+  `benchmark/v13-ambiguity-flags.json`, and `DECISION.md` §AJ.
+- **Primary outcome (AI-1, Ruling 4): 20 of 20 rows returned `ambiguous = no`** — against v12's
+  8 of 20. Zero column flags (AI-2, AI-3). Two independent signals agree: every verdict table reads
+  `no`, and not one verdict emitted an `### ambiguity` section.
+- **All six predictions confirmed.** §AJ3 and §AJ6 state plainly why six-for-six is weaker evidence
+  than it sounds: AI-5 was filed at ~97% prior by its own note, AI-4 and AI-6 bound shapes absent
+  from v12 too, and AI-1/2/3 are close to an in-sample check — same seeds, same report formats, same
+  instance the clauses were fit to.
+- **Gate, both arms together per §AD7: native 4/10 = 40.0% (47/60); custom 0/10 = 0.0% (5/60).**
+  Against v12: **native 6/10 = 60.0% (51/60); custom 0/10 = 0.0% (9/60)** — so the native arm
+  **declined two rows**.
+  Ruling 3's milestone is evaluated and **not met**. Per Ruling 6 no prediction was filed on the
+  gate, so no gate prediction is claimed in either direction.
+- **#155's fix is visible and did not move the gate.** Two custom rows were rejected by the
+  validator on two different rules (unsupported sweep claim; evidence-count shortfall). Both scored
+  0/6, as did four custom rows with accepted reports — **nine** of ten custom rows missed upstream, on
+  `root_cause_layer_correct` (row 12 is the sole exception).
+
+### Fixed
+
+- **A void condition §A3 does not name.** Row 05 native's first attempt terminated
+  `state_reason: execution_failed` with no report (495s, 18 tool calls, ceiling unreached, fixtures
+  intact). §A3's definition is seed-state only. Ruled void under §4.1 of the raw-evidence file —
+  **symmetric across both arms, and committed in `77d0d44` BEFORE the replacement fired**, so
+  `git log -p` shows the rule predating the row it governs. 1 of 3 native re-runs spent.
+
+### Fixed (#172 review)
+
+- **The v12 baseline was published as v4's number, inverting the reported direction of change.**
+  `scorecard-v13.md`, §AJ2 and this entry first said "native 3/10 = 30.0%" — that is §O2's v4
+  figure. v12's native result is 6/10 = 60.0%, 51/60, pinned by `test/scorecardV12Tallies.test.js`.
+  v13's native arm **declined** 60.0% → 40.0%; it did not improve. §AJ2's resolution argument is
+  rewritten rather than patched.
+- **"Eight of ten custom rows" was v12's count** — in v13 it is nine of ten.
+- **`test/scorecardV13Tallies.test.js` added**, the counterpart the v12 tally test's own header
+  argues for. Every mechanical property of the v13 primaries was already correct; both errors lived
+  purely in prose about them, the one layer no existing guard watched. Deliberately a second
+  independent recomputation rather than a shared helper.
+- **`build-packets.js` no longer asserts pass-level facts it cannot see.** It emitted, hardcoded and
+  unconditional, *"No row in this pass was void, and no arm used any of its permitted re-runs"* —
+  true of v12, false of v13, and shipped to all twenty blind scorers. It now states only this row's
+  terminal state and whether this row is a replacement. **`scoring-v13/` is NOT rebuilt**: those
+  files are the record of what the scorers read, frozen on the same ground as `scoring-v4` and
+  `scoring-v12`. Disclosed at §AJ5a with the second defect found alongside it (`operator_note`
+  renders nowhere, so two rows with the same report-assembly fact presented differently).
+
+### Verified
+
+- Three guard edits made as part of building the packets, not after: `PACKET_SETS` gains
+  `scoring-v13` (`scanned: true`, `packets: 20`), the declared-membership literal lists four sets,
+  and `npm test` is green **before** any packet reached a scorer. **32 suites, 1600 tests.**
+  `scoring-v12/` untouched — no `--force`.
+- §AI7 item 11 confirmed in the artefact: Ruling 1 renders in full into all four seed-05 packets.
+
 ## 2026.08.1101 — 2026-08-11
 
 ### Fixed

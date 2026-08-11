@@ -618,7 +618,25 @@ function buildPacket(row, rubric, spec, rulings, reportsDir, pass) {
         '## 6. Notes specific to this run',
         '',
         row.note ? '- ' + row.note : '- No run-specific notes.',
-        '- This run reached a terminal state and was not re-run. No row in this pass was void, and no arm used any of its permitted re-runs.',
+        // PASS-LEVEL CLAIMS ARE NOT THE GENERATOR'S TO MAKE (#166 review).
+        // This line previously read, hardcoded and unconditional: "This run
+        // reached a terminal state and was not re-run. No row in this pass was
+        // void, and no arm used any of its permitted re-runs." That was true of
+        // v12 and FALSE of v13 -- one row was ruled void and one native re-run
+        // was spent -- so generalising the script to --pass carried a
+        // v12-specific fact into a pass it did not describe, and shipped it to
+        // all twenty blind scorers. It was doubly false in row 05's own packet,
+        // because row 05 IS the replacement run.
+        //
+        // The generator sees one row. It can state that row's terminal state and
+        // whether that row is a replacement; it cannot see the pass, so it no
+        // longer says anything about the pass. A row declares itself a
+        // replacement with `rerun_of` in the manifest.
+        row.rerun_of
+            ? '- This run reached a terminal state. It is a REPLACEMENT run: the void it replaces (' +
+              row.rerun_of +
+              ') is recorded in this pass’s raw-evidence file.'
+            : '- This run reached a terminal state.',
         '',
         '---',
         '',
