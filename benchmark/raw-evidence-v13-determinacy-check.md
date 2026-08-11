@@ -1,8 +1,9 @@
 # v13 — the determinacy check (build `5fb7648`, #166)
 
 > **The pass is keyed to a commit, not a version token.** §AI's heading says `2026.08.1008`, an
-> earlier title here said `2026.08.1009`, and the repo is now `2026.08.1010` — three labels for one
-> pass, none of which identifies the code under test. **The code under test is `5fb7648`**
+> earlier title here said `2026.08.1009`, the repo was `2026.08.1010` when this file landed and is
+> `2026.08.1101` as of the stage-3 sitting — four labels for one pass, none of which identifies the
+> code under test. **The code under test is `5fb7648`**
 > (= `sys_app.version` `2026.08.1003`), and `git log 5fb7648..HEAD -- src/` is empty. §W7/§AB6 say
 > version strings are not evidence; §1.1 records an item that was wrong precisely because it trusted
 > one. Naming the commit is the same rule applied to this file's own title.
@@ -14,8 +15,13 @@ Infrastructure (§AI7 items 11 and 12) merged in `b36a09d`, also before run 1.
 > as they were returned by the tool that produced them, and **two clocks appear**. `sn_aia_message`
 > and `x_snc_troubleshoot_run` rows carry **UTC** (§1.6, §1.7: `00:48`–`00:53`). `sn_aia_execution_plan`
 > rows and `servicenow_aia_trace` carry **instance local time**, UTC−4 (§2.2 onward: `21:24`–`21:48`).
-> The same seed-01 rep-1 plan therefore appears as `01:22:54` in §2.4's staleness note and `21:25:38`
-> in §2.7's manifest — a 4-hour offset, not a discrepancy. **This matters operationally:** §3.3's
+> The seed-01 rep-1 retry `c343e7be…` therefore reads `01:25:38` from the Table API and `21:25:38` in
+> §2.7's manifest — a 4-hour offset, not a discrepancy. **Do not pair it with §2.4's staleness note:**
+> that note's `01:22:54` is the **void** plan `dfa22b7a…`, a different execution three minutes
+> earlier (local `21:22:54`), and reading the two as one plan makes the offset look like 3h57m and
+> the clocks look unreliable. Both pairs are exactly 4h; the referents differ. (Verified live
+> 2026-08-11: the API returns `01:22:54` and `01:25:38` for the two plans respectively.)
+> **This matters operationally:** §3.3's
 > "messages created after the final tool call" rule compares a `sn_aia_message` timestamp (UTC)
 > against a trace tool-call time (local), and an operator who does not convert will mis-slice the
 > report by four hours. Convert before comparing, or compare only within one source.
@@ -289,6 +295,50 @@ All four are newly worded rather than reused from v12, so no seeded execution in
 **All eight execution-producing fixtures are complete.** Seed 05 produces no execution by
 design, so the pass needs eight, not ten.
 
+### 2.4 Seed 01 will not fire from a bare sys_id — the invocation, not the agent
+
+**This subsection has been cut back to what survived review.** Its original text claimed *"both
+seed-01 attempts stalled"* and that the retry's outcome was *"unresolved and the first thing the next
+session must check"*. Both statements were already false when written — §2.3's table records the
+retry completing in 67s — and the #169 review found them still standing, pointing a future operator
+at a resolved question. The stale text is removed rather than annotated in place, because a runbook
+another session executes is the one document where a superseded paragraph is a hazard rather than a
+record.
+
+**Correction, #166 stage-3 sitting.** That removal was applied but the superseded block was left in
+place *as well*, 135 lines further down — so the file carried both versions and an operator reading
+linearly ended on the withdrawn one. The duplicate is now deleted, and this subsection moved ahead of
+§2.4a so the void run is explained before the sections that refer back to it. The review's cut had
+also taken three still-cited items with it, restored below: the read-staleness note (§1's clock
+convention and §2.6 both cite it by name), the verbatim input-schema capture, and the stall
+presentation §2.5's discriminator callout compares itself against. Dropped deliberately, not
+restored: the claim that `sn_aia_execution_plan.agent` "carries the agent's display name" — read back
+through `servicenow_query` it returns the reference **sys_id**, so plan→seed mapping is by sys_id
+unless `displayValue` is requested.
+
+**What holds:** the first attempt (`dfa22b7a…`) supplied only the ticket sys_id, and the agent
+responded by emitting an input schema and waiting in `collect_input_from_user` — `Mode: Interactive`,
+with nothing to answer it. Verbatim, as the agent's own message:
+
+```json
+[{"name":"ticket_description","prompt":"What is the request or issue described in the ticket? …",
+  "dataType":"text"},{"name":"affected_users","prompt":"…"}]
+```
+
+The seed spec's Trigger section requires the sys_id **plus an urgent-sounding description**.
+Supplying both works, on every attempt since. The run is a **void** under §A3, recorded and replaced.
+
+> **How a stall presents — recorded here in the wording §2.5 later corrects.** `State: In progress`
+> with `Duration: 0s`, **indefinitely**: at a glance indistinguishable from a slow run. The
+> discriminator as first written was `TOOL CALLS (0)` **plus** an agent message carrying an input
+> schema. §2.5 is the correction and supersedes this line — the two halves are not independent, and
+> treating the second as optional is what cost this pass a false stall call.
+
+> **A read-staleness note, matching §3.0's warning in v12's file.** The **void** plan `dfa22b7a…` was
+> created at 01:22:54 and a `sys_created_on>=javascript:gs.minutesAgoStart(3)` query run immediately
+> afterwards returned **zero** records; the same query at `minutesAgoStart(10)` returned it. Do not
+> read an empty narrow-window result as "the agent did not fire".
+
 ### 2.4a Seed 01's defect, confirmed live and it is sharper than "the value is wrong"
 
 Rep 1's `set_ticket_priority` returned **`[OK]` in 250ms**. The ticket afterwards:
@@ -384,155 +434,6 @@ Seed 04 rep 1 likewise fires `summarise_ticket` once, the unmapped-capability pa
 
 **All four bench tickets read `priority` empty and `sys_mod_count: 0` at handoff** — no write has
 landed on any of them, so every seed-01/04 fixture is intact and uncontaminated.
-
-### 2.4 Seed 01 will not fire from a bare sys_id — the invocation, not the agent
-
-**This subsection has been cut back to what survived review.** Its original text claimed *"both
-seed-01 attempts stalled"* and that the retry's outcome was *"unresolved and the first thing the next
-session must check"*. Both statements were already false when written — §2.4a records the retry
-completing in 67s — and the #169 review found them still standing, pointing a future operator at a
-resolved question. The stale text is removed rather than annotated in place, because a runbook
-another session executes is the one document where a superseded paragraph is a hazard rather than a
-record.
-
-**What holds:** the first attempt (`dfa22b7a…`) supplied only the ticket sys_id, and the agent
-responded by emitting an input schema (`ticket_description`, `affected_users`) and waiting in
-`collect_input_from_user` — `Mode: Interactive`, with nothing to answer it. The seed spec's Trigger
-section requires the sys_id **plus an urgent-sounding description**. Supplying both works, on every
-attempt since. The run is a **void** under §A3, recorded and replaced.
-
-### 2.4a Seed 01's defect, confirmed live and it is sharper than "the value is wrong"
-
-Rep 1's `set_ticket_priority` returned **`[OK]` in 250ms**. The ticket afterwards:
-
-| field | value |
-|---|---|
-| `priority` | **empty** |
-| `sys_mod_count` | **0** |
-
-`sys_mod_count: 0` is the part worth having. The write did not land wrong — **it never happened at
-all**, and the tool still reported success. A diagnosis that stops at "the priority is wrong" has
-not reached the defect; the record was never updated, and the tool's own status is actively
-misleading. This is the schema mismatch the seed exists to plant (a word forwarded to an
-Integer-typed column), observed end to end.
-
-### 2.5 Seed 01 rep 2 was NOT a second stall — it was latency, and the claim it was is withdrawn
-
-**This subsection previously reported a "second stall shape" and a flakiness finding. Both were
-wrong, and they are corrected here rather than deleted**, because the mistake is the instructive
-part.
-
-`1c65237e…` **completed in 67s** with one `set_ticket_priority` call (307ms, `OK`) — the same
-duration and the same terminal shape as rep 1. What was read as a hang was the OOB
-`organize_general_knowledge` step followed by a slow model turn: **LLM P95 latency 22,037ms** on this
-run against 4,780ms on rep 1, a 4.6× spread on identical work.
-
-**The error was calling a stall from two identical polls.** Two consecutive traces showed the same
-task list, the same `0` tool calls and no new message, and that was treated as evidence of a hang.
-It is not: it is exactly what a 22-second model turn looks like through a polling window shorter
-than the turn. The genuine stall (`dfa22b7a…`) is distinguishable and stayed distinguishable — it
-carried **an agent message containing an input schema**, which is a positive signal, not an absence.
-
-> **The corrected discriminator, which §2.4's version got half right.** A stall is
-> `TOOL CALLS (0)` **plus a message whose body is an input schema**. `TOOL CALLS (0)` on its own
-> means nothing — tool calls are recorded on completion, so any run mid-turn shows zero. The earlier
-> wording ("`TOOL CALLS (0)` plus an input-schema message") is right only if both halves are
-> required, and this pass proved what happens when the second half is treated as optional.
-
-**Seed 01 is therefore not flaky, and the recipe is deterministic:** invoke with the ticket sys_id
-**plus** an urgent-sounding description, per the seed spec's Trigger section. One attempt out of
-three failed, and it is the one that omitted the description. The risk this subsection previously
-raised against seed 01's 4 scored rows does not exist.
-
-Rep 2's defect is confirmed on the same terms as rep 1: ticket `5cc267be…` reads `priority` **empty**
-and `sys_mod_count` **0** after a tool call that returned `OK`.
-
-### 2.6 Seed 05 is blocked on seed 01 rep 2, and the reason is a protocol constraint
-
-Seed 05's fixture is an **absence**: insert a bench ticket, then verify **zero execution plans
-created instance-wide** across a multi-minute silence window (v12 §3.58; the qualification measured
-~1s from insert to plan when the trigger *is* active). That check cannot run while any other agent is
-executing, so seed 05 was produced **last**, after all eight execution-producing fixtures had
-terminated.
-
-| check | result |
-|---|---|
-| ticket inserted | `0277233a2b6e0bd817a6ffbeee91bf6f` at **21:43:52**, `short_description` non-empty (satisfies the trigger's `short_descriptionISNOTEMPTY` condition) |
-| execution plans created instance-wide since | **zero**, across a 4+ minute silence window |
-| m2m gate `ba30d8775b0c4cebb960c58830590d5d` | still **`true`** |
-| trigger config `bfb77d6c64884500a80203ee029436ee` | still **Inactive** |
-
-**The empty result was proved to be an absence rather than a stale read, with a positive control.**
-§2.3's staleness note is the reason this matters: a narrow window had already returned zero for a
-plan that existed. So the silence query was re-run at `minutesAgoStart(20)`, wide enough to reach
-back past the last real execution — it returned **all eight** fixture plans, newest
-`1c65237e…` at 21:34:44, and **nothing at or after 21:43:52**. The query demonstrably sees plans in
-the window it covers; there simply are none after the insert.
-
-With the m2m gate on and only the trigger config off, the seed isolates exactly one gate — which is
-the whole point of §A3's void condition for it, and what a correct diagnosis has to name
-specifically rather than saying "the trigger is off".
-
-### 2.7 Fixture manifest — all eight execution-producing fixtures, plus seed 05's absence
-
-| seed | rep | plan | created |
-|---|---|---|---|
-| 01 | 1 | `c343e7be2b624718f243fed2ce91bfd3` | 21:25:38 |
-| 01 | 2 | `1c65237e2b2e0bd817a6ffbeee91bfff` | 21:34:44 |
-| 02 | 1 | `0913233e2b624718f243fed2ce91bf0f` | 21:24:40 |
-| 02 | 2 | `d96323b22b2e0bd817a6ffbeee91bf04` | 21:26:04 |
-| 03 | 1 | `8513233e2b624718f243fed2ce91bf6e` | 21:24:41 |
-| 03 | 2 | `656323b22b2e0bd817a6ffbeee91bfb7` | 21:26:05 |
-| 04 | 1 | `a513a33e2b624718f243fed2ce91bf4e` | 21:24:43 |
-| 04 | 2 | `ea63a3b22b2e0bd817a6ffbeee91bfb0` | 21:26:09 |
-| 05 | 1, 2 | *(none — the absence is the fixture)* | ticket 21:43:52 |
-
-Plus one void: `dfa22b7a2b624718f243fed2ce91bf12` (seed 01, invoked without a description, §2.4).
-
-**Stage 2 is complete.** Both arms diagnose the same fixture for a given seed/rep, per §AI7.
-
-Seed 02 rep 1 reproduces v12's shape exactly: a routing request answered by a character counter.
-Seed 04 rep 1 likewise fires `summarise_ticket` once, the unmapped-capability path.
-
-**All four bench tickets read `priority` empty and `sys_mod_count: 0` at handoff** — no write has
-landed on any of them, so every seed-01/04 fixture is intact and uncontaminated.
-
-### 2.4 Seed 01 will not fire from a bare sys_id — and this is a fixture finding, not a harness one
-
-**Both seed-01 attempts stalled with zero tool calls.** The first (`dfa22b7a…`) is diagnostic: at
-+23s the agent emitted, as its own message, a request for inputs it had not been given —
-
-```json
-[{"name":"ticket_description","prompt":"What is the request or issue described in the ticket? …",
-  "dataType":"text"},{"name":"affected_users","prompt":"…"}]
-```
-
-— i.e. it entered `collect_input_from_user` and waited. `Mode: Interactive`, and nothing was ever
-going to answer it. **The invocation was wrong, not the agent.** `seeds/seed-01-schema-mismatch.md`
-§Trigger says it plainly: give the agent *"the ticket sys_id **plus an urgent-sounding
-description**"*. The first attempt supplied only the sys_id.
-
-The retry (`c343e7be…`) supplies both and had not requested input by handoff, but had also made no
-tool call. **Whether the retry completes is unresolved and is the first thing the next session must
-check.** If it also stalls, the next probe is whether `Seed 01 Ticket Prioritizer` requires its
-inputs supplied structurally rather than in prose — the other three seeds take a bare message and
-fire on the first turn, so seed 01 is the outlier.
-
-> **Two operator lessons, both cheap to bank.** A stalled agent presents as `State: In progress`
-> with `Duration: 0s` **indefinitely** — it is indistinguishable at a glance from a slow run, and
-> the discriminator is `TOOL CALLS (0)` plus an agent message containing an input schema. And
-> `sn_aia_execution_plan.agent` carries the agent's display name, which makes plan→seed mapping
-> exact without tracking session IDs; fire different agents concurrently and the mapping stays
-> unambiguous, fire the same agent twice and disambiguate on `sys_created_on`.
-
-> **A read-staleness note, matching §3.0's warning in v12's file.** The plan for seed 01 rep 1 was
-> created at 01:22:54 and a `sys_created_on>=javascript:gs.minutesAgoStart(3)` query run immediately
-> afterwards returned **zero** records; the same query at `minutesAgoStart(10)` returned it. Do not
-> read an empty narrow-window result as "the agent did not fire".
-
----
-
-
 
 ---
 

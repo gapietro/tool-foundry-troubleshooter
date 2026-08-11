@@ -17,6 +17,54 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1101 — 2026-08-11
+
+### Fixed
+
+- **`benchmark/raw-evidence-v13-determinacy-check.md` carried two copies of §2.4/§2.4a/§2.5/§2.6/§2.7**
+  — the corrected post-review block and the superseded pre-review draft it says it deleted, with the
+  stale copy placed **last**. An operator reading linearly therefore finished on the withdrawn claims:
+  that *"both seed-01 attempts stalled"*, that the retry's outcome was *"unresolved and the first
+  thing the next session must check"*, and that seed 05 was *"blocked on seed 01 rep 2"*. All three
+  are false — §2.3's table records the retry completing in 67s and §2.6 records seed 05 produced last. The
+  #166 handoff comment was written from the stale block and repeats all three. Duplicate deleted.
+- **A still-cited note was collateral damage of the #169 review's cut.** The read-staleness note
+  (a `minutesAgoStart(3)` window returning zero for a plan that existed) lived only in the deleted
+  block, yet §1's clock convention and §2.6 both cite *"§2.4's staleness note"* by name. Restored
+  into §2.4, so both references resolve.
+- **Dropped, not restored:** the claim that `sn_aia_execution_plan.agent` *"carries the agent's
+  display name"*. Read back through `servicenow_query` the field returns the reference **sys_id** —
+  plan→seed mapping is by sys_id unless `displayValue` is requested.
+
+### Fixed (#171 review round)
+
+- **§1's clock convention paired two different executions.** It read the staleness note's `01:22:54`
+  and §2.7's `21:25:38` as *"the same seed-01 rep-1 plan… a 4-hour offset"*. They are two plans: the
+  **void** `dfa22b7a…` (UTC `01:22:54`) and the retry `c343e7be…` (UTC `01:25:38`), three minutes
+  apart — verified live 2026-08-11. As written the worked example implied a 3h57m offset and made the
+  clocks look unreliable, in the one paragraph §3.3's "convert before comparing" rule depends on.
+  Both pairs are exactly 4h; the referents differ.
+- **Two more casualties of the #169 cut, restored to §2.4:** the verbatim input-schema capture (the
+  file's framing is *"records measurements only"*, and both §2.5's discriminator and §3.3 item 4 turn
+  on what an input-schema message looks like), and the stall presentation — `State: In progress` with
+  `Duration: 0s` indefinitely — which §2.5's callout cites as *"§2.4's version"* and critiques. It is
+  restored in its original half-right wording, so §2.5's correction has a real referent.
+- **§2.4 moved ahead of §2.4a.** The region ran §2.3 → §2.4a → §2.5 → §2.6 → §2.7 → §2.4, so the
+  explanation of the void run sat after the manifest and after two sections that refer back to it.
+- **`§2.4a records the retry completing in 67s`** → §2.3's table. §2.4a records the 250ms `[OK]` and
+  the empty `priority`; the 67s completion is §2.3.
+
+### Verified (gpinst01, before stage 3)
+
+- All **eight** execution-plan fixtures `completed`; all **four** bench tickets `priority` empty,
+  `sys_mod_count: 0`, `sys_updated_on` == `sys_created_on` — uncontaminated.
+- Seed 05's trigger `Seed 05 Bench Ticket Created` still `active: false`, as designed.
+- `git log 5fb7648..HEAD -- src/` empty — the §AH7 single-variable claim still holds.
+
+**Stage 2 is complete and stage 3 is unblocked.** No fixture needs re-firing.
+
+---
+
 ## 2026.08.1010 — 2026-08-10
 
 ### Added
