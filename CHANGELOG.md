@@ -23,7 +23,7 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 - **The v13 determinacy check is pre-registered (#166, `DECISION.md` §AI).** Discharges §AH7's
   standing open item — *"The next scored pass is still not scheduled, sized or pre-registered"* —
-  which had closed six consecutive sections (§AC–§AH). **No run fired, no packet was scored, no
+  a sentence §AG6 and §AH7 both close with. **No run fired, no packet was scored, no
   instance was touched, and no v12 number moves.**
 - **The pass is framed as a determinacy check rather than a milestone measurement**, inverting every
   prior scored pass. Primary outcome is the packet-level `ambiguous` tally across 20 rows against
@@ -48,6 +48,47 @@ two-digit daily counter. Incremented on every merge to `main`.
 - **§AC6's optional-stopping protection is extended to the flag tally.** Under a determinacy framing
   the ambiguity count *is* the outcome, so no row-level or column-level tally may be computed,
   curated or glanced at until all twenty packets have been scored and returned (§U8.5).
+
+### Fixed — the review round and the pre-flight round, both before merge
+
+- **Eleven `/code-review` findings, all real, applied once.** Two were release-grade: §AI named **no
+  `v13-advance-rulings.json`**, re-opening the defect #160 closed (§AD5's rule that an advance ruling
+  must ship in the packets — §AG1 records rows 17/19 flagging `fix_usable_unedited` in v12 precisely
+  because the ruling never reached the scorer, which alone lands AI-3 on its refutation boundary);
+  and **no v13 packet generator exists** — `build-v12-packets.js` hardcodes its paths and declares
+  `scoring-v12/` frozen, so there was no path from v13 reports to v13 packets. Both are now
+  pre-flight items 11 and 12, gated before run 1.
+- **Ruling 4's column scan is now domain-bounded to `ambiguous = yes` rows**, matching how
+  `v12-ambiguity-flags.json` was curated. All twenty v12 verdicts carry an `### ambiguity` section,
+  so an unbounded scan would have scored AI-2/AI-3 against a denominator different from the v12
+  baseline they name.
+- **AI-1/AI-2/AI-3 are restated as proportions of valid rows**, with the 20-row figures kept as the
+  full-denominator case. §AI6's cost stop permits an arm to close at 8 or 9, which would otherwise
+  have left the primary outcome partly a function of the void count, resolvable after the rows exist.
+- **The optional-stopping seal now covers AI-4 and AI-5.** Both read off report *shape*, which the
+  operator necessarily sees mid-pass; without this AI-5 could have been confirmed at run 3.
+- **Two provenance claims withdrawn as unverifiable.** "Closed six consecutive sections (§AC–§AH)"
+  was false (§AC discharged the item; §AD–§AF do not carry it), and the "seventh consecutive section"
+  ordinal does not reconcile under any consistent rule — §AD1's "fifth" is the last that does. The
+  fact is kept, the tally is dropped, and both are recorded rather than silently corrected.
+- **AI-5 is disclosed as ~3% refutable** and explicitly not counted toward the section's six
+  meaningful predictions.
+
+### Fixed — by the pre-flight the section prescribes
+
+- **The build under test is `2026.08.1003`, not `2026.08.1008`.** A live probe of gpinst01 returned
+  `1003`; `5fb7648` *is* `1003`, and `1004`–`1007` are documentation only. Pre-flight item 1 had
+  demanded a version-string match three paragraphs after §AI1 forbids trusting version strings —
+  **the section carried the rule and a violation of it**, inherited from §AC7. Item 1 now probes
+  that `git log 5fb7648..HEAD -- src/` is empty, which is the claim that actually binds.
+- **Pre-flight items 2 and 3 verified live against gpinst01**, and item 2 now names its probe string
+  (`the presence requirement is stated FIRST`) instead of "the fixed wording"; a `scriptLIKE`
+  negative control confirmed the filter is real and not silently dropped.
+- **One anomaly recorded unexplained** (new pre-flight item): every `x_snc_troubleshoot` script
+  include reports `sys_updated_on` ≤ 2026-08-02 while `PaFixReport` demonstrably contains code
+  written 2026-08-10. Verified, unreconciled, blocking nothing — the code probe decides — but an
+  install path that writes records without touching audit fields is worth understanding before
+  twenty runs rest on it.
 
 ### Verified
 

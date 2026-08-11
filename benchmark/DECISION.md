@@ -5477,13 +5477,18 @@ benchmark/DECISION.md` is the check, in the form §W, §Z, §AC, §AE, §AF, §A
 section claims no result.**
 
 It discharges §AH7's standing open item — *"The next scored pass is still not scheduled, sized or
-pre-registered"* — which has now closed six consecutive sections (§AC through §AH). It also takes
+pre-registered"* — a sentence §AG6 and §AH7 both close with. **An earlier draft of this section said
+that item "has now closed six consecutive sections (§AC through §AH)" and that was false**: §AC
+*discharged* the equivalent §Z6 item by pre-registering v12, and §AD, §AE and §AF do not carry the
+sentence at all, so the run is §AG–§AH — two sections, not six. It is corrected here rather than
+quietly dropped, because a pre-registration that miscounts its own provenance is the wrong document
+to be trusted about a tally. It also takes
 §AG5's warning at its word: a rubric section is not a pre-registration, and the clauses at §AG and
 §AH do not become a pass by being correct.
 
 **This pass is framed differently from every scored pass before it, and the difference is the point.**
 §O, §T and §AD were milestone measurements that also produced rubric information. **v13 is a
-determinacy check that also produces milestone figures.** AI1 states what that inverts and AI5 states
+determinacy check that also produces milestone figures.** AI1 states what that inverts and Ruling 6 states
 what it costs.
 
 ### AI1. What this pass decides, and what it does not
@@ -5508,11 +5513,31 @@ and the per-column flag tally, against v12's 8-of-20 and fourteen flags (§AD3) 
 - **Anything about #155's fix as a repair.** AI4's Ruling 5 explains why the single-variable build
   difference is stated as a fact about the pass and not converted into a hypothesis about it.
 
-**The build under test is `2026.08.1008`, and it must carry BOTH #148's and #155's fixes.** Verified
-by probe, not by version string (§W7, §AB6). The relevant fact, measured rather than assumed:
-`git log 5fb7648..HEAD -- src/` is **empty**, and `5fb7648` is the commit that published the v12
-rows *and* shipped #155. So the code under test differs from the code v12 measured by exactly one
-change, on the custom arm's report-validation path, and by nothing else.
+**The build under test is `2026.08.1003`, and it must carry BOTH #148's and #155's fixes.** Verified
+by probe, not by version string (§W7, §AB6).
+
+> **Corrected before merge, by the pre-flight it prescribes.** The first draft of this section named
+> the build `2026.08.1008` — this document's own version — and pre-flight item 1 demanded
+> `sys_app.version` read it. **A live probe of gpinst01 returned `2026.08.1003`, and the item as
+> written was wrong rather than the instance.** `5fb7648` *is* `2026.08.1003`; every version since
+> (`1004`–`1007`) is §AE, §AF, §AG and §AH, all documentation. So the instance is four versions
+> behind in *string* and zero lines behind in *code*, and item 1 would have demanded a reinstall
+> that changes nothing under test purely to make a string match — three paragraphs after this
+> sentence forbids trusting version strings. **The section contained the rule and a violation of
+> it**, inherited unexamined from §AC7 item 1. This is what pre-flight is for, and it is recorded
+> rather than silently repaired.
+
+The relevant fact, measured rather than assumed: `git log 5fb7648..HEAD -- src/` is **empty**, and
+`5fb7648` is the commit that published the v12 rows *and* shipped #155. The v12 runs themselves
+fired against `2026.08.1001`, before that commit. So the code under test differs from the code v12
+measured by exactly one change, on the custom arm's report-validation path, and by nothing else.
+
+> **One anomaly, unexplained and not waved through.** Every `x_snc_troubleshoot` script include on
+> gpinst01 reports `sys_updated_on` ≤ **2026-08-02**, while `PaFixReport` demonstrably contains code
+> written 2026-08-10. Both are verified; they are not reconciled. The code probe is decisive and
+> §W7 already denies timestamps evidential weight, so this blocks nothing — but an install path that
+> writes records without touching audit fields is a thing to understand *before* twenty runs rest on
+> assumptions about what is deployed. Pre-flight item 11 carries it.
 
 ### AI2. Shape and sizing — and why §AC2's justification does not carry
 
@@ -5531,7 +5556,7 @@ seeds × two report formats × two reps. The clauses at §AG and §AH were writt
 rows; twenty rows re-derived from fresh runs is the largest sample of fresh shapes obtainable from
 the existing seed set.
 
-**§A3.4's 8-valid-run floor is read PER ARM**, carried from §AC2's Ruling 2, and it still bites —
+**§A3.4's 8-valid-run floor is read PER ARM**, stated at §AC2 and named Ruling 2 at §AC4, and it still bites —
 below 8 valid rows in an arm, that arm's *gate* figure is not computed (§AC6's table). **The
 determinacy tally is separate and is read across all valid rows in both arms combined**, because
 `ambiguous` is a property of a packet and a scorer, not of an arm. An arm falling below its floor
@@ -5592,8 +5617,15 @@ tests, so that neither can be argued after the packets come back:
 - **Column-level.** A column flag is counted iff the verdict's `### ambiguity` prose **names that
   column as under-determined**. Those sections are prose that argues both readings, so every column
   gets mentioned and **no regex can tell "named" from "discussed"** — this is exactly the parse that
-  produced the miscount §AD3 had to correct before merge. The tally is therefore **curated by hand
-  into `benchmark/v13-ambiguity-flags.json`**, in the form and with the `_why`/`_verified` header
+  produced the miscount §AD3 had to correct before merge.
+
+  **The scan domain is the rows whose header reads `ambiguous = yes`, and no others.** This is not a
+  refinement, it is the difference between comparable and incomparable numbers: `v12-ambiguity-flags.json`
+  was curated *only* from the twelve flagged verdicts, while **all twenty** v12 verdicts carry an
+  `### ambiguity` section — row 09 reads `ambiguous = no` and still discusses and rejects a second
+  reading. A v13 curator scanning all twenty would count rows the v12 baseline excluded, and AI-2 and
+  AI-3 would be scored against a denominator different from the one they name. The tally is
+  **curated by hand into `benchmark/v13-ambiguity-flags.json`**, in the form and with the `_why`/`_verified` header
   `v12-ambiguity-flags.json` carries, and bound to the scorecard by a test in that file's pattern.
 
 **Ruling 5 — the single-variable build difference is a fact about the pass, not a hypothesis in it.**
@@ -5628,18 +5660,26 @@ refutation is not one.
 
 | | Prediction | What refutes it |
 |---|---|---|
-| **AI-1** | **≥ 16 of 20** rows return `ambiguous = no` under Ruling 4's row test — against v12's 8 of 20 (§AD3) and v9's 3 of 12 (§T2's T8) | ≤ 15 rows. This is the pass's primary outcome and the one most worth failing |
-| **AI-2** | **≤ 4 column flags in total** under Ruling 4's column test, against v12's fourteen | ≥ 5 flags |
-| **AI-3** | **≤ 2 column flags** fall on `evidence_cites_trace_and_config` and `fix_usable_unedited` combined — the two columns §AG closed, which drew 10 of v12's 14 | ≥ 3 flags across the two |
+| **AI-1** | **≥ 80% of valid rows** return `ambiguous = no` under Ruling 4's row test — **16 of 20 at the full denominator** — against v12's 8 of 20 = 40% (§AD3) and v9's 3 of 12 = 25% (§T2's T8) | < 80% of valid rows. This is the pass's primary outcome and the one most worth failing |
+| **AI-2** | **≤ 0.20 column flags per valid row** under Ruling 4's column test — **≤ 4 at the full denominator** — against v12's 14 over 20 = 0.70 | > 0.20 per valid row |
+| **AI-3** | **≤ 0.10 column flags per valid row** fall on `evidence_cites_trace_and_config` and `fix_usable_unedited` combined — **≤ 2 at the full denominator** — the two columns §AG closed, which drew 10 of v12's 14 | > 0.10 per valid row |
 | **AI-4** | **Neither** of §AH6's two named residual exposures occurs in 20 rows: no report proposes five *specific* fixes one per area, and no primary root cause declares all seven layers at once | Either shape occurs in any row. §AH6 called both "bounds to watch in the next pass"; this is the watching |
-| **AI-5** | **Compound declared layers recur on ≥ 1 native row** — §AH5a found them to be the native format's norm (rows 01, 03, 13), and the compound clause was written after the fact | Zero native rows carry a compound. A refutation here means the clause was written for a shape that does not recur, which is worth knowing |
-| **AI-6** | **≤ 2 void rows encountered** across the pass, and every arm finishes with **10 valid rows** | ≥ 3 encountered, or any arm below 10 valid. Stated on voids *encountered* rather than surviving, per AC-8's reason: AI6 re-runs them |
+| **AI-5** | **Compound declared layers recur on ≥ 1 native row** — §AH5a found them to be the native format's norm (rows 01, 03, 13), and the compound clause was written after the fact | Zero native rows carry a compound. **Filed knowing it is close to certain** — 3 of 10 v12 native rows carried one, so P(zero across 10) ≈ 3%. It is a *tripwire on the clause's applicability*, not a discriminating prediction, and it is not counted toward this section's claim to have filed six meaningful ones. §AC5's AC-9 standard is what it fails |
+| **AI-6** | **≤ 2 void rows encountered** across the pass, and every arm finishes with **10 valid rows** | ≥ 3 encountered, or any arm below 10 valid. Stated on voids *encountered* rather than surviving, per AC-8's reason: **§AI6** (the stopping rule, not this prediction) re-runs them |
 | **—** | **No prediction is filed on `passes_gate`, either arm, either direction.** Recorded as a row so the withholding is visible on the table rather than inferred from its absence | Nothing. Ruling 6 governs what may be said about the figures it produces anyway |
 
 ### AI6. The stopping rule
 
 **Fixed `n` = 20 runs. The pass does not extend and does not stop early.** §AC6's reasoning carries:
 every run produces a scorable row unless void, so the denominator is fixed by construction.
+
+**AI-4 and AI-5 are read off the REPORTS, and are therefore sealed too.** Both are evaluated against
+report *shape* — five specific fixes one per area, a seven-layer primary root cause, a compound
+declared layer — and the operator necessarily reads every report while running the pass and building
+the packets. Without this clause AI-5 could be confirmed at run 3, mid-pass, with nothing forbidding
+it, while the section declared its stopping rule to be about a different quantity entirely. **No
+prediction of any kind is evaluated until all twenty runs have terminated and all twenty packets have
+been scored and returned.** The seal covers the tallies below and these two equally.
 
 **One addition, and it is this pass's most result-sensitive commitment.** §AC6 forbade computing any
 score, `passes_gate` or arm total while runs remained. **Under a determinacy framing the ambiguity
@@ -5676,9 +5716,16 @@ outcome, which raises the stakes on topology above where §AC7 had them.
 
 **Pre-flight, every item verified by probe before run 1:**
 
-1. `sys_app.version` reads `2026.08.1008`.
-2. **#148's fix present** in the installed `PaFixReport`, by `scriptLIKE` probe against the fixed
-   wording — not by version, not by `sys_updated_on` (§W7, §U7).
+1. **The installed code is repo HEAD's `src/`** — two probes, neither a version string. `sys_app.version`
+   reads **`2026.08.1003`** (the `5fb7648` build), **and** `git log 5fb7648..HEAD -- src/` is empty.
+   The second is the one that binds; the first is recorded to catch an unexpected reinstall. **A
+   version reading `1004`–`1008` is not a failure** — those are documentation versions and the
+   second probe still decides.
+2. **#148's fix present** in the installed `PaFixReport`, by
+   `PaFixReport^scriptLIKEthe presence requirement is stated FIRST` → 1 record. A draft of this item
+   said only "by `scriptLIKE` probe against the fixed wording" and named nothing — precisely the gap
+   §W7 exists to close, since an improvised substring can also match pre-#148 `PaFixReport` and pass
+   a gate that should fail.
 3. **#155's fix present**, by `PaFixReport^scriptLIKE_withCanonicalLayersSwept` → 1 record. The
    method name is distinctive and was introduced by that fix; this is the probe the single-variable
    claim at AI1 rests on, and it is the one item here whose absence invalidates the framing rather
@@ -5709,10 +5756,35 @@ is re-scanned as part of pre-flight, not assumed clean because the suite was gre
 were merged.** §AH6's own summary of this — that §AH produced two blind-rule defects in one section —
 is the reason.
 
+**Two build-side gates, added after review found the pass could not be executed as first written.**
+Both are pre-flight items and both must be green before run 1, not discovered after twenty runs
+terminate:
+
+11. **A v13 advance-rulings channel exists** — `benchmark/v13-advance-rulings.json`, carrying
+    Ruling 1 in the `v12-advance-rulings.json` shape (`id`, `source`, `column`, `applies_to`,
+    `heading`, `text`), and the generator renders it into every seed-05 packet. **§AD5's standing
+    rule is that an advance ruling on a scoring column must ship in the packets, not only in the
+    pre-registration** — that is #160, and §AG1 records what its absence cost in v12: rows 17 and 19
+    flagged `fix_usable_unedited` *because the ruling never reached the scorer*. Two such flags land
+    AI-3 exactly on its refutation boundary, so an undelivered Ruling 1 would refute a prediction
+    about the rubric using a defect in the delivery. The first draft of this section named no such
+    file and re-opened the defect #160 closed.
+12. **A v13-capable packet generator exists and has been exercised on a throwaway `--out`.**
+    `benchmark/scripts/build-v12-packets.js` hardcodes `OUT = scoring-v12`, `REPORTS = v12-reports`
+    and reads `v12-rows.json` / `v12-advance-rulings.json`, and its header reads *"scoring-v12/ IS
+    FROZEN. PASS --force TO WRITE OVER IT, AND DO NOT."* — `--out` exists only to exercise the
+    freeze check. **There is therefore no path from v13 reports to v13 packets**, and the nearest
+    tool either refuses to write or overwrites dispatched, scored v12 evidence. Generalising it to
+    take a pass version (rows, rulings, reports, out) is **work that must be done and verified
+    before run 1**, because §AI6 forbids touching packets until all twenty runs have terminated —
+    the operator would hit this at the worst possible moment.
+
 **Artefacts.** Measurements → `benchmark/raw-evidence-v13-determinacy-check.md`. Rows →
-`benchmark/scorecard-v13.md`. Packets exactly as scored → `benchmark/scoring-v13/`. Flag tally →
-`benchmark/v13-ambiguity-flags.json` (Ruling 4). Operator records are **outside** the scorer-facing
-channel by the guard's own declaration and must never be pasted into a packet.
+`benchmark/scorecard-v13.md` and `benchmark/v13-rows.json`. Reports verbatim →
+`benchmark/v13-reports/`. Advance rulings → `benchmark/v13-advance-rulings.json` (item 11). Packets
+exactly as scored → `benchmark/scoring-v13/`. Flag tally → `benchmark/v13-ambiguity-flags.json`
+(Ruling 4). Operator records are **outside** the scorer-facing channel by the guard's own
+declaration and must never be pasted into a packet.
 
 ### AI8. What this pass cannot establish
 
@@ -5747,5 +5819,11 @@ tally, and a pre-flight whose third item the framing depends on.
 **Unchanged at the time of writing: native remains the recommended path on this instance, and the
 Phase 1b milestone is not met.** Quote §AD1's figures for both arms together, never singly (§AD7) —
 native 6/10 · 60% · middle band, custom 0/10 · 0% · bottom band, rubric totals 51/60 and 9/60.
-**This is the seventh consecutive section to close with the milestone unmet**, and the first in which
-that sentence is a report of the standing record rather than a result the section produced.
+**The ordinal is deliberately not stated.** A draft of this section claimed "the seventh consecutive
+section to close with the milestone unmet"; it was inherited from §AH7's "sixth" by adding one, and
+it does not survive a grep — §AF7 does not carry the sentence, which breaks any consecutive run, and
+the sections that do carry it (§Z6, §AA, §AB, §AC8, §AD1, §AE8, §AG6, §AH7) do not yield six then
+seven under any consistent rule. §AD1's "fifth" is the last one that reconciles. **The fact needs no
+ordinal**: the milestone is unmet, it has been unmet in every section since §Z6, and a running tally
+this file cannot verify is exactly the kind of decorative precision a determinacy check should not
+be introducing.
