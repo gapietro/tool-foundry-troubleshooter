@@ -107,6 +107,30 @@ declare global {
                         table: 'sys_security_acl'
                         id: 'ae03b8b8c2fe447eafda3617190a17f3'
                     }
+                    'seed-06-acl': {
+                        table: 'sys_security_acl'
+                        id: '9c412ef327e142789e74c70df9a374e3'
+                    }
+                    'seed-06-agent': {
+                        table: 'sn_aia_agent'
+                        id: '3e8b1e1f2b1c45c8b437c09ecb6c185a'
+                    }
+                    'seed-07-acl': {
+                        table: 'sys_security_acl'
+                        id: 'ec2484fd6d35445cb3bcdfd422ff5b42'
+                    }
+                    'seed-07-agent': {
+                        table: 'sn_aia_agent'
+                        id: '56c9f86373974407ac1a276a91cdfa79'
+                    }
+                    'seed-08-acl': {
+                        table: 'sys_security_acl'
+                        id: 'd241967905534c3ca846596f3df811cb'
+                    }
+                    'seed-08-agent': {
+                        table: 'sn_aia_agent'
+                        id: 'fad5a34c531446f6989b071636f5491e'
+                    }
                     src_server_script_ts: {
                         table: 'sys_module'
                         id: '30055670e07444bd993faecf66d51bc8'
@@ -114,6 +138,15 @@ declare global {
                     }
                 }
                 composite: [
+                    {
+                        table: 'sn_aia_agent_tool_m2m'
+                        id: '0199db4f7f49413eb5ef1bca4795af45'
+                        key: {
+                            agent: '3e8b1e1f2b1c45c8b437c09ecb6c185a'
+                            tool: 'd7728c6477db44a29c2ad0fed0df7419'
+                            name: 'count_by_category'
+                        }
+                    },
                     {
                         table: 'sn_aia_agent_config'
                         id: '0434d97b6fb84307ba54774a0a161df6'
@@ -177,6 +210,14 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_agent_access_role_configuration'
+                        id: '1bdce07b54ff4181bb893435d31d3eb6'
+                        deleted: true
+                        key: {
+                            agent: '3e8b1e1f2b1c45c8b437c09ecb6c185a'
+                        }
+                    },
+                    {
                         table: 'sn_aia_agent_tool_m2m'
                         id: '1fa91a286055441bb4afce79fe876207'
                         key: {
@@ -204,6 +245,29 @@ declare global {
                                     name: 'x_snc_tsbench.bench'
                                 }
                             }
+                        }
+                    },
+                    {
+                        table: 'sn_aia_tool'
+                        id: '2465188619a2417682e91483d560c084'
+                        key: {
+                            name: 'read_ticket_context'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_agent_config'
+                        id: '26f0de96ae4b4c809e10393ae9870f65'
+                        key: {
+                            agent: '3e8b1e1f2b1c45c8b437c09ecb6c185a'
+                        }
+                    },
+                    {
+                        table: 'sys_security_acl_role'
+                        id: '28f796fb6a54441a814cdbb06a3aca55'
+                        deleted: true
+                        key: {
+                            sys_security_acl: '9c412ef327e142789e74c70df9a374e3'
+                            sys_user_role: '84f6a6a4de3d49218e8d4891a24b4510'
                         }
                     },
                     {
@@ -312,6 +376,13 @@ declare global {
                         key: {
                             capability: 'seed-04-capability-parent'
                             api: '936e514a53b3b110f028ddeeff7b128c'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_agent_config'
+                        id: '52b535d21f074e94a93da7a766dbe8ff'
+                        key: {
+                            agent: 'fad5a34c531446f6989b071636f5491e'
                         }
                     },
                     {
@@ -447,6 +518,14 @@ declare global {
                         }
                     },
                     {
+                        table: 'sn_aia_version'
+                        id: '865c3b6e640549279641916596741f3b'
+                        key: {
+                            target_id: '56c9f86373974407ac1a276a91cdfa79'
+                            version_name: 'V1'
+                        }
+                    },
+                    {
                         table: 'sn_aia_tool'
                         id: '8953483c2762479b97bf55da8ed1c4ac'
                         key: {
@@ -458,6 +537,14 @@ declare global {
                         id: '8ef2290dfd3141f193438d4d018cc793'
                         key: {
                             target_id: 'cd050d48e810411d9f113fd530694fe6'
+                            version_name: 'V1'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_version'
+                        id: '8f267590bb9c40488421f6ad85b2f6b6'
+                        key: {
+                            target_id: 'fad5a34c531446f6989b071636f5491e'
                             version_name: 'V1'
                         }
                     },
@@ -474,6 +561,22 @@ declare global {
                         id: '966b6507233440219a8dd643c2b62410'
                         key: {
                             usecase_configuration: 'af15173b98ce46c3a5f35a9f7160e888'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_tool'
+                        id: '96d2f732dda847868688307d4c5cd375'
+                        key: {
+                            name: 'check_processing_status'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_agent_tool_m2m'
+                        id: '9a1926554cb945b8a5fc6762a928058f'
+                        key: {
+                            agent: 'fad5a34c531446f6989b071636f5491e'
+                            tool: '96d2f732dda847868688307d4c5cd375'
+                            name: 'check_processing_status'
                         }
                     },
                     {
@@ -501,11 +604,37 @@ declare global {
                         }
                     },
                     {
+                        table: 'sn_aia_agent_config'
+                        id: 'adb1c91378c9496fb6846df25838235e'
+                        key: {
+                            agent: '56c9f86373974407ac1a276a91cdfa79'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_agent_tool_m2m'
+                        id: 'af00eeb5803c487482b5d50a5a6f11e9'
+                        deleted: true
+                        key: {
+                            agent: '3e8b1e1f2b1c45c8b437c09ecb6c185a'
+                            tool: 'f00d37f98d19460f9430ef0c58ff4daa'
+                            name: 'read_bench_ticket'
+                        }
+                    },
+                    {
                         table: 'sn_aia_version'
                         id: 'b10a90822bc1410490cd71b269725995'
                         key: {
                             target_id: '914db68f3e364222a47f9e5398b6ac8d'
                             version_name: 'V1'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_agent_tool_m2m'
+                        id: 'b1b830fa038a444f9a7a890d6fd19948'
+                        key: {
+                            agent: '56c9f86373974407ac1a276a91cdfa79'
+                            tool: '2465188619a2417682e91483d560c084'
+                            name: 'read_ticket_context'
                         }
                     },
                     {
@@ -594,6 +723,14 @@ declare global {
                         }
                     },
                     {
+                        table: 'sn_aia_version'
+                        id: 'd03c153a583344478a4e7325876934f0'
+                        key: {
+                            target_id: '3e8b1e1f2b1c45c8b437c09ecb6c185a'
+                            version_name: 'V1'
+                        }
+                    },
+                    {
                         table: 'sys_choice'
                         id: 'd44c60c42ac14b2eb8d896cc35272b6b'
                         key: {
@@ -602,6 +739,13 @@ declare global {
                             value: '2'
                             language: 'en'
                             dependent_value: 'NULL'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_tool'
+                        id: 'd7728c6477db44a29c2ad0fed0df7419'
+                        key: {
+                            name: 'count_by_category'
                         }
                     },
                     {
@@ -634,6 +778,14 @@ declare global {
                         id: 'ece2b203c073475e89ffad8a360bb204'
                         key: {
                             name: 'x_snc_tsbench_routing'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_tool'
+                        id: 'f00d37f98d19460f9430ef0c58ff4daa'
+                        deleted: true
+                        key: {
+                            name: 'read_bench_ticket'
                         }
                     },
                     {

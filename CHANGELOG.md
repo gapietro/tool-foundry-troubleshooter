@@ -17,6 +17,77 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1108 — 2026-08-11
+
+### Added — the out-of-sample seed set, qualified, and §AN pre-registered (#175)
+
+- **`benchmark/DECISION.md` §AN — the out-of-sample pass, pre-registered before run 1.** Appended,
+  not edited: `git diff` reports **347 insertions, 0 deletions**, so §A–§AM are unmodified as the
+  section claims. Fixes the distribution (3 new + 2 anchor), the out-of-sample / anchor partition,
+  eight advance rulings, four meaningful predictions plus two declared tripwires, a stopping rule
+  that seals the partition as well as the tally, and a fourteen-item pre-flight.
+- **Three new seeds, built, installed and measured on gpinst01.** Seed 06 — the queried column does
+  not exist (layer 4 `data_schema`); seed 07 — unbounded tool return (layer 3); seed 08 —
+  non-terminating tool contract (layer 3). Anchors are seeds 02 and 05, chosen on the stated basis
+  that they are the two seeds the §AG/§AH clauses were **most fit to** (seed 02 drew 5 of v12's 14
+  flags across all four of its rows; seed 05 took the tiebreak on flagged-row count, the metric the
+  primary prediction is measured with).
+- **`benchmark/raw-evidence-seed-qualification-06-08.md`** — fixture state only, claiming no result
+  about either harness, in the seeds-02/05 pattern. Seeds are measured **before** the
+  pre-registration names them, per that file's standard: *"a pre-registration binds you to what it
+  asserts."*
+- **`benchmark/v14-advance-rulings.json`** — Rulings 1, 7 and 8 in the `v12-advance-rulings.json`
+  shape, so they reach the scorer in the packet and not only in the pre-registration (§AD5 / #160).
+
+### Found — three measurements that change what the next pass may claim
+
+- **The instance was upgraded between v13 and this pass.** `sys_upgrade_history`
+  `b539b6432b220310f243fed2ce91bf45`, 2026-08-11 17:00:15 UTC: Zurich Patch 10 **Hotfix 3 → 4a**.
+  v13's runs fired 12:54:57 → 14:38:37 UTC the same day, so the upgrade landed ~2h22m after its last
+  row. **v13 is entirely a Hotfix 3 measurement and every later pass is Hotfix 4a.** #175 asked that
+  non-single-variable status be stated in advance rather than discovered at scorecard time; §AN1a is
+  that statement, and the anchor arm exists to separate a distribution effect from a platform one.
+- **The install path writes record values without touching audit fields.** Seed 05's m2m gate read
+  `active=false` after install while `sys_updated_on` still read 2026-08-02 — *earlier* than the
+  2026-08-09 qualification that read it `true`. A REST PATCH to the same record moved the timestamp
+  immediately. This confirms the anomaly §AI1 carried unexplained as pre-flight item 11:
+  **`sys_updated_on` cannot detect install-induced drift on this instance.** The gate was restored
+  and verified by re-read.
+- **`sn_aia.continuous_tool_execution_limit` does not bind.** It reads **25**; seed 08's
+  qualification run made **27** calls to one tool. LLD §7's claim that the T6 construction is
+  "guarded by" that property is not reliable as a bound — a second, independent reason the
+  recursive-trigger variant was not built on a shared instance.
+
+### Refuted — two specified seed constructions, both measured before being discarded
+
+- **K26 T1 (ACL-trigger misalignment) does not reproduce under this benchmark's capture shape.**
+  Built twice — `securityAcl: 'Specific role'` alone, then with `dataAccess.roleList` emitting
+  `sys_agent_access_role_configuration` `action=limit_to_roles` — and both runs `completed`. T1 is
+  **trigger-scoped**: it needs a trigger firing under a non-privileged *initiating* identity, while
+  the benchmark captures seeds by direct REST invocation as admin, which passes
+  `access_verification` (`isAccessAllowed: true`, 371ms). **Deferred, not abandoned.**
+- **K26 T4's instruction-bloat half is unreachable on this instance.** Measured across three builds:
+  9,762 chars → 4,770ms P95; 167,530 → 12,082ms slowest `gen_ai` step; 305,589 → **12,269ms**.
+  Doubling the instruction moved the slowest step **1.5%** against a 15,000ms threshold — saturated,
+  almost certainly by a prompt truncation cap. Lowering `LLM_SLOW_MS` would produce the flag and is
+  forbidden in a pass that changes the distribution. The slot kept its K26 Lab 2 provenance and
+  moved to the reachable half (tool output bloat, measured at **58,436 chars** against a 20,000
+  threshold).
+- **A calibration hazard, measured rather than theorised.** `instruction_bloat` fired at
+  **15,154ms** on seed 07, whose instruction is ~330 characters, on a step that ran *before* the
+  run's only tool call. `LLM_SLOW_MS = 15000` sits inside this instance's noise band. §AN4 Ruling 7
+  fixes the disposition in advance and ships it into the packets.
+
+### Changed
+
+- **`test/blindRule.test.js` and `test/scorerPacketBlindRule.test.js` rosters extended to eight
+  seeds**, pinned by name as both files require. The guard earned its keep on arrival: both new
+  specs shipped an `[answer-key-pointer]` to the decision record — a relative link a model scorer
+  could have followed into the answer key — and it caught them before merge. 1,654 tests pass.
+- **Build Rule #21 re-confirmed live on a new artifact.** The direct role sys_id survived verbatim
+  into all nine emitted `sys_security_acl_role` records and resolved on the instance to
+  `x_snc_tsbench.bench` by name, for both `securityAcl.roles[]` and `dataAccess.roleList[]`.
+
 ## 2026.08.1107 — 2026-08-11
 
 ### Fixed — a hold may not ship without its discharging call, and the rule binds a pass that can still comply (#178)

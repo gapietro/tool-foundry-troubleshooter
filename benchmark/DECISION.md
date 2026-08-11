@@ -6410,3 +6410,350 @@ names**. Two bounds, both load-bearing:
 - **It does not claim `note` is the right field forever.** It is the only scorer-facing field that is
   free prose about the row today. A future pass that adds another would have to widen the check
   deliberately, and the widening is where `invocation`'s constant-shape problem would return.
+
+---
+
+## AN. Pre-registration — the out-of-sample pass (`2026.08.1108`, #175)
+
+**Written and committed before a single run fired. §A through §AM are unmodified** — `git log -p
+benchmark/DECISION.md` is the check, in the form §W, §Z, §AC, §AE, §AF, §AG, §AH, §AI, §AK and §AL
+all used. **This section claims no result.**
+
+It discharges §AJ6's closing item — *"The next pass should change the distribution, not the
+clauses"* — and #175's framing of it. Both of #175's declared blockers are closed: **#174** by §AK
+(§A3 now carries the terminated-run void condition, so the next operator is not authoring a void
+rule mid-pass as v13 had to) and **#173** by §AL (the `layers_swept` HOLD is ruled target-blind by
+construction, so the custom arm's 0/10 is not carried forward on an unresolved mechanism). §AM
+added the delivery guard that puts a hold's discharging call in front of the scorer, which §AL6
+named as the precondition for those rows being assessable at all.
+
+**This pass changes the seed distribution and nothing else it can control.** AN1 states what that
+buys and AN2 states what it costs.
+
+### AN1. What this pass decides, and what it does not
+
+**Decides:** whether the clause sets written at §AG and §AH *determine* a value on reports drawn
+from seeds they were **not** fit to — measured as the packet-level `ambiguous` flag and the
+per-column flag tally **across the twelve out-of-sample rows**, against v13's in-sample 20-of-20
+(§AJ1) and v12's 8-of-20 (§AD3).
+
+**Does not decide:**
+
+- **Whether the clauses are RIGHT.** §AC8's caveat, standing since §AD3 and applied at §AG5, §AH6
+  and §AI1, applies unamended. Determinacy is a property of the instrument; correctness is not
+  measured by it.
+- **The Phase 1b milestone, by prediction.** §AC's Ruling 3 criterion carries and is applied, and
+  **no prediction is filed on the gate in either direction** — §AI4's Ruling 6, carried verbatim as
+  Ruling 6 below.
+- **`MAX_EVIDENCE_RETURNS` or `REQUIRE_RETRIEVAL_TO_RELEASE`.** Both frozen — `0` and `false`.
+  §AL4 ruled the retrieval flag stays off and named enabling it here as "the instrument risk §Y6
+  names, arriving at the worst moment to take it."
+- **Anything about the seed constructions that were refuted.** Two candidate seeds were built,
+  installed, measured and discarded during qualification (AN3). That is fixture work, recorded in
+  `raw-evidence-seed-qualification-06-08.md`, and it is not a result of this pass.
+
+### AN1a. This pass is NOT single-variable against v13, and the reason is not a harness change
+
+#175 asks that non-single-variable status be *"stated in the pre-registration rather than
+discovered at scorecard time."* It is stated here, and it did not come from the source #175
+anticipated.
+
+**The instance was upgraded between v13 and this pass.** `sys_upgrade_history`
+`b539b6432b220310f243fed2ce91bf45`, **2026-08-11 17:00:15 UTC**: Zurich Patch 10 **Hotfix 3 →
+Hotfix 4a**. v13's runs fired 12:54:57 → 14:38:37 UTC the same day (TR1000268 → TR1000290), so the
+upgrade landed **~2h22m after v13's last row**. **v13 is entirely a Hotfix 3 measurement and this
+pass is entirely a Hotfix 4a one.**
+
+Nothing in the repo caused it and nothing in the repo can undo it. What the design does about it is
+AN2's anchor arm: eight rows on seeds 02 and 05, scored under the **same** clauses against the
+**same** seeds v13 used, differing from their v13 counterparts by the platform patch and by nothing
+else. That arm is the only instrument this pass has for telling *the distribution moved* from *the
+platform moved*, and it is why the shape is 3 new + 2 anchor rather than 5 new.
+
+**The anchor is a control, not a proof.** Eight rows cannot resolve a small patch effect, and a
+clean anchor is consistent both with "the patch changed nothing" and with "the patch changed
+something the anchor seeds do not exercise." AN8 carries that limit.
+
+### AN2. Shape and sizing — 3 new + 2 anchor, and why not 5 new
+
+**5 seeds × 2 reps × 2 arms = 20 runs, 10 valid rows per arm.** The run count and the per-arm floor
+are §AC2's and §AI2's, unchanged. **The composition is new:**
+
+| role | seeds | expected layer | rows |
+|---|---|---|---|
+| **out-of-sample** | 06 · 07 · 08 | 4 `data_schema` · 3 `tool_definition` · 3 `tool_definition` | **12** |
+| **anchor** | 02 · 05 | 2 `instruction` · 7 `wiring` | **8** |
+
+**The primary outcome is read on the twelve out-of-sample rows only.** Mixing anchor rows into it
+would dilute exactly the quantity the pass exists to measure — the anchors are in-sample by
+construction, and v13 already measured them at 20-of-20.
+
+**Why the anchors are 02 and 05, decided on a stated basis rather than convenience.** They are the
+two seeds the clause set was **most fit to**, measured from `v12-ambiguity-flags.json`: seed 02 drew
+**5 of v12's 14 flags across all 4 of its rows**, the most of any seed. Seeds 04 and 05 tie at 3
+flags, and 05 is taken on the tiebreak that matters — it had **3 of 4 rows flagged** against 04's 2,
+and the row-level test is the one AN-1 is measured with (Ruling 4). Seed 05 additionally carries
+Ruling 1, which re-exercises the advance-ruling delivery channel that seeds 07 and 08 now depend on.
+
+**Why not 5 new seeds.** It maximises the out-of-sample denominator (20 rows, directly comparable to
+v13's 20) and gives up the anchor. Under AN1a that trade is no longer available on its merits: with
+a platform upgrade sitting between the two passes, a 5-new design cannot attribute a weak result to
+the distribution rather than to Hotfix 4a. Two of the five would also have had to be invented for
+this pass, which is the provenance problem AN3 describes.
+
+**§A3.4's 8-valid-run floor is read PER ARM** (Ruling 2, carried). The **determinacy tally is
+separate** and is read across valid rows in both arms — `ambiguous` is a property of a packet and a
+scorer, not of an arm — but it is *partitioned* into the out-of-sample twelve and the anchor eight,
+and the partition is fixed here, in advance, so it cannot be redrawn in front of the rows.
+
+**What twenty rows still is not: a rate.** §T8 is carried verbatim and unamended — twenty rows, five
+seeds, one instance, one day, one model, one app version, and now two platform patch levels across
+the comparison. §AC2's binomial table bounds only the incidental gate figures at Ruling 6.
+
+### AN3. The seed set — what qualified, what was refuted, and how out-of-sample each seed is
+
+Fixture state is measured, not assumed, per `raw-evidence-seed-qualification-02-05.md`'s standard:
+*"a pre-registration binds you to what it asserts, so its seed set must be measured rather than
+assumed."* Full evidence: `raw-evidence-seed-qualification-06-08.md`.
+
+| seed | defect | qualified by |
+|---|---|---|
+| **06** | the queried column does not exist (`category` absent from `x_snc_tsbench_ticket`) | `ee0a07832b624310f243fed2ce91bfeb` — tool returned `count: 0` with status **success** while the table held 15+ rows |
+| **07** | unbounded tool return | `9d9a4f4b2b624310f243fed2ce91bf2d` — **`tool_output_bloat`, 58,436 chars** against a 20,000 threshold |
+| **08** | non-terminating tool contract | `fd8503432b2e0310f243fed2ce91bf70` — **27 identical tool calls over 7m18s** |
+
+**Two candidate constructions were refuted by measurement and are NOT in the pass.** Both are
+recorded because a pre-registration that hid its discarded fixtures would be claiming a cleaner
+selection than it made:
+
+- **K26 T1, ACL-trigger misalignment** (LLD §7's candidate seed 6) — built twice, both `completed`.
+  T1 is **trigger-scoped**: it needs a trigger firing under a non-privileged *initiating* identity,
+  and this benchmark captures seeds by direct REST invocation as admin, which passes
+  `access_verification` (`isAccessAllowed: true`, 371ms). Deferred, not abandoned.
+- **K26 T4, instruction bloat** (LLD §7's candidate seed 7, layer 2) — **unreachable on this
+  instance.** 9,762 chars → 4,770ms P95; 167,530 → 12,082ms slowest step; 305,589 → 12,269ms.
+  Doubling the instruction moved the slowest step **1.5%**. `instruction_bloat` needs >15,000ms.
+  The slot kept its taxonomy entry and moved to the reachable half of the same K26 Lab 2 pair.
+
+**How out-of-sample each new seed is, graded honestly rather than asserted uniformly:**
+
+- **Seeds 07 and 08 are strongly out-of-sample.** Their taxonomy entries were selected in
+  `docs/LOW_LEVEL_DESIGN.md` §7 on **2026-08-01**, from ServiceNow's external K26 CCL6230 failure
+  taxonomy — **five days before §AG (2026-08-06) and six before §AH (2026-08-07)**. They cannot have
+  been fit to clauses that did not exist, and the selecting authority was not this project.
+- **Seed 06 is weaker, and is not presented as equivalent.** Its slot was chosen **after** the
+  clauses, so the provenance argument above is unavailable to it. Its external criterion is the
+  layer-coverage table — **layer 4 is covered by no other seed**, a gap DESIGN.md R-21 recorded on
+  2026-08-01 and `scorecard-template.md` §E2 makes visible by mapping layer 4 to `schema_lookup`.
+  That is a real, pre-existing, externally-recorded criterion, and it is still weaker than the other
+  two. **A reader is entitled to discount seed 06's four rows**, and AN5 files the primary
+  prediction so that discount can be applied: AN-1a reports the tally on all twelve rows and AN-1b
+  reports it on the eight strongly-out-of-sample rows alone.
+
+**Seeds 07 and 08 share expected layer 3 deliberately.** §A2.2 scores the *declared* layer, so two
+seeds agreeing on the layer while disagreeing entirely on the mechanism — a tool that returns too
+much versus a tool that cannot say when it is done, both fixed by editing a return contract — tests
+whether that clause **resolves** or merely **matches**. It is the sharpest structural question this
+distribution asks, and it is not the primary outcome.
+
+**Operational conditions, all three of §AC3's carrying forward:**
+
+1. **Seed 05's `sn_aia_trigger_agent_usecase_m2m` gate is re-read before run 1.** It was found
+   **`active=false`** during qualification and restored by PATCH, verified by re-read
+   (`ba30d8775b0c4cebb960c58830590d5d`, `active=true`, `sys_mod_count=3`). **Read it again anyway** —
+   five installs happened during qualification and any further install resets it.
+2. **`sys_updated_on` may not be used to decide whether it reset.** The install path writes record
+   values **without touching audit fields** — measured during qualification, and the confirmation of
+   the anomaly §AI1 carried unexplained as pre-flight item 11. A gate that reset will look untouched.
+3. **The seed-05 probe-row deletion (§AI3.2) and the trigger-activation wait (§AI3.3) carry
+   unchanged.** Neither applies to the protocol as written; both are recorded so a mid-pass repair
+   does not re-commit qualification §3.1's void.
+
+### AN4. The rulings made in advance
+
+Rulings 1–6 carry from §AC and §AI unchanged. Rulings 7 and 8 are new, and each exists because it
+is a call a scorer would otherwise make at the desk with the run's most salient symptom pointing the
+wrong way.
+
+**Ruling 1 — seed 05 `fix_usable_unedited` = 1** for a report naming
+`sn_aia_trigger_configuration.active = false` and proposing activation. Carried verbatim from §AC4
+and §AI4, including its stated cost and its explicit non-generalisation.
+
+**Ruling 2 — the §A3.4 floor is per arm.** Carried. AN2 adds only that the determinacy tally is
+partitioned into out-of-sample and anchor, and that the partition is fixed here.
+
+**Ruling 3 — the milestone criterion is unchanged:** met iff the custom arm reaches
+`sum(passes_gate) / valid runs ≥ 80%`. The *custom ≥ native* reading stays rejected for §AC4's
+stated reason.
+
+**Ruling 4 — what counts as a flag.** Carried verbatim from §AI4. Row-level: a row is ambiguous iff
+its verdict header table's `ambiguous` field reads `yes` — §AC5's broad AC-5 definition, not the
+narrower gate-only reading at §T2. Column-level: counted iff the verdict's `### ambiguity` prose
+**names that column as under-determined**, curated by hand into `benchmark/v14-ambiguity-flags.json`
+in `v12-ambiguity-flags.json`'s form, **scanning only rows whose header reads `ambiguous = yes`**.
+
+**Ruling 5 — the confound is a fact about the pass, not a hypothesis in it.** AN1a records that the
+platform patch level differs from v13's. This is deliberately **not** converted into a prediction,
+for §AI4 Ruling 5's reason applied to a new quantity: a patch effect and a distribution effect are
+not separable from twenty rows, and filing a prediction on a confounded quantity produces a
+confirmation or refutation that means nothing.
+
+**Ruling 6 — the incidental gate figures: published, applied, unpredicted.** Carried verbatim.
+Both arms' `passes_gate` proportions and rubric totals are reported **together, never singly**, per
+§AD7, whatever they say. Ruling 3's criterion is evaluated against them. **No prediction is filed**,
+so this pass may not claim a confirmed or refuted prediction about the milestone in either
+direction.
+
+**Ruling 7 — a latency flag on seed 07 may be an instrument artefact.** A seed-07 run may report
+**two** flags: `tool_output_bloat` on a tool, and `instruction_bloat` on the `AIA ReAct Engine`
+step. **Only the first is seeded.** Measured: `instruction_bloat` fired at **15,154ms** against a
+15,000ms threshold on a seed whose instruction is **~330 characters**, on a step that ran *before*
+the run's only tool call. The threshold sits inside this instance's ordinary variance.
+
+A report naming **instruction bloat as its primary root cause** on seed 07 scores
+`root_cause_layer_correct` = **0**. **Merely listing the flag is not charged** — it is genuinely in
+the trace, and a report surfacing what the instrument emitted is doing its job. This fixes which of
+two flags is the seeded one; it amends no clause and adds no scoring test.
+
+**Ruling 8 — seed 08's instruction is clean by construction.** The intuitive diagnosis — "the agent
+has no completion criteria", layer 2 — scores `root_cause_layer_correct` = **0**. The seeded defect
+is at layer 3: the tool returns a constant non-terminal status while its description promises a
+terminal one. The instruction states an explicit, correct stop condition, so the loop is not the
+agent failing to stop but the tool never saying when.
+
+**Rulings 1, 7 and 8 ship in the packets, not only here.** `benchmark/v14-advance-rulings.json`
+carries all three in the `v12-advance-rulings.json` shape, rendered into every packet for the seed
+each applies to. §AD5's standing rule is that an advance ruling on a scoring column must reach the
+scorer — that is #160, and §AG1 records what its absence cost v12: rows 17 and 19 flagged
+`fix_usable_unedited` *because the ruling never reached the scorer*.
+
+### AN5. The predictions
+
+Filed here, before any run. Refutation criteria stated for each; a prediction with no stated
+refutation is not one.
+
+| | Prediction | What refutes it |
+|---|---|---|
+| **AN-1a** | **≥ 80% of the twelve out-of-sample rows** return `ambiguous = no` under Ruling 4's row test — **≥ 10 of 12** | < 10 of 12. **The pass's primary outcome.** The bar is AI-1's, deliberately: v13 cleared it at 100% in-sample, and §AI8 said a strong in-sample result "is the MINIMUM the clauses must clear". This is the same bar on reports the clauses were not fit to |
+| **AN-1b** | **≥ 80% of the eight STRONGLY out-of-sample rows** (seeds 07, 08) return `ambiguous = no` — **≥ 7 of 8** | < 7 of 8. Filed separately so seed 06's weaker provenance (AN3) can be discounted by a reader without re-deriving the tally |
+| **AN-2** | **≤ 0.20 column flags per out-of-sample row** — **≤ 2 at the twelve-row denominator** — against v12's 0.70 and v13's 0.00 | > 0.20 per row |
+| **AN-3** | **All eight anchor rows** return `ambiguous = no`, matching v13's result on the same two seeds | ≥ 1 anchor row reads `ambiguous = yes`. **This is the drift control** (AN1a). Refutation does not falsify AN-1 — it says the cause is the platform or the model rather than the distribution, and that reading is fixed here so it cannot be reached for afterwards |
+| **AN-4** | **≥ 1 row files a primary root cause at layer 2 on seed 08** — the decoy bites | Zero such rows across four seed-08 rows. A *shape* prediction like AI-4/AI-5, not a determinacy one, and **not counted toward this section's meaningful predictions**: it predicts a wrong answer, and confirming it says nothing about the clauses |
+| **AN-5** | **≥ 1 seed-07 row's report names an `instruction_bloat` flag** | Zero across four seed-07 rows. A **tripwire on Ruling 7's applicability**, filed knowing qualification already produced one, so its prior is high. It is not discriminating and, per AI-5's precedent, is not counted toward this section's claim to have filed meaningful predictions |
+| **AN-6** | **≤ 2 void rows encountered** across the pass, and every arm finishes with **10 valid rows** | ≥ 3 encountered, or any arm below 10 valid. Stated on voids *encountered* rather than surviving; AN6 re-runs them |
+| **—** | **No prediction is filed on `passes_gate`, either arm, either direction.** Recorded as a row so the withholding is visible rather than inferred | Nothing. Ruling 6 governs what may be said about the figures it produces anyway |
+
+**Four meaningful predictions (AN-1a, AN-1b, AN-2, AN-3) and two tripwires (AN-4, AN-5).** §AJ6's
+warning against reading six-for-six confirmation as strength is why the count is stated here rather
+than left to be totted up afterwards.
+
+### AN6. The stopping rule
+
+**Fixed `n` = 20 runs. The pass does not extend and does not stop early.** Every run produces a
+scorable row unless void, so the denominator is fixed by construction.
+
+**No tally of any kind is computed, curated or glanced at until all twenty packets have been scored
+and returned.** §AI6's most result-sensitive commitment, carried and widened: it now protects the
+row-level `ambiguous` count, the column-flag tally, **the out-of-sample / anchor partition**, and
+both arms' gate figures. §U8.5 governs — *"Continuing because the split is tied is optional stopping
+at the most result-sensitive moment there is."*
+
+**AN-4 and AN-5 are read off the REPORTS and are sealed identically.** Both are evaluated against
+report shape, and the operator necessarily reads every report while running the pass and building
+packets. Without this clause AN-5 could be confirmed at run 3 with nothing forbidding it.
+
+**Void handling.** A void row is re-run rather than absorbed, and both the void and its replacement
+are recorded. **§A3 now carries the terminated-run condition explicitly (§AK)**, so this pass does
+not repeat v13's mid-pass authoring of a void rule under time pressure. Re-runs reaching 3 in one
+arm is a **cost stop, not a verdict**. An operator error is still a void, still re-run, still
+recorded.
+
+**Packets are built after all 20 runs terminate, and the scorers are dispatched once.**
+
+### AN7. Protocol and pre-flight
+
+**Sequencing: interleaved by seed** — native rep 1, custom rep 1, native rep 2, custom rep 2, per
+seed, strictly sequential, one day, one deployed version. **Run identity is verified, not inferred**
+(`PaRunAnchor`'s 30-minute fallback makes interleaving a hazard, §O1).
+
+**Scorer topology is fixed to match v9, v12 and v13: independent agents, one per packet, redacted
+packets.** §O5 measured topology moving the result by about two rows; it is held constant or the
+comparison to v13 is meaningless.
+
+**Pre-flight, every item verified by probe before run 1:**
+
+1. **The installed product code is repo HEAD's `src/`** — by `git log <build-commit>..HEAD -- src/`
+   being empty, **not** by a version string. §AI7 item 1 records why: a version reading later than
+   the build is not a failure when the intervening versions are documentation.
+2. **The fixture app is the qualified build**, carrying seeds 06, 07 and 08 — verify all three
+   agents exist by name (`Seed 06 Hardware Reporter`, `Seed 07 Ticket Classifier`,
+   `Seed 08 Batch Watcher`).
+3. **Seed 05's m2m gate re-read** (AN3 condition 1), and **not** trusted to `sys_updated_on`
+   (condition 2).
+4. `PaAgentLoop^scriptLIKEMAX_EVIDENCE_RETURNS: 0` → 1 record.
+5. `PaAgentLoop^scriptLIKEREQUIRE_RETRIEVAL_TO_RELEASE: false` → 1 record.
+6. **All five seeds' §A3 fixture conditions re-read live**, including seed 04's capability sys_id.
+7. **The three seed-05 probe rows are gone** (§AI3.2), by re-query.
+8. `layers_available` read by **two independent paths** — `sn_aia_agent_tool_m2m` for native,
+   `PaToolRegistry`'s own registry read for custom (§O1).
+9. Budget knobs read fresh: `sn_aia.continuous_tool_execution_limit` (read **25** during
+   qualification — and note it did **not** bind seed 08's 27-call run) and `max_auto_executions`.
+10. Smoke gate fired and passed on **both** arms before any scored row is spent.
+11. **The blind-rule guard is told about `scoring-v14/` as part of building the packets, not after** —
+    add the `PACKET_SETS` entry (`dir: 'scoring-v14'`, `scanned: true`, a `why`, a real `packets:`
+    count), update the hardcoded membership literal in the same test, and confirm `npm test` green
+    **before the first packet reaches a scorer**. Navigate by test name; §AC7 pinned a line number
+    that had already drifted.
+12. **The three new seed specs are re-scanned by the blind-rule suite as part of pre-flight.** They
+    are already green — and both new specs shipped an `[answer-key-pointer]` to the decision record
+    on first authoring, caught by `scorerPacketBlindRule.test.js` before merge. A new spec is exactly
+    the input that guard exists for, and it has now been demonstrated on this seed set rather than
+    assumed.
+13. **`benchmark/v14-advance-rulings.json` renders into every packet** for seeds 05, 07 and 08
+    (Rulings 1, 7, 8). Verify on a throwaway `--out` build, not by reading the JSON.
+14. **The packet generator accepts `--pass v14`** and its `buildAll('v14')` path is exercised.
+    §AM2's precedent is the warning: #176 left `buildAll('v13')` permanently throwing and nothing
+    noticed, because no test or parity path called it.
+
+**Artefacts.** Measurements → `benchmark/raw-evidence-v14-out-of-sample.md`. Rows →
+`benchmark/scorecard-v14.md` and `benchmark/v14-rows.json`. Reports verbatim →
+`benchmark/v14-reports/`. Advance rulings → `benchmark/v14-advance-rulings.json`. Packets exactly as
+scored → `benchmark/scoring-v14/`. Flag tally → `benchmark/v14-ambiguity-flags.json`. Operator
+records are **outside** the scorer-facing channel and must never be pasted into a packet.
+
+### AN8. What this pass cannot establish
+
+Everything in §T8, §Z5, §AB5, §AC8, §AG5, §AH6, §AI8, §AJ6 and §AL6 stands, unsoftened. Five limits
+are specific to this pass.
+
+- **It is not single-variable against v13.** AN1a. The platform moved between the two passes and
+  the anchor arm is a control, not a correction. Any comparison of a v14 figure to a v13 figure
+  carries Hotfix 3 → 4a with it, and **any future quotation of this pass that drops this bullet is a
+  misquotation.**
+- **Eight anchor rows cannot resolve a small patch effect.** A clean AN-3 is consistent with "the
+  patch changed nothing" **and** with "the patch changed something these two seeds do not exercise."
+- **One of the three new seeds has weaker provenance than the other two.** AN3. AN-1b exists so a
+  reader can apply that discount without re-deriving anything, and a divergence between AN-1a and
+  AN-1b is itself informative about how much the provenance grading mattered.
+- **Determinacy is not correctness**, with the same force §AI8 gave it. A clause a scorer has to
+  argue itself into is not obviously the same thing as a determinate clause, and §AJ3 recorded two
+  v13 verdicts that did exactly that without flagging. **This pass inherits that open question and
+  does not close it** — Ruling 4's row test cannot tell the two apart, by construction.
+- **It does not make v13's custom arm assessable**, and it does not re-open it. §AJ5a's
+  qualification and §AL6's first bullet stand: the five off-fixture rows stay unassessed. §AM closed
+  the delivery gap for *this* pass; it repaired nothing already scored.
+
+### AN9. Disposition
+
+**This section contains no measurement.** It fixes a distribution, a partition, eight rulings, four
+predictions and two tripwires, a stopping rule that now seals a partition as well as a tally, and a
+pre-flight of fourteen items — two of which (11 and 14) exist because a prior pass discovered them
+at the worst possible moment.
+
+**Unchanged at the time of writing: native remains the recommended path on this instance, and the
+Phase 1b milestone is not met.** Quote both arms together, never singly (§AD7) — v13: **native
+4/10 · 40.0% · 47/60; custom 0/10 · 0.0% · 5/60** (§AJ2). v12 on the same seeds: **native
+6/10 · 60.0% · 51/60; custom 0/10 · 0.0% · 9/60** (§AD1). **§T9 governs: no v12 or v13 value moves,
+and this section moves none.** Per §AI9, no ordinal is attached to the milestone's unmet status —
+the fact needs none.
+

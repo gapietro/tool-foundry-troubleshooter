@@ -531,16 +531,24 @@ function load(filename) {
 }
 
 describe('no prior run outcome reaches a scorer-facing seed spec (issue #100)', () => {
-    it('scans every scorer-facing spec -- five of them', () => {
+    it('scans every scorer-facing spec -- eight of them', () => {
         // Pinned by name as well as by count: a substitution (one spec renamed,
-        // another added) would keep the count at five while coverage moved. That
+        // another added) would keep the count at eight while coverage moved. That
         // is the silent-under-coverage failure this guard exists to prevent.
+        //
+        // Seeds 06-08 added 2026-08-11 (#175). This guard earned its keep on
+        // arrival: both new specs shipped an [answer-key-pointer] to the
+        // decision record, which a model scorer could have followed into the
+        // answer key, and it caught them before the pre-registration merged.
         expect(SPECS).toEqual([
             'seed-01-schema-mismatch.md',
             'seed-02-ambiguous-instruction.md',
             'seed-03-missing-data.md',
             'seed-04-genai-unmapped.md',
             'seed-05-inactive-usecase.md',
+            'seed-06-schema-field-missing.md',
+            'seed-07-tool-output-bloat.md',
+            'seed-08-nonterminating-tool.md',
         ])
     })
 
