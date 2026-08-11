@@ -119,7 +119,42 @@ because it is invisible from the plan header. **Not a scored row; carries no rub
 | arm | run | terminal | verdict |
 |---|---|---|---|
 | custom | run `4dead7fe2bae0718f243fed2ce91bfe8` (**`TR1000266`**) | complete, created 00:48:54 → updated 00:49:11 = **17s** | **PASS** — `failure_summary` names "InternalError in the `context_processing_script`… occurring at **line 42**" |
-| native | execution `51dadb722b6a0bd817a6ffbeee91bf8b`, conversation `08da5b722b6a0bd817a6ffbeee91bfc2` | *(in flight at time of writing — populated below)* | *(pending)* |
+| native | execution `51dadb722b6a0bd817a6ffbeee91bf8b`, conversation `08da5b722b6a0bd817a6ffbeee91bfc2` | completed, **280s**, 15 tool calls, 26 tasks | **PASS** — ReAct scratchpad records *"HIGH-confidence script_error in `sn_aia_agent.601672d32b1a83d0f243fed2ce91bf3e.context_processing_script` **line 42**"*; all seven tool types called |
+
+**Both arms pass. Pre-flight is 12 of 12 and the pass may fire.**
+
+Native's sweep profile matches v12's strongest native row almost exactly: 15 tool calls spanning
+`agent_trace`, `read_artifact` (×8, paging a 27,110-char artifact to `eof`), `agent_config` (×2),
+`genai_log`, `log_analysis`, `query_table`, `schema_lookup` — **7/7 tool types**. LLM P95 latency
+69.3s, tool P95 186ms: the wall-clock is the model, not the harness.
+
+One behaviour worth recording because it shapes report capture: the agent delivered the Fix Report
+**twice** — the first `show_output_to_user` truncated mid-`RC-2`, and the ReAct engine then
+re-delivered the whole report in one message (*"The previous output was truncated mid-RC-2.
+Completing and delivering the full Fix Report now as a single show_output_to_user action."*). §AD's
+packet rule already covers it — carry every `role=agent` message after the final tool call,
+concatenated in creation order — and this run is why that rule is not optional.
+
+### 1.7 Reading a native report: the field trap that costs an hour
+
+`sn_aia_message` is queried on **`execution_plan`**, not `conversation`, and the report text is in
+**`message`**. Getting that wrong does not produce a "no such field" error:
+
+```
+sn_aia_message^conversation=<id>   →  "Access denied: Insufficient rights to query records"
+sn_aia_message  (no query at all)  →  1 record, read fine
+```
+
+**A bad query field on this instance is reported as an ACL failure**, which is indistinguishable at a
+glance from the Build Rule #42 no-ACL shape and sends the operator to check roles and ACLs on a
+table they can already read. The cheap discriminator is a bare `limit: 1` query with no `query` and
+no `fields`: if that returns a row, the table is readable and the field name is the fault.
+
+Report messages for this run: the three `role=agent` rows with an **empty `type`** created after the
+final tool call — `d2ab533a2b6a0bd817a6ffbeee91bf9b` (00:52:17), `4deb5b7a2b6a0bd817a6ffbeee91bfa5`
+and `55eb5b7a2b6a0bd817a6ffbeee91bfad` (both 00:53:17). The sixteen `type=conversation` rows are
+ReAct turn chatter, not report. Order by `sys_created_on`: `message_sequence` is populated on only
+the first agent message and empty on the rest (§AD's correction, re-confirmed here).
 
 **A protocol note carried forward and re-confirmed.** `servicenow_aia_execute` with
 `waitForCompletion=false` returns a Session ID but **no** execution-plan sys_id, so the plan is
