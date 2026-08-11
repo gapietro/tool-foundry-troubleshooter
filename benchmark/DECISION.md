@@ -5469,3 +5469,361 @@ running one against a rubric section as though it were a pre-registration applie
 What the next pass inherits is a rubric in which every column a v12 scorer flagged now decides
 itself, a stated rule in each for how its cases combine and which fix or root cause they bind to, and
 a suite that reddens if any clause set is edited away or drifts outside the slice a scorer reads.
+
+## AI. Pre-registration — the v13 determinacy check (`2026.08.1008`, #166)
+
+**Written and committed before a single run fired. §A through §AH are unmodified** — `git log -p
+benchmark/DECISION.md` is the check, in the form §W, §Z, §AC, §AE, §AF, §AG and §AH all used. **This
+section claims no result.**
+
+It discharges §AH7's standing open item — *"The next scored pass is still not scheduled, sized or
+pre-registered"* — a sentence §AG6 and §AH7 both close with. **An earlier draft of this section said
+that item "has now closed six consecutive sections (§AC through §AH)" and that was false**: §AC
+*discharged* the equivalent §Z6 item by pre-registering v12, and §AD, §AE and §AF do not carry the
+sentence at all, so the run is §AG–§AH — two sections, not six. It is corrected here rather than
+quietly dropped, because a pre-registration that miscounts its own provenance is the wrong document
+to be trusted about a tally. It also takes
+§AG5's warning at its word: a rubric section is not a pre-registration, and the clauses at §AG and
+§AH do not become a pass by being correct.
+
+**This pass is framed differently from every scored pass before it, and the difference is the point.**
+§O, §T and §AD were milestone measurements that also produced rubric information. **v13 is a
+determinacy check that also produces milestone figures.** AI1 states what that inverts and Ruling 6 states
+what it costs.
+
+### AI1. What this pass decides, and what it does not
+
+**Decides:** whether the clause sets written at §AG and §AH *determine* a value when a scorer meets a
+report they were not written against — measured as the packet-level `ambiguous` flag across 20 rows
+and the per-column flag tally, against v12's 8-of-20 and fourteen flags (§AD3) and v9's 3-of-12
+(§T2's prediction T8).
+
+**Does not decide:**
+
+- **The Phase 1b milestone, by prediction.** §AC's Ruling 3 criterion carries forward unchanged and
+  is applied — but **no prediction is filed on it in either direction**, and AI4's Ruling 6 states
+  what that does and does not license. This is the deliberate inversion; AI5's non-entry records it
+  on the face of the prediction table rather than as an omission a reader has to notice.
+- **Whether the clauses are RIGHT.** §AC8's caveat, promoted to a standing limit at §AD3 and applied
+  unamended at §AG5 and §AH6, applies here and is the reason this pass is not named a rubric
+  validation. Determinacy is a property of the instrument. Correctness is not measured by it.
+- **`MAX_EVIDENCE_RETURNS` or `REQUIRE_RETRIEVAL_TO_RELEASE`.** Both frozen — `0` and `false` — for
+  §AC1's reason, unchanged: re-opening either inside a scored pass confounds the depth mechanism with
+  the arm comparison.
+- **Anything about #155's fix as a repair.** AI4's Ruling 5 explains why the single-variable build
+  difference is stated as a fact about the pass and not converted into a hypothesis about it.
+
+**The build under test is `2026.08.1003`, and it must carry BOTH #148's and #155's fixes.** Verified
+by probe, not by version string (§W7, §AB6).
+
+> **Corrected before merge, by the pre-flight it prescribes.** The first draft of this section named
+> the build `2026.08.1008` — this document's own version — and pre-flight item 1 demanded
+> `sys_app.version` read it. **A live probe of gpinst01 returned `2026.08.1003`, and the item as
+> written was wrong rather than the instance.** `5fb7648` *is* `2026.08.1003`; every version since
+> (`1004`–`1007`) is §AE, §AF, §AG and §AH, all documentation. So the instance is four versions
+> behind in *string* and zero lines behind in *code*, and item 1 would have demanded a reinstall
+> that changes nothing under test purely to make a string match — three paragraphs after this
+> sentence forbids trusting version strings. **The section contained the rule and a violation of
+> it**, inherited unexamined from §AC7 item 1. This is what pre-flight is for, and it is recorded
+> rather than silently repaired.
+
+The relevant fact, measured rather than assumed: `git log 5fb7648..HEAD -- src/` is **empty**, and
+`5fb7648` is the commit that published the v12 rows *and* shipped #155. The v12 runs themselves
+fired against `2026.08.1001`, before that commit. So the code under test differs from the code v12
+measured by exactly one change, on the custom arm's report-validation path, and by nothing else.
+
+> **One anomaly, unexplained and not waved through.** Every `x_snc_troubleshoot` script include on
+> gpinst01 reports `sys_updated_on` ≤ **2026-08-02**, while `PaFixReport` demonstrably contains code
+> written 2026-08-10. Both are verified; they are not reconciled. The code probe is decisive and
+> §W7 already denies timestamps evidential weight, so this blocks nothing — but an install path that
+> writes records without touching audit fields is a thing to understand *before* twenty runs rest on
+> assumptions about what is deployed. Pre-flight item 11 carries it.
+
+### AI2. Shape and sizing — and why §AC2's justification does not carry
+
+**5 seeds × 2 reps × 2 arms = 20 runs, 10 valid rows per arm.** The number is §AC2's and the v4
+shape (§O1). **The reason is not.**
+
+§AC2 justified ten rows per arm with a binomial resolution table — the probability of landing in a
+band given a true per-run pass rate. That argument is about resolving a **rate**, and this pass does
+not read one. Carrying the number while silently carrying the old justification would be the
+quietest kind of error in this file: a figure that looks pre-registered because it was, for a
+different question.
+
+**The sizing rationale for v13 is report diversity.** What a determinacy check needs is *unseen
+report shapes*, and twenty runs buys the widest set available without changing any fixture: five
+seeds × two report formats × two reps. The clauses at §AG and §AH were written against twelve flagged
+rows; twenty rows re-derived from fresh runs is the largest sample of fresh shapes obtainable from
+the existing seed set.
+
+**§A3.4's 8-valid-run floor is read PER ARM**, stated at §AC2 and named Ruling 2 at §AC4, and it still bites —
+below 8 valid rows in an arm, that arm's *gate* figure is not computed (§AC6's table). **The
+determinacy tally is separate and is read across all valid rows in both arms combined**, because
+`ambiguous` is a property of a packet and a scorer, not of an arm. An arm falling below its floor
+therefore suppresses a gate figure without suppressing this pass's primary outcome, and that
+asymmetry is decided here rather than in front of the rows.
+
+**What twenty rows still is not: a rate.** §T8's limit is carried verbatim and unamended — twenty
+rows, five seeds, one instance, one day, one model, one app version. Two reps per seed per arm
+measures a flip. §AC2's binomial table is demoted to exactly one use: bounding what the *incidental*
+gate figures at AI4 Ruling 6 can resolve, which is less than a reader who skips this paragraph will
+assume.
+
+### AI3. The seed set and the operational conditions
+
+**All five seeds, unchanged.** Seeds 02 and 05 remain qualified per `raw-evidence-seed-qualification-02-05.md`;
+that qualification is fixture state only and claims nothing about either harness.
+
+**§AC3's three operational conditions carry forward and all three bind**, restated because an
+intervening reinstall resets the first:
+
+1. **Re-read the `sn_aia_trigger_agent_usecase_m2m` gate before run 1.** Do not assume the PATCH
+   took, and do not re-apply blind — read, then act.
+2. **The three seed-05 probe rows are deleted before run 1 and the deletion is verified by re-query**
+   (`e24c49a22b2203d817a6ffbeee91bf16`, `2fac09262b2203d817a6ffbeee91bfa0`,
+   `f3ec4d662b2203d817a6ffbeee91bfd5`). Their `short_description` values name the seed-05
+   qualification — a blind-rule leak of the §O5 shape, cheapest to close before the pass. The seven
+   pre-existing rows stay.
+3. **Any procedure that activates a trigger and then exercises it waits for `trigger_flow` to be
+   populated and `sys_hub_flow.active` to read `true` first.** Applies to no step of the protocol as
+   written — the seed stays inactive — and is recorded so a mid-pass repair does not re-commit
+   qualification §3.1's void.
+
+### AI4. The rulings made in advance
+
+Rulings 1–3 carry from §AC unchanged. Rulings 4–6 are new and exist because each is a decision
+someone would otherwise make with rows in hand.
+
+**Ruling 1 — seed 05 `fix_usable_unedited` = 1** for a report naming `sn_aia_trigger_configuration.active = false`
+and proposing activation, notwithstanding qualification §3.3. Carried verbatim from §AC4, including
+its stated cost and its explicit non-generalisation. If `fix_target_correct` = 0, §A's constraint
+binds first and this ruling never arises.
+
+**Ruling 2 — the §A3.4 floor is per arm.** Carried. AI2 states the one thing added: it gates arm gate
+figures, not the determinacy tally.
+
+**Ruling 3 — the milestone criterion is unchanged:** met iff the custom arm reaches §A3.3's top band,
+`sum(passes_gate) / valid runs ≥ 80%`. The *custom ≥ native* reading stays rejected for §AC4's stated
+reason — it makes the milestone a function of native's intra-day drift, which §O measured as real.
+**The criterion carries; the prediction does not.** Those are separable and Ruling 6 separates them.
+
+**Ruling 4 — what counts as a flag, fixed before any verdict exists.** Two tallies, two mechanical
+tests, so that neither can be argued after the packets come back:
+
+- **Row-level.** A row is ambiguous iff its verdict header table's `ambiguous` field reads `yes`.
+  This is §AC5's AC-5 definition — the broad reading, ambiguity anywhere in the row — and the
+  narrower gate-only reading recorded at §T2 is **not** the one measured and may not be substituted
+  afterwards.
+- **Column-level.** A column flag is counted iff the verdict's `### ambiguity` prose **names that
+  column as under-determined**. Those sections are prose that argues both readings, so every column
+  gets mentioned and **no regex can tell "named" from "discussed"** — this is exactly the parse that
+  produced the miscount §AD3 had to correct before merge.
+
+  **The scan domain is the rows whose header reads `ambiguous = yes`, and no others.** This is not a
+  refinement, it is the difference between comparable and incomparable numbers: `v12-ambiguity-flags.json`
+  was curated *only* from the twelve flagged verdicts, while **all twenty** v12 verdicts carry an
+  `### ambiguity` section — row 09 reads `ambiguous = no` and still discusses and rejects a second
+  reading. A v13 curator scanning all twenty would count rows the v12 baseline excluded, and AI-2 and
+  AI-3 would be scored against a denominator different from the one they name. The tally is
+  **curated by hand into `benchmark/v13-ambiguity-flags.json`**, in the form and with the `_why`/`_verified` header
+  `v12-ambiguity-flags.json` carries, and bound to the scorecard by a test in that file's pattern.
+
+**Ruling 5 — the single-variable build difference is a fact about the pass, not a hypothesis in it.**
+AI1 records that the code differs from v12's by #155 alone. It is tempting to convert that into a
+custom-arm prediction, and this section declines, for a reason worth stating: **the two arms are not
+symmetric under this pass.** Custom changes by one code fix **and** by the new clauses; native
+changes by the clauses **only**. So a native delta from §AD1 is attributable to the rubric alone,
+and a custom delta is attributable to neither cause without an argument this pass cannot supply from
+twenty rows. Filing a prediction on a confounded quantity would produce a confirmation or a
+refutation that means nothing, and this file has enough of those it has had to correct.
+
+**Ruling 6 — the incidental gate figures: published, applied, unpredicted.** Deciding all three in
+advance, because each is a place a later reader could be told a different story:
+
+- **Published.** Both arms' `passes_gate` proportions and rubric totals are reported, together,
+  never singly, per §AD7 — **whatever they say**. Not predicting an outcome is not a licence to
+  report it selectively, and a pass that produced milestone figures and buried them would be a worse
+  instrument than one that never ran.
+- **Applied.** Ruling 3's criterion is evaluated against them. If custom reaches ≥80%, **the
+  milestone is met** and this section's framing does not get to override that. A criterion fixed in
+  advance does not require a prediction to be binding.
+- **Unpredicted.** No prediction is filed on the gate, so **v13 may not claim a confirmed or refuted
+  prediction about the milestone in either direction**, and its gate figures carry the resolution
+  §AC2's binomial table describes and no more. §AC5's AC-9 was filed against the project's preferred
+  outcome on purpose; withholding it here is a different choice, made for AI5's stated reason, and
+  the trade is that this pass loses AC-9's evidential value about the prior.
+
+### AI5. The predictions — all on determinacy, none on the gate
+
+Filed here, before any run. Refutation criteria are stated for each; a prediction with no stated
+refutation is not one.
+
+| | Prediction | What refutes it |
+|---|---|---|
+| **AI-1** | **≥ 80% of valid rows** return `ambiguous = no` under Ruling 4's row test — **16 of 20 at the full denominator** — against v12's 8 of 20 = 40% (§AD3) and v9's 3 of 12 = 25% (§T2's T8) | < 80% of valid rows. This is the pass's primary outcome and the one most worth failing |
+| **AI-2** | **≤ 0.20 column flags per valid row** under Ruling 4's column test — **≤ 4 at the full denominator** — against v12's 14 over 20 = 0.70 | > 0.20 per valid row |
+| **AI-3** | **≤ 0.10 column flags per valid row** fall on `evidence_cites_trace_and_config` and `fix_usable_unedited` combined — **≤ 2 at the full denominator** — the two columns §AG closed, which drew 10 of v12's 14 | > 0.10 per valid row |
+| **AI-4** | **Neither** of §AH6's two named residual exposures occurs in 20 rows: no report proposes five *specific* fixes one per area, and no primary root cause declares all seven layers at once | Either shape occurs in any row. §AH6 called both "bounds to watch in the next pass"; this is the watching |
+| **AI-5** | **Compound declared layers recur on ≥ 1 native row** — §AH5a found them to be the native format's norm (rows 01, 03, 13), and the compound clause was written after the fact | Zero native rows carry a compound. **Filed knowing it is close to certain** — 3 of 10 v12 native rows carried one, so P(zero across 10) ≈ 3%. It is a *tripwire on the clause's applicability*, not a discriminating prediction, and it is not counted toward this section's claim to have filed six meaningful ones. §AC5's AC-9 standard is what it fails |
+| **AI-6** | **≤ 2 void rows encountered** across the pass, and every arm finishes with **10 valid rows** | ≥ 3 encountered, or any arm below 10 valid. Stated on voids *encountered* rather than surviving, per AC-8's reason: **§AI6** (the stopping rule, not this prediction) re-runs them |
+| **—** | **No prediction is filed on `passes_gate`, either arm, either direction.** Recorded as a row so the withholding is visible on the table rather than inferred from its absence | Nothing. Ruling 6 governs what may be said about the figures it produces anyway |
+
+### AI6. The stopping rule
+
+**Fixed `n` = 20 runs. The pass does not extend and does not stop early.** §AC6's reasoning carries:
+every run produces a scorable row unless void, so the denominator is fixed by construction.
+
+**AI-4 and AI-5 are read off the REPORTS, and are therefore sealed too.** Both are evaluated against
+report *shape* — five specific fixes one per area, a seven-layer primary root cause, a compound
+declared layer — and the operator necessarily reads every report while running the pass and building
+the packets. Without this clause AI-5 could be confirmed at run 3, mid-pass, with nothing forbidding
+it, while the section declared its stopping rule to be about a different quantity entirely. **No
+prediction of any kind is evaluated until all twenty runs have terminated and all twenty packets have
+been scored and returned.** The seal covers the tallies below and these two equally.
+
+**One addition, and it is this pass's most result-sensitive commitment.** §AC6 forbade computing any
+score, `passes_gate` or arm total while runs remained. **Under a determinacy framing the ambiguity
+tally is the outcome, so it inherits the same protection:** no row-level `ambiguous` count and no
+column-flag tally is computed, curated or glanced at until all twenty packets have been scored and
+returned. §U8.5's ruling is what governs — *"Continuing because the split is tied is optional
+stopping at the most result-sensitive moment there is"* — and the quantity it now protects is a new
+one. An operator who tallies flags at row twelve has broken this pass in the way §AC6 says a careless
+operator can break silently.
+
+**Void handling, decided now**, carried from §AC6: a void row is re-run rather than absorbed, and
+both the void and its replacement are recorded. **Re-runs reaching 3 in one arm is a cost stop, not a
+verdict** — stop re-running that arm, close the pass with what is valid, then apply §A3.4 to that
+arm's valid row count (10 evaluable normally; 9 or 8 evaluable with the void reasons stated; below 8
+report *gate not evaluable — insufficient data* and compute no verdict from the survivors). Per AI2,
+the determinacy tally still reads every valid row. An operator error is still a void, still re-run,
+and recorded in the raw-evidence file (§O5's precedent).
+
+**Packets are built after all 20 runs terminate, and the scorers are dispatched once.**
+
+### AI7. Protocol and pre-flight
+
+**Sequencing: interleaved by seed** — native rep 1, custom rep 1, native rep 2, custom rep 2, per
+seed, strictly sequential, one day, one deployed version. Interleaving spreads intra-day model drift
+across both arms instead of aligning it with the arm boundary (§O1).
+
+**Run identity is verified, not inferred** — each row's `conversation_ref` queried directly and
+confirmed distinct (`PaRunAnchor`'s 30-minute fallback makes interleaving a hazard here, §O1).
+
+**Scorer topology is fixed to match v9 and v12: independent agents, one per packet, redacted
+packets.** §O5 measured topology moving the result by about two rows, so it is held constant or the
+comparison to v12's 8-of-20 is meaningless — and that comparison is this pass's entire primary
+outcome, which raises the stakes on topology above where §AC7 had them.
+
+**Pre-flight, every item verified by probe before run 1:**
+
+1. **The installed code is repo HEAD's `src/`** — two probes, neither a version string. `sys_app.version`
+   reads **`2026.08.1003`** (the `5fb7648` build), **and** `git log 5fb7648..HEAD -- src/` is empty.
+   The second is the one that binds; the first is recorded to catch an unexpected reinstall. **A
+   version reading `1004`–`1008` is not a failure** — those are documentation versions and the
+   second probe still decides.
+2. **#148's fix present** in the installed `PaFixReport`, by
+   `PaFixReport^scriptLIKEthe presence requirement is stated FIRST` → 1 record. A draft of this item
+   said only "by `scriptLIKE` probe against the fixed wording" and named nothing — precisely the gap
+   §W7 exists to close, since an improvised substring can also match pre-#148 `PaFixReport` and pass
+   a gate that should fail.
+3. **#155's fix present**, by `PaFixReport^scriptLIKE_withCanonicalLayersSwept` → 1 record. The
+   method name is distinctive and was introduced by that fix; this is the probe the single-variable
+   claim at AI1 rests on, and it is the one item here whose absence invalidates the framing rather
+   than just the run.
+4. `PaAgentLoop^scriptLIKEMAX_EVIDENCE_RETURNS: 0` → 1 record.
+5. `PaAgentLoop^scriptLIKEREQUIRE_RETRIEVAL_TO_RELEASE: false` → 1 record.
+6. **All five seeds' §A3 fixture conditions re-read live** — including seed 05's m2m gate (AI3.1) and
+   seed 04's capability sys_id matching the instance's `sys_one_extend_capability` record.
+7. The three seed-05 probe rows are gone (AI3.2), by re-query.
+8. `layers_available` read by **two independent paths** — `sn_aia_agent_tool_m2m` for native,
+   `PaToolRegistry`'s own registry read for custom — not one value asserted for both (§O1).
+9. Budget knobs read fresh: `sn_aia.continuous_tool_execution_limit` and `max_auto_executions` (§T1).
+10. Smoke gate fired and passed on **both** arms before any scored row is spent.
+
+**The blind-rule guard must be told about `scoring-v13/` as part of building the packets, not after.**
+§AC7's finding holds unchanged and the same three edits are needed before the suite goes green:
+add the `PACKET_SETS` entry (`dir: 'scoring-v13'`, `scanned: true`, a `why`, and a real `packets:`
+count — the per-set test asserts the on-disk `row-NN-*.md` count equals it); update the hardcoded
+membership literal in the same test to include `'scoring-v13'`; run `npm test` and confirm green
+before the first packet reaches a scorer. Navigate by test name — §AC7 pinned a line number that had
+already drifted.
+
+**One addition §AC7 did not need.** §AH5a found **two provenance leaks inside the packet slice** that
+tripped none of the then-existing `RUBRIC_PATTERNS`, and added three patterns for them
+(`pass-version-token`, `empirically-observed`, `rows-were-flagged`). The v13 slice now carries §A2.2
+and §A2.3, written after those patterns existed but never yet exposed to a packet build. **The slice
+is re-scanned as part of pre-flight, not assumed clean because the suite was green when the clauses
+were merged.** §AH6's own summary of this — that §AH produced two blind-rule defects in one section —
+is the reason.
+
+**Two build-side gates, added after review found the pass could not be executed as first written.**
+Both are pre-flight items and both must be green before run 1, not discovered after twenty runs
+terminate:
+
+11. **A v13 advance-rulings channel exists** — `benchmark/v13-advance-rulings.json`, carrying
+    Ruling 1 in the `v12-advance-rulings.json` shape (`id`, `source`, `column`, `applies_to`,
+    `heading`, `text`), and the generator renders it into every seed-05 packet. **§AD5's standing
+    rule is that an advance ruling on a scoring column must ship in the packets, not only in the
+    pre-registration** — that is #160, and §AG1 records what its absence cost in v12: rows 17 and 19
+    flagged `fix_usable_unedited` *because the ruling never reached the scorer*. Two such flags land
+    AI-3 exactly on its refutation boundary, so an undelivered Ruling 1 would refute a prediction
+    about the rubric using a defect in the delivery. The first draft of this section named no such
+    file and re-opened the defect #160 closed.
+12. **A v13-capable packet generator exists and has been exercised on a throwaway `--out`.**
+    `benchmark/scripts/build-v12-packets.js` hardcodes `OUT = scoring-v12`, `REPORTS = v12-reports`
+    and reads `v12-rows.json` / `v12-advance-rulings.json`, and its header reads *"scoring-v12/ IS
+    FROZEN. PASS --force TO WRITE OVER IT, AND DO NOT."* — `--out` exists only to exercise the
+    freeze check. **There is therefore no path from v13 reports to v13 packets**, and the nearest
+    tool either refuses to write or overwrites dispatched, scored v12 evidence. Generalising it to
+    take a pass version (rows, rulings, reports, out) is **work that must be done and verified
+    before run 1**, because §AI6 forbids touching packets until all twenty runs have terminated —
+    the operator would hit this at the worst possible moment.
+
+**Artefacts.** Measurements → `benchmark/raw-evidence-v13-determinacy-check.md`. Rows →
+`benchmark/scorecard-v13.md` and `benchmark/v13-rows.json`. Reports verbatim →
+`benchmark/v13-reports/`. Advance rulings → `benchmark/v13-advance-rulings.json` (item 11). Packets
+exactly as scored → `benchmark/scoring-v13/`. Flag tally → `benchmark/v13-ambiguity-flags.json`
+(Ruling 4). Operator records are **outside** the scorer-facing channel by the guard's own
+declaration and must never be pasted into a packet.
+
+### AI8. What this pass cannot establish
+
+Everything in §T8, §Z5, §AB5, §AC8, §AG5 and §AH6 stands, unsoftened. Four limits are specific to
+this pass and the first is the one that matters most.
+
+- **It tests the clauses on the distribution they were fit to.** Same five seeds, same two report
+  formats, same instance. §AG and §AH were written against twelve flagged rows drawn from exactly
+  this population. **A strong AI-1 is therefore the MINIMUM the clauses must clear, not evidence
+  that the rubric is determinate in general** — it is close to an in-sample check, and §AH6 said the
+  quiet part already: *"a pass with different seeds or an unseen report shape will find more."*
+  A weak AI-1 would be damning; a strong one is merely not disqualifying. Any future quotation of
+  this pass that drops this bullet is a misquotation.
+- **Determinacy is not correctness.** Promoted to a standing limit at §AD3, applied unamended at
+  §AG5 and §AH6, and applying here with more force than anywhere it has been written before, because
+  determinacy is now the *headline* rather than a secondary reading. §A2.2 in particular is a
+  deliberate choice to score bookkeeping over understanding, and this pass cannot show that trade was
+  right — only that it is decidable.
+- **The gate figures carry no predictive weight.** Ruling 6. They are published and the criterion is
+  applied, but v13 confirms and refutes nothing about the milestone, and its figures resolve a band
+  only as well as §AC2's table allows.
+- **It cannot establish transferability, and it does not license a re-run.** One instance, one model,
+  one day, one app version. §T9's *"Do not re-run this pass to get a firmer number"* applies to this
+  pass as it did to v9 and v12; a result near a threshold is reported as near a threshold.
+
+### AI9. Disposition
+
+**This section contains no measurement.** It fixes a frame, a size and its new rationale, six
+rulings, six predictions and one recorded non-prediction, a stopping rule that now protects a flag
+tally, and a pre-flight whose third item the framing depends on.
+
+**Unchanged at the time of writing: native remains the recommended path on this instance, and the
+Phase 1b milestone is not met.** Quote §AD1's figures for both arms together, never singly (§AD7) —
+native 6/10 · 60% · middle band, custom 0/10 · 0% · bottom band, rubric totals 51/60 and 9/60.
+**The ordinal is deliberately not stated.** A draft of this section claimed "the seventh consecutive
+section to close with the milestone unmet"; it was inherited from §AH7's "sixth" by adding one, and
+it does not survive a grep — §AF7 does not carry the sentence, which breaks any consecutive run, and
+the sections that do carry it (§Z6, §AA, §AB, §AC8, §AD1, §AE8, §AG6, §AH7) do not yield six then
+seven under any consistent rule. §AD1's "fifth" is the last one that reconciles. **The fact needs no
+ordinal**: the milestone is unmet, it has been unmet in every section since §Z6, and a running tally
+this file cannot verify is exactly the kind of decorative precision a determinacy check should not
+be introducing.
