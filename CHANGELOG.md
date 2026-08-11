@@ -17,6 +17,85 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1104 — 2026-08-11
+
+### Fixed — the unguarded half of §AF2: a call argument could hide in `operator_note` (#176)
+
+- **`withheldFactViolations` added to `benchmark/scripts/build-packets.js`**, failing the build
+  before any packet is written when a row with `holds > 0` carries an `operator_note` naming a
+  platform identifier that nothing in that row's own scorer-visible text names.
+- **What was unguarded.** §AF2's rule is two-sided — a scorer-facing field NAMES the argument of a
+  call, and the operator's reading of it lives in `operator_note`, which renders nowhere. Both
+  existing guards protected the *second* half (`registerViolations` keeps a reading out of a
+  scorer-facing field; the delivery check keeps `operator_note` out of every packet). Nothing
+  protected the half §AF2's own text calls **"not optional"** — that the fact arrives at all. Two
+  guards pointing the same way read as coverage and were not.
+- **How it failed.** v13 authored both halves into `operator_note` on **six of the seven rows**
+  that took a hold and carried a reading, leaving `note` null on four. Section 6 rendered
+  *"No run-specific notes."* directly beneath section 5's promise that a held call's argument
+  "is named in section 6 instead" (`build-packets.js:449`, `:620`). Four of the five off-fixture
+  rows §AJ6 asks about are unassessable as a result — and so is row 14, the **on-fixture control**
+  that would have bounded them.
+- **v12 is the worked example, not a casualty.** All seven of its `operator_note` rows delivered
+  the argument in `note` first (row 06: `note` names `schema_lookup on incident.priority`,
+  `operator_note` reads it), so the guard is **non-breaking** and the `--pass v12` byte-identical
+  parity check (#168) is unaffected. v13's own row 18 followed the convention too — this was an
+  authoring regression, not an ambiguous rule.
+- **Deliberately broad, per the posture the sibling lint already declares.** The token shape cannot
+  distinguish a call argument from any other identifier, so unrelated instrument commentary on a
+  held row reddens the build (v13 row 18, measured). No exemption list — an exemption would be a
+  second and silent way to be unguarded. Scoped to `holds > 0`, so a row that held nothing keeps
+  its `operator_note` free for run plumbing, as the native rows' notes legitimately use it.
+
+### Fixed in review — seven findings from `/code-review` on PR #177, all reproduced before fixing
+
+- **The comparison set was wrong in both directions.** Comparing against `SCORER_FACING_FIELDS`
+  flagged `schema_lookup` and `agent_trace` — tool names section 5 prints in *every* packet — and
+  told the operator to pad `note` with boilerplate the packet already carried (F1). Comparing
+  against the whole built packet was then tried and is worse: the embedded **seed spec launders the
+  token**, so v13 row 14 passed — the on-fixture control, whose argument was withheld exactly like
+  the four adverse rows. Now compares against that row's **own** scorer-visible text: the
+  scorer-facing fields plus `distinct_tools` and `hold_text`.
+- **Case-sensitivity bypass (F3).** The lowercase-only token shape scored ZERO on
+  `Schema_lookup ran against Incident.priority, and against incident.assignmentGroup` — a
+  sentence-initial capital and a camelCase field path, on precisely the v13 failure shape. Regex is
+  now case-insensitive and matches are lowercased before comparison.
+- **Exact set membership rejected a delivered fact (F4).** A `note` naming
+  `x_snc_tsbench_routing.assignment_group` failed a reading that named the bare
+  `x_snc_tsbench_routing`. Now a substring comparison.
+- **English prose was reported as withheld identifiers (F5).** `e.g` and `i.e` were flagged, and no
+  rewrite of `note` can name them. Dotted paths now require segments of 3+ characters; underscored
+  identifiers are unaffected.
+- **The scope test failed OPEN (F6).** `Number(row.holds) > 0` on a missing field yielded `NaN` and
+  silently skipped the row, while section 5 rendered `Harness HOLDs: undefined`. An unreadable
+  `holds` now **refuses**, like every other check in `buildAll`.
+- **Name collision (F7).** `deliveryViolations` sat beside a pre-existing "delivery check" pointing
+  the opposite way, and the README listed both as adjacent rows. Renamed
+  **`withheldFactViolations`**.
+- **Overclaim corrected, and the hole filed rather than papered over (F2).** The guard is
+  conditioned on `operator_note` being present, so it enforces **consistency between two fields,
+  not delivery as such** — the docblock, README and this entry previously claimed the §AF2
+  requirement "that the fact arrives at all". Omitting the reading passes with `note` still null,
+  and deleting the reading is the *cheapest* way to green a red build. The unconditional check
+  reddens **v12 rows 02 and 04**, which took a hold and wrote no note, making it a change to a
+  frozen fixture's contract and to #168's parity check — a §T9-adjacent decision, not a review-fix
+  slip-in. **Filed as #178** and pinned as a measured property in the test suite.
+
+Stated limit, unchanged: a **delivery floor, not a proof of sufficiency**.
+- The register lint's remedy string now says to name the fact as well as move the reading, and
+  points at this check by number.
+- `benchmark/README.md` gains **"Authoring a row manifest: the fact and the reading are two
+  fields"** — the rule, v12 row 06 quoted as the worked example, and all three guards in one table.
+- Tests: `test/packetGeneratorParity.test.js` gains a `#176` block — v12 passes as authored, each
+  of v13's six withholding rows fails, the v13 shape fails synthetically, delivering the argument
+  clears it, and `holds: 0` rows stay out of scope. **33 suites, 1621 tests.**
+
+### Not changed
+
+- **§T9 governs.** No v12 or v13 value moves. `scoring-v13/` is not rebuilt — it remains the record
+  of what the scorers actually read, and the v13 manifest is frozen evidence that was not
+  backfilled to satisfy the new guard.
+
 ## 2026.08.1103 — 2026-08-11
 
 ### Added — the v13 scored pass, complete (#166)

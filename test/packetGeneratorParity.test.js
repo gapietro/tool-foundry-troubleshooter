@@ -262,6 +262,174 @@ describe('operator commentary stays in a neutral register (#157, I4)', () => {
     })
 })
 
+/**
+ * The OTHER direction of §AF2, which shipped unguarded and then failed (#176).
+ *
+ * §AF2's rule has two halves: a scorer-facing field NAMES the argument of a
+ * call, and the operator's reading of it lives in `operator_note`, which
+ * renders nowhere. Two guards enforced the second half — `registerViolations`
+ * keeps a verdict OUT of a scorer-facing field, and the delivery check keeps
+ * `operator_note` OUT of every packet. Nothing enforced the first half, and
+ * §AF2's own text is the one that calls it "not optional".
+ *
+ * v13 collapsed both halves into `operator_note` on six of the seven rows that
+ * had a hold and a reading, so section 6 rendered "No run-specific notes."
+ * directly beneath section 5's promise that a held call's argument "is named in
+ * section 6 instead". Four of that pass's five off-fixture rows are
+ * unassessable as a result, the on-fixture control among them.
+ *
+ * v12 is the worked example and the fixture: every one of its seven
+ * `operator_note` rows delivered the argument in `note` first.
+ */
+describe('a reading does not ship without its fact (#176)', () => {
+    const V12 = JSON.parse(fs.readFileSync(path.join(ROOT, 'benchmark', 'v12-rows.json'), 'utf8'))
+    const V13 = JSON.parse(fs.readFileSync(path.join(ROOT, 'benchmark', 'v13-rows.json'), 'utf8'))
+    const check = (row) => gen.withheldFactViolations(row)
+
+    test('the v12 manifest passes as authored, so the guard is non-breaking', () => {
+        // Why `--pass v12` parity (#168) is unaffected: this adds no
+        // requirement v12 does not already meet.
+        expect(V12.flatMap(gen.withheldFactViolations)).toEqual([])
+    })
+
+    test('v12 row 06 is the worked example the rule is written from', () => {
+        const row = V12.find((r) => r.row === 6)
+        expect(row.note).toContain('incident.priority')
+        expect(row.operator_note).toContain('incident.priority')
+        expect(check(row)).toEqual([])
+    })
+
+    test.each([6, 8, 10, 12, 14, 16])('v13 row %i withheld its argument and fails the build', (n) => {
+        const row = V13.find((r) => r.row === n)
+        expect(check(row).length).toBeGreaterThan(0)
+    })
+
+    test('the exact v13 shape fails: a held row whose reading names a table nothing else does', () => {
+        expect(
+            check({
+                row: 1,
+                holds: 1,
+                note: null,
+                operator_note: 'Not rendered into any packet. The call that answered the layer-4 HOLD was ' +
+                    'schema_lookup on incident.priority, not this seed\'s fixture table x_snc_tsbench_ticket.',
+            })
+        ).toHaveLength(1)
+    })
+
+    test('delivering the argument in note clears it', () => {
+        const note = 'The call that answered the HOLD was schema_lookup on incident.priority.'
+        expect(
+            check({
+                    row: 1,
+                    holds: 1,
+                    note: note,
+                    operator_note: 'incident.priority is an out-of-box table, not this seed\'s fixture.',
+                },
+                note
+            )
+        ).toEqual([])
+    })
+
+    test('a row that took no hold is out of scope, so instrument commentary is free', () => {
+        // v13 rows 11/17/19 are native, hold nothing, and their operator_notes
+        // discuss run plumbing (`x_snc_troubleshoot_run`, `conversation_ref`).
+        for (const n of [11, 17, 19]) {
+            const row = V13.find((r) => r.row === n)
+            expect(row.holds).toBe(0)
+            expect(check(row)).toEqual([])
+        }
+    })
+
+    test('operator_note is still the only field that never renders', () => {
+        // The guard must not be satisfiable by rendering operator_note — that
+        // would trade this defect for the one the ruling check already stops.
+        expect(gen.SCORER_FACING_FIELDS).not.toContain('operator_note')
+    })
+
+    // ---- the #177 review findings, each pinned against the case that showed it
+
+    test('F1: a tool name the packet already prints is not reported as withheld', () => {
+        // `schema_lookup` is in every packet's layer map. Reporting it told the
+        // operator to pad `note` with boilerplate the packet already carried.
+        expect(
+            check({
+                row: 1,
+                holds: 1,
+                note: 'The call that answered the HOLD was schema_lookup on incident.priority.',
+                operator_note: 'schema_lookup reached L4, but incident.priority is out-of-box.',
+            }, 'The call that answered the HOLD was schema_lookup on incident.priority.')
+        ).toEqual([])
+    })
+
+    test('F3: capitalisation and camelCase do not bypass the check', () => {
+        // Both returned ZERO tokens under the lowercase-only shape, on
+        // precisely the v13 failure shape.
+        expect(
+            check({
+                row: 1,
+                holds: 1,
+                note: null,
+                operator_note: 'Schema_lookup ran against Incident.priority, and against ' +
+                    'incident.assignmentGroup, not the fixture.',
+            }).length
+        ).toBeGreaterThan(0)
+        expect([...gen.identifiers('Incident.priority')]).toEqual(['incident.priority'])
+        expect([...gen.identifiers('incident.assignmentGroup')]).toEqual(['incident.assignmentgroup'])
+    })
+
+    test('F4: naming a more specific identifier delivers the barer one', () => {
+        const note = 'query_table on x_snc_tsbench_routing.assignment_group returned 0 rows.'
+        expect(
+            check({
+                    row: 2,
+                    holds: 1,
+                    note: note,
+                    operator_note: 'x_snc_tsbench_routing is this seed\'s fixture table.',
+                },
+                note
+            )
+        ).toEqual([])
+    })
+
+    test('F5: English prose abbreviations are not identifiers', () => {
+        // `e.g` was being reported as a withheld identifier, and no rewrite of
+        // `note` can name it.
+        for (const s of ['e.g', 'i.e', 'node.js']) expect([...gen.identifiers(s)]).toEqual([])
+        const note = 'The call that answered the HOLD was schema_lookup on incident.priority.'
+        expect(
+            check({
+                    row: 3,
+                    holds: 1,
+                    note: note,
+                    operator_note: 'incident.priority is out-of-box; other rows (e.g. row 04) differ.',
+                },
+                note
+            )
+        ).toEqual([])
+    })
+
+    test('F6: an unreadable holds value refuses rather than skips', () => {
+        // Section 5 renders `holds`, and this check is scoped by it. `> 0` on a
+        // missing field yielded NaN and silently skipped the row.
+        for (const holds of [undefined, null, 'many']) {
+            expect(() =>
+                check({ row: 4, holds: holds, note: null, operator_note: 'schema_lookup on incident.priority' })
+            ).toThrow(/unreadable `holds`/)
+        }
+        expect(check({ row: 4, holds: 0, operator_note: 'x' })).toEqual([])
+    })
+
+    test('F2: the hole this does NOT close is stated, not implied', () => {
+        // Conditioned on `operator_note`, so it enforces consistency between
+        // two fields — not delivery as such. Omitting the reading passes with
+        // `note` still null. Filed as #178; pinned here so the limit is a
+        // measured property of the guard rather than a claim in a docblock.
+        expect(check({ row: 5, holds: 1, note: null })).toEqual([])
+        expect(fs.readFileSync(path.join(ROOT, 'benchmark', 'scripts', 'build-packets.js'), 'utf8'))
+            .toContain('#178')
+    })
+})
+
 describe('a row\'s terminal state and its report agree (#157)', () => {
     test('every v12 row\'s terminal matches whether its report was rejected', () => {
         // buildAll() throws on a mismatch; that it returns is the assertion.
