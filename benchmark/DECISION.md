@@ -6759,3 +6759,147 @@ Phase 1b milestone is not met.** Quote both arms together, never singly (§AD7) 
 and this section moves none.** Per §AI9, no ordinal is attached to the milestone's unmet status —
 the fact needs none.
 
+
+## AO. v14 — the out-of-sample pass, scored (`2026.08.1110`, #175)
+
+**§AN was committed in `0c4f36c` before run 1; §A through §AN are unmodified.** `git log -p
+benchmark/DECISION.md` is the check. Scorecard: `benchmark/scorecard-v14.md`. Rows:
+`benchmark/v14-rows.json`. Verdicts: `benchmark/scoring-v14/results/`. Flags:
+`benchmark/v14-ambiguity-flags.json`.
+
+### AO1. The result
+
+**Twelve of twelve out-of-sample rows returned `ambiguous = no`, with zero column flags.** All four
+meaningful predictions confirmed; both tripwires refuted.
+
+| | prediction | bar | measured | verdict |
+|---|---|---|---|---|
+| **AN-1a** | out-of-sample determinacy | ≥ 10 of 12 | **12/12** | CONFIRMED |
+| **AN-1b** | strongly out-of-sample (seeds 07, 08) | ≥ 7 of 8 | **8/8** | CONFIRMED |
+| **AN-2** | column flags per out-of-sample row | ≤ 0.20 | **0.00** | CONFIRMED |
+| **AN-3** | anchor arm clean (drift control) | all 8 | **8/8** | CONFIRMED |
+| **AN-4** | seed-08 layer-2 decoy bites | ≥ 1 of 4 | **0/4** | REFUTED |
+| **AN-5** | a seed-07 report names `instruction_bloat` | ≥ 1 of 4 | **0/4** | REFUTED |
+| **AN-6** | ≤ 2 voids, 10 valid rows per arm | — | **0 voids, 10/10** | CONFIRMED |
+
+**Gate, both arms together (§AD7 — never quote one alone): native 5/10 = 50.0% (45/60), custom
+0/10 = 0.0% (3/60).** v13 was native 4/10 = 40.0% (47/60), custom 0/10 (5/60); v12 was native 6/10 =
+60.0% (51/60), custom 0/10 (9/60). **Ruling 3's milestone is not met.** Ruling 6 governs: no gate
+prediction was filed, so none may be claimed either way. Native's point total, 45/60, is the lowest
+of the three passes even though its gate count is not the lowest — and the distribution and the
+platform patch both moved, so nothing here licenses reading it as harness movement.
+
+**This discharges §AJ6's closing item and #175.** The clauses were shown to determine a value on
+seeds they were not fit to, eight of the twelve rows drawn from taxonomy entries selected
+2026-08-01 — five days before §AG existed and by an authority outside this project.
+
+### AO2. The finding that outranks the result — determinacy came apart from correctness, at full marks
+
+**Row 09 scored 6/6, cleared the gate, was not flagged ambiguous, and proposed a fix that cannot
+work.** It correctly identified seed 06's layer-4 defect (a filter on a `category` column that does
+not exist), then proposed repointing the query at a **`type`** column and asserted that
+`schema_lookup` and `query_table` had confirmed it. `x_snc_tsbench_ticket` has 8 fields whose only
+non-system members are `short_description` and `priority`. **The packet's own seed spec states this
+in its opening paragraph.** The refuting fact was in front of the scorer and the verdict did not use
+it.
+
+Two neighbours show the same shape: **row 11** filed a co-primary "the table is genuinely empty
+(0 rows)" against a table holding **22**, and proposed "seed the table" — the exact target seed 06's
+spec scores 0; it scored 5/6 and cleared the gate. **Row 13** listed five `u_*` columns that do not
+exist while getting the field count right.
+
+**§AC8 and §AI8 have asserted since v12 that determinacy is not correctness. This is the first pass
+to demonstrate it at full marks on a gate-passing row**, and it is worth more than the confirmed
+predictions. The rubric measures whether a report *names the right layer, targets the right thing,
+cites evidence, and reads as usable*. It does not measure whether the report's factual claims are
+true.
+
+**No score was changed, and none should be.** The manifest was frozen at dispatch and re-scoring
+after seeing results is optional stopping at the most result-sensitive moment there is (§U8.5). The
+observations live in `v14-rows.json` `operator_note`, which renders into no packet.
+
+**Deliberately unresolved, and the first thing the next pass must settle.** Row 11 attributes its
+empty-table claim to `query_table` **itself** returning `unfiltered_row_count: 0` /
+`verdict: genuinely_empty`. If the tool returned that against a 22-row table, this is a **harness
+defect, not a fabrication** — and a mechanism exists: `query_table` runs in scope
+`x_snc_troubleshoot` while the bench table is owned by `x_snc_tsbench`, and Build Rule #42 records
+that a Fluent `Table()` installs with zero ACLs. Not investigated mid-pass (§T9 freezes `src/`). The
+two readings have opposite consequences: one is a model that invents, the other is a diagnostic tool
+reporting absence where there is a permission barrier — the precise failure `unfiltered_row_count`
+exists to prevent.
+
+### AO3. The operator changed the scorer instruction, and it weakens the v13 comparison
+
+**Disclosed as a defect of this pass, not a footnote.** §AN7 pinned the scorer *topology* —
+independent agents, one per packet, redacted packets — and that was held. It did not pin the scorer
+*instruction*, and v14's differs from v13's in two ways, **both operator-introduced and both pushing
+toward fewer flags**:
+
+1. **v13 required an `### ambiguity` section iff the flag was `yes`**, which is exactly why
+   scorecard-v13 §3 could cite **two independent agreeing signals**. v14 asked every verdict for the
+   section, so that independence does not exist and the header table is the only signal.
+2. **v14 added: *"do not flag `ambiguous` merely because a judgement was effortful."*** v13 carried
+   no such clause — and scorecard-v13 §3.1 records two v13 verdicts that made close calls **without**
+   flagging and treats that as a **limitation**. v14's prompt licensed the behaviour v13 recorded as
+   a caveat. Row 19's verdict shows it operating: it states the judgement "took work", then declines
+   to flag it in those terms.
+
+**AN-1a/AN-1b/AN-3 stand as absolute measurements under a stated instruction. The
+determinacy comparison v13 → v14 does not.** Any future text placing v13's 20/20 beside v14's 20/20
+without this subsection is a misquotation.
+
+**Rule for the next pass:** pin the scorer instruction verbatim in the pre-registration, the way
+§AN7 pins topology, and diff it against the prior pass's before dispatch.
+
+### AO4. Rulings 7 and 8 were both correct and neither was exercised
+
+**Ruling 8** pre-ruled the seed-08 layer-2 answer ("the agent has no completion criteria") as 0. No
+row filed it. Both native rows filed **layer 3 primary** — a tool script that is a hardcoded constant
+with no terminal branch — and each explicitly demoted the instruction gap to *contributing*, having
+independently noticed the instruction has no polling cap.
+
+**Ruling 7** exists because `instruction_bloat` fired at 15,154ms against a 15,000ms threshold on a
+~330-char instruction. **No seed-07 report names it**; both native seed-07 rows name
+`tool_output_bloat` at **58,471** and **58,462** chars against a 20,000 threshold. Its premise was
+nonetheless *strengthened*: native LLM P95 ran 4,090 → 97,065ms across the ten native rows, with
+**six of ten at or above the 15,000ms threshold**. **Do not read a ruling's non-use as evidence it
+was unnecessary.**
+
+### AO5. What the pass could not do, carried forward
+
+- **Not single-variable against v13** (§AN1a): ZP10 Hotfix 3 → 4a landed between the passes. The
+  anchor arm is a control, and **eight rows cannot resolve a small patch effect** — a clean AN-3 is
+  equally consistent with "the patch changed nothing" and "the patch changed something these two
+  seeds do not exercise."
+- **§T8 carried verbatim.** Twenty rows, five seeds, one instance, one day, one model, one app
+  version, two patch levels across the comparison. **Not a rate.**
+- **The custom arm produced no report at all on both seed-05 rows** (06, 08), failing identically
+  with `unknown action: agent_config` on the `agent`+`timeframe` path while the same tool succeeded
+  on the `execution` path in rows 02 and 04. Scored, not void, per §A3 as amended by §AK. **This is
+  a reproducible defect and is not yet filed as an issue.**
+- **§AJ5a and §AL6 stand** — v13's five off-fixture custom rows remain unassessed, and this pass does
+  not reopen them.
+
+### AO6. Instrument changes made during this pass, all disclosed
+
+1. **The packet generator gained `NO_REPORT_SPLIT`** — a `failed` terminal is now satisfied by
+   either a validator rejection **or** an explicit no-report marker. v14 rows 06 and 08 failed before
+   any report body existed, and the sole failure slot was labelled `VALIDATOR REJECTION`; using it
+   would have told twenty scorers the fix-report validator ran when it never did. Additive: carrying
+   both markers is now itself a refusal, and no previously-representable row is treated differently.
+   Pinned by `packetGeneratorPassSelection.test.js`. **§AK left the adjacent `genai_down` case
+   explicitly undecided; this does not decide it.**
+2. **`buildAll('v14')` is pinned by a test**, not by the operator having run the CLI once — running
+   it by hand is the substitution §AN7 item 14 exists to name.
+3. **Two seed-08 fixtures were discarded and re-produced**, and the reasoning was wrong twice before
+   it was right — `raw-evidence-v14-out-of-sample.md` §2.6 and §2.7 carry the full retraction:
+   concurrency was blamed for a slowdown it did not cause, a starvation diagnosis was raised against
+   a run that had already finished, and `PATCH sn_aia_execution_plan.state` turned out to be
+   cosmetic. **Row 01 was proposed for voiding on that diagnosis and the proposal was withdrawn on
+   measurement.**
+
+**Three operational corrections worth more than the pass:** terminal state comes from
+`servicenow_aia_trace`, **not** the plan row (v13 §3.3 / §AC7's "or the plan row" is wrong — they
+disagree); liveness is judged from instance timestamps, never from elapsed wall clock estimated in
+conversation; and a bad field name reads as "Access denied" on this instance, discriminated **only**
+by a bare query carrying neither `query` nor `fields`.
