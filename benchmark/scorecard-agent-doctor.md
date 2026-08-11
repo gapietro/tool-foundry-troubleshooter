@@ -90,6 +90,14 @@ re-derive it from the /6 totals.
 
 ## A3. Void runs — a run that measured nothing
 
+> **The standing rule has moved since this file was filled (#174), and this section is deliberately
+> NOT updated to match.** `scorecard-template.md` §A3 now carries a third, **run-state** void
+> condition — the platform terminating an execution with no report body produced — plus a per-arm
+> reading of the §A3.4 floor and a declared re-run cap. None of that governed these 10 rows, which
+> were scored with zero voids against the text below. The two post-fill wording updates this file's
+> header records were corrections to a *shared* rule; a new condition is not, and mirroring it here
+> would silently restate what contract these rows were scored under. Provenance: `DECISION.md` §AK.
+
 A run is **void** when the seed was not in the state its spec requires, so the
 run tested something other than the seeded defect. It is neither a hit nor a
 miss, and scoring it either way corrupts the gate.

@@ -86,6 +86,13 @@ Same rule as `scorecard-template.md`/`scorecard-agent-doctor.md`, unchanged for 
 Same void conditions as the template (seed 4 capability mismatch, seed 5 m2m gate off) — both
 re-verified/fixed above before any row was scored. **No void rows in this file.**
 
+> **The standing rule has moved since these rows were scored (#174).** `scorecard-template.md` §A3
+> now carries a third, **run-state** void condition — the platform terminating an execution with no
+> report body produced — plus a per-arm reading of the §A3.4 floor. Neither governed this pass, and
+> this section is left as the contract these rows were actually scored against rather than
+> retrofitted to a later rule. The two seed-state conditions above are unchanged by that work.
+> Provenance: `DECISION.md` §AK.
+
 ## E. `layers_swept` — derived from the audit trail, not the run's own self-report
 
 **Critical finding that drove how every custom row below is scored** (statement scoped to the

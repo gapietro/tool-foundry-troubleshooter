@@ -22,19 +22,39 @@ two-digit daily counter. Incremented on every merge to `main`.
 ### Changed — §A3 carries the terminated-run void condition (#174)
 
 - **A third void condition added to `benchmark/scorecard-template.md` §A3**: any seed, any harness,
-  where the platform execution closed `state: terminated` with `state_reason: execution_failed` (or
-  any other terminal state that ends the run before a report exists). An intact fixture does not
-  make that a valid `0` — a `0` is a report that failed the rubric, and there is no report.
+  where the **platform** closed the execution `state: terminated` / `state_reason:
+  execution_failed` **and no report body of any kind was produced**. An intact fixture does not make
+  that a valid `0` — a `0` is a report that failed the rubric, and there is no report.
+- **The boundary is narrow, and both adjacent cases are named as SCORED**: a report body that was
+  produced and then rejected is a report (scored, `0` if it fails the rubric), and a run that
+  exhausted a declared budget — tool ceiling, context, supervision stall, wander — is a run that
+  failed, scored with `cause_of_death` recording how. The line is *the platform failed the execution
+  → void; the run failed, however it failed → score it*. A provider outage with no report body is
+  named as **undecided**. Review caught the first draft generalising past all of this and
+  reclassifying five already-scored rows (v13 04/16, v12 08/14/20) — see `DECISION.md` §AK4.
 - **The two properties that made v13's ruling sound are now requirements on the operator**, not
   remarks about one pass: the condition must be **symmetric** across harnesses, and it must be
   **recorded before the replacement run is fired**. §A3's definition was widened from seed-state
   only (*"the seed was not in the state its spec requires"*) to cover both ways a run can measure
   nothing, and the condition list now separates the two seed-state conditions from the run-state one.
-- **§A3.4's floor checked, as #174 required.** It reads correctly with the new condition present.
-  Two clauses that lived only in the decision record are promoted alongside it, because a run-state
-  void makes both live for the first time: the floor is read **per arm** (§AC2 / §AI2), and it
-  counts **unrecoverable** voids at the close of the pass — a void whose replacement is valid costs
-  the denominator nothing.
+- **§A3.4's floor checked, as #174 required.** Two clauses that lived only in the decision record
+  are promoted alongside it, because a run-state void makes both live for the first time: the floor
+  is read **per arm** (§AC2 / §AI2) — stated with the sizing premise it needs, since this template
+  declares 10 rows total and a pass splitting those across two arms is under the floor before
+  anything is scored — and it counts **unrecoverable** voids at the close of the pass, a void whose
+  replacement is valid costing the denominator nothing.
+- **`benchmark/scorecard-template.md` §A3 rule 2 now requires a declared per-arm re-run cap.**
+  Without one a run-state void is always re-firable, so nothing is ever unrecoverable and the floor
+  can never bite; "cannot be made valid" is now defined as a void the cap leaves unreplaced. The
+  number stays with the pass; the requirement to declare one is standing.
+- **Clause (b) rewritten to bind authoring a void condition, not applying a standing one** — as
+  first written it refused the void on a terminated *last* row (tallies necessarily visible) while
+  the same bullet refused the `0`, leaving the row with no valid disposition.
+- **The two filled scorecards are annotated, not retrofitted.** `scorecard-agent-doctor.md` and
+  `scorecard-custom-harness.md` embed the §A3 their rows were scored against; each now states that
+  the standing rule has moved, what moved, that none of it governed those rows, and where the
+  provenance is. Merging the new condition into them would silently restate which contract those
+  rows were scored under (§AF1's principle, applied to a filled scorecard). §AK5.
 - **Provenance is in `benchmark/DECISION.md` §AK, not in §A3.** §A3 ships inside the slice copied
   verbatim into every scorer packet, where `test/scorerPacketBlindRule.test.js` bans exactly the
   citation #174 asked for — a `§` pointer out of the rubric, a pass named by version, a repository
