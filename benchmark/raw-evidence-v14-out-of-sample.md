@@ -392,3 +392,264 @@ identical terms to item 11 (§1.11), and both must be discharged before the firs
 scorer.**
 
 ---
+
+## 2. The eight seeded target executions
+
+*Fixtures, produced 2026-08-11 before any diagnostic run. Both arms diagnose the same seeded
+execution for a given seed/rep, per §AN7. Seed 05 produces no execution by design — its seeded
+defect is the inactive trigger, so the absence IS the fixture (§AI3, carried).*
+
+### 2.1 Fixture manifest
+
+| seed | rep | execution plan sys_id | invocation | state |
+|---|---|---|---|---|
+| 02 | 1 | `c5fcd3c72b6e4310f243fed2ce91bf26` | `Seed 02 Request Router`, badge reader, message only | **completed 25s** |
+| 02 | 2 | `ba4dd38b2b6e4310f243fed2ce91bf62` | `Seed 02 Request Router`, second monitor, message only | **completed 21s** |
+| 06 | 1 | `281d57c72bea031017a6ffbeee91bfc8` | `Seed 06 Hardware Reporter`, hardware category count | **completed 16s** |
+| 06 | 2 | `ff6d1fcb2b6e4310f243fed2ce91bf26` | `Seed 06 Hardware Reporter`, hardware count for report | **completed 16s** |
+| 07 | 1 | `b52d5f0b2bea031017a6ffbeee91bfec` | `Seed 07 Ticket Classifier` on ticket `e6dcdf07…` | **completed 18s** |
+| 07 | 2 | `7fad9f4f2b6e4310f243fed2ce91bf20` | `Seed 07 Ticket Classifier` on ticket `36dc1347…` | **completed 18s** |
+| 08 | 1 | `9becd7472bea031017a6ffbeee91bf12` | `Seed 08 Batch Watcher`, BR-4417 | *(see 2.4)* |
+| 08 | 2 | `a6cdd7432b2e031017a6ffbeee91bf3b` | `Seed 08 Batch Watcher`, BR-9052 | *(see 2.4)* |
+| 05 | 1, 2 | **none, by design** | — | absence is the fixture |
+
+### 2.2 Bench ticket fixtures — seed 07 only
+
+Two inserted, one per rep, `priority` empty at insert, **newly worded** so no seeded execution in
+this pass shares a `short_description` with one a scorer may have seen (v13 §2.2's rule, carried):
+
+| rep | ticket sys_id | short_description |
+|---|---|---|
+| 1 | `e6dcdf072bea031017a6ffbeee91bfe4` | Conference bridge drops the first ninety seconds of every scheduled call in the east wing |
+| 2 | `36dc13472bea031017a6ffbeee91bf75` | Loading dock scanner misreads pallet barcodes whenever the overhead door is open |
+
+Seeds 02, 06 and 08 need no row: 02 and 08 consult no record, and seed 06's table population is
+pre-existing and **load-bearing for its decoy** (the table is not empty — that is what makes "the
+table has no data" the tempting wrong answer).
+
+### 2.3 Seed 06's qualification bar, met on both reps
+
+The bar is *completes without error AND reports zero hardware tickets while the table demonstrably
+holds rows.* Both reps returned `{"ok":true,"category":"hardware","count":0,"tickets":[]}` with tool
+status **`success`**, one `count_by_category` call each, plan state `completed`:
+
+| rep | plan | tool call | response |
+|---|---|---|---|
+| 1 | `281d57c7…` | `count_by_category` 966ms, **OK** | `count: 0`, status `success` |
+| 2 | `ff6d1fcb…` | `count_by_category` 857ms, **OK** | `count: 0`, status `success` |
+
+`x_snc_tsbench_ticket` held 19 rows at pre-flight (§1.5) and gained 2 more here, so the "table is
+empty" reading is refutable by a single unfiltered query on both reps. **Neither run errored**, so
+neither has degraded into the layer-3 defect the bar excludes.
+
+### 2.4 Seed 08's two runs were fired concurrently, and why that is safe here
+
+Both were submitted with `waitForCompletion=false` and overlapped (rep 1 created 19:36:16, rep 2
+19:40:02). §O1's concurrency prohibition is about **the two diagnostic arms**, which call the same
+Agent Doctor script tools and write to the same `x_snc_troubleshoot_audit` table — concurrent arms
+cross-contaminate audit attribution. It does not reach here: `check_processing_status` is a **pure
+constant function that consults no record and writes nothing** (the seed spec's own Safety section),
+the two plans are distinct rows, and no fixture state is shared. Serialising them would have cost
+~7 minutes against the one-day clause for no measurable gain.
+
+`waitForCompletion=false` returns a Session ID and **no** plan sys_id (§AC7 / v13 §1), so both plans
+were recovered by querying `sn_aia_execution_plan` on `agent=fad5a34c…` ordered by creation — keyed
+on the agent, not on a time window, so the two concurrent runs stay distinguishable.
+
+### 2.5 A seed-07 spec defect found while checking its bar — the field does not exist, and the table is readable
+
+`seeds/seed-07-tool-output-bloat.md`'s qualification bar reads *"its `read_ticket_context` call must
+record a `response_length` above 20,000 on `sn_aia_tools_execution`"*, and its Note states the table
+is **"not readable through the foundry MCP broker as admin — 'Access denied: Insufficient rights',
+verified 2026-08-11 both with and without a `fields` filter, so it is a genuine ACL denial and not
+the bad-field-name confusion that mimics one."**
+
+**Both halves of that are wrong, measured here:**
+
+1. **The table reads fine.** A bare `limit: 1` with no `query` and no `fields` returned row
+   `d56d970f2bea031017a6ffbeee91bf2f`. That is the discriminator v13 §1 and the seed-01 note both
+   name, and it passes.
+2. **`response_length` is not a column on `sn_aia_tools_execution`.** Full `sys_dictionary` read —
+   20 fields, and the response is carried in **`response` (json)**. There is no length column at
+   all. The nearest neighbours are `execution_time_ms` and `execution_time_sec`.
+
+So this is the bad-field trap after all, for the **third** recorded time on this instance (v13 §1.7
+on `sn_aia_message`, v13 §2.1 on `sn_aia_trigger_configuration.table_name`, now here). What makes
+this instance different is that the spec **claims to have applied the discriminator and cleared it**.
+The claim is checkable and does not hold: "without a `fields` filter" still fails if the nonexistent
+field stays in the **`query`** — `response_length>20000` with no `fields` is denied exactly as
+`fields=['response_length']` is. The discriminating check is a bare query with *neither*, which was
+evidently never run.
+
+**What this does and does not change.** It does **not** put seed 07's rows at risk and it is not a
+re-qualification: `read_ticket_context` **generates its oversized payload in-script** and consults no
+record (the spec's own Safety section), so its return size is **constant by construction** across
+calls — it does not vary by ticket, by rep, or by day. The 58,436-char measurement taken at
+qualification therefore carries to both reps here. The bar's *stated verification route* — observe
+the harness surface the `tool_output_bloat` flag — is also unchanged and will be exercised by the
+seed-07 diagnostic runs themselves.
+
+What it changes is the **runbook**: the note as written tells the next operator that a readable table
+is ACL-denied, which is the same wrong-diagnosis shape §1.9b caught the native arm making at the
+smoke gate, and one this project has now written into its own documentation. Filed separately rather
+than fixed in this pass — the seed specs are scorer-facing inputs and §T9 governs.
+
+### 2.6 §2.4 IS WITHDRAWN — the seed-08 fixtures were run concurrently, then mishandled, and both are being re-produced
+
+**This subsection supersedes §2.4.** §2.4 argued the two seed-08 runs could safely overlap and that
+serialising them would cost ~7 minutes "for no measurable gain." That was wrong on the cost side, and
+the operator response to it was wrong twice more. The whole sequence is recorded because the pass's
+own standard is that a mishandled fixture is disclosed, not quietly replaced.
+
+**What actually happened, anchored to instance timestamps rather than elapsed-time estimates.**
+
+| instance time | event |
+|---|---|
+| 19:36:16 | seed 08 rep 1 created (`9becd747…`) |
+| 19:40:02 | seed 08 rep 2 created (`a6cdd743…`) — **overlapping rep 1** |
+| 19:42:37 | **row 01 fired** (native, seed 02 rep 1, plan `986ed307…`) — overlapping BOTH |
+| 19:47:17 | **row 01 ended, 279s** |
+| 19:52:44/46 | operator `PATCH state=terminated` on rep 1 and rep 2 |
+| 19:52:50 | **rep 2 completed NATURALLY**, 766s — the platform overwrote the operator's value |
+| 19:54:12 | **rep 1 finished naturally**, 1075s — but `state` stayed `terminated` |
+
+**Error 1 — the concurrency claim.** Seed 08's defect is a tool that can never report completion, so
+its run length is bounded only by whatever undocumented mechanism stopped qualification's run at 27
+calls (its spec states outright that the stopping mechanism is **not** part of the bar). Two
+concurrent instances took **766s and 1075s** against qualification's **438s** solo. An unbounded-loop
+seed is the one fixture shape that must never be run in parallel, and §2.4 asserted the opposite.
+
+**Error 2 — a starvation diagnosis that the measurement had already refuted.** The operator sampled
+`sn_aia_execution_task` counts for row 01 twice, saw them unchanged at 21, and concluded the scored
+run was being starved. **Both samples were taken after row 01 had already finished** at 19:47:17 —
+the counts matched because the run was over, not because it was stuck. Row 01's measured numbers show
+no contention signature whatsoever:
+
+| | row 01 | comparator |
+|---|---|---|
+| duration | **279s** | v13's documented native expectation: **~280s** |
+| LLM P95 | **4,090ms** | seed 02 fixtures the same hour: 4,794ms / 6,518ms |
+| tool P95 | 297ms | — |
+| tool calls | 14 | v13 row 01: 15 |
+
+**Row 01 is NOT void and is not being re-run.** The perturbation it was going to be voided for is not
+present in it.
+
+> **The reading error is the transferable part.** The plan row's `state` column read `in_progress`
+> after the trace already showed `Completed`. v13 §3.3 and §AC7 say to read terminal state "from
+> `servicenow_aia_trace` **or the plan row**, never from `aia_logs`." That **"or" is wrong** — the two
+> disagree, and only the trace was right. Worse, the operator compounded it by reasoning from
+> *elapsed wall clock estimated in conversation* rather than from instance timestamps, and was off by
+> more than ten minutes. **Anchor every liveness judgement to an instance timestamp, and read
+> terminal state from the trace alone.**
+
+**Error 3 — the remedy did not work and was not needed.** `PATCH sn_aia_execution_plan.state` is
+**cosmetic**: rep 1 kept creating tasks after the write (19:53:10, 19:53:25, 19:54:03) and ran to its
+own `Show response to user`. The async worker does not consult the column. And rep 2 self-completed
+four seconds after the write, which proves seed 08 **does** terminate unaided — so nothing needed
+cancelling. `state_reason` did not persist on either record (returned empty), so the instance carries
+no trace of the operator's intent; this file is the only record.
+
+**Consequence for the fixtures, stated conservatively.**
+
+- **rep 1 (`9becd747…`) is DISCARDED.** The platform wrote `end_time` and `execution_time_sec: 1075`
+  at 19:54:12 but **left `state` at the operator's `terminated`**, because that is already a terminal
+  value and the completion handler does not overwrite one. Its plan row therefore reports an operator
+  artifact rather than its real outcome — and **§A3 makes a terminated run a void condition**, so any
+  arm or scorer reading this fixture would be reading the wrong thing. Not usable.
+- **rep 2 (`a6cdd743…`) is ALSO discarded**, though its case is weaker: its natural `completed` /
+  766s overwrote the operator write, leaving only an extra `sys_mod_count`. It is discarded anyway
+  because replacing it is cheap and a fixture that was written to mid-pass is not worth defending in
+  a pass whose primary outcome is about how determinate its own instrument is.
+
+**Replacement plan.** Both seed-08 fixtures are re-produced **strictly one at a time, with nothing
+else in flight**, and this is done **after rows 01–16**, which do not depend on seed 08. That
+sequencing costs no extra wall clock (rows 01–16 occupy the time either way) and it removes the
+concurrency for the one seed that cannot tolerate it. A solo seed-08 run is ~438s by qualification's
+measurement.
+
+**Nothing here touches seeds 02, 06 or 07.** Their six fixtures were produced sequentially, completed
+naturally in 16–25s, and no operator write was made to any of them.
+
+### 2.7 §2.6's Error-1 attribution is WITHDRAWN — seed 08 is variable and self-terminating, and concurrency was not the cause
+
+The two replacement seed-08 fixtures were produced **strictly solo, with nothing else in flight**, as §2.6 committed. The first replacement refutes §2.6's own explanation.
+
+| run | conditions | duration | `check_processing_status` calls | terminal state | operator write? |
+|---|---|---|---|---|---|
+| qualification (2026-08-11 17:54) | solo | **438s** | 27 | `completed` | no |
+| rep 1, discarded | **concurrent** with rep 2 | 1075s | ~43+ | `terminated` | **yes** |
+| rep 2, discarded | **concurrent** with rep 1 | 766s | ~33+ | `completed` | yes (overwritten 4s later) |
+| **replacement rep 1** | **solo** | **1124s** | **75** | **`terminated`** | **no** |
+
+**What this refutes.** §2.6's Error 1 said concurrency made the two runs take 766s/1075s "against qualification's 438s solo," and treated that as the measurable cost of overlapping them. The solo replacement ran **longer than either** — 1124s and 75 calls — with nothing else on the instance. **Seed 08's loop length is simply variable**, which is exactly what its spec implies by declining to specify a stopping mechanism. Concurrency is not established as the cause of anything, and that attribution is withdrawn.
+
+**What this also corrects about rep 1.** §2.6 concluded that rep 1's `state = terminated` was the operator's PATCH value, surviving because "the completion handler does not overwrite a terminal value," and discarded the fixture on that basis. The replacement reached **`terminated` on its own, with no operator write at all**, at a comparable duration (1124s vs rep 1's 1075s). So `terminated` is the platform's ordinary outcome for a long seed-08 run, and rep 1 would most likely have ended `terminated` regardless of the PATCH. **The claim that the operator write ruined that fixture is not supported and is withdrawn.**
+
+The discard still stands, on the weaker and sufficient ground §2.6 already gave for rep 2: a fixture that was written to mid-pass is not worth defending in a pass whose primary outcome is about how determinate its own instrument is. Replacing it cost one solo run.
+
+**What survives from §2.6, unchanged and still load-bearing:**
+
+- **Error 2 stands in full.** The starvation diagnosis was raised against row 01 on task counts sampled twice *after* the run had finished. Row 01 measured 279s against v13's ~280s expectation. Row 01 is not void.
+- **Error 3 stands in full.** `PATCH sn_aia_execution_plan.state` is cosmetic — rep 1 kept creating tasks after the write and ran to its own terminal step — and `state_reason` does not persist.
+- **The reading correction stands.** Terminal state comes from `servicenow_aia_trace`, not the plan row; liveness is judged from instance timestamps, never from elapsed wall clock estimated in conversation.
+
+**A fixture fact worth carrying forward.** A seed-08 target execution is normally `terminated`, not `completed`. That does **not** disqualify it: §A3's terminated-run void condition governs **scored diagnostic runs**, and this is a **seeded target execution**. Seed 08's own bar is *"the same tool called repeatedly with no change in its result, ≥ 10 calls"* and explicitly states that *"the stopping mechanism is **not** part of the bar."* Replacement rep 1 meets that bar at **75 calls**.
+
+### 2.8 The replacement seed-08 fixtures, and the final fixture manifest
+
+Both produced **solo, nothing else in flight**, per §2.6's commitment and §2.7's correction.
+
+| seed | rep | execution plan sys_id | invocation | duration | `check_processing_status` calls | terminal state |
+|---|---|---|---|---|---|---|
+| 08 | 1 | `c24f27032ba6431017a6ffbeee91bf4d` | `Seed 08 Batch Watcher`, BR-7731 | **1124s** | **75** | `terminated` |
+| 08 | 2 | `3f247f0b2b6a431017a6ffbeee91bf55` | `Seed 08 Batch Watcher`, BR-2298 | **1116s** | **75** | `terminated` |
+
+Both meet seed 08's bar — *"the same tool called repeatedly with no change in its result, ≥ 10 calls"* — at 75 calls each, with every call returning the identical constant payload. Neither carries an operator write.
+
+**The two durations agree to within 8 seconds (1124s / 1116s) at an identical 75 calls.** Combined with the discarded rep 1's 1075s, that is a platform execution ceiling, not variance in the loop itself — which sharpens §2.7: the *ceiling* is stable; what varied was how far the earlier runs got before hitting it. `state_reason` reads `execution_failed` on both, and rows 17 and 19 both quote it.
+
+### 2.9 Final fixture manifest — the ten scored targets
+
+| seed | rep | target | fixture state |
+|---|---|---|---|
+| 02 | 1 | `c5fcd3c72b6e4310f243fed2ce91bf26` | completed 25s |
+| 02 | 2 | `ba4dd38b2b6e4310f243fed2ce91bf62` | completed 21s |
+| 05 | 1, 2 | **none, by design** | absence verified: 0 plans ever for agent `a4b7ef5d…`; trigger `bfb77d6c…` `active=false`; m2m gate `ba30d877…` `active=true`. Ticket `25e32b4b2b228310f243fed2ce91bf22` inserted 20:06:44 |
+| 06 | 1 | `281d57c72bea031017a6ffbeee91bfc8` | completed 16s, `count: 0`, status success |
+| 06 | 2 | `ff6d1fcb2b6e4310f243fed2ce91bf26` | completed 16s, `count: 0`, status success |
+| 07 | 1 | `b52d5f0b2bea031017a6ffbeee91bfec` | completed 18s, ticket `e6dcdf07…` |
+| 07 | 2 | `7fad9f4f2b6e4310f243fed2ce91bf20` | completed 18s, ticket `36dc1347…` |
+| 08 | 1 | `c24f27032ba6431017a6ffbeee91bf4d` | terminated 1124s, 75 calls |
+| 08 | 2 | `3f247f0b2b6a431017a6ffbeee91bf55` | terminated 1116s, 75 calls |
+
+**Seed 07's bar is confirmed at runtime, not merely carried.** Rows 13 and 15 both independently report the `tool_output_bloat` latency flag from `agent_trace` at **58,471** and **58,462** chars against the 20,000 threshold — the spec's stated verification route, exercised by the pass itself. This closes the loop #187 opened: the bar's *quantity* was always real; only its stated *source* (a `response_length` column on `sn_aia_tools_execution`) was wrong.
+
+---
+
+## 3. The twenty scored runs — all fired, none scored
+
+**All twenty terminated. No row was voided.** §AN-6 predicted ≤2 voids encountered and 10 valid rows per arm; **0 voids were encountered and each arm has 10 rows.** Row 01 was proposed for voiding mid-pass and that proposal was withdrawn on measurement (§2.6 Error 2).
+
+Terminal states across the twenty:
+
+| terminal state | rows |
+|---|---|
+| `completed` (native) | 01, 03, 05, 07, 09, 11, 13, 15, 17, 19 — **all 10 native rows** |
+| `complete` (custom) | 02, 04, 10, 14, 16, 18, 20 — 7 custom rows |
+| `failed (LLM reasoning failed, no fix_report)` | 06, 08 — both seed-05 custom rows |
+| `failed (fix_report rejected by validation)` | 12 |
+
+Rows 06, 08 and 12 are **scored, not void**, per §A3 as amended by §AK: the platform did not fail those executions; the runs' own reasoning or output validation did. This matches v13's precedent of scoring `failed (fix_report rejected)` rows.
+
+**Artefacts written as the stage ran, per §AN7:** `benchmark/v14-rows.json` (20 entries) and `benchmark/v14-reports/row-01.md` … `row-20.md` (20 files, verbatim). Committed per seed block so no report was ever held only in conversation context.
+
+**NO TALLY HAS BEEN COMPUTED.** §AN6 seals the row-level `ambiguous` count, the column-flag tally, the out-of-sample/anchor partition and both arms' gate figures until all twenty packets have been scored and returned. Nothing in this file states or implies one. AN-4 and AN-5 are read off report shape and are sealed on identical terms; the operator has necessarily read every report while building these artefacts, and per-row observations recorded in `operator_note` are deliberately confined to that field, which renders into no packet.
+
+**Still outstanding before the first packet reaches a scorer**, both carried from §1.11 and §1.12 and neither discharged by this stage:
+
+1. **§AN7 item 11** — add the `scoring-v14` entry to `PACKET_SETS`, update the hardcoded membership literal in the same test, and confirm `npm test` green.
+2. **§AN7 item 14** — exercise `buildAll('v14')`. It is still called by nothing; the synthetic `v98` path is not a substitute, and treating it as one is the defect item 14 exists to name.
+
+A third item is now due with them: several rows carry `tool_calls: null` and `run_id: null` in the manifest, recorded as PENDING rather than guessed. These must be backfilled from `x_snc_troubleshoot_audit` before packets are built.
+

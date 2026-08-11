@@ -17,6 +17,51 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1110 — 2026-08-11
+
+**v14 — the out-of-sample pass, scored (#175).** Verdict in `DECISION.md` §AO; scorecard
+`benchmark/scorecard-v14.md`. Twenty runs fired, twenty packets scored by independent blind agents,
+zero voids.
+
+- **Primary outcome: 12 of 12 out-of-sample rows returned `ambiguous = no`, zero column flags.**
+  All four meaningful predictions confirmed (AN-1a, AN-1b, AN-2, AN-3); both tripwires refuted
+  (AN-4, AN-5). AN-6 confirmed at 0 voids and 10 valid rows per arm. This discharges §AJ6's closing
+  item — the §AG/§AH clauses were tested on seeds they were not fit to, eight of the twelve rows
+  drawn from taxonomy entries selected five days before §AG existed.
+- **Gate, both arms together (§AD7): native 5/10 = 50.0% (45/60), custom 0/10 = 0.0% (3/60).**
+  Ruling 3's milestone is not met. Ruling 6 governs — no gate prediction was filed, so none may be
+  claimed either way.
+- **The finding that outranks the result (§AO2): determinacy came apart from correctness at full
+  marks.** Row 09 scored 6/6, cleared the gate, was not flagged ambiguous, and proposed repointing a
+  query at a `type` column that does not exist — a fact stated in the packet's own seed spec. Row 11
+  filed "the table is genuinely empty (0 rows)" against a table holding 22 and proposed the exact
+  fix target its seed scores 0. No score was changed and none should be; the manifest was frozen at
+  dispatch.
+- **Disclosed defect of this pass (§AO3): the operator changed the scorer instruction.** v14 asked
+  every verdict for an `### ambiguity` section (v13 required it iff the flag was `yes`, which is what
+  gave v13 two independent signals), and added "do not flag `ambiguous` merely because a judgement
+  was effortful" — a clause v13 did not carry, licensing behaviour v13's own scorecard recorded as a
+  limitation. **The absolute determinacy figures stand; the v13 → v14 determinacy comparison does
+  not.**
+- **Packet generator: `NO_REPORT_SPLIT`.** A `failed` terminal is now satisfied by a validator
+  rejection **or** an explicit no-report marker. Rows 06 and 08 failed before any report body
+  existed, and the only failure slot was labelled `VALIDATOR REJECTION`; using it would have told
+  twenty scorers the fix-report validator ran when it never did. Additive — carrying both markers is
+  itself a refusal. §AN7 items 11 and 14 discharged, the latter pinned by a test rather than by
+  having run the CLI once.
+- **Two seed-08 fixtures discarded and re-produced solo**, with the reasoning retracted twice in
+  `raw-evidence-v14-out-of-sample.md` §2.6/§2.7: concurrency was blamed for a slowdown it did not
+  cause, a starvation diagnosis was raised against a run that had already finished, and
+  `PATCH sn_aia_execution_plan.state` proved cosmetic. Row 01 was proposed for voiding on that
+  diagnosis and the proposal was withdrawn on measurement (279s against v13's ~280s expectation).
+- **Operational corrections worth more than the pass:** read terminal state from
+  `servicenow_aia_trace`, **not** the plan row — they disagree and v13 §3.3 / §AC7's "or the plan
+  row" is wrong; judge liveness from instance timestamps, never elapsed wall clock estimated in
+  conversation; a bad field name reads as "Access denied" on this instance and is discriminated only
+  by a bare query carrying **neither** `query` nor `fields`.
+- **Filed, not fixed:** #187 (seed-07's bar cites `response_length` on `sn_aia_tools_execution`, a
+  column that does not exist — the field is real but derived by the harness's own `agent_trace`).
+
 ## 2026.08.1109 — 2026-08-11
 
 ### Added — v14 stage 1: the pre-flight and the smoke gate, both arms (#175, PR #184)

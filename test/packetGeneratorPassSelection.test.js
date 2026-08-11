@@ -321,6 +321,90 @@ describe('a full --pass build, end to end (the gate no test covered)', () => {
      * already dispatched, and dispatching required passing the gate that was in
      * force at the time. An exemption nobody can grant themselves is not one.
      */
+    /**
+     * reportBody() DROPS everything before a NO REPORT PRODUCED marker, which
+     * is only safe because the marker asserts there is no body to drop. Without
+     * this refusal a future author could put real content there and lose it
+     * with no error anywhere — a silent second way to be wrong, which is the
+     * shape build-packets.js's guards exist to prevent. Found reviewing #175's
+     * own change before merge.
+     */
+    test('a no-report file carrying prose BEFORE its marker is refused, not silently truncated', () => {
+        const rows = JSON.parse(fs.readFileSync(rowsFile, 'utf8'))
+        // Any row whose terminal already reads `failed` — the marker only
+        // applies to a run that ended without an accepted report.
+        const failed = rows.find((r) => /failed/.test(r.terminal))
+        expect(failed).toBeDefined()
+
+        const n = String(failed.row).padStart(2, '0')
+        const target = path.join(reportsDir, 'row-' + n + '.md')
+        const saved = fs.readFileSync(target, 'utf8')
+        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pass-noreport-'))
+        try {
+            fs.writeFileSync(
+                target,
+                'This prose would be discarded without a trace.\n\n---\nNO REPORT PRODUCED\nharness terminal error\n'
+            )
+            expect(() => gen.main(['--pass', PASS, '--out', tmp])).toThrow(/content BEFORE its no-report marker/)
+            expect(fs.readdirSync(tmp)).toEqual([])
+
+            // The marker alone, with nothing in front of it, is the legal shape.
+            fs.writeFileSync(target, '---\nNO REPORT PRODUCED\nharness terminal error\n')
+            const quiet = jest.spyOn(console, 'log').mockImplementation(() => {})
+            try {
+                gen.main(['--pass', PASS, '--out', tmp])
+            } finally {
+                quiet.mockRestore()
+            }
+            const built = fs.readFileSync(path.join(tmp, fs.readdirSync(tmp).find((f) => f.startsWith('row-' + n))), 'utf8')
+            expect(built).toMatch(/no report at all/i)
+            expect(built).toMatch(/harness terminal error/)
+        } finally {
+            fs.writeFileSync(target, saved)
+            fs.rmSync(tmp, { recursive: true, force: true })
+        }
+    })
+
+    /**
+     * A scorer-facing field must be a STRING. v14 rows 05-08 carried
+     * `target_execution: null` for seed 05, and four packets shipped
+     * "**Execution under diagnosis:** `null`" — a code-formatted identifier
+     * where the intended message was "there is none". Found by review of #175.
+     * The boundary is dispatch state, per §AM2, so this is the still-authorable
+     * half; the dispatched half is covered by the v14 build reporting instead.
+     */
+    test('a still-authorable pass REFUSES a non-string target_execution', () => {
+        const rows = JSON.parse(fs.readFileSync(rowsFile, 'utf8'))
+        const saved = JSON.stringify(rows, null, 2)
+        rows[0].target_execution = null
+        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pass-target-'))
+        try {
+            fs.writeFileSync(rowsFile, JSON.stringify(rows, null, 2))
+            expect(gen.existingPacketsIn(gen.resolvePaths(PASS).out)).toEqual([])
+            expect(() => gen.main(['--pass', PASS, '--out', tmp])).toThrow(/non-string `target_execution`/)
+            expect(fs.readdirSync(tmp)).toEqual([])
+        } finally {
+            fs.writeFileSync(rowsFile, saved)
+            fs.rmSync(tmp, { recursive: true, force: true })
+        }
+    })
+
+    test('a dispatched pass REPORTS a non-string target_execution instead of gating', () => {
+        // v14 is dispatched and rows 05-08 carry null by construction. It must
+        // build — a gate whose only remedy is forbidden by §T9 is a permanent
+        // red, not a gate.
+        const warned = []
+        const quiet = jest.spyOn(console, 'warn').mockImplementation((m) => warned.push(String(m)))
+        try {
+            expect(gen.buildAll('v14')).toHaveLength(20)
+        } finally {
+            quiet.mockRestore()
+        }
+        const report = warned.join('\n')
+        expect(report).toMatch(/target_execution/)
+        expect(report).toMatch(/dispatched/i)
+    })
+
     test('a still-authorable pass GATES on a row that names no discharging call', () => {
         const rows = JSON.parse(fs.readFileSync(rowsFile, 'utf8'))
         const saved = JSON.stringify(rows, null, 2)
@@ -355,6 +439,55 @@ describe('a full --pass build, end to end (the gate no test covered)', () => {
         expect(report).toMatch(/row 2:/)
         expect(report).toMatch(/row 4:/)
         expect(report).toMatch(/dispatched/i)
+    })
+
+    // §AN7 item 14 exists because #176 left buildAll('v13') permanently
+    // throwing and nothing noticed — a parallel path stayed green. Running the
+    // CLI once by hand is exactly the substitution that item warns about, so
+    // the v14 path is pinned here, where it runs on every suite.
+    test("buildAll('v14') builds all twenty rows (§AN7 item 14)", () => {
+        const quiet = jest.spyOn(console, 'warn').mockImplementation(() => {})
+        try {
+            expect(gen.buildAll('v14')).toHaveLength(20)
+        } finally {
+            quiet.mockRestore()
+        }
+    })
+
+    // The two shapes a `failed` row can take. Until v14 only the first existed,
+    // and a run that died BEFORE producing a body had nowhere truthful to go:
+    // the sole failure slot was labelled VALIDATOR REJECTION, which would have
+    // told twenty scorers the fix-report validator ran when it never did.
+    test('a failed row is satisfied by EITHER a validator rejection or a no-report marker', () => {
+        const quiet = jest.spyOn(console, 'warn').mockImplementation(() => {})
+        let built
+        try {
+            built = gen.buildAll('v14')
+        } finally {
+            quiet.mockRestore()
+        }
+        const byRow = (n) => built.find((p) => p.row.row === n)
+
+        // Rows 06 and 08: reasoning failed before any report body existed.
+        for (const n of [6, 8]) {
+            const p = byRow(n)
+            expect(p.row.terminal).toMatch(/failed/)
+            expect(p.body).toMatch(/no report at all/i)
+            expect(p.body).toMatch(/Harness terminal error, verbatim/)
+            // It must NOT claim a validator rejection it never had.
+            expect(p.body).not.toMatch(/validator rejection, verbatim/i)
+        }
+
+        // Row 12: the model DID produce a body and the validator rejected it.
+        const twelve = byRow(12)
+        expect(twelve.row.terminal).toMatch(/failed/)
+        expect(twelve.body).toMatch(/no accepted report/i)
+        expect(twelve.body).toMatch(/Harness validator rejection, verbatim/)
+        expect(twelve.body).not.toMatch(/no report at all/i)
+
+        // And a passing row carries neither shape.
+        expect(byRow(1).body).not.toMatch(/no report at all/i)
+        expect(byRow(1).body).not.toMatch(/validator rejection, verbatim/i)
     })
 
     /**

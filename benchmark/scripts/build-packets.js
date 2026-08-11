@@ -775,6 +775,31 @@ function reportHeader(row) {
 const REJECTION_SPLIT = /\n+-{3,}\nVALIDATOR REJECTION\n/
 
 /**
+ * The OTHER way a run can end with no accepted report, added for v14 (#175).
+ *
+ * Until v14 every `failed` row had been failed BY THE VALIDATOR: the model
+ * produced a report, the harness rejected it, and both halves went in the
+ * packet. v14 rows 06 and 08 failed EARLIER than that — the reasoning loop
+ * could not be parsed, so no report body was ever produced and the fix-report
+ * validator never ran. The old shape could not represent that: the only slot
+ * for a failure was labelled "VALIDATOR REJECTION", and putting a reasoning
+ * error there would have told twenty scorers something untrue about how the
+ * run failed.
+ *
+ * So a `failed` terminal is now satisfied by EITHER marker, and each one says
+ * what actually happened. This is additive: no row that was representable
+ * before is treated differently now. §AK left the adjacent case (`genai_down`
+ * with no report body) explicitly undecided; this does not decide it, it only
+ * gives the artifact a truthful shape.
+ *
+ * Unlike REJECTION_SPLIT this anchors at start-of-string as well as after a
+ * newline run: a rejection ALWAYS has a body in front of it, but a no-report
+ * file has nothing in front of it by definition, so the marker is the first
+ * thing in the file and a leading `\n+` would never match.
+ */
+const NO_REPORT_SPLIT = /(?:^|\n+)-{3,}\nNO REPORT PRODUCED\n/
+
+/**
  * The report body. Custom runs store a structured `fix_report`; native runs
  * emit markdown prose. Both are reproduced in the form the arm produced —
  * v9 did the same, and normalising one into the other would edit the artifact
@@ -783,13 +808,36 @@ const REJECTION_SPLIT = /\n+-{3,}\nVALIDATOR REJECTION\n/
 function reportBody(row, raw) {
     const out = []
 
+    const noReportSplit = raw.match(NO_REPORT_SPLIT)
+
     if (/failed/.test(row.terminal)) {
         out.push(
-            'This run terminated with **no accepted report**. What follows is the report body the model' +
-                " produced, verbatim, followed by the harness validator's verbatim rejection. **A rejected" +
-                ' report is still scored** — it is the only record of what the model produced.'
+            noReportSplit
+                ? 'This run terminated with **no report at all**. The reasoning loop failed before any' +
+                      ' report body was produced, so there is nothing the model wrote to show and the' +
+                      " harness's fix-report validator never ran. What follows is the harness's verbatim" +
+                      ' terminal error. **Score what the run produced, which is nothing** — that is itself' +
+                      ' the observation, not a gap in the record.'
+                : 'This run terminated with **no accepted report**. What follows is the report body the model' +
+                      " produced, verbatim, followed by the harness validator's verbatim rejection. **A rejected" +
+                      ' report is still scored** — it is the only record of what the model produced.'
         )
         out.push('')
+    }
+
+    if (noReportSplit) {
+        // Everything before the marker is DROPPED, and that is only safe because
+        // the marker asserts there is no report body to drop. buildAll() refuses
+        // to write a packet whose no-report file carries prose before the marker,
+        // so this branch cannot silently swallow model output -- the alternative
+        // was a discard nobody would notice, which is the shape this file's
+        // guards exist to prevent.
+        out.push('**Harness terminal error, verbatim:**')
+        out.push('')
+        out.push('```')
+        out.push(raw.slice(noReportSplit.index + noReportSplit[0].length).trim())
+        out.push('```')
+        return out.join('\n')
     }
 
     const split = raw.match(REJECTION_SPLIT)
@@ -1030,10 +1078,29 @@ function buildAll(pass) {
         // both are one manifest edit away.
         const raw = readInput(path.join(paths.reports, 'row-' + n + '.md'), paths.pass, "this row's report")
         const hasRejection = REJECTION_SPLIT.test(raw)
-        if (/failed/.test(row.terminal) !== hasRejection) {
+        const hasNoReport = NO_REPORT_SPLIT.test(raw)
+        // A `failed` terminal must be accounted for by exactly one of the two
+        // shapes, and a passing row by neither. Both markers at once is a
+        // manifest/report contradiction, not a richer record.
+        if (hasRejection && hasNoReport) {
+            mismatched.push(
+                name + ': the report carries BOTH a validator rejection and a no-report marker; ' +
+                    'a run either produced a body that was rejected or produced none at all'
+            )
+        } else if (hasNoReport && raw.slice(0, raw.match(NO_REPORT_SPLIT).index).trim()) {
+            // reportBody() drops everything before the marker. That is correct
+            // ONLY because the marker means there was no body -- so anything
+            // written there would be discarded without a trace. Refuse instead.
+            mismatched.push(
+                name + ': the report carries content BEFORE its no-report marker, which reportBody() ' +
+                    'would discard silently. A no-report file carries the marker and the harness error, ' +
+                    'nothing else; if the run DID produce a body, it is a validator rejection, not a no-report'
+            )
+        } else if (/failed/.test(row.terminal) !== (hasRejection || hasNoReport)) {
             mismatched.push(
                 name + ': terminal is "' + row.terminal + '" but the report ' +
-                    (hasRejection ? 'DOES' : 'does NOT') + ' carry a validator rejection'
+                    (hasRejection || hasNoReport ? 'DOES' : 'does NOT') +
+                    ' carry a validator rejection or a no-report marker'
             )
         }
 
@@ -1112,6 +1179,34 @@ function buildAll(pass) {
                 'argument in `note`, so section 5 promises the scorer an argument that section 6 ' +
                 'does not carry. Name the call and its argument in `note`. Deleting `operator_note` ' +
                 'is NOT the remedy — this check does not read it:\n  ' + list
+    )
+
+    // A scorer-facing field must be a STRING, or it renders as whatever
+    // String() makes of it. v14 rows 05-08 set `target_execution: null` for
+    // seed 05, which has no execution by design, and section 5 shipped
+    // "**Execution under diagnosis:** `null`" to four scorers — a code-formatted
+    // identifier where the intended message was "there is none". v12 got this
+    // right by writing the parenthesised description the `/^\(/` branch exists
+    // to render; nothing enforced it, so the next manifest simply did not.
+    //
+    // Carried through gateOrReport for §AM2's reason, not as a new mechanism:
+    // the boundary is DERIVED from dispatch state. v14 is dispatched, its
+    // manifest is frozen evidence (§T9), and this reports there; a pass still
+    // being authored can comply, so it refuses.
+    const nonString = built
+        .map((p) => p.row)
+        .filter((r) => typeof r.target_execution !== 'string')
+        .map((r) => 'row ' + r.row + ': `target_execution` is ' + JSON.stringify(r.target_execution) +
+            ', which renders into section 5 as the literal string')
+    gateOrReport(
+        nonString,
+        dispatched,
+        paths.pass,
+        (n, list) =>
+            'REFUSING TO WRITE ANY PACKET — ' + n + ' row(s) carry a non-string `target_execution`, ' +
+                'which section 5 renders verbatim into a scorer-facing field. A seed with no ' +
+                'execution takes a parenthesised description, e.g. ' +
+                '"(none — no execution plan was created)", NOT null:\n  ' + list
     )
 
     // The rubric must be identical across all twenty. Checked on the built
