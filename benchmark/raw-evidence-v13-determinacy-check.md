@@ -174,8 +174,53 @@ from `aia_trace` or the plan row, **never** from `aia_logs` (§AC7's tooling not
 Fresh bench ticket per rep for seeds 01 and 04 so rep 1's agent writes cannot contaminate rep 2
 (v9 §2's rule). Seeds 02 and 03 need no ticket. Seed 05 stays inactive per §AI3.
 
-| seed | rep | execution plan sys_id | trigger | plan state |
+### 2.1 The seed agents are invoked directly — only seed 05 has a trigger, and it is off by design
+
+**Checked before assuming, because v12's §2 column header ("trigger") reads as though the inserts
+fired the agents.** They do not. `sn_aia_trigger_configuration` where `target_table =
+x_snc_tsbench_ticket` returns exactly **one** record:
+
+| name | active | condition | trigger_flow |
+|---|---|---|---|
+| `Seed 05 Bench Ticket Created` (`bfb77d6c64884500a80203ee029436ee`) | **false** | `short_descriptionISNOTEMPTY` | `924c09a22b2203d817a6ffbeee91bf63` |
+
+That is seed 05's own seeded defect (§AI3), and it is the **only** trigger on the bench table. So
+inserting a ticket fires nothing: seeds 01 and 04 are invoked with `servicenow_aia_execute` against
+the ticket as `targetRecord`, and seeds 02 and 03 with a bare message. The insert creates the
+fixture; the invocation creates the execution.
+
+> **A second instance of the field trap, inside this same check.** `sn_aia_trigger_configuration`
+> has no `table_name` column — the field is **`target_table`** — and querying the wrong one returned
+> "Access denied: Insufficient rights to query records" on a table the same session reads without
+> difficulty. That is now twice in one pass (§1.7 was the first, on `sn_aia_message`). Treat
+> "Access denied" on this instance as **a bad field name until a bare `limit: 1` query proves
+> otherwise.**
+
+### 2.2 Bench ticket fixtures
+
+Four created, one per rep for seeds 01 and 04, all with `priority` **empty** at insert. Fresh per
+rep so rep 1's agent writes cannot contaminate rep 2 (v9 §2's rule).
+
+| seed | rep | ticket sys_id | short_description |
+|---|---|---|---|
+| 01 | 1 | `9182277e2bea0bd817a6ffbeee91bf31` | Payment gateway rejects every card transaction at checkout across all storefronts, revenue halted |
+| 01 | 2 | `5cc267be2bea0bd817a6ffbeee91bf8b` | VPN concentrator drops all remote sessions every ninety seconds, entire field workforce offline |
+| 04 | 1 | `64c2abbe2bea0bd817a6ffbeee91bf2f` | Meeting room display flickers with a magenta cast during video calls on the third floor |
+| 04 | 2 | `c5c2a77a2b624718f243fed2ce91bf25` | Nightly inventory reconciliation job omits the final warehouse in its output file |
+
+All four are newly worded rather than reused from v12, so no seeded execution in this pass shares a
+`short_description` with one a scorer may have seen.
+
+### 2.3 The executions
+
+| seed | rep | execution plan sys_id | invocation | plan state |
 |---|---|---|---|---|
+| 01 | 1 | `dfa22b7a2b624718f243fed2ce91bf12` (conversation `46a2677a2b624718f243fed2ce91bf67`) | `Seed 01 Ticket Prioritizer` on ticket `9182277e…` | in progress at time of writing |
+
+> **A read-staleness note, matching §3.0's warning in v12's file.** The plan for seed 01 rep 1 was
+> created at 01:22:54 and a `sys_created_on>=javascript:gs.minutesAgoStart(3)` query run immediately
+> afterwards returned **zero** records; the same query at `minutesAgoStart(10)` returned it. Do not
+> read an empty narrow-window result as "the agent did not fire".
 
 ---
 
