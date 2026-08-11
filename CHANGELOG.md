@@ -17,6 +17,35 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1105 — 2026-08-11
+
+### Changed — §A3 carries the terminated-run void condition (#174)
+
+- **A third void condition added to `benchmark/scorecard-template.md` §A3**: any seed, any harness,
+  where the platform execution closed `state: terminated` with `state_reason: execution_failed` (or
+  any other terminal state that ends the run before a report exists). An intact fixture does not
+  make that a valid `0` — a `0` is a report that failed the rubric, and there is no report.
+- **The two properties that made v13's ruling sound are now requirements on the operator**, not
+  remarks about one pass: the condition must be **symmetric** across harnesses, and it must be
+  **recorded before the replacement run is fired**. §A3's definition was widened from seed-state
+  only (*"the seed was not in the state its spec requires"*) to cover both ways a run can measure
+  nothing, and the condition list now separates the two seed-state conditions from the run-state one.
+- **§A3.4's floor checked, as #174 required.** It reads correctly with the new condition present.
+  Two clauses that lived only in the decision record are promoted alongside it, because a run-state
+  void makes both live for the first time: the floor is read **per arm** (§AC2 / §AI2), and it
+  counts **unrecoverable** voids at the close of the pass — a void whose replacement is valid costs
+  the denominator nothing.
+- **Provenance is in `benchmark/DECISION.md` §AK, not in §A3.** §A3 ships inside the slice copied
+  verbatim into every scorer packet, where `test/scorerPacketBlindRule.test.js` bans exactly the
+  citation #174 asked for — a `§` pointer out of the rubric, a pass named by version, a repository
+  path, and the past tense that says a run actually did this. The rule is written in
+  provenance-free standing voice; §AK carries the citation to §AJ4 and to §4.1 of
+  `benchmark/raw-evidence-v13-determinacy-check.md`, and states the general constraint: a rule that
+  reaches a scorer cannot carry its own history.
+- **No value moves (§T9).** No run fired, no packet re-scored, no instance touched. Row 05's void
+  ruling stands as made. `scoring-v13/`'s twenty packets carry the old §A3 and stay frozen — the
+  §AF1 no-clobber guard is what keeps them the record of what the scorers read.
+
 ## 2026.08.1104 — 2026-08-11
 
 ### Fixed — the unguarded half of §AF2: a call argument could hide in `operator_note` (#176)

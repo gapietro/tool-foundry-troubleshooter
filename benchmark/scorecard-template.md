@@ -458,11 +458,15 @@ a bound, not a defence, and it is the case to watch in the next pass.*
 
 ## A3. Void runs — a run that measured nothing
 
-A run is **void** when the seed was not in the state its spec requires, so the
-run tested something other than the seeded defect. It is neither a hit nor a
-miss, and scoring it either way corrupts the gate.
+A run is **void** when it measured nothing about the seeded defect. That happens
+two ways: the seed was not in the state its spec requires, so the run tested
+something other than the seeded defect; or the run ended without producing a
+report, so there is nothing for the rubric to read. Either way it is neither a
+hit nor a miss, and scoring it either way corrupts the gate.
 
-Known void conditions, both from the seed specs:
+Known void conditions. The first two are **seed-state** conditions and come from
+the seed specs. The third is a **run-state** condition: it belongs to no seed,
+and it binds every seed and every harness alike.
 
 - **Seed 5** — the `sn_aia_trigger_agent_usecase_m2m` gate was not turned on
   post-install, so *both* activation gates were off and the seed isolated
@@ -477,6 +481,29 @@ Known void conditions, both from the seed specs:
   the tool tests a malformed reference rather than an unmapped provider. A
   hardcoded value that MATCHES the instance's record is a valid install, not a
   void.
+- **Any seed, any harness — the execution terminated and produced no report.**
+  The platform execution closed `state: terminated` with `state_reason:
+  execution_failed`, or in any other terminal state that ends the run before a
+  report exists. An intact fixture does **not** make this a valid `0`: a `0` is a
+  report that failed the rubric, and here there is no report to fail it. The
+  condition is about the run's terminal state and **nothing about the quality of
+  the diagnosis** — a terminated execution is a real fact about operating that
+  harness, and it belongs in the operator record, but it is not a measurement of
+  the thing these columns grade.
+
+  Two properties are what make this condition safe to apply, and both are
+  requirements on the operator, not remarks:
+
+  **(a) It is symmetric.** It applies on identical terms whichever harness the
+  terminated run belongs to. A condition invoked for one harness's terminated
+  run and not another's is not this condition.
+
+  **(b) It is recorded before the replacement run is fired.** Voiding removes a
+  row that could only have taken a zero against an absent report, and it spends
+  one of the arm's capped re-runs; which of those two effects dominates is not
+  knowable in advance, so the classification must be committed while that is
+  still true. A void called after its effect on the comparison is visible is not
+  a void, whatever the terminal state says.
 
 **How to record one.** Put `void` in `passes_gate` — not `0` — write the reason
 in `notes`, and leave the four rubric columns blank. A blank rubric with a stated
@@ -542,6 +569,17 @@ reason is honest; a `0` is a measurement that did not happen.
    void rows already take this to exactly 8; a third puts the benchmark under its
    own floor. This is the case the whole column exists to make visible rather
    than let a low total hide it.
+
+   **The floor is read on one arm at a time, and it counts what could not be
+   made valid.** Where a pass runs two harnesses, each arm carries its own floor
+   against its own valid rows — one arm falling below it suppresses that arm's
+   gate figure, not the other's. And because rule 2 above requires a void to be
+   re-run rather than absorbed, a void whose replacement is valid costs the
+   denominator nothing: the floor bites on voids that **cannot** be made valid.
+   An arm may therefore finish with up to two unrecoverable voids and still be
+   evaluable, however many voids it encountered on the way there. A pass that
+   voids many rows and recovers them all is a costly pass, not an
+   under-powered one.
 
 ## B. Four further columns — required, not optional
 
