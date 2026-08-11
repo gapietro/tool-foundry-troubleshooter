@@ -128,7 +128,7 @@ const PACKET_SETS = [
         scanned: true,
         why:
             'The current pass (§AC). Unlike v9 these packets are generated rather than ' +
-            'hand-built: scripts/build-v12-packets.js redacts paths mechanically and then ' +
+            'hand-built: scripts/build-packets.js redacts paths mechanically and then ' +
             're-scans every emitted packet with a copy of the patterns below, refusing to ' +
             'write anything if one survives. That copy is deliberate rather than an import -- ' +
             'two independent copies disagreeing is a signal, one shared copy being wrong is ' +

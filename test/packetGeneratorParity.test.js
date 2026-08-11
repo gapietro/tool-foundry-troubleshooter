@@ -1,6 +1,6 @@
 /**
  * The packet generator carries a DELIBERATE copy of the packet guard's
- * repository-path patterns (benchmark/scripts/build-v12-packets.js, and
+ * repository-path patterns (benchmark/scripts/build-packets.js, and
  * scorerPacketBlindRule.test.js's PACKET_PATTERNS). The stated justification
  * is that "two independent copies disagreeing is a signal; one shared copy
  * being wrong is invisible."
@@ -29,7 +29,7 @@ const path = require('path')
 const { execFileSync } = require('child_process')
 
 const ROOT = path.join(__dirname, '..')
-const GENERATOR_PATH = path.join(ROOT, 'benchmark', 'scripts', 'build-v12-packets.js')
+const GENERATOR_PATH = path.join(ROOT, 'benchmark', 'scripts', 'build-packets.js')
 const GUARD_PATH = path.join(__dirname, 'scorerPacketBlindRule.test.js')
 
 const gen = require(GENERATOR_PATH)

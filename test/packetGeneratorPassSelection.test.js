@@ -1,0 +1,234 @@
+/**
+ * packetGeneratorPassSelection.test.js — the generator must build ANY pass's
+ * packets from one code path, and must not be able to build one pass's packets
+ * out of another pass's inputs.
+ *
+ * WHY THIS EXISTS. `build-packets.js` was `build-v12-packets.js` and hardcoded
+ * `scoring-v12`, `v12-reports`, `v12-rows.json` and `v12-advance-rulings.json`.
+ * DECISION.md §AI7 item 12 records what that cost: the v13 pre-registration
+ * named `scoring-v13/` as an artefact while no tool on disk could produce it,
+ * and §AI6 forbids touching packets until all twenty runs have terminated — so
+ * the operator would have discovered the gap after an hour of instance time, at
+ * the one moment the protocol says not to improvise.
+ *
+ * The fix is parameterisation, NOT a forked copy. The generator is the blind-rule
+ * boundary and the redaction layer; two copies drifting apart would make v12's
+ * 8-of-20 and v13's tally incomparable with nothing to flag it — the shape of
+ * §AD3's miscount. One code path, the pass as data.
+ *
+ * The default stays `v12` deliberately. v12's packets are dispatched, scored
+ * evidence and `packetGeneratorParity.test.js` drives the freeze guard through
+ * `main(['--out', tmp])` with no pass argument; a required flag would have
+ * changed v12's reproducibility to buy nothing.
+ */
+
+'use strict'
+
+const path = require('path')
+
+const ROOT = path.resolve(__dirname, '..')
+const BENCH = path.join(ROOT, 'benchmark')
+const gen = require(path.join(BENCH, 'scripts', 'build-packets.js'))
+
+describe('pass selection', () => {
+    test('the default pass is v12, and it resolves the dispatched directories', () => {
+        const p = gen.resolvePaths()
+        expect(p.pass).toBe('v12')
+        expect(p.out).toBe(path.join(BENCH, 'scoring-v12'))
+        expect(p.reports).toBe(path.join(BENCH, 'v12-reports'))
+        expect(p.rows).toBe(path.join(BENCH, 'v12-rows.json'))
+        expect(p.rulings).toBe(path.join(BENCH, 'v12-advance-rulings.json'))
+    })
+
+    test('--pass v13 resolves every one of the four inputs to v13', () => {
+        // All four move together or the generator silently mixes passes — v13
+        // rows against v12 rulings would ship a seed-05 ruling written for a
+        // different pass, which is #160's failure mode wearing a new hat.
+        const p = gen.resolvePaths('v13')
+        expect(p.pass).toBe('v13')
+        expect(p.out).toBe(path.join(BENCH, 'scoring-v13'))
+        expect(p.reports).toBe(path.join(BENCH, 'v13-reports'))
+        expect(p.rows).toBe(path.join(BENCH, 'v13-rows.json'))
+        expect(p.rulings).toBe(path.join(BENCH, 'v13-advance-rulings.json'))
+    })
+
+    test('no pass can resolve onto another pass\'s output directory', () => {
+        const v12 = gen.resolvePaths('v12')
+        const v13 = gen.resolvePaths('v13')
+        expect(v13.out).not.toBe(v12.out)
+        expect(v13.rows).not.toBe(v12.rows)
+        expect(v13.rulings).not.toBe(v12.rulings)
+        expect(v13.reports).not.toBe(v12.reports)
+    })
+
+    test('a malformed pass token is refused rather than resolved', () => {
+        // Without this, `--pass ../..` or `--pass v12/../scoring-v4` resolves to
+        // a path outside benchmark/ or onto frozen evidence. The freeze guard
+        // would catch a populated directory, but not an empty one.
+        for (const bad of ['', '../..', 'v12/..', 'scoring-v12', '12', 'V12', 'v12 ', 'v-12']) {
+            expect(() => gen.resolvePaths(bad)).toThrow(/pass/i)
+        }
+    })
+
+    test('a well-formed pass token is accepted regardless of whether its files exist yet', () => {
+        // Resolution is pure. The generator reports missing inputs when it reads
+        // them, with a message naming the file — not as an ENOENT from inside a
+        // JSON.parse. v99 has no files and must still resolve.
+        const p = gen.resolvePaths('v99')
+        expect(p.out).toBe(path.join(BENCH, 'scoring-v99'))
+    })
+
+    test('--pass with no value throws, like --out', () => {
+        expect(() => gen.main(['--pass'])).toThrow(/--pass needs/)
+    })
+
+    test('a missing input file names the file and the pass, not an ENOENT', () => {
+        // v99 exists nowhere. The operator hits this AFTER twenty runs, so the
+        // message has to say which artefact is absent.
+        //
+        // Driven through --out into a throwaway, NEVER bare. A bare main() here
+        // would rely on the code under test throwing: if the read guard ever
+        // regressed to a default-input fallback, this test would WRITE twenty
+        // packets into benchmark/scoring-v99/ as a side effect.
+        // packetGeneratorParity.test.js documents that exact accident as one
+        // that already happened once.
+        const fs = require('fs')
+        const os = require('os')
+        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pass-missing-'))
+        try {
+            expect(() => gen.main(['--pass', 'v99', '--out', tmp])).toThrow(/v99-rows\.json/)
+            expect(fs.readdirSync(tmp)).toEqual([])
+        } finally {
+            fs.rmSync(tmp, { recursive: true, force: true })
+        }
+    })
+
+    test('OUT stays exported and still points at the dispatched v12 directory', () => {
+        // packetGeneratorParity.test.js asserts on gen.OUT; parameterisation
+        // must not move it.
+        expect(gen.OUT).toBe(path.join(BENCH, 'scoring-v12'))
+    })
+})
+
+describe('the v13 advance-rulings channel (DECISION.md §AI7 item 11)', () => {
+    const fs = require('fs')
+    const RULINGS = path.join(BENCH, 'v13-advance-rulings.json')
+
+    // §AD5's standing rule: an advance ruling on a scoring column must ship IN
+    // THE PACKETS, not only in the pre-registration. That is #160. §AG1 records
+    // the cost of getting it wrong in v12 — rows 17 and 19 flagged
+    // `fix_usable_unedited` BECAUSE the ruling never reached the scorer, and two
+    // such flags land AI-3 exactly on its refutation boundary. An undelivered
+    // ruling would refute a prediction about the rubric using a defect in the
+    // delivery of the rubric.
+
+    test('the file exists, parses, and carries §AI4 Ruling 1 in the v12 shape', () => {
+        const rulings = JSON.parse(fs.readFileSync(RULINGS, 'utf8'))
+        expect(Array.isArray(rulings)).toBe(true)
+        expect(rulings).toHaveLength(1)
+        const r = rulings[0]
+        for (const k of ['id', 'source', 'column', 'applies_to', 'heading', 'text']) {
+            expect(Object.keys(r)).toContain(k)
+        }
+        expect(r.source).toMatch(/§AI4/)
+        expect(r.column).toBe('fix_usable_unedited')
+        expect(r.applies_to.seed).toBe('05')
+    })
+
+    test('it renders into a seed-05 packet and is absent from every other seed', () => {
+        const rulings = JSON.parse(fs.readFileSync(RULINGS, 'utf8'))
+        const rendered = gen.advanceRulings({ seed: '05' }, rulings)
+        expect(rendered).toContain('fix_usable_unedited')
+        expect(rendered).toContain('sn_aia_trigger_configuration.active')
+
+        for (const seed of ['01', '02', '03', '04']) {
+            const other = gen.advanceRulings({ seed: seed }, rulings)
+            expect(other).toContain('None for this seed')
+            expect(other).not.toContain('sn_aia_trigger_configuration.active')
+        }
+    })
+
+    test('its scorer-facing prose carries no operator verdict and no repository path', () => {
+        // The generator lints rulings on the same terms as every other
+        // scorer-facing field, and refuses to write ANY packet if one trips.
+        // Catching it here means catching it before the pass rather than after
+        // twenty runs have been spent.
+        const rulings = JSON.parse(fs.readFileSync(RULINGS, 'utf8'))
+        for (const r of rulings) {
+            expect(gen.verdictHits(r.heading, 'heading')).toEqual([])
+            expect(gen.verdictHits(r.text, 'text')).toEqual([])
+        }
+    })
+})
+
+
+describe('a full --pass build, end to end (the gate no test covered)', () => {
+    // The #168 review found the hardcoded runbook by hand-running `--pass v13`
+    // with synthetic inputs, because nothing exercised the whole path — only
+    // path resolution and the v12 default were covered. That gap is closed
+    // here: a build under a non-default pass, from staged inputs, all the way
+    // to twenty files and the printed runbook.
+    const fs = require('fs')
+    const os = require('os')
+
+    const V12_ROWS = path.join(BENCH, 'v12-rows.json')
+    const V12_REPORTS = path.join(BENCH, 'v12-reports')
+    const PASS = 'v98'
+    const rowsFile = path.join(BENCH, PASS + '-rows.json')
+    const reportsDir = path.join(BENCH, PASS + '-reports')
+    const rulingsFile = path.join(BENCH, PASS + '-advance-rulings.json')
+
+    // v98 inputs are cloned from v12's and removed in afterAll. They are
+    // scaffolding for the code path, not evidence: nothing here is scored, and
+    // the real v13 inputs arrive from the pass itself.
+    beforeAll(() => {
+        fs.writeFileSync(rowsFile, fs.readFileSync(V12_ROWS))
+        fs.copyFileSync(path.join(BENCH, 'v13-advance-rulings.json'), rulingsFile)
+        fs.mkdirSync(reportsDir, { recursive: true })
+        for (const f of fs.readdirSync(V12_REPORTS)) {
+            fs.copyFileSync(path.join(V12_REPORTS, f), path.join(reportsDir, f))
+        }
+    })
+
+    afterAll(() => {
+        fs.rmSync(rowsFile, { force: true })
+        fs.rmSync(rulingsFile, { force: true })
+        fs.rmSync(reportsDir, { recursive: true, force: true })
+    })
+
+    test('builds twenty packets and prints a runbook naming ITS OWN directory', () => {
+        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pass-e2e-'))
+        const lines = []
+        const quiet = jest.spyOn(console, 'log').mockImplementation((m) => lines.push(String(m)))
+        try {
+            gen.main(['--pass', PASS, '--out', tmp])
+            expect(gen.existingPacketsIn(tmp)).toHaveLength(20)
+
+            // The finding: an unconditional `scoring-v12` here tells the
+            // operator to make two edits that are already done, so the suite
+            // goes green while the new packets never enter the blind-rule scan.
+            const runbook = lines.join('\n')
+            expect(runbook).toContain(path.basename(tmp))
+            expect(runbook).not.toContain('scoring-v12')
+        } finally {
+            quiet.mockRestore()
+            fs.rmSync(tmp, { recursive: true, force: true })
+        }
+    })
+
+    test('a partially staged reports directory names the pass, not "?"', () => {
+        const missing = path.join(reportsDir, 'row-02.md')
+        const saved = fs.readFileSync(missing)
+        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pass-partial-'))
+        try {
+            fs.rmSync(missing)
+            expect(() => gen.main(['--pass', PASS, '--out', tmp])).toThrow(
+                new RegExp('MISSING INPUT for pass ' + PASS)
+            )
+            expect(fs.readdirSync(tmp)).toEqual([])
+        } finally {
+            fs.writeFileSync(missing, saved)
+            fs.rmSync(tmp, { recursive: true, force: true })
+        }
+    })
+})

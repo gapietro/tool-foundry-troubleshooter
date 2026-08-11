@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 /**
- * build-v12-packets.js — assembles the v12 scorer packets deterministically.
+ * build-packets.js — assembles one pass's scorer packets deterministically.
+ *
+ * Pass selection is `--pass v13`; the default is v12, whose packets are
+ * dispatched, scored evidence. See resolvePaths() for why the pass is data.
  *
  * WHY A SCRIPT. Twenty packets at ~33KB each is not hand work: the rubric
  * section must be byte-identical across all twenty (§AC7 holds scorer topology
@@ -9,15 +12,15 @@
  * Both properties are mechanical, so a script asserts them instead of a human
  * remembering them.
  *
- * INPUTS (all local — this script never touches the instance):
- *   v12-rows.json           the row manifest: arm, seed, rep, ids, measurements
- *   v12-advance-rulings.json  rulings made on a scoring column BEFORE the pass
- *   v12-reports/row-NN.md   each run's report VERBATIM, fetched from the
+ * INPUTS (all local — this script never touches the instance), per pass:
+ *   <pass>-rows.json        the row manifest: arm, seed, rep, ids, measurements
+ *   <pass>-advance-rulings.json  rulings made on a scoring column BEFORE the pass
+ *   <pass>-reports/row-NN.md  each run's report VERBATIM, fetched from the
  *                           instance separately and committed before this runs
  *   scorecard-template.md   rubric source (§A .. end of §A3)
  *   seeds/seed-0N-*.md      the scorer-facing spec
  *
- * OUTPUT: scoring-v12/row-NN-<arm>-seed-NN-run-N.md
+ * OUTPUT: scoring-<pass>/row-NN-<arm>-seed-NN-run-N.md
  *
  * ---------------------------------------------------------------------------
  * scoring-v12/ IS FROZEN. PASS --force TO WRITE OVER IT, AND DO NOT.
@@ -56,8 +59,61 @@ const fs = require('fs')
 const path = require('path')
 
 const BENCH = path.resolve(__dirname, '..')
-const OUT = path.join(BENCH, 'scoring-v12')
-const REPORTS = path.join(BENCH, 'v12-reports')
+
+// The pass is DATA, not a filename. This script was `build-v12-packets.js` with
+// all four inputs hardcoded, and DECISION.md §AI7 item 12 records what that
+// cost: the v13 pre-registration named `scoring-v13/` as an artefact while
+// nothing on disk could produce it, and §AI6 forbids touching packets until all
+// twenty runs terminate — so the gap would have surfaced after an hour of
+// instance time, at the one moment the protocol says not to improvise.
+//
+// Parameterised rather than forked. This file is the blind-rule boundary AND
+// the redaction layer; two copies drifting apart would make one pass's
+// ambiguity tally incomparable with another's and nothing would flag it.
+const DEFAULT_PASS = 'v12'
+
+/**
+ * Resolve a pass token to its four inputs/outputs. Pure — it never touches the
+ * filesystem, so a pass whose files do not exist yet still resolves, and the
+ * "which artefact is missing" error is raised at read time with the filename in
+ * it rather than as an ENOENT out of a JSON.parse.
+ *
+ * The token is validated because `--pass ../..` or `--pass v12/../scoring-v4`
+ * would otherwise resolve outside benchmark/ or onto frozen evidence, and the
+ * freeze guard only catches a directory that is already POPULATED.
+ */
+function resolvePaths(pass) {
+    const p = pass === undefined ? DEFAULT_PASS : pass
+    if (typeof p !== 'string' || !/^v\d+$/.test(p)) {
+        throw new Error(
+            'invalid pass token ' + JSON.stringify(p) + ' — a pass is "v" followed by digits ' +
+                '(v4, v9, v12, v13). Got something that could resolve outside benchmark/.'
+        )
+    }
+    return {
+        pass: p,
+        out: path.join(BENCH, 'scoring-' + p),
+        reports: path.join(BENCH, p + '-reports'),
+        rows: path.join(BENCH, p + '-rows.json'),
+        rulings: path.join(BENCH, p + '-advance-rulings.json'),
+    }
+}
+
+/** Read a required input, naming the artefact and the pass when it is absent. */
+function readInput(file, pass, what) {
+    if (!fs.existsSync(file)) {
+        throw new Error(
+            'MISSING INPUT for pass ' + pass + ' — ' + what + ' not found at ' + path.basename(file) + '.\n' +
+                'Expected ' + file + '. Every pass needs all four: <pass>-rows.json, ' +
+                '<pass>-advance-rulings.json, <pass>-reports/, and a free scoring-<pass>/.'
+        )
+    }
+    return fs.readFileSync(file, 'utf8')
+}
+
+// Kept exported and pointing at the dispatched v12 directory: the freeze tests
+// in packetGeneratorParity.test.js assert on it.
+const OUT = path.join(BENCH, 'scoring-' + DEFAULT_PASS)
 
 const RUBRIC_START = '## A. The 6-point rubric'
 const SEED_SECTION = '## 2. Seed specification'
@@ -505,7 +561,7 @@ function advanceRulings(row, rulings) {
     return out.join('\n')
 }
 
-function buildPacket(row, rubric, spec, rulings) {
+function buildPacket(row, rubric, spec, rulings, reportsDir, pass) {
     const n = String(row.row).padStart(2, '0')
     return [
         '# Scoring packet — Row ' + n,
@@ -549,7 +605,7 @@ function buildPacket(row, rubric, spec, rulings) {
         '',
         reportHeader(row),
         '',
-        reportBody(row, fs.readFileSync(path.join(REPORTS, 'row-' + n + '.md'), 'utf8').trimEnd()),
+        reportBody(row, readInput(path.join(reportsDir, 'row-' + n + '.md'), pass, "this row's report").trimEnd()),
         '',
         '---',
         '',
@@ -586,9 +642,10 @@ function buildPacket(row, rubric, spec, rulings) {
  * how two malformed v12 packets were caught before dispatch; no test found
  * them.
  */
-function buildAll() {
-    const rows = JSON.parse(fs.readFileSync(path.join(BENCH, 'v12-rows.json'), 'utf8'))
-    const rulings = JSON.parse(fs.readFileSync(path.join(BENCH, 'v12-advance-rulings.json'), 'utf8'))
+function buildAll(pass) {
+    const paths = resolvePaths(pass)
+    const rows = JSON.parse(readInput(paths.rows, paths.pass, 'the row manifest'))
+    const rulings = JSON.parse(readInput(paths.rulings, paths.pass, 'the advance-rulings file'))
 
     // A pre-registered ruling that matches no row ships in no packet — the
     // #160 failure mode, one typo away, and silent. Fail before building.
@@ -645,13 +702,13 @@ function buildAll() {
     for (const row of rows) {
         const n = String(row.row).padStart(2, '0')
         const name = 'row-' + n + '-' + row.arm + '-seed-' + row.seed + '-run-' + row.rep + '.md'
-        const body = buildPacket(row, rubric, specs[row.seed], rulings)
+        const body = buildPacket(row, rubric, specs[row.seed], rulings, paths.reports, paths.pass)
 
         // A `failed` terminal makes the packet PROMISE a validator rejection,
         // and a report carrying one on a passing row shows it with nothing to
         // explain it. Neither is visible from the built file at a glance, and
         // both are one manifest edit away.
-        const raw = fs.readFileSync(path.join(REPORTS, 'row-' + n + '.md'), 'utf8')
+        const raw = readInput(path.join(paths.reports, 'row-' + n + '.md'), paths.pass, "this row's report")
         const hasRejection = REJECTION_SPLIT.test(raw)
         if (/failed/.test(row.terminal) !== hasRejection) {
             mismatched.push(
@@ -745,9 +802,17 @@ function main(argv) {
     // it — a test that writes twenty packets the moment it regresses.
     const outFlag = args.indexOf('--out')
     if (outFlag >= 0 && !args[outFlag + 1]) throw new Error('--out needs a directory')
-    const out = outFlag >= 0 ? path.resolve(args[outFlag + 1]) : OUT
 
-    const built = buildAll()
+    const passFlag = args.indexOf('--pass')
+    if (passFlag >= 0 && !args[passFlag + 1]) throw new Error('--pass needs a pass token, e.g. --pass v13')
+    const paths = resolvePaths(passFlag >= 0 ? args[passFlag + 1] : undefined)
+
+    // `--out` still wins, because it is how the freeze guard is exercised on a
+    // throwaway directory. Without an explicit --out the destination is the
+    // pass's own directory, never DEFAULT_PASS's.
+    const out = outFlag >= 0 ? path.resolve(args[outFlag + 1]) : paths.out
+
+    const built = buildAll(paths.pass)
 
     // scoring-v12/ holds dispatched, scored evidence. See the header.
     const existing = existingPacketsIn(out)
@@ -770,9 +835,18 @@ function main(argv) {
 
     console.log('wrote ' + written.length + ' packets to ' + out)
     console.log('rubric section verified byte-identical across all of them')
+    // The directory THIS run wrote, not a hardcoded one. When these two lines
+    // said `scoring-v12` unconditionally, a `--pass v13` build printed a runbook
+    // whose two edits were ALREADY DONE — so the operator makes two no-op
+    // changes, sees `npm test` green, and concludes the gate passed while
+    // scoring-v13/ never enters PACKET_SETS and the blind-rule scan never covers
+    // a single v13 packet. §AI6 puts the operator here after twenty runs of
+    // instance time, which is the worst possible moment to be told the wrong
+    // thing confidently.
+    const dirName = path.basename(out)
     console.log('\nNEXT (all three, or the suite stays red):')
-    console.log('  1. add a PACKET_SETS entry: dir scoring-v12, scanned true, a why, packets: ' + written.length)
-    console.log('  2. extend the declared-membership literal to include scoring-v12')
+    console.log('  1. add a PACKET_SETS entry: dir ' + dirName + ', scanned true, a why, packets: ' + written.length)
+    console.log('  2. extend the declared-membership literal to include ' + dirName)
     console.log('  3. npm test — must be green BEFORE any packet is handed to a scorer')
 }
 
@@ -793,8 +867,12 @@ module.exports = {
     registerViolations,
     verdictHits,
     existingPacketsIn,
+    advanceRulings,
     buildAll,
     main,
+    resolvePaths,
+    readInput,
+    DEFAULT_PASS,
 }
 
 if (require.main === module) main(process.argv.slice(2))
