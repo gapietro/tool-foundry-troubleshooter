@@ -1784,3 +1784,14 @@ stable per-instance rate. The doubled-run benchmark protocol exists precisely fo
 Retained by decision, as on keynexus01: execution plans `7926bad32b1a83d0f243fed2ce91bf20`
 (E1) and `c9d63a932bda8b9417a6ffbeee91bfd0` (E2, the 5-call run — a known-answer specimen of
 premature completion).
+
+> **Consequence, recorded 2026-08-11 (#185).** Deleting all three rows above while retaining E2
+> makes E2's **layers 2, 3 and 7 permanently unsweepable** — the whole `agent_config` surface,
+> since that tool is the only one for instructions, tool definitions and trigger wiring, and the
+> probe run created no `sn_aia_usecase` either. It returns `empty` for `sn_aia_agent` and
+> `sn_aia_usecase` against it, correctly, forever. E2 is the benchmark's standing smoke gate
+> (`benchmark/README.md` step 3), so this shape is re-presented on every scored pass — and v14's
+> native arm misread it as a cross-scope privilege gap. The known answer (line 42) is unaffected;
+> the ruling is `benchmark/DECISION.md` §AP. **Retaining an execution does not retain its
+> diagnosability** — the plan's own `agent`/`usecase` fields are empty, so the record it ran under
+> is recoverable only from the error JSON in the message stream.
