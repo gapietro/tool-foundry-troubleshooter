@@ -419,14 +419,130 @@ describe('a reading does not ship without its fact (#176)', () => {
         expect(check({ row: 4, holds: 0, operator_note: 'x' })).toEqual([])
     })
 
-    test('F2: the hole this does NOT close is stated, not implied', () => {
+    test('F2: this check still only enforces consistency — the sibling enforces delivery', () => {
         // Conditioned on `operator_note`, so it enforces consistency between
-        // two fields — not delivery as such. Omitting the reading passes with
-        // `note` still null. Filed as #178; pinned here so the limit is a
-        // measured property of the guard rather than a claim in a docblock.
+        // two fields. That is now a DIVISION OF LABOUR rather than a hole:
+        // omitting the reading passes HERE and is caught by
+        // unnamedHoldViolations below (#178). Kept as a measured property so
+        // the boundary between the two checks stays a fact, not a docblock
+        // claim.
         expect(check({ row: 5, holds: 1, note: null })).toEqual([])
-        expect(fs.readFileSync(path.join(ROOT, 'benchmark', 'scripts', 'build-packets.js'), 'utf8'))
-            .toContain('#178')
+        expect(gen.unnamedHoldViolations({ row: 5, holds: 1, note: null })).toHaveLength(1)
+    })
+})
+
+/**
+ * THE OTHER HALF OF THE SAME RULE: a hold must name the call that discharged
+ * it, reading or no reading (#178, §AF2 via §AL5's Ruling 3).
+ *
+ * `withheldFactViolations` above is conditioned on `operator_note`, so deleting
+ * the operator's reading was the cheapest way to green a red build — a guard
+ * whose least-effort remedy is erasing the record. This check is unconditional
+ * on `holds > 0`, so that remedy no longer exists.
+ *
+ * WHY IT BINDS ONLY `note`. Every other scorer-facing field is either a
+ * measurement (`layers_swept`, `terminal`) or constant-shaped: `invocation`
+ * carries `x_snc_troubleshoot` on every row of every pass, so accepting it
+ * would let boilerplate discharge the requirement on rows that name nothing.
+ * `note` is the only scorer-facing field that is free prose about THIS row,
+ * and it is the field the sibling check's own remedy string already names.
+ *
+ * WHY TOOL NAMES DO NOT COUNT. Section 5 prints `distinct_tools` on every
+ * packet, so a `note` reading "schema_lookup answered the HOLD" delivers
+ * nothing a scorer did not already have. The fact owed is the ARGUMENT.
+ */
+describe('a hold does not ship without its discharging call (#178)', () => {
+    const V12 = JSON.parse(fs.readFileSync(path.join(ROOT, 'benchmark', 'v12-rows.json'), 'utf8'))
+    const V13 = JSON.parse(fs.readFileSync(path.join(ROOT, 'benchmark', 'v13-rows.json'), 'utf8'))
+    const check = (row) => gen.unnamedHoldViolations(row)
+
+    test('v12 rows 02 and 04 are the frozen violations, and they are named', () => {
+        // NOT backfilled (§T9). That two rows of a frozen pass fail a rule
+        // written after them is a fact about the rule's history, and this is
+        // where it is recorded as a measurement rather than a sentence.
+        const hits = V12.flatMap(check)
+        expect(hits).toHaveLength(2)
+        expect(hits[0]).toMatch(/^row 2:/)
+        expect(hits[1]).toMatch(/^row 4:/)
+    })
+
+    test('every other v12 held row names its argument', () => {
+        for (const row of V12.filter((r) => Number(r.holds) > 0 && ![2, 4].includes(r.row))) {
+            expect(check(row)).toEqual([])
+        }
+    })
+
+    test('v13 row 02 is a LIVE instance of the hole, not a hypothetical one', () => {
+        // #178 argued the hole from a counterfactual — "had v13's rows simply
+        // omitted their readings". Row 02 did not need to: it took a hold and
+        // carries NEITHER `note` NOR `operator_note`, so the sibling check —
+        // conditioned on `operator_note` — passes it in silence. It shipped to
+        // scorers with the hold unnamed and nothing flagged, which is the
+        // shipped defect minus its audit trail, already in the corpus.
+        const row = V13.find((r) => r.row === 2)
+        expect(row.holds).toBe(1)
+        expect(row.note).toBeUndefined()
+        expect(row.operator_note).toBeUndefined()
+        expect(gen.withheldFactViolations(row)).toEqual([])
+        expect(check(row)).toHaveLength(1)
+    })
+
+    test('the v13 held rows that name no argument are caught', () => {
+        // Six of ten. Rows 04/18/20 name one in `note`; row 06's names its own
+        // subject. The two checks overlap on 08/10/12/14/16 — a reading that
+        // ships without its fact is usually also a hold that ships without its
+        // call — and row 02 is caught by this one ALONE.
+        expect(V13.filter((r) => check(r).length).map((r) => r.row)).toEqual([2, 8, 10, 12, 14, 16])
+    })
+
+    test('a held row with no note is a violation, and naming the argument clears it', () => {
+        expect(check({ row: 1, holds: 1, note: null })).toHaveLength(1)
+        expect(check({ row: 1, holds: 1, note: 'The call that answered the HOLD was ' +
+            'schema_lookup on incident.priority.' })).toEqual([])
+    })
+
+    test('naming only the tool does not count — the fact owed is the argument', () => {
+        // `schema_lookup` is in section 5 of every packet in the pass.
+        expect(
+            check({
+                row: 1,
+                holds: 1,
+                distinct_tools: ['agent_trace', 'schema_lookup'],
+                note: 'The HOLD was answered by a schema_lookup call.',
+            })
+        ).toHaveLength(1)
+    })
+
+    test('a repetition count on a tool name does not smuggle it past the filter', () => {
+        // Section 5 renders `agent_config (x2)`; the manifest stores it that
+        // way, and an unstripped suffix would leave `agent_config` looking
+        // like an argument.
+        expect(
+            check({ row: 1, holds: 1, distinct_tools: ['agent_config (x2)'], note: 'agent_config was read twice.' })
+        ).toHaveLength(1)
+    })
+
+    test('a row that took no hold is out of scope', () => {
+        expect(check({ row: 1, holds: 0, note: null })).toEqual([])
+    })
+
+    test('an unreadable holds value refuses here too, for F6\'s reason', () => {
+        for (const holds of [undefined, null, 'many']) {
+            expect(() => check({ row: 4, holds: holds, note: 'x' })).toThrow(/unreadable `holds`/)
+        }
+    })
+
+    test('MEASURED RESIDUAL: v12 row 20 clears the check on `sys_id` alone', () => {
+        // The token shape cannot tell a call argument from any other platform
+        // identifier — the same deliberate breadth the sibling check declares,
+        // pointing the other way. Row 20 took a hold and its `note` names no
+        // call; it passes because the prose contains `sys_id`. Recorded as a
+        // measurement, not fixed: the fix would be a list of tokens that do not
+        // count, and this guard family's stated posture is no lists.
+        const row = V12.find((r) => r.row === 20)
+        expect(check(row)).toEqual([])
+        expect([...gen.identifiers(row.note)]).toContain('sys_id')
+        expect(row.note).not.toMatch(/schema_lookup on/)
     })
 })
 

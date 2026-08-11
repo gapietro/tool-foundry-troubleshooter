@@ -181,8 +181,23 @@ describe('a full --pass build, end to end (the gate no test covered)', () => {
     // v98 inputs are cloned from v12's and removed in afterAll. They are
     // scaffolding for the code path, not evidence: nothing here is scored, and
     // the real v13 inputs arrive from the pass itself.
+    //
+    // Rows 02 and 04 are PATCHED here, and the patch is the #178 rule working
+    // as designed rather than an inconvenience worked around. v12's own rows 02
+    // and 04 took a hold and named no discharging call; cloned into a pass with
+    // no dispatched packets, they are authorable again, so the gate binds them
+    // and refuses to build. The synthetic note below is scaffolding — it
+    // asserts nothing about what those two runs actually called, and v12's
+    // manifest on disk is untouched (§T9).
     beforeAll(() => {
-        fs.writeFileSync(rowsFile, fs.readFileSync(V12_ROWS))
+        const rows = JSON.parse(fs.readFileSync(V12_ROWS, 'utf8'))
+        for (const r of rows) {
+            if (r.row === 2 || r.row === 4) {
+                r.note = 'SCAFFOLDING, not evidence. The call that answered the HOLD was ' +
+                    'query_table on x_snc_tsbench_ticket.'
+            }
+        }
+        fs.writeFileSync(rowsFile, JSON.stringify(rows, null, 2))
         fs.copyFileSync(path.join(BENCH, 'v13-advance-rulings.json'), rulingsFile)
         fs.mkdirSync(reportsDir, { recursive: true })
         for (const f of fs.readdirSync(V12_REPORTS)) {
@@ -214,6 +229,91 @@ describe('a full --pass build, end to end (the gate no test covered)', () => {
             quiet.mockRestore()
             fs.rmSync(tmp, { recursive: true, force: true })
         }
+    })
+
+    /**
+     * #178: the delivery rule binds a pass that can still comply.
+     *
+     * §T9 forbids editing a frozen manifest, so on a DISPATCHED pass a rule
+     * written after it has no legal remedy — the check can only report. On a
+     * pass still being authored it gates, and nothing is written.
+     *
+     * The boundary is DERIVED from whether the pass's own directory already
+     * holds packets, never declared as a list of pass tokens. That distinction
+     * is the whole reason this shape was chosen over an exemption list, and
+     * the two tests below are the property, not the mechanism: the SAME
+     * manifest gates under a pass with no dispatched packets and reports under
+     * one that has them. The only way to reach the reporting branch is to have
+     * already dispatched, and dispatching required passing the gate that was in
+     * force at the time. An exemption nobody can grant themselves is not one.
+     */
+    test('a still-authorable pass GATES on a row that names no discharging call', () => {
+        const rows = JSON.parse(fs.readFileSync(rowsFile, 'utf8'))
+        const saved = JSON.stringify(rows, null, 2)
+        for (const r of rows) if (r.row === 2) delete r.note
+        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pass-held-'))
+        try {
+            fs.writeFileSync(rowsFile, JSON.stringify(rows, null, 2))
+            // benchmark/scoring-v98/ does not exist, so this pass is still
+            // being authored and the rule is one it can comply with.
+            expect(gen.existingPacketsIn(gen.resolvePaths(PASS).out)).toEqual([])
+            expect(() => gen.main(['--pass', PASS, '--out', tmp])).toThrow(/row 2:/)
+            expect(fs.readdirSync(tmp)).toEqual([])
+        } finally {
+            fs.writeFileSync(rowsFile, saved)
+            fs.rmSync(tmp, { recursive: true, force: true })
+        }
+    })
+
+    test('a dispatched pass REPORTS the same violation instead of gating', () => {
+        // v12 and v13 are dispatched, scored evidence. v12's rows 02 and 04
+        // name no discharging call and v13 fails both halves of the rule; both
+        // must stay readable as fixtures, and both must say so out loud.
+        const warned = []
+        const quiet = jest.spyOn(console, 'warn').mockImplementation((m) => warned.push(String(m)))
+        try {
+            expect(gen.buildAll('v12')).toHaveLength(20)
+            expect(gen.buildAll('v13')).toHaveLength(20)
+        } finally {
+            quiet.mockRestore()
+        }
+        const report = warned.join('\n')
+        expect(report).toMatch(/row 2:/)
+        expect(report).toMatch(/row 4:/)
+        expect(report).toMatch(/dispatched/i)
+    })
+
+    /**
+     * The destructive branch is unit-tested, NOT driven end to end.
+     *
+     * Reaching it through main() means pointing the writer at real dispatched
+     * evidence and relying on the guard under test to stop it — the accident
+     * packetGeneratorParity.test.js documents as one that already happened.
+     * Staging a throwaway benchmark/scoring-v9x/ is no better: the blind-rule
+     * suite asserts the scoring directories on disk against its declared
+     * membership, and jest runs files in parallel, so the directory would flake
+     * a guard in another worker. The decision is therefore a pure function over
+     * the three facts main() holds, and its truth table is the test.
+     */
+    describe('--force is not also an escape hatch from the delivery rule (#178)', () => {
+        const cases = [
+            [2, true, true, true, 'a dispatched pass, into its own directory, with violations'],
+            [0, true, true, false, 'the same, with no violations'],
+            [2, false, true, false, 'a pass that was never dispatched — the gate already threw'],
+            [2, true, false, false, 'a scratch rebuild into --out, which destroys nothing'],
+        ]
+
+        test.each(cases)('%i violation(s), dispatched=%s, ownDirectory=%s → refuses=%s (%s)',
+            (violations, dispatched, ownDirectory, refuses) => {
+                const r = gen.forceRefusal(violations, dispatched, ownDirectory)
+                expect(Boolean(r)).toBe(refuses)
+                if (refuses) expect(r).toMatch(/--force/)
+            })
+
+        test('main() consults it, rather than carrying a second copy of the rule', () => {
+            const src = fs.readFileSync(path.join(BENCH, 'scripts', 'build-packets.js'), 'utf8')
+            expect(src.slice(src.indexOf('function main('))).toContain('forceRefusal(')
+        })
     })
 
     test('a partially staged reports directory names the pass, not "?"', () => {

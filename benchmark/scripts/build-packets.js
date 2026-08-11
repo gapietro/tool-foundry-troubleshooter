@@ -453,19 +453,16 @@ function registerViolations(row) {
  * answerable. Constant prose and shared specs cannot deliver a row-specific
  * fact.
  *
- * WHAT IT DOES NOT DO, AND THE HOLE IS REAL. It is conditioned on
- * `operator_note` being present, so it enforces CONSISTENCY BETWEEN TWO FIELDS
- * rather than delivery as such. Had v13's rows 08/10/12/14 simply omitted their
- * readings, this check would pass with `note` still null and section 6 still
- * reading "No run-specific notes." — the shipped defect, minus its audit trail.
- * Worse, deleting the reading is the CHEAPEST way to green a red build, so the
- * incentive points at erasing the operator's record (review of #177, F2).
- *
- * The unconditional check — `holds > 0` requires a scorer-facing field to name
- * the discharging call, reading or no reading — is NOT added here because it
- * reddens v12 rows 02 and 04, which took a hold and wrote no note. That makes
- * it a change to a frozen fixture's contract and to #168's `--pass v12` parity
- * check, which is a §T9-adjacent decision and not a slip-in. Filed as #178.
+ * WHAT IT DOES NOT DO — AND ITS OTHER HALF IS NOW `unnamedHoldViolations`.
+ * This check is conditioned on `operator_note` being present, so on its own it
+ * enforces CONSISTENCY BETWEEN TWO FIELDS rather than delivery as such. Had
+ * v13's rows 08/10/12/14 simply omitted their readings, it would pass with
+ * `note` still null and section 6 still reading "No run-specific notes." — the
+ * shipped defect, minus its audit trail — and deleting the reading was the
+ * CHEAPEST way to green a red build, pointing the incentive at erasing the
+ * operator's record (review of #177, F2). `unnamedHoldViolations` below closes
+ * that, unconditionally on `holds > 0` (#178). The two stay separate because
+ * they fail on opposite errors and take opposite remedies.
  *
  * DELIBERATELY BROAD, THE SAME POSTURE AS THE LINT ABOVE. The token shape
  * cannot tell a call argument from any other identifier, so an `operator_note`
@@ -517,20 +514,29 @@ function rowVisibleText(row) {
     return parts.filter((p) => typeof p === 'string').join(' ')
 }
 
-/** @param {Object} row the row manifest entry */
-function withheldFactViolations(row) {
-    // Fails CLOSED on an unreadable `holds`, unlike the `> 0` comparison it
-    // replaced: a row omitting the field yielded NaN, skipped the check, and
-    // rendered "Harness HOLDs: undefined" into section 5 (review of #177, F6).
-    // Every other check in `buildAll` refuses rather than skips.
+/**
+ * `holds` as a number, REFUSING rather than skipping when it cannot be read.
+ *
+ * Fails CLOSED, unlike the bare `> 0` comparison it replaced: a row omitting
+ * the field yielded NaN, skipped the check, and rendered "Harness HOLDs:
+ * undefined" into section 5 (review of #177, F6). Every other check in
+ * `buildAll` refuses rather than skips. Shared by both delivery checks, so
+ * neither can regress to the skipping form on its own.
+ */
+function readHolds(row) {
     if (row.holds === undefined || row.holds === null || !Number.isFinite(Number(row.holds))) {
         throw new Error(
             'REFUSING TO WRITE ANY PACKET — row ' + row.row + ' has an unreadable `holds` value ' +
-                '(' + JSON.stringify(row.holds) + '). Section 5 renders it, and the withheld-fact ' +
-                'check is scoped by it.'
+                '(' + JSON.stringify(row.holds) + '). Section 5 renders it, and both delivery ' +
+                'checks are scoped by it.'
         )
     }
-    if (Number(row.holds) <= 0 || !row.operator_note) return []
+    return Number(row.holds)
+}
+
+/** @param {Object} row the row manifest entry */
+function withheldFactViolations(row) {
+    if (readHolds(row) <= 0 || !row.operator_note) return []
 
     // SUBSTRING, not set membership: a `note` naming the more specific
     // `x_snc_tsbench_routing.assignment_group` delivers a reading that names the
@@ -544,6 +550,139 @@ function withheldFactViolations(row) {
         'row ' + row.row + ': `operator_note` reads ' + withheld.map((t) => '`' + t + '`').join(', ') +
             ', which no row-specific scorer-visible field names — the reading ships without the fact',
     ]
+}
+
+/**
+ * A HOLD MAY NOT SHIP WITHOUT ITS DISCHARGING CALL (#178).
+ *
+ * The unconditional half of §AF2's delivery requirement, and the half the
+ * check above cannot reach: `holds > 0` requires the ARGUMENT of the call that
+ * answered the hold to be named in `note`, reading or no reading. Without it,
+ * deleting `operator_note` greens a red build — a guard whose least-effort
+ * remedy is erasing the operator's record, one step from the "second and silent
+ * way to be unguarded" §AF2's own note rules out.
+ *
+ * WHY THE REQUIREMENT IS STRUCTURAL, not a preference. §AL3's Ruling 2 puts the
+ * targeting judgement — did this run diagnose AT the layer it reached — with
+ * the scorer, because the harness cannot hold both operands. §AL5's Ruling 3
+ * follows: a rubric asked to decide that from a packet naming the layer and
+ * hiding the table is being asked to score a fact it was not shown.
+ *
+ * WHY ONLY `note`. Of the scorer-facing fields, `layers_swept` and `terminal`
+ * are measurements and `invocation` is constant-shaped — it carries
+ * `x_snc_troubleshoot` on every row of every pass, so accepting it would let
+ * boilerplate discharge the requirement on a row that names nothing. `note` is
+ * the only scorer-facing field that is free prose about THIS row, and it is
+ * already the field the sibling check's remedy string names.
+ *
+ * WHY TOOL NAMES DO NOT COUNT. Section 5 prints `distinct_tools` on every
+ * packet, so "schema_lookup answered the HOLD" delivers a scorer nothing it did
+ * not already have. The fact owed is the argument; the tool name is the same
+ * boilerplate F1 stopped this family reporting as withheld.
+ *
+ * MEASURED RESIDUAL, accepted on the same terms as the sibling's dotted
+ * hostname: the token shape cannot tell a call argument from any other platform
+ * identifier, so v12 row 20 — a held row whose `note` names no call — clears
+ * this check on the word `sys_id` in its prose. The fix would be a list of
+ * tokens that do not count, and no lists is this family's stated posture.
+ *
+ * WHICH PASSES IT BINDS is decided in `buildAll`, not here: this function is
+ * pure over a row, and §T9 is what makes a dispatched pass unable to comply.
+ */
+function unnamedHoldViolations(row) {
+    if (readHolds(row) <= 0) return []
+
+    // `agent_config (x2)` is how section 5 renders a repeated call, and the
+    // manifest stores the suffix. Left on, the bare tool name would read as an
+    // argument.
+    const tools = new Set(
+        (Array.isArray(row.distinct_tools) ? row.distinct_tools : [])
+            .map((t) => String(t).replace(/\s*\(x\d+\)\s*$/, '').toLowerCase())
+    )
+    if ([...identifiers(row.note)].some((t) => !tools.has(t))) return []
+
+    return [
+        'row ' + row.row + ': `holds` is ' + row.holds + ' but `note` names no call argument — ' +
+            'the hold ships without the call that discharged it',
+    ]
+}
+
+/**
+ * §T9 IN CODE: A RULE BINDS A PASS THAT CAN STILL COMPLY (#178).
+ *
+ * A dispatched pass's manifest is frozen evidence — §T9 forbids editing it, and
+ * backfilling one to green a later rule is forbidden outright. So a violation
+ * of a rule written after dispatch has NO LEGAL REMEDY, and a gate with no
+ * remedy is not a gate: it is a permanent red, which is the condition that
+ * teaches a team to stop reading reds. On a dispatched pass the check reports.
+ * On a pass still being authored it refuses, and nothing is written.
+ *
+ * THE BOUNDARY IS DERIVED, NOT DECLARED, and that is the whole reason this
+ * shape was chosen over versioning the rule by pass token. There is no list of
+ * exempt passes to extend and no calendar to argue about: the reporting branch
+ * is reachable only by a pass that has already dispatched its packets, and
+ * dispatching them required passing whatever gate was in force at the time.
+ * An exemption nobody can grant themselves is not the "second and silent way to
+ * be unguarded" §AF2's note distrusts. What it costs is stated in §AM: the
+ * frozen pass's violations must be pinned by a test, or reporting them out loud
+ * degrades into printing them where nobody looks.
+ *
+ * @param {string[]} violations one line per violating row
+ * @param {boolean} dispatched whether this pass's packets are already on disk
+ * @param {string} pass the pass token, for the report header
+ * @param {(n: number, list: string) => string} refusal builds the gate's message
+ */
+function gateOrReport(violations, dispatched, pass, refusal) {
+    if (!violations.length) return
+    const list = violations.join('\n  ')
+    if (!dispatched) throw new Error(refusal(violations.length, list))
+    console.warn(
+        '\nREPORTED, NOT REFUSED — pass ' + pass + ' is dispatched, so its manifest is frozen ' +
+            'evidence (§T9) and these ' + violations.length + ' row(s) have no remedy. Recorded ' +
+            'here rather than fixed; do NOT backfill the manifest:\n  ' + list + '\n'
+    )
+}
+
+/**
+ * Whether this pass's packets have already been dispatched.
+ *
+ * ONE definition, consulted by `buildAll` (which branch a violation takes) and
+ * by `main` (whether --force may overwrite). Two copies of a predicate this
+ * load-bearing is the drift shape `packetGeneratorParity.test.js` exists to
+ * catch, and here there would be nothing to compare the copies against.
+ *
+ * Note it reads the PASS's own directory, never `--out`: dispatch is a property
+ * of the pass, not of where a given run happens to write.
+ */
+function isDispatched(paths) {
+    return existingPacketsIn(paths.out).length > 0
+}
+
+/**
+ * Whether `--force` may rebuild a pass into its own dispatched directory.
+ *
+ * `--force` exists to overwrite the freeze check, and it must not also be a way
+ * around the delivery rule: the reporting branch below is granted to a
+ * dispatched pass because §T9 leaves it no remedy, and a rebuild that WRITES is
+ * the one act that would turn "no remedy" into "no rule".
+ *
+ * Scoped to the pass's own directory. A scratch rebuild under `--out` reads
+ * evidence and destroys nothing, and it is how the freeze guard itself is
+ * exercised without pointing a writer at real packets.
+ *
+ * Pure over the three facts main() holds, so its truth table is testable
+ * without staging a directory the blind-rule suite would then find on disk.
+ * Returns the refusal text, or null.
+ */
+function forceRefusal(violationCount, dispatched, intoOwnDirectory) {
+    if (!violationCount || !dispatched || !intoOwnDirectory) return null
+    return (
+        'REFUSING TO WRITE ANY PACKET — this pass is dispatched and ' + violationCount +
+        ' of its rows violate the §AF2 delivery rule, so the build reported rather than refused ' +
+        '(§T9: a frozen manifest cannot comply). --force overwrites the freeze check, not that ' +
+        'rule. Rebuilding these packets in place would destroy the record of what the scorers ' +
+        'actually read AND ship the violation as current output. Build a new pass instead.'
+    )
 }
 
 /**
@@ -799,6 +938,10 @@ function buildAll(pass) {
     const rows = JSON.parse(readInput(paths.rows, paths.pass, 'the row manifest'))
     const rulings = JSON.parse(readInput(paths.rulings, paths.pass, 'the advance-rulings file'))
 
+    // Whether this pass has already been dispatched — DERIVED, never declared.
+    // See gateOrReport for what it decides and why it is not an exemption list.
+    const dispatched = isDispatched(paths)
+
     // A pre-registered ruling that matches no row ships in no packet — the
     // #160 failure mode, one typo away, and silent. Fail before building.
     const orphans = rulings.filter((r) => !rows.some((row) => row.seed === r.applies_to.seed))
@@ -917,20 +1060,34 @@ function buildAll(pass) {
         throw new Error('REFUSING TO WRITE ANY PACKET — advance-ruling delivery check failed:\n  ' + missing.join('\n  '))
     }
 
-    // The other half of §AF2 (#176). Reported SEPARATELY from the register lint
-    // above: the two fail on opposite errors — a reading that reached a
-    // scorer-facing field, and a fact that never reached one — and folding them
-    // into one message would let a single remedy read as the fix for both.
-    const withheld = built.flatMap((p) => withheldFactViolations(p.row))
-    if (withheld.length) {
-        throw new Error(
-            'REFUSING TO WRITE ANY PACKET — ' + withheld.length + ' row(s) carry a reading in ' +
+    // The other half of §AF2 (#176 + #178). Reported SEPARATELY from the
+    // register lint above, and from each other: the three fail on different
+    // errors — a reading that reached a scorer-facing field, a reading whose
+    // fact never reached one, and a hold whose call was never named — and
+    // folding them into one message would let a single remedy read as the fix
+    // for all of them.
+    gateOrReport(
+        built.flatMap((p) => withheldFactViolations(p.row)),
+        dispatched,
+        paths.pass,
+        (n, list) =>
+            'REFUSING TO WRITE ANY PACKET — ' + n + ' row(s) carry a reading in ' +
                 '`operator_note` whose subject no scorer can tie to THIS row. Name the call and its ' +
                 'argument in `note`, then keep the reading where it is. (A shared seed spec naming ' +
                 'the same table does not count — it says nothing about which call this row\'s hold ' +
-                'discharged.):\n  ' + withheld.join('\n  ')
-        )
-    }
+                'discharged.):\n  ' + list
+    )
+
+    gateOrReport(
+        built.flatMap((p) => unnamedHoldViolations(p.row)),
+        dispatched,
+        paths.pass,
+        (n, list) =>
+            'REFUSING TO WRITE ANY PACKET — ' + n + ' row(s) took a harness HOLD and name no call ' +
+                'argument in `note`, so section 5 promises the scorer an argument that section 6 ' +
+                'does not carry. Name the call and its argument in `note`. Deleting `operator_note` ' +
+                'is NOT the remedy — this check does not read it:\n  ' + list
+    )
 
     // The rubric must be identical across all twenty. Checked on the built
     // bodies, before writing, for the same reason as the leak scan.
@@ -985,6 +1142,18 @@ function main(argv) {
 
     // scoring-v12/ holds dispatched, scored evidence. See the header.
     const existing = existingPacketsIn(out)
+
+    // A dispatched pass whose rows violate the delivery rule was REPORTED
+    // rather than refused, because §T9 leaves it no remedy. --force must not
+    // convert that into a licence to rebuild it in place (#178).
+    const refusal = forceRefusal(
+        built.flatMap((p) => withheldFactViolations(p.row)).length +
+            built.flatMap((p) => unnamedHoldViolations(p.row)).length,
+        isDispatched(paths),
+        out === paths.out
+    )
+    if (force && refusal) throw new Error(refusal)
+
     if (existing.length && !force) {
         throw new Error(
             'REFUSING TO WRITE ANY PACKET — ' + existing.length + ' packet(s) already exist in ' + out + '.\n' +
@@ -1035,6 +1204,8 @@ module.exports = {
     reportBody,
     registerViolations,
     withheldFactViolations,
+    unnamedHoldViolations,
+    forceRefusal,
     identifiers,
     verdictHits,
     existingPacketsIn,

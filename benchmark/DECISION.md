@@ -6296,3 +6296,117 @@ backfilling either manifest to make a later rule pass.
   *usefully* on every tool — only that the column exists and is populated by `_write`. A targeting
   check built later must verify per-tool coverage before trusting it; this section needed only the
   weaker claim that the data is not absent.
+
+---
+
+## AM. The delivery rule binds a pass that can still comply (`2026.08.1107`, #178)
+
+§AL5's Ruling 3 settled the **substance** of #178 — the discharging call's argument must reach the
+scorer — and left it one question: **which passes the requirement binds**, given that it reddens v12
+rows 02 and 04. This section answers that, adds the check, and records what the answer costs.
+
+### AM1. The hole was live in v13, not hypothetical
+
+#178 argued from a counterfactual: *"had v13's rows 08/10/12/14 simply omitted their readings, the
+build would pass today with `note` still null."* It did not need the counterfactual. **v13 row 02
+took a hold and carries neither `note` nor `operator_note`**, so `withheldFactViolations` — which is
+conditioned on `operator_note` being present — passes it in silence. It was dispatched to scorers
+with its hold unnamed, and no guard said anything.
+
+That moves the argument off incentives and onto evidence. The perverse incentive #178 names (deleting
+`operator_note` is the cheapest way to green a red build) is real and remains the reason the check is
+unconditional, but it is no longer the only reason: the conditional form has already let a held row
+ship unnamed, once, in the corpus §AJ6's open question depends on.
+
+Cross-tabulating the two checks over v13's ten held rows, which is what makes the division of labour
+visible rather than asserted:
+
+| caught by | v13 rows |
+|---|---|
+| `withheldFactViolations` only | 06, 18 |
+| both | 08, 10, 12, 14, 16 |
+| `unnamedHoldViolations` only | **02** |
+| neither | 04, 20 |
+
+### AM2. Ruling — the boundary is authorability, and it is DERIVED
+
+**A delivery guard refuses on a pass that can still comply, and reports on one that cannot.**
+Mechanically: the pass's own `scoring-<pass>/` is empty → refuse, nothing written; it already holds
+packets → `console.warn` and build.
+
+The reasoning is §T9's, followed to its conclusion. §T9 forbids editing a frozen manifest, and #178's
+own constraints forbid backfilling one to make a later rule pass. So on a dispatched pass a rule
+written after dispatch has **no legal remedy** — and a gate whose only remedy is forbidden is not a
+gate, it is a permanent red. Permanent reds are how a team learns to stop reading reds, which would
+cost more than this rule buys.
+
+**Why this is not #178's option 2.** Option 2 versions the requirement by pass token, and the issue
+is right that a pass-scoped carve-out is "an exemption with a calendar attached" — precisely the
+shape §AF2's note distrusts. The difference is where the boundary comes from. There is no list here
+and no cutoff version: the reporting branch is reachable **only** by a pass that has already
+dispatched its packets, and dispatching them required passing whatever gate was in force at the time.
+An exemption nobody can grant themselves is not a second and silent way to be unguarded. The
+distinction generalises, and is the reason to record it: **a carve-out derived from a state the
+guarded party cannot enter at will is a different object from one written down as a name.** It is
+the same move §AL3 made for guards — enforce only over operands the guarded party cannot author —
+applied to the guard's own scope rather than to its comparison.
+
+**Why not option 1.** Binding it everywhere makes v12 unbuildable, and v12's `buildAll()` backs the
+freeze tests, the terminal-state check, the advance-ruling delivery tests and #168's byte-identical
+`--pass v12` parity check. The precedent is already visible and is an argument *against* option 1
+rather than for it: #176 left `buildAll('v13')` permanently throwing, and nothing noticed, because no
+test or parity path calls it. A rule enforced where nobody looks is indistinguishable from no rule.
+
+**Why not option 3.** It keeps the incentive pointed at erasing the operator's record, and AM1 shows
+the conditional form has already failed once in the corpus.
+
+**`--force` is not a way around this.** It exists to overwrite the freeze check; a dispatched pass
+whose rows violate the rule cannot be rebuilt into its own directory at all. Otherwise the reporting
+branch — granted because there is no remedy — would itself become the remedy. A scratch rebuild under
+`--out` is unaffected: it reads evidence and destroys nothing.
+
+### AM3. What the check requires, and where it is deliberately narrow
+
+`holds > 0` requires **`note` to name a platform identifier that is not one of this row's tool
+names**. Two bounds, both load-bearing:
+
+- **Only `note`.** Of the scorer-facing fields, `layers_swept` and `terminal` are measurements and
+  `invocation` is constant-shaped — it carries `x_snc_troubleshoot` on every row of every pass, so
+  accepting it would let boilerplate discharge the requirement on a row that names nothing.
+- **Tool names do not count.** Section 5 prints `distinct_tools` on every packet, so *"schema_lookup
+  answered the HOLD"* delivers a scorer nothing it did not already have. The fact owed is the
+  argument. This is F1's finding from the #177 review, applied in the opposite direction.
+
+### AM4. What this costs, stated rather than implied
+
+- **A measured residual, accepted on the sibling's terms.** The token shape cannot tell a call
+  argument from any other platform identifier, so **v12 row 20 clears the check on the word `sys_id`
+  in its prose** — a held row whose `note` names no call. The fix would be a list of tokens that do
+  not count, and no lists is this family's stated posture (§AF2). Recorded as a measurement.
+- **The warning channel is permanent for two passes.** v12's and v13's violations can never be
+  fixed, so their report fires on every build of them, forever. That is habituation risk, and it is
+  bounded by there being nothing else in the channel: an authorable pass never warns, it throws.
+- **A warning nothing asserts is a report printed where nobody looks** — the failure #176's two
+  same-direction guards already demonstrated. So the frozen violations are pinned **by row number**
+  in `test/packetGeneratorParity.test.js`: v12 rows 02/04, v13 rows 02/08/10/12/14/16.
+- **The destructive branch is unit-tested, not driven end to end.** Reaching the `--force` refusal
+  through `main()` means pointing the writer at real dispatched evidence and trusting the guard under
+  test to stop it — an accident that already happened once and is documented in the parity suite.
+  Staging a throwaway `benchmark/scoring-v9x/` is no better: the blind-rule suite compares the
+  scoring directories on disk against its declared membership, and jest runs files in parallel, so
+  the directory would flake a guard in another worker. The decision is a pure function over the three
+  facts `main()` holds, and its truth table is the test.
+
+### AM5. What this does not establish
+
+- **No v12 or v13 value moves, and neither manifest is backfilled** (§T9). That two v12 rows and six
+  v13 rows fail a rule written after them is a fact about the rule's history, recorded as a
+  measurement, not a defect in the manifests.
+- **It does not make v13's custom arm assessable.** §AJ5a's qualification and §AL6's first bullet
+  stand unchanged: the five off-fixture rows stay unassessed until a pass scores them with the
+  argument visible. This closes the gap for the *next* pass; it repairs nothing already scored.
+- **It measures nothing about the instrument.** No run was fired. The cross-tab in AM1 is a read of
+  two manifests at this commit.
+- **It does not claim `note` is the right field forever.** It is the only scorer-facing field that is
+  free prose about the row today. A future pass that adds another would have to widen the check
+  deliberately, and the widening is where `invocation`'s constant-shape problem would return.
