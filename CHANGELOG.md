@@ -17,6 +17,50 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1008 — 2026-08-10
+
+### Added
+
+- **The v13 determinacy check is pre-registered (#166, `DECISION.md` §AI).** Discharges §AH7's
+  standing open item — *"The next scored pass is still not scheduled, sized or pre-registered"* —
+  which had closed six consecutive sections (§AC–§AH). **No run fired, no packet was scored, no
+  instance was touched, and no v12 number moves.**
+- **The pass is framed as a determinacy check rather than a milestone measurement**, inverting every
+  prior scored pass. Primary outcome is the packet-level `ambiguous` tally across 20 rows against
+  v12's 8-of-20 (§AD3) and v9's 3-of-12 (§T2). Six predictions are filed, **all on determinacy and
+  none on `passes_gate`** — the withheld gate prediction is recorded as a row on the prediction table
+  so the omission is visible rather than inferred.
+- **Six rulings fixed in advance.** Rulings 1–3 carry from §AC (seed-05 `fix_usable_unedited`, the
+  per-arm §A3.4 floor, the milestone criterion). Ruling 4 fixes what counts as a flag, at row and
+  column level, and sends the column tally to a hand-curated `v13-ambiguity-flags.json` because the
+  `### ambiguity` sections are prose no regex can parse — the miscount §AD3 corrected before merge.
+  Ruling 5 declines to convert the single-variable build difference into a prediction, because the
+  arms are not symmetric under this pass. Ruling 6 decides in advance that the incidental gate
+  figures are **published, applied to Ruling 3's criterion, and unpredicted** — three separable
+  things, each a place a later reader could otherwise be told a different story.
+
+### Changed
+
+- **§AC2's sizing justification is explicitly retired and replaced.** The shape stays 5 seeds × 2
+  reps × 2 arms, but §AC2 justified ten rows per arm with a binomial-resolution table — an argument
+  about resolving a *rate*, which this pass does not read. v13's rationale is **report diversity**;
+  the binomial table is demoted to bounding what the incidental gate figures can resolve.
+- **§AC6's optional-stopping protection is extended to the flag tally.** Under a determinacy framing
+  the ambiguity count *is* the outcome, so no row-level or column-level tally may be computed,
+  curated or glanced at until all twenty packets have been scored and returned (§U8.5).
+
+### Verified
+
+- **The build under test differs from the code v12 measured by exactly one change.**
+  `git log 5fb7648..HEAD -- src/` is empty, and `5fb7648` is the commit that both published the v12
+  rows and shipped #155's fix. Pre-flight item 3 probes for it by the distinctive method name
+  `_withCanonicalLayersSwept` — the single-variable claim rests on that probe, not on a version
+  string (§W7, §AB6).
+- **DECISION.md remains append-only.** The pre-branch file is a byte-exact prefix of the new one,
+  confirmed by SHA-256 over the first 380,344 bytes.
+
+---
+
 ## 2026.08.1007 — 2026-08-10
 
 ### Fixed
