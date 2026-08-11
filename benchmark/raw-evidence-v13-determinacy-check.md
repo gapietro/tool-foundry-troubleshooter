@@ -215,7 +215,50 @@ All four are newly worded rather than reused from v12, so no seeded execution in
 
 | seed | rep | execution plan sys_id | invocation | plan state |
 |---|---|---|---|---|
-| 01 | 1 | `dfa22b7a2b624718f243fed2ce91bf12` (conversation `46a2677a2b624718f243fed2ce91bf67`) | `Seed 01 Ticket Prioritizer` on ticket `9182277e…` | in progress at time of writing |
+| 02 | 1 | `0913233e2b624718f243fed2ce91bf0f` | `Seed 02 Request Router`, message only | **completed 25s**, 1 tool call `measure_request` (591ms) |
+| 03 | 1 | `8513233e2b624718f243fed2ce91bf6e` | `Seed 03 Category Router`, Network category | **completed** |
+| 04 | 1 | `a513a33e2b624718f243fed2ce91bf4e` | `Seed 04 Summarizer` on ticket `64c2abbe…` | **completed 21s**, 1 tool call `summarise_ticket` (685ms) |
+| 02 | 2 | `d96323b22b2e0bd817a6ffbeee91bf04` | `Seed 02 Request Router`, parking permit | **completed** |
+| 03 | 2 | `656323b22b2e0bd817a6ffbeee91bfb7` | `Seed 03 Category Router`, Facilities category | **completed** |
+| 04 | 2 | `ea63a3b22b2e0bd817a6ffbeee91bfb0` | `Seed 04 Summarizer` on ticket `c5c2a77a…` | in progress at handoff |
+| 01 | 1 | `dfa22b7a2b624718f243fed2ce91bf12` | `Seed 01 Ticket Prioritizer`, sys_id only | **VOID — stalled, see 2.4** |
+| 01 | 1 (retry) | `c343e7be2b624718f243fed2ce91bfd3` | `Seed 01 Ticket Prioritizer`, sys_id + urgent description | in progress at handoff, 0 tool calls |
+| 01 | 2 | — | not yet fired (ticket `5cc267be…` staged) | — |
+| 05 | 1, 2 | — | absence, not yet verified | — |
+
+Seed 02 rep 1 reproduces v12's shape exactly: a routing request answered by a character counter.
+Seed 04 rep 1 likewise fires `summarise_ticket` once, the unmapped-capability path.
+
+**All four bench tickets read `priority` empty and `sys_mod_count: 0` at handoff** — no write has
+landed on any of them, so every seed-01/04 fixture is intact and uncontaminated.
+
+### 2.4 Seed 01 will not fire from a bare sys_id — and this is a fixture finding, not a harness one
+
+**Both seed-01 attempts stalled with zero tool calls.** The first (`dfa22b7a…`) is diagnostic: at
++23s the agent emitted, as its own message, a request for inputs it had not been given —
+
+```json
+[{"name":"ticket_description","prompt":"What is the request or issue described in the ticket? …",
+  "dataType":"text"},{"name":"affected_users","prompt":"…"}]
+```
+
+— i.e. it entered `collect_input_from_user` and waited. `Mode: Interactive`, and nothing was ever
+going to answer it. **The invocation was wrong, not the agent.** `seeds/seed-01-schema-mismatch.md`
+§Trigger says it plainly: give the agent *"the ticket sys_id **plus an urgent-sounding
+description**"*. The first attempt supplied only the sys_id.
+
+The retry (`c343e7be…`) supplies both and had not requested input by handoff, but had also made no
+tool call. **Whether the retry completes is unresolved and is the first thing the next session must
+check.** If it also stalls, the next probe is whether `Seed 01 Ticket Prioritizer` requires its
+inputs supplied structurally rather than in prose — the other three seeds take a bare message and
+fire on the first turn, so seed 01 is the outlier.
+
+> **Two operator lessons, both cheap to bank.** A stalled agent presents as `State: In progress`
+> with `Duration: 0s` **indefinitely** — it is indistinguishable at a glance from a slow run, and
+> the discriminator is `TOOL CALLS (0)` plus an agent message containing an input schema. And
+> `sn_aia_execution_plan.agent` carries the agent's display name, which makes plan→seed mapping
+> exact without tracking session IDs; fire different agents concurrently and the mapping stays
+> unambiguous, fire the same agent twice and disambiguate on `sys_created_on`.
 
 > **A read-staleness note, matching §3.0's warning in v12's file.** The plan for seed 01 rep 1 was
 > created at 01:22:54 and a `sys_created_on>=javascript:gs.minutesAgoStart(3)` query run immediately
