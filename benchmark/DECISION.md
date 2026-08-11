@@ -6136,3 +6136,163 @@ its text. `scorecard-agent-doctor.md`'s header records a precedent for mirroring
 correction. Retrofitting one would silently restate which contract those rows were scored under,
 which is the §AF1 principle applied to a filled scorecard instead of a packet. Only
 `scorecard-template.md` feeds the packet generator, so neither note reaches a scorer.
+
+## AL. The `layers_swept` HOLD is target-blind by construction, and the missing operand is why (`2026.08.1106`, #173)
+
+**§A through §AK are unmodified and this section appends to them** — `git log -p benchmark/DECISION.md`
+is the check, in the form §W, §Z, §AC, §AD, §AE, §AF and §AK all used.
+
+**§T9 governs: no v12 or v13 value moves.** No run was fired, no packet was re-scored, no instance
+was touched, and `scoring-v13/` is not rebuilt. This section reads code and prior sections; it
+produces a ruling and two docblocks.
+
+Artefacts: `src/server/PaAgentLoop.js` (`_releaseSet`, `_depthGate` — **comments only, no behaviour
+change**).
+
+### AL1. The five rows are two causes, and the split is the whole section
+
+§AJ6 left one question open — whether five custom rows answering a layer HOLD off-fixture is a
+harness defect, a model defect, or a rubric that rewards reaching a layer over diagnosing at it —
+and named the HOLD mechanism as the place to look. Looking there splits the five:
+
+| rows | the discharging call | what it returned | lever that would bind |
+|---|---|---|---|
+| 12 | `query_table` on `sysrule_routing` | `table_does_not_exist` — barren | `REQUIRE_RETRIEVAL_TO_RELEASE` |
+| 06, 08, 10, 16 | `schema_lookup` / `query_table` on real tables | rows, successfully | **none exists** |
+
+Row 14 is the control: same seed family, same layer, same tool, and it *did* land on the fixture, so
+the behaviour is not uniform.
+
+The four-row majority is the load-bearing half, and reaching for the retrieval flag as "the fix"
+repairs row 12 and leaves it untouched — which is the error this section exists to prevent, and
+which its own author made once before checking §Y.
+
+### AL2. The gate is target-blind by PROJECTION, not for want of the data
+
+The target of every call is recorded. `PaAuditLogger` writes `target_table` per row
+(`PaAuditLogger.js:372`) and `toolCalls(runId)` returns every call with its payload in order.
+
+The gate does not read that path. `_trailTools` (`PaAgentLoop.js:660`) projects the audit rows down
+to two arrays of tool **names** — `tools` and `retrieving` — and both of `_depthGate`'s consumers
+read only those. The discarding happens one layer below the gate, in the projection, not at the
+source.
+
+So "the harness cannot see which table the call hit" is **false**, and any argument for or against a
+targeting check that rests on it is void. The question is not availability. It is AL3.
+
+### AL3. The second operand does not exist, and manufacturing it is #88 one level up
+
+A targeting check needs two operands: the call's target, and **what the failure under investigation
+is about**. The first is recorded. The second is not a fact this run holds.
+
+`_normRequest` (`PaAgentLoop.js:1936`) normalises every request to a plain object whose usable
+content is free-form — `{description: <text>}` in the fall-through — and the one field that names a
+subject, `r.execution`, is consumed by being pushed into the prompt as text
+(`PaAgentLoop.js:1779`). Nothing on the request states, in a form the loop can compare against,
+which artefact or table the run is diagnosing.
+
+To compare a call's target against the subject, the loop would therefore have to **derive the
+subject** — from the model's own draft, or from the output of the run's own tools, which the model
+chose. `_depthGate`'s stated posture forbids exactly that:
+
+> *#88 raised the COST of stopping and got fabrication, because a stop priced in text is paid in
+> text. So the gate is discharged only by something the model cannot author: a row in the audit
+> trail.*
+
+A gate released by an inference over model output is released by the model. It would present as a
+trail check — it reads audit rows — while its decisive operand came from the thing being gated.
+That is #88's failure wearing the trail check's clothes, and it is worse than #88 because the
+costume defeats the review that caught #88.
+
+**Ruling 1 — the release condition stays target-blind, and this is now recorded as deliberate.**
+Not because targeting does not matter, but because the loop cannot perform the comparison from
+operands it holds. The docblocks on `_releaseSet` and `_depthGate` carry this, so the next reader
+meets the answer instead of re-deriving it from row notes.
+
+**Ruling 2 — the targeting question moves to the rubric, where both operands are native.** A scorer
+reads the packet: it holds the seed's fixture and the run's calls at once, and comparing them is
+what a scorer is for. §T3's standing finding — *"reaching a layer is not diagnosing at it"* — is
+already the rubric-side statement of this, and §A2.2 is where it lives. Rows 06/08/10/16 are
+therefore **not** a harness defect. They are the rubric's business, and the pass that scores them
+needs the call's argument in front of the scorer (AL5).
+
+**The general shape, stated because the next guard meets it again: a guard can only enforce a
+relation between operands it already holds as facts the guarded party cannot author.** If one
+operand has to be inferred from the guarded party's output, the check is not a guard — it is a
+heuristic wearing one — and it belongs where a human or a blind scorer holds both sides.
+
+**What would change this ruling:** a structured subject field on the request — the artefact or table
+under diagnosis, written by whoever *files* the run, not by the model answering it. That is a real
+option and it is not proposed here, because it changes the request contract, every caller and the
+benchmark seed format at once, to serve a check whose value is unmeasured. Recorded so the next
+proposal starts from the operand rather than from the comparison.
+
+### AL4. Row 12 is real and §Y already ruled on its lever
+
+`REQUIRE_RETRIEVAL_TO_RELEASE` **stays `false`.** Not deferred — ruled, and by a section that spent
+the measurement.
+
+§Y ran the counterfactual across 64 trail-backed releases: the strict rule would have changed
+**one — 1.6%, 95% Wilson [0.3%, 8.3%]** — and the one it changed was §T4's defect verbatim
+(a `schema_lookup` answering `table_exists: false` discharging a hold on a guessed table name).
+§Y6's disposition set the bar for enabling it: *"anyone proposing to enable it now has to argue that
+a mechanism which binds that rarely is worth the depth gate's instrument risk — eight measured
+passes are calibrated against the current release rule."*
+
+v13 row 12 does not clear that bar, and being a genuine instance of the defect is not the same as
+clearing it:
+
+- It is a **second observation of the bind case**, in a second corpus. It moves the estimated bind
+  rate and says nothing about benefit. §Y5's limit applies to it unchanged — a retrospective
+  measures what the strict rule would have *withheld* given the calls that happened, never what the
+  run would have done with another hold. Row 12 is no more observable on that point than §Y's
+  TR1000202 was.
+- Enabling it now would make #175's out-of-sample pass **non-single-variable against v13** while
+  v13's own reading is the thing #175 exists to test. That is the instrument risk §Y6 names,
+  arriving at the worst moment to take it.
+- §U9 governs the family: *"No verdict is not the same as proven, so the default is off."*
+
+**What would clear the bar,** stated so this is a standing condition rather than a permanent no: a
+prospective arm — the flag on, its own pre-registration, sized against a corpus with enough guessed
+table names to bind more than twice — measuring what a withheld release *produces*, which is the
+question every retrospective on this flag has been unable to reach.
+
+### AL5. The discharging call's argument must reach the scorer — which settles #178's substance
+
+**Ruling 3 — yes.** AL3's Ruling 2 makes it structural rather than a preference: if the targeting
+judgement is the rubric's, then withholding the call's argument from the packet withholds the
+evidence the judgement is made on. A rubric asked to decide whether a run diagnosed *at* the layer
+it reached, from a packet that names the layer and hides the table, is being asked to score a fact
+it was not shown.
+
+v13 did exactly that. §AJ5a records it: the five off-fixture arguments live in `operator_note`,
+which `buildPacket` renders nowhere by design, while the packet boilerplate promises such an
+argument would be *"named in section 6 instead"*. **No scorer in the v13 pass saw any of the five.**
+That is why §AJ6's question could not be settled by the scores — the scores were taken blind to it —
+and it is a second reason the four rows were never the harness's to answer.
+
+This decides the **substance** of #178 and leaves it its actual open question. #178 asks whether
+`withheldFactViolations` should require a scorer-facing field to name the discharging call whenever
+`holds > 0`; the answer here is that the requirement is right. What #178 still owns is the part this
+section cannot settle: **which passes it binds**, given that the check reddens v12 rows 02 and 04
+(both took a hold and wrote no note) and so changes a frozen fixture's contract and #168's
+byte-identical `--pass v12` parity check. Options 1–3 there stand undisturbed; §T9 still forbids
+backfilling either manifest to make a later rule pass.
+
+### AL6. What this section does not establish
+
+- **It does not settle rows 06/08/10/16.** It rules on *where* they are settled — the rubric, on
+  evidence the packet must carry — and rules out the harness as their author. The rows themselves
+  remain unassessed, and will stay so until a pass scores them with the argument visible. Anyone
+  quoting v13's custom arm inherits §AJ5a's qualification until then.
+- **It does not claim the depth gate is well-calibrated.** Target-blindness is defensible; whether a
+  gate that counts reaching without weighing arrival is the right instrument is §T3's open question
+  and is untouched here.
+- **It does not measure anything.** No run was fired. Every number in AL4 is §Y's, re-read, and
+  every claim in AL2/AL3 is a reading of code at the commit this section was written against —
+  which is the weaker kind of evidence this record has repeatedly warned about, and is why the file
+  and line of each is named rather than summarised.
+- **The one-instance risk in AL2.** `target_table` being written does not establish it is written
+  *usefully* on every tool — only that the column exists and is populated by `_write`. A targeting
+  check built later must verify per-tool coverage before trusting it; this section needed only the
+  weaker claim that the data is not absent.

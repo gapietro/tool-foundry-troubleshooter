@@ -17,6 +17,38 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1106 — 2026-08-11
+
+### Changed — the `layers_swept` HOLD is ruled target-blind by construction (#173)
+
+**No behaviour change.** `DECISION.md` §AL plus two docblocks; no run was fired, no packet
+re-scored, `scoring-v13/` untouched (§T9).
+
+- **v13's five off-fixture HOLD discharges split into two causes, and only one had a lever.** Row 12
+  (a barren `query_table` on the invented `sysrule_routing`) is the `REQUIRE_RETRIEVAL_TO_RELEASE`
+  case; rows 06/08/10/16 discharged with *successful* calls on unrelated tables, which no existing
+  mechanism touches. Treating the retrieval flag as "the fix" repairs one row of five.
+- **The gate is target-blind by PROJECTION, not for want of data.** `PaAuditLogger` records
+  `target_table` on every call; `_trailTools` projects the audit rows down to tool names before the
+  gate sees them. The claim that the harness cannot see which table a call hit is false.
+- **The ruling, and its reason: the second operand does not exist.** Nothing on the request states
+  what the run is diagnosing in a comparable form — `_normRequest` yields free-form content and
+  `r.execution` is consumed into the prompt as text. A targeting check in the loop would have to
+  derive the subject from model output, and a gate released by an inference over model output is
+  released by the model: #88's fabrication failure wearing a trail check's costume. **The release
+  condition stays target-blind; the targeting judgement moves to the rubric** (§T3 / §A2.2), where a
+  scorer holds the fixture and the calls at once. Precondition for ever revisiting: a structured
+  subject field written by whoever *files* the run.
+- **`REQUIRE_RETRIEVAL_TO_RELEASE` stays `false` — ruled, not deferred.** §Y measured 1 changed
+  release in 64 (1.6%, Wilson [0.3%, 8.3%]); row 12 is a second instance of the bind case and does
+  not clear §Y6's bar, since a retrospective bounds the rule's benefit without ever measuring it.
+  Enabling it now would also confound #175 against v13's calibration. What would clear the bar is
+  named: a prospective arm with its own pre-registration.
+- **The discharging call's argument must reach the scorer**, which settles the substance of #178 and
+  leaves it only its versioning question. §AJ5a recorded that all five arguments lived in
+  `operator_note` and so reached **no** scorer in v13 — a second reason those four rows were never
+  the harness's to answer.
+
 ## 2026.08.1105 — 2026-08-11
 
 ### Changed — §A3 carries the terminated-run void condition (#174)

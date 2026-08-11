@@ -762,6 +762,19 @@ PaAgentLoop.prototype = {
      * for the release check while deriving open gaps from the loose one would
      * let a barren call pre-close a declared gap before any hold could be
      * issued — the identical defect, one step earlier.
+     *
+     * THE DEFAULT IS RULED, NOT MERELY UNSET (DECISION.md §Y6, §AL4, #173).
+     * §Y measured the counterfactual across 64 trail-backed releases: the
+     * strict rule would have changed ONE — 1.6%, Wilson [0.3%, 8.3%] — and
+     * that one was §T4's defect verbatim. A bind rate that low is a CEILING
+     * on the rule's benefit, not evidence of it, and no retrospective can
+     * reach the real question (what a WITHHELD release produces, which needs
+     * another hold and another iteration to observe). v13 row 12 — a
+     * `query_table` on the invented `sysrule_routing` answering
+     * `table_does_not_exist` and discharging a hold anyway — is a second
+     * genuine instance of the bind case and still does not clear §Y6's bar.
+     * Flipping this default needs a PROSPECTIVE arm with its own
+     * pre-registration, not one more observed instance.
      */
     _releaseSet: function (trail) {
         return this.REQUIRE_RETRIEVAL_TO_RELEASE === true ? trail.retrieving : trail.tools
@@ -794,6 +807,38 @@ PaAgentLoop.prototype = {
      * names all seven and always has, via `PaToolRegistry.promptBlock()`;
      * see issue #110 and DECISION.md §S. Do not read this as a claim that
      * the model is unaware of the tools — it is a claim about the gate.
+     *
+     * TARGET-BLIND BY CONSTRUCTION — DELIBERATE (DECISION.md §AL, #173)
+     * The release compares tool NAMES and never what the call was aimed at.
+     * v13 rows 06/08/10/16 discharged a layer-4 HOLD with successful calls on
+     * tables unrelated to the failure under investigation (`incident.priority`,
+     * `incident.assignment_group`, `sn_aia_agent_tool_m2m`), and the gate
+     * released. That is this method behaving as specified — do not "fix" it
+     * here, and read why before proposing to:
+     *
+     * The call's target IS available — `PaAuditLogger` writes `target_table`
+     * per row (`PaAuditLogger.js:372`) and `toolCalls()` returns every call
+     * with its payload; `_trailTools` simply projects that down to names.
+     * The operand that does NOT exist is the other one: nothing on the request
+     * states what the run is diagnosing in a form this loop can compare
+     * against. `_normRequest` (:1936) yields free-form content, and the one
+     * subject-ish field, `r.execution`, is consumed by being pushed into the
+     * prompt as text (:1779). So a targeting check here would have to DERIVE
+     * the subject from the model's own draft or from the output of tools the
+     * model chose — and a gate released by an inference over model output is
+     * released by the model. It would read audit rows and so LOOK like a trail
+     * check while its decisive operand came from the thing being gated: #88's
+     * failure in the costume of the mechanism that was built to survive #88.
+     *
+     * The targeting judgement therefore belongs to the RUBRIC, where a scorer
+     * holds the seed's fixture and the run's calls at once (§T3's "reaching a
+     * layer is not diagnosing at it"; §A2.2). What that requires of the
+     * harness is not a check but DISCLOSURE — the discharging call's argument
+     * has to reach the scorer's packet (§AL5, issue #178).
+     *
+     * The precondition for ever moving this into the loop: a STRUCTURED
+     * subject field on the request, written by whoever FILES the run. Start
+     * any such proposal from that operand, not from the comparison.
      *
      * STICKY, DELIBERATELY
      * The gap set is recorded at the FIRST hold and never re-derived. Without
