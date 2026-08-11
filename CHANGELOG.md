@@ -17,6 +17,61 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1109 — 2026-08-11
+
+### Added — v14 stage 1: the pre-flight and the smoke gate, both arms (#175, PR #184)
+
+- `benchmark/raw-evidence-v14-out-of-sample.md`. **No scored row is spent**; §AN6 seals every tally
+  until all twenty packets are returned.
+- **Both arms pass the known-answer gate** on execution `c9d63a932bda8b9417a6ffbeee91bfd0`: custom
+  `TR1000292` in **12s**, native plan `e7a653c3…` in **192s**, both naming `context_processing_script`
+  **line 42** (native as RC-2, confidence CONFIRMED).
+
+### Found — the code under test is `5fb7648`, the SAME commit v13 ran
+
+- `git log 5fb7648..HEAD -- src/` is **not** empty, but its one commit (`41c0ce6`) is 45 comment
+  lines with zero executable change. **The harness code is held constant across v13→v14**, so
+  §AN1a's "not single-variable" excludes the product code. What remains is the platform patch, the
+  distribution, and fixture state.
+- **The app was deliberately NOT rebuilt** to make that log literally empty: Build Rule #40 would
+  deactivate the NASK skills and #21 would duplicate ACL rows — perturbing the instrument to satisfy
+  a check about the instrument, and spending the one variable that is provably constant.
+
+### Changed — three inherited claims corrected by measurement
+
+- **§AN7 item 6 names "seed 04's capability sys_id"**, but §AN2 excludes seed 04. Copy-forward from
+  §AI7, whose set was 01–05. Executed against §AN2's five; the slip recorded, not reinterpreted.
+- **v13's clock note is one level off.** The UTC−4 offset belongs to the **access path**, not the
+  `sn_aia_execution_plan` table: same plan reads `19:08:58` via the Table API and `15:08:59` via
+  `servicenow_aia_trace`.
+- **`sys_updated_on` carries no install information on this instance** — a third record class on
+  which records reading 2026-08-02 demonstrably hold Aug-10 code.
+
+### Fixed — eight review findings, three of them items ticked without the check (`/code-review`, PR #184)
+
+- **Item 14 was ticked green** on the synthetic `v98` path; `buildAll('v14')` is called by nothing
+  and cannot run before the pass produces its inputs — the exact substitution #176 made invisible,
+  and the failure item 14 cites as its reason for existing. Now deferred to packet build with item 11.
+- **Item 8's custom path** was declared discharged by the smoke run; that run made 2 tool calls,
+  which proves dispatch but enumerates nothing. Recorded as a standing limitation.
+- **"Installed `src/` is exactly `src/@5fb7648`"** rested on three greps across two of eighteen
+  script includes. Narrowed: the delta is bracketed, not exhaustively verified.
+- Items 12–14 misattributed wholesale to `0c4f36c` (item 14's coverage landed in `b36a09d`); the
+  header enumerated two uncontrolled movers where fixture state is a third; "clean 4-hour offset"
+  described a 3h59m59s pair; "both new specs" where three were added.
+
+### Filed — two follow-ups, neither folded into the pass
+
+- **#183** — §AL cites `target_table` as written on every call, but `PaAuditLogger:372` is a
+  conditional write and the column is blank in practice. **The ruling stands** (its other support,
+  `toolCalls()` returning the payload, holds); the citation does not. Blocked on the `src/` freeze.
+- **#185** — the smoke gate's agent record `601672d3…` is **deleted**, so layer 2 is permanently
+  unsweepable on the README known-answer target and the gate reliably invites the privilege-gap
+  misdiagnosis native produced. No scored row is at risk; the seed agents were probed and are
+  readable.
+
+---
+
 ## 2026.08.1108 — 2026-08-11
 
 ### Added — the out-of-sample seed set, qualified, and §AN pre-registered (#175)
