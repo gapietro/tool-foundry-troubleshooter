@@ -176,33 +176,54 @@ reading may repeat the fact, but it may never be the only place the fact lives.
 | Guard | Catches | Origin |
 |---|---|---|
 | `registerViolations` (`build-packets.js`) | a **reading** that reached a scorer-facing field | #157 / §AF2 |
-| delivery check (`build-packets.js`) | `operator_note` **rendering** into a packet | #157 / §AF2 |
-| `deliveryViolations` (`build-packets.js`) | a **fact** that never left `operator_note` | #176 / §AJ5a |
+| advance-ruling delivery check (`build-packets.js`) | `operator_note` **rendering** into a packet | #157 / §AF2 |
+| `withheldFactViolations` (`build-packets.js`) | a **reading that ships without its fact** | #176 / §AJ5a |
 
 The third was added after v13 shipped without it. That pass authored both halves
 into `operator_note` on six of the seven rows that took a hold and carried a
 reading, leaving `note` null on four of them — so section 6 read *"No
 run-specific notes."* directly beneath section 5's promise that a held call's
-argument "is named in section 6 instead". The five off-fixture rows §AJ6 asks
-about cannot be assessed as a result, and neither can the on-fixture control
-that would have bounded them. **Two guards pointing the same way is not
-coverage**; both existing ones protected `operator_note`'s confidentiality and
-neither protected the scorer's entitlement.
+argument "is named in section 6 instead". Four of the five off-fixture rows §AJ6
+asks about cannot be assessed as a result, and neither can row 14, the
+on-fixture control that would have bounded them. **Two guards pointing the same
+way is not coverage**; both existing ones protected `operator_note`'s
+confidentiality and neither protected the scorer's entitlement.
 
-`deliveryViolations` scopes itself to rows with `holds > 0` — a row that held
-nothing has no held call to name, so its `operator_note` is free to discuss run
-plumbing, which is what the native rows' notes legitimately do. Within that
-scope it is **deliberately broad**: it compares platform-identifier-shaped
-tokens and cannot tell a call argument from any other identifier, so mixing
-unrelated instrument commentary into a held row's `operator_note` reddens the
-build (v13 row 18 is the measured case). That reddening **is** the signal — name
-the fact, or keep the unrelated commentary out of a held row's note. There is no
-exemption list, because an exemption would be a second and silent way to be
-unguarded.
+**What it compares, and both bounds are load-bearing.** A reading's identifiers
+must appear in that row's *own* scorer-visible text — the scorer-facing fields
+plus the two row-specific things section 5 renders, `distinct_tools` and
+`hold_text`. Wider than the scorer-facing fields alone, or it flags tool names
+every packet already prints and asks you to pad `note` with boilerplate.
+Narrower than the built packet, or the **embedded seed spec launders the token**:
+the spec names the seed's fixture table, so comparing against the whole body let
+v13 row 14 pass — the on-fixture control, whose argument was withheld exactly
+like the four adverse rows. A shared spec says nothing about which call *this*
+row's hold discharged.
 
-It is a **delivery floor, not a proof of sufficiency**: it establishes that the
-identifiers the operator was reading reached a scorer, not that they were the
-right ones. It catches withholding, which is the failure that actually shipped.
+**Scoped to `holds > 0`** — a row that held nothing has no held call to name, so
+its `operator_note` is free to discuss run plumbing, which is what the native
+rows' notes legitimately do. An unreadable `holds` **refuses** rather than
+skips, like every other check here.
+
+Within that scope it is **deliberately broad**: it compares
+platform-identifier-shaped tokens and cannot tell a call argument from any other
+identifier, so mixing unrelated instrument commentary into a held row's
+`operator_note` reddens the build (v13 row 18 is the measured case). That
+reddening **is** the signal. There is no exemption list, because an exemption
+would be a second and silent way to be unguarded.
+
+Two limits, both measured rather than assumed:
+
+- It is a **delivery floor, not a proof of sufficiency**. It establishes that the
+  identifiers the operator was reading reached a scorer, not that they were the
+  right ones.
+- It is conditioned on `operator_note` being present, so it enforces
+  **consistency between two fields, not delivery as such** — omitting the reading
+  passes with `note` still null, and deleting the reading is the *cheapest* way
+  to green a red build. The unconditional check would redden v12 rows 02 and 04,
+  which took a hold and wrote no note, so closing it means deciding what happens
+  to a frozen fixture's contract. **Filed as #178**, to be settled before the
+  next pass runs under it.
 
 ## The protocol
 

@@ -21,10 +21,9 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ### Fixed — the unguarded half of §AF2: a call argument could hide in `operator_note` (#176)
 
-- **`deliveryViolations` added to `benchmark/scripts/build-packets.js`**, failing the build before
-  any packet is written when a row with `holds > 0` carries an `operator_note` naming a
-  platform identifier that no scorer-facing field (`note`, `layers_swept`, `invocation`,
-  `terminal`) also names.
+- **`withheldFactViolations` added to `benchmark/scripts/build-packets.js`**, failing the build
+  before any packet is written when a row with `holds > 0` carries an `operator_note` naming a
+  platform identifier that nothing in that row's own scorer-visible text names.
 - **What was unguarded.** §AF2's rule is two-sided — a scorer-facing field NAMES the argument of a
   call, and the operator's reading of it lives in `operator_note`, which renders nowhere. Both
   existing guards protected the *second* half (`registerViolations` keeps a reading out of a
@@ -47,7 +46,42 @@ two-digit daily counter. Incremented on every merge to `main`.
   held row reddens the build (v13 row 18, measured). No exemption list — an exemption would be a
   second and silent way to be unguarded. Scoped to `holds > 0`, so a row that held nothing keeps
   its `operator_note` free for run plumbing, as the native rows' notes legitimately use it.
-  Stated limit: a **delivery floor, not a proof of sufficiency**.
+
+### Fixed in review — seven findings from `/code-review` on PR #177, all reproduced before fixing
+
+- **The comparison set was wrong in both directions.** Comparing against `SCORER_FACING_FIELDS`
+  flagged `schema_lookup` and `agent_trace` — tool names section 5 prints in *every* packet — and
+  told the operator to pad `note` with boilerplate the packet already carried (F1). Comparing
+  against the whole built packet was then tried and is worse: the embedded **seed spec launders the
+  token**, so v13 row 14 passed — the on-fixture control, whose argument was withheld exactly like
+  the four adverse rows. Now compares against that row's **own** scorer-visible text: the
+  scorer-facing fields plus `distinct_tools` and `hold_text`.
+- **Case-sensitivity bypass (F3).** The lowercase-only token shape scored ZERO on
+  `Schema_lookup ran against Incident.priority, and against incident.assignmentGroup` — a
+  sentence-initial capital and a camelCase field path, on precisely the v13 failure shape. Regex is
+  now case-insensitive and matches are lowercased before comparison.
+- **Exact set membership rejected a delivered fact (F4).** A `note` naming
+  `x_snc_tsbench_routing.assignment_group` failed a reading that named the bare
+  `x_snc_tsbench_routing`. Now a substring comparison.
+- **English prose was reported as withheld identifiers (F5).** `e.g` and `i.e` were flagged, and no
+  rewrite of `note` can name them. Dotted paths now require segments of 3+ characters; underscored
+  identifiers are unaffected.
+- **The scope test failed OPEN (F6).** `Number(row.holds) > 0` on a missing field yielded `NaN` and
+  silently skipped the row, while section 5 rendered `Harness HOLDs: undefined`. An unreadable
+  `holds` now **refuses**, like every other check in `buildAll`.
+- **Name collision (F7).** `deliveryViolations` sat beside a pre-existing "delivery check" pointing
+  the opposite way, and the README listed both as adjacent rows. Renamed
+  **`withheldFactViolations`**.
+- **Overclaim corrected, and the hole filed rather than papered over (F2).** The guard is
+  conditioned on `operator_note` being present, so it enforces **consistency between two fields,
+  not delivery as such** — the docblock, README and this entry previously claimed the §AF2
+  requirement "that the fact arrives at all". Omitting the reading passes with `note` still null,
+  and deleting the reading is the *cheapest* way to green a red build. The unconditional check
+  reddens **v12 rows 02 and 04**, which took a hold and wrote no note, making it a change to a
+  frozen fixture's contract and to #168's parity check — a §T9-adjacent decision, not a review-fix
+  slip-in. **Filed as #178** and pinned as a measured property in the test suite.
+
+Stated limit, unchanged: a **delivery floor, not a proof of sufficiency**.
 - The register lint's remedy string now says to name the fact as well as move the reading, and
   points at this check by number.
 - `benchmark/README.md` gains **"Authoring a row manifest: the fact and the reading are two

@@ -413,64 +413,136 @@ function registerViolations(row) {
 }
 
 /**
- * THE OTHER HALF OF §AF2, WHICH SHIPPED UNGUARDED (#176).
+ * A READING MAY NOT SHIP WITHOUT ITS FACT (#176).
  *
  * §AF2's rule is two-sided: a scorer-facing field NAMES the argument of a call,
  * and the operator's reading of it lives in `operator_note`, which renders
  * nowhere. `registerViolations` above keeps the READING out of a scorer-facing
- * field; the delivery check in `buildAll` keeps `operator_note` out of every
- * packet. Both guard the same direction. Nothing guarded the direction §AF2's
- * own text calls "not optional" — that the FACT arrives at all.
+ * field; the advance-ruling delivery check in `buildAll` keeps `operator_note`
+ * out of every packet. Both guard the same direction, and their agreeing read
+ * as coverage of a rule only half of which was enforced.
  *
- * It then failed exactly there. v13 authored both halves into `operator_note`
- * on six of the seven rows that took a hold and carried a reading, leaving
- * `note` null on four of them; section 6 rendered "No run-specific notes."
- * directly under section 5's promise that a held call's argument "is named in
- * section 6 instead". The five off-fixture rows §AJ6 asks about are
- * unassessable as a result, and so is the on-fixture control that would have
- * bounded them.
+ * v13 failed on the other half. It authored BOTH halves into `operator_note` on
+ * six of the seven rows that took a hold and carried a reading, leaving `note`
+ * null on four of them; section 6 rendered "No run-specific notes." directly
+ * under section 5's promise that a held call's argument "is named in section 6
+ * instead". Four of the five off-fixture rows §AJ6 asks about are unassessable
+ * as a result, and so is row 14, the on-fixture control that would have bounded
+ * them.
  *
  * THE TEST. For a row that took a hold and carries a reading, every
- * platform-identifier-shaped token in that reading must also appear in some
- * scorer-facing field. `holds > 0` is the scoping condition and it is doing
- * real work: a row that held nothing has no held call to name, so its
- * `operator_note` is free to discuss run plumbing — which is what the native
- * rows' notes legitimately do.
+ * platform-identifier-shaped token in that reading must appear in this row's
+ * own scorer-visible text.
  *
- * DELIBERATELY BROAD, AND THAT IS THE SAME POSTURE AS THE LINT ABOVE. The token
- * shape cannot tell a call argument from any other identifier, so an
- * `operator_note` that mixes instrument commentary into a row that took a hold
- * reddens the build (v13 row 18 is the measured case: a runbook-ambiguity note
- * naming `body.agent` on a row held twice). The remedy is the same one the lint
- * offers — name the fact, or keep the unrelated commentary out of a held row's
- * note — and there is no exemption list, because an exemption would be a second
- * and silent way to be unguarded.
+ * THAT SET IS ROW-SPECIFIC, AND BOTH HALVES OF THAT ARE LOAD-BEARING. It is
+ * wider than `SCORER_FACING_FIELDS`, which exists for the register lint
+ * ("operator-authored") and is not the set of text a scorer can see: section 5
+ * also renders `distinct_tools` and `hold_text`. Comparing against the fields
+ * alone flagged `schema_lookup` and `agent_trace` — tool names printed in every
+ * packet of the pass — and told the operator to pad `note` with boilerplate the
+ * packet already carried (review of #177, F1).
  *
- * WHAT IT IS NOT. This is a DELIVERY FLOOR, not a proof of sufficiency: it
- * establishes that the identifiers the operator was reading reached a scorer,
- * not that they were the right ones or that the scorer could act on them. It
- * catches withholding, which is the failure that actually shipped.
+ * But it is narrower than the built packet. Comparing against the whole body
+ * was tried and is WRONG: the packet embeds the seed spec, which names the
+ * seed's fixture table, so `x_snc_tsbench_ticket` appears in every packet for
+ * that seed and the spec LAUNDERS the very token the operator withheld. Row 14
+ * — the on-fixture control, whose argument was withheld exactly like the four
+ * adverse rows — passed under a body comparison, and so did row 10. A scorer
+ * reading the fixture's name in a shared spec learns nothing about which call
+ * THIS row's hold discharged, which is the whole question §AF2 exists to keep
+ * answerable. Constant prose and shared specs cannot deliver a row-specific
+ * fact.
+ *
+ * WHAT IT DOES NOT DO, AND THE HOLE IS REAL. It is conditioned on
+ * `operator_note` being present, so it enforces CONSISTENCY BETWEEN TWO FIELDS
+ * rather than delivery as such. Had v13's rows 08/10/12/14 simply omitted their
+ * readings, this check would pass with `note` still null and section 6 still
+ * reading "No run-specific notes." — the shipped defect, minus its audit trail.
+ * Worse, deleting the reading is the CHEAPEST way to green a red build, so the
+ * incentive points at erasing the operator's record (review of #177, F2).
+ *
+ * The unconditional check — `holds > 0` requires a scorer-facing field to name
+ * the discharging call, reading or no reading — is NOT added here because it
+ * reddens v12 rows 02 and 04, which took a hold and wrote no note. That makes
+ * it a change to a frozen fixture's contract and to #168's `--pass v12` parity
+ * check, which is a §T9-adjacent decision and not a slip-in. Filed as #178.
+ *
+ * DELIBERATELY BROAD, THE SAME POSTURE AS THE LINT ABOVE. The token shape
+ * cannot tell a call argument from any other identifier, so an `operator_note`
+ * that mixes instrument commentary into a held row reddens the build (v13 row
+ * 18: a runbook-ambiguity note naming `body.agent` on a row held twice). The
+ * remedy is the lint's own — name the fact, or keep unrelated commentary out of
+ * a held row's note — and there is no exemption list, because an exemption
+ * would be a second and silent way to be unguarded. Residual over-trigger,
+ * measured and accepted: a dotted hostname fragment (`gpinst01.service`) still
+ * matches.
+ *
+ * WHAT IT IS NOT. A DELIVERY FLOOR, not a proof of sufficiency: it establishes
+ * that the identifiers the operator was reading reached a scorer, not that they
+ * were the right ones or that the scorer could act on them.
  */
-const PLATFORM_IDENT = /\b[a-z][a-z0-9]*(?:[._][a-z0-9]+)+\b/g
+
+/**
+ * Platform-identifier shape: an underscored identifier, or a dotted path whose
+ * segments are each >= 3 characters.
+ *
+ * Case-insensitive because the lowercase-only form was bypassed by ordinary
+ * authoring — a sentence-initial `Schema_lookup` and a camelCase
+ * `incident.assignmentGroup` both scored ZERO tokens on precisely the v13
+ * failure shape (review of #177, F3). Matches are lowercased before comparison.
+ *
+ * The >= 3 rule on dotted segments is what keeps English prose out: `e.g` and
+ * `i.e` were being reported as withheld identifiers, and no rewrite of `note`
+ * can name them (review of #177, F5). Underscored forms need no such rule —
+ * prose does not contain them.
+ */
+const PLATFORM_IDENT = /\b(?:[a-z][a-z0-9]*_[a-z0-9_]+|[a-z][a-z0-9]{2,}(?:\.[a-z][a-z0-9]{2,})+)\b/gi
 
 function identifiers(text) {
-    return new Set(typeof text === 'string' ? text.match(PLATFORM_IDENT) || [] : [])
+    return new Set(
+        typeof text === 'string' ? (text.match(PLATFORM_IDENT) || []).map((t) => t.toLowerCase()) : []
+    )
 }
 
-function deliveryViolations(row) {
-    if (!(Number(row.holds) > 0) || !row.operator_note) return []
+/**
+ * This row's own scorer-visible text: the operator-authored scorer-facing
+ * fields, plus the two row-specific things section 5 renders. Deliberately
+ * excludes the constant layer map and the embedded seed spec — see the
+ * docblock above on why a shared spec must not launder a row-specific fact.
+ */
+function rowVisibleText(row) {
+    const parts = SCORER_FACING_FIELDS.map((f) => row[f])
+    parts.push(row.hold_text)
+    if (Array.isArray(row.distinct_tools)) parts.push(row.distinct_tools.join(' '))
+    return parts.filter((p) => typeof p === 'string').join(' ')
+}
 
-    const delivered = new Set()
-    for (const field of SCORER_FACING_FIELDS) {
-        for (const t of identifiers(row[field])) delivered.add(t)
+/** @param {Object} row the row manifest entry */
+function withheldFactViolations(row) {
+    // Fails CLOSED on an unreadable `holds`, unlike the `> 0` comparison it
+    // replaced: a row omitting the field yielded NaN, skipped the check, and
+    // rendered "Harness HOLDs: undefined" into section 5 (review of #177, F6).
+    // Every other check in `buildAll` refuses rather than skips.
+    if (row.holds === undefined || row.holds === null || !Number.isFinite(Number(row.holds))) {
+        throw new Error(
+            'REFUSING TO WRITE ANY PACKET — row ' + row.row + ' has an unreadable `holds` value ' +
+                '(' + JSON.stringify(row.holds) + '). Section 5 renders it, and the withheld-fact ' +
+                'check is scoped by it.'
+        )
     }
+    if (Number(row.holds) <= 0 || !row.operator_note) return []
 
-    const withheld = [...identifiers(row.operator_note)].filter((t) => !delivered.has(t))
+    // SUBSTRING, not set membership: a `note` naming the more specific
+    // `x_snc_tsbench_routing.assignment_group` delivers a reading that names the
+    // bare `x_snc_tsbench_routing`, and exact membership failed that (review of
+    // #177, F4). Lowercased once, for the same reason as the tokens.
+    const visible = rowVisibleText(row).toLowerCase()
+    const withheld = [...identifiers(row.operator_note)].filter((t) => !visible.includes(t))
     if (!withheld.length) return []
 
     return [
         'row ' + row.row + ': `operator_note` reads ' + withheld.map((t) => '`' + t + '`').join(', ') +
-            ', which no scorer-facing field names — the reading ships without the fact',
+            ', which no row-specific scorer-visible field names — the reading ships without the fact',
     ]
 }
 
@@ -756,19 +828,6 @@ function buildAll(pass) {
         )
     }
 
-    // The other half of the same rule (#176). Runs beside the register lint
-    // rather than inside it: they fail on opposite errors — a reading that
-    // reached a scorer-facing field, and a fact that never did — and reporting
-    // them together would let one remedy read as the fix for both.
-    const withheld = rows.flatMap(deliveryViolations)
-    if (withheld.length) {
-        throw new Error(
-            'REFUSING TO WRITE ANY PACKET — ' + withheld.length + ' row(s) carry a reading in ' +
-                '`operator_note` whose subject no scorer will see. Name the call and its argument in ' +
-                '`note`, then keep the reading where it is:\n  ' + withheld.join('\n  ')
-        )
-    }
-
     const unreviewed = []
     const rubric = rubricSection(unreviewed)
     const specs = {}
@@ -856,6 +915,21 @@ function buildAll(pass) {
     }
     if (missing.length) {
         throw new Error('REFUSING TO WRITE ANY PACKET — advance-ruling delivery check failed:\n  ' + missing.join('\n  '))
+    }
+
+    // The other half of §AF2 (#176). Reported SEPARATELY from the register lint
+    // above: the two fail on opposite errors — a reading that reached a
+    // scorer-facing field, and a fact that never reached one — and folding them
+    // into one message would let a single remedy read as the fix for both.
+    const withheld = built.flatMap((p) => withheldFactViolations(p.row))
+    if (withheld.length) {
+        throw new Error(
+            'REFUSING TO WRITE ANY PACKET — ' + withheld.length + ' row(s) carry a reading in ' +
+                '`operator_note` whose subject no scorer can tie to THIS row. Name the call and its ' +
+                'argument in `note`, then keep the reading where it is. (A shared seed spec naming ' +
+                'the same table does not count — it says nothing about which call this row\'s hold ' +
+                'discharged.):\n  ' + withheld.join('\n  ')
+        )
     }
 
     // The rubric must be identical across all twenty. Checked on the built
@@ -960,7 +1034,8 @@ module.exports = {
     redact,
     reportBody,
     registerViolations,
-    deliveryViolations,
+    withheldFactViolations,
+    identifiers,
     verdictHits,
     existingPacketsIn,
     advanceRulings,
