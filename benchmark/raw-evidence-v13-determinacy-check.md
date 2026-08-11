@@ -47,13 +47,24 @@ which does not reconcile with the list it summarises.
 > preceded the check, which is the thing §AI7's pre-flight exists to prevent. Recorded rather than
 > quietly back-filled.
 >
-> **One clause of item 6 remains outstanding and the pass should not fire until it is closed:**
-> §AI7's unnumbered pre-flight requirement that the **§A2.2/§A2.3 rubric slice be re-scanned**, not
-> assumed clean because the suite was green when those clauses merged (§AH6's precedent: two
-> blind-rule defects came out of that one section). `npm test` is green and includes
-> `scorerPacketBlindRule.test.js`, but **that the suite's scan actually covers the §A2.2/§A2.3 slice
-> has not been confirmed here**, and "a test exists" is not the same claim as "the slice was
-> scanned".
+> **The remaining clause is now CLOSED, and it was closed by checking rather than by inferring.**
+> §AI7 also requires the **§A2.2/§A2.3 rubric slice be re-scanned**, not assumed clean because the
+> suite was green when those clauses merged (§AH6's precedent: two blind-rule defects came out of
+> that one section). "npm test is green" was not sufficient — the question was whether the guard's
+> scan actually reaches those two subsections. Two checks say it does:
+>
+> 1. **The slice contains them.** `scorerPacketBlindRule.test.js` derives the packet-reaching range
+>    live from `scorecard-template.md`'s own `## A.` → `## B.` headings: bytes **463–34597**.
+>    §A2.2 begins at **18250** and §A2.3 at **23426** — both inside, computed rather than assumed.
+> 2. **The guard scans that range against the real file, not a fixture.** The `#143` block runs
+>    `derives the packet-reaching range from its own headings`, `states no repository path — the
+>    range ships to twelve scorers`, `states no prior pass outcome — the real file`, and `scans ONLY
+>    the packet-reaching range, and reports file-absolute lines`. All green, alongside positive
+>    controls that fire on planted leaks.
+>
+> So the slice a scorer will read is scanned on every suite run, and it is clean. **Item 6 is fully
+> discharged and pre-flight is genuinely 12 of 12** — a sentence this file was entitled to write only
+> after the seed-04 capability probe and these two checks, and not before.
 
 ### 1.1 Item 1 — the build under test, and the item that was wrong
 
