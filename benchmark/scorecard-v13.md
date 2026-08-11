@@ -59,7 +59,20 @@ scoring — see §4.
 | native (Agent Doctor) | 10, 0 void | **4 / 10 — 40.0%** | 47 / 60 |
 | custom (`x_snc_troubleshoot`) | 10, 0 void | **0 / 10 — 0.0%** | 5 / 60 |
 
-Against v12 on the same seeds: native 3/10 (30.0%), custom 0/10 (0.0%).
+Against v12 on the same seeds (`scorecard-v12.md`, §AD1, pinned by
+`test/scorecardV12Tallies.test.js`): **native 6/10 = 60.0%, 51/60; custom 0/10 = 0.0%, 9/60.**
+
+**So the native arm DECLINED — two rows, 60.0% → 40.0%, 51/60 → 47/60 — and the custom arm held at
+0.0% while losing four points, 9/60 → 5/60.**
+
+> **Correction, found in review of this scorecard.** The first draft of this line published v12's
+> native baseline as "3/10 (30.0%)" and narrated a one-row improvement. **3/10 is v4's figure**
+> (§O2, 42/60), not v12's, and the direction of change was therefore reported backwards. §AG/§AH
+> state that no v12 number moves and no row is re-scored, so no 3/10 v12 baseline exists to have
+> meant. The error is the exact class `test/scorecardV12Tallies.test.js` was written to catch —
+> a wrong figure in the prose layer above scorers that every mechanical check passes straight
+> through — and it shipped because this pass added a ledger without adding that test's v13
+> counterpart. `test/scorecardV13Tallies.test.js` now binds these figures to the primary verdicts.
 
 **The milestone criterion (Ruling 3) is not met.** It is met iff the custom arm reaches §A3.3's top
 band (≥ 80%). The custom arm scored 0.0%, as it did in v12.
@@ -75,10 +88,12 @@ repaired)`, on **two different validator rules**: row 04 for an unsupported swee
 marked SWEPT with no tool behind it), row 16 for an evidence-count shortfall (an UNCONFIRMED
 trace-only root cause citing fewer evidence items than layers claimed swept).
 
-**It did not move the gate.** Custom was 0/10 before the change and is 0/10 after. What the
-validator rejects is the *shape* of a report; the gate asks whether the run reached the expected
-layer and produced an applicable fix, and on this evidence the custom arm's misses are upstream of
-report shape — eight of ten custom rows scored `root_cause_layer_correct` = 0.
+**It did not move the gate.** Custom was 0/10 before the change and is 0/10 after (points 9/60 →
+5/60). What the validator rejects is the *shape* of a report; the gate asks whether the run reached
+the expected layer and produced an applicable fix, and on this evidence the custom arm's misses are
+upstream of report shape — **nine of ten custom rows scored `root_cause_layer_correct` = 0**, row 12
+being the only exception. (An earlier draft said "eight of ten", which is v12's count carried
+forward; §1's table shows row 12 at 2 and nothing else above 0.)
 
 ---
 
@@ -154,3 +169,11 @@ Everything in §T8, §Z5, §AB5, §AC8, §AG5, §AH6 and §AI8 stands unsoftened
 - **The custom arm's two validator rejections are not scored differently from its other rows.**
   Both scored 0/6, as did four custom rows that produced accepted reports. The rejection is visible
   in `terminal`, not in the columns.
+- **Two instrument defects reached all twenty scorers and are recorded, not repaired** (§AJ5a). The
+  packets carried a hardcoded, unconditional *"No row in this pass was void, and no arm used any of
+  its permitted re-runs"* — false of v13, and doubly false in row 05's own packet, since row 05 is
+  the replacement. And `operator_note` renders nowhere, so row 03's multi-message-report note
+  reached its scorer via `note` while row 05's identical fact did not. `scoring-v13/` is frozen on
+  the same ground as `scoring-v4` and `scoring-v12`: it is the record of what the scorers read. The
+  generator is fixed for the next pass. **"The instrument is constant across rows" is a claim this
+  pass can no longer make unqualified.**

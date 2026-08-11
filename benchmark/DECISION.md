@@ -5856,22 +5856,45 @@ where the care goes.
 ### AJ2. The gate, published under Ruling 6
 
 Both figures, together, per §AD7 — **native 4/10 = 40.0% (47/60 points); custom 0/10 = 0.0%
-(5/60)**. Against v12 on the same seeds: native 3/10 = 30.0%, custom 0/10 = 0.0%.
+(5/60)**. Against v12 on the same seeds: **native 6/10 = 60.0% (51/60); custom 0/10 = 0.0% (9/60)**.
+
+**The native arm therefore DECLINED by two rows, 60.0% → 40.0%**, and the custom arm held at 0.0%
+while losing four points.
+
+> **Correction, found in review before merge.** This paragraph first published v12's native baseline
+> as 3/10 = 30.0% and called the change a one-row improvement. **3/10 is §O2's v4 figure**, not
+> v12's — v12's native result is 6/10, published at `scorecard-v12.md` and §AD1 and pinned by
+> `test/scorecardV12Tallies.test.js`. §AG/§AH fix that no v12 number moves, so there was never a
+> re-scored 3/10 to mean. The direction of the headline change was reported backwards, and the
+> resolution argument below is rewritten accordingly rather than patched.
 
 **Ruling 3's milestone criterion is evaluated and NOT met** — it requires the custom arm at ≥ 80%.
 Per Ruling 6 no prediction was filed on the gate, so v13 claims **no** confirmed or refuted
 prediction about the milestone in either direction. §A3.4's floor is satisfied on both arms.
 
-**Ruling 5 holds and is now load-bearing.** Custom changed by #155's fix *and* by the new clauses;
-native changed by the clauses only. Custom's 0.0% is therefore attributable to neither cause on this
-evidence, and the native 30.0% → 40.0% delta is one row on ten — inside the resolution §AC2's
-binomial table describes. Neither number is a result about capability.
+**Ruling 5 holds and is now load-bearing — and it cuts the other way from the first draft.** Custom
+changed by #155's fix *and* by the new clauses; native changed by the clauses **only**. So the
+native movement is the attributable one, and it is a **two-row decline on ten** (60.0% → 40.0%,
+51/60 → 47/60).
+
+Two rows on ten is still inside the resolution §AC2's binomial table describes, so this is not a
+demonstrated regression — but it is the opposite sign from what a pass that confirmed all six of its
+determinacy predictions might be assumed to show, and **that asymmetry is the point of separating
+the two quantities.** The clauses were written to make scoring determinate, not to make runs score
+better; a rubric that resolves more cases can resolve them *against* a run. Rows 09, 11, 13 and 15
+are where it shows: each scores `root_cause_layer_correct` = 2 and `fix_target_correct` = 2 and
+still fails the gate on `fix_usable_unedited`, three of them on §A2.1 Case 1 — a value the instance
+held and the run declined to look up. That clause is §AG's, and it is doing exactly what it says.
+
+Custom's 0.0% remains attributable to neither cause on this evidence. Neither arm's number is a
+result about capability.
 
 **#155's fix is visible in the rows and did not move the gate.** Two custom rows terminated
 `failed (fix_report rejected, could not be repaired)`, on two *different* validator rules — row 04
 an unsupported sweep claim, row 16 an evidence-count shortfall. Both scored 0/6, as did four custom
-rows whose reports were accepted. The validator rejects report *shape*; eight of ten custom rows
-missed on `root_cause_layer_correct`, which is upstream of shape.
+rows whose reports were accepted. The validator rejects report *shape*; **nine of ten** custom rows
+missed on `root_cause_layer_correct`, which is upstream of shape. (An earlier draft said eight —
+v12's count. Row 12 is the sole custom row above 0 on that column.)
 
 ### AJ3. Zero flags is the measured value, and three things bound what it means
 
@@ -5929,6 +5952,38 @@ work rather than asserted as done here.
    the agent identifier and v12's row-18 body carried three keys (`agent`, `timeframe`, `note`).
    Resolved by putting the agent NAME in `agent` and the prose in `note`, and confirmed at runtime —
    the harness called `agent_trace` with `{agent, since, until}` and matched `sn_aia_agent` on name.
+
+### AJ5a. Two defects in the instrument, found in review AFTER the packets were scored
+
+Both reached all twenty blind scorers. Neither is repaired in `scoring-v13/`, on the same ground
+that freezes `scoring-v4` and `scoring-v12`: **those files are the record of what the scorers
+actually read, and editing them to satisfy a later finding destroys the only thing they preserve.**
+The generator is fixed; the packets are not.
+
+- **A false pass-level claim, hardcoded.** `build-packets.js` emitted, unconditionally, *"This run
+  reached a terminal state and was not re-run. No row in this pass was void, and no arm used any of
+  its permitted re-runs."* True of v12. **False of v13** — one row was ruled void and one native
+  re-run was spent (§AJ4) — and doubly false inside row 05's own packet, because row 05 **is** the
+  replacement. Generalising the script to `--pass` carried a v12-specific fact into a pass it did
+  not describe. The generator now states only what it can see: this row's terminal state, and
+  whether this row is a replacement (`rerun_of` in the manifest). **A generator that renders one row
+  may not assert facts about the pass.**
+- **The instrument was not constant across rows, while the packet said it was.** `buildPacket`
+  renders `row.note` and never `row.operator_note` — deliberately, and a guard enforces it. But
+  row 03's "report delivered across TWO messages, concatenated per §3.3 rule 3" was authored into
+  `note` and reached its scorer, while row 05's identical fact was authored into `operator_note`, so
+  row 05's packet reads *"No run-specific notes."* Two rows whose reports were assembled the same
+  way presented differently. That is an **authoring** inconsistency in this pass's row manifest, not
+  a generator bug, and it sits underneath boilerplate asserting *"Every packet in this pass carries
+  the same fields, so the instrument is constant across rows."* Related: the five off-fixture HOLD
+  arguments (rows 06, 08, 10, 12, 16) live in `operator_note` and are correctly withheld — but the
+  same boilerplate promises such an argument would be "named in section 6 instead", and it is not.
+
+**What this costs the pass, stated rather than minimised.** Neither defect touches a scored column:
+the false line makes a claim about voids that no rubric column reads, and the missing note concerns
+report assembly rather than diagnostic content. But *"the instrument is constant across rows"* is
+now a claim v13 cannot make without this paragraph attached, and any future pass quoting v13's
+determinacy figures inherits the qualification.
 
 ### AJ6. What v13 does not establish
 
