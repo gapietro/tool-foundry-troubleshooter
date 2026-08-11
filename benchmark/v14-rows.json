@@ -398,5 +398,101 @@
     "triggering_record": "36dc13472bea031017a6ffbeee91bf75",
     "invocation": "POST /api/x_snc_troubleshoot/v1/troubleshooter/analyze {\"execution\": \"7fad9f4f2b6e4310f243fed2ce91bf20\", \"mode\": \"diagnose\"}",
     "operator_note": "root_causes: [] and fixes: [] with an `inconclusive` block; its schema evidence cites sn_aia_agent_tool_m2m rather than the bench table. Does not mention the bloat."
+  },
+  {
+    "row": 17,
+    "arm": "native",
+    "seed": "08",
+    "rep": 1,
+    "terminal": "completed",
+    "wall_clock": "297s",
+    "tool_calls": null,
+    "distinct_tools": [
+      "agent_trace",
+      "agent_config",
+      "genai_log",
+      "read_artifact"
+    ],
+    "layers_swept": "5/7 SWEPT (L1,L2,L3,L6,L7); L4/L5 NOT SWEPT with stated reasons; platform logs UNAVAILABLE",
+    "layers_available": "7/7",
+    "holds": 0,
+    "tool_limit": 25,
+    "target_execution": "c24f27032ba6431017a6ffbeee91bf4d",
+    "run_id": null,
+    "run_number": null,
+    "triggering_record": null,
+    "invocation": "servicenow_aia_execute on agent \"Agent Doctor\"; waitForCompletion=false; session 6a09ff472b2a8310f243fed2ce91bf4d -> plan ef0937872b2a8310f243fed2ce91bf61",
+    "operator_note": "LLM P95 30,707ms. Files RC-1 PRIMARY at layer 3 (tool script is a hardcoded constant with no terminal branch) and places instructions at layer 2 as CONTRIBUTING, not primary. Independently flags that max_auto_executions=10 did not bind against 75 tool calls, marked UNCONFIRMED with a stated confirmation route."
+  },
+  {
+    "row": 18,
+    "arm": "custom",
+    "seed": "08",
+    "rep": 1,
+    "terminal": "complete",
+    "wall_clock": "~60s",
+    "tool_calls": null,
+    "distinct_tools": [
+      "agent_trace",
+      "schema_lookup"
+    ],
+    "layers_swept": "2/7 (L1, L4)",
+    "layers_available": "7/7",
+    "holds": 0,
+    "tool_limit": 25,
+    "target_execution": "c24f27032ba6431017a6ffbeee91bf4d",
+    "run_id": "baca77472b6a8310f243fed2ce91bf1f",
+    "run_number": "TR1000312",
+    "triggering_record": null,
+    "invocation": "POST /api/x_snc_troubleshoot/v1/troubleshooter/analyze {\"execution\": \"c24f27032ba6431017a6ffbeee91bf4d\", \"mode\": \"diagnose\"}",
+    "operator_note": "Single root cause at layer 1, confidence UNCONFIRMED, would_confirm names layer 2. Its one fix targets agent instructions."
+  },
+  {
+    "row": 19,
+    "arm": "native",
+    "seed": "08",
+    "rep": 2,
+    "terminal": "completed",
+    "wall_clock": "289s",
+    "tool_calls": null,
+    "distinct_tools": [
+      "agent_trace",
+      "agent_config",
+      "genai_log",
+      "read_artifact"
+    ],
+    "layers_swept": "5/7 SWEPT (L1,L2,L3,L6,L7); L4/L5 NOT SWEPT with stated reasons; platform logs UNAVAILABLE",
+    "layers_available": "7/7",
+    "holds": 0,
+    "tool_limit": 25,
+    "target_execution": "3f247f0b2b6a431017a6ffbeee91bf55",
+    "run_id": null,
+    "run_number": null,
+    "triggering_record": null,
+    "invocation": "servicenow_aia_execute on agent \"Agent Doctor\"; waitForCompletion=false; session 817bbb8f2b6e431017a6ffbeee91bfe2 -> plan 4e7b7f8f2b6e431017a6ffbeee91bf07",
+    "operator_note": "LLM P95 27,318ms. Same shape as row 17: RC-1 PRIMARY at layer 3 (hardcoded constant, no terminal branch), instructions layer 2 as CONTRIBUTING. Quotes the tool script's own comment verbatim. Adds RC-4 at layer 7 (no use case, no trigger links)."
+  },
+  {
+    "row": 20,
+    "arm": "custom",
+    "seed": "08",
+    "rep": 2,
+    "terminal": "complete",
+    "wall_clock": "~60s",
+    "tool_calls": null,
+    "distinct_tools": [
+      "agent_trace",
+      "schema_lookup"
+    ],
+    "layers_swept": "2/7 (L1, L4)",
+    "layers_available": "7/7",
+    "holds": 0,
+    "tool_limit": 25,
+    "target_execution": "3f247f0b2b6a431017a6ffbeee91bf55",
+    "run_id": "c53d3fc32baa8310f243fed2ce91bfa4",
+    "run_number": "TR1000314",
+    "triggering_record": null,
+    "invocation": "POST /api/x_snc_troubleshoot/v1/troubleshooter/analyze {\"execution\": \"3f247f0b2b6a431017a6ffbeee91bf55\", \"mode\": \"diagnose\"}",
+    "operator_note": "Single root cause at layer 1, confidence UNCONFIRMED, would_confirm names layer 5. Its one fix targets batch data existence."
   }
 ]

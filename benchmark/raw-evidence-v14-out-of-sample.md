@@ -596,3 +596,60 @@ The discard still stands, on the weaker and sufficient ground §2.6 already gave
 
 **A fixture fact worth carrying forward.** A seed-08 target execution is normally `terminated`, not `completed`. That does **not** disqualify it: §A3's terminated-run void condition governs **scored diagnostic runs**, and this is a **seeded target execution**. Seed 08's own bar is *"the same tool called repeatedly with no change in its result, ≥ 10 calls"* and explicitly states that *"the stopping mechanism is **not** part of the bar."* Replacement rep 1 meets that bar at **75 calls**.
 
+### 2.8 The replacement seed-08 fixtures, and the final fixture manifest
+
+Both produced **solo, nothing else in flight**, per §2.6's commitment and §2.7's correction.
+
+| seed | rep | execution plan sys_id | invocation | duration | `check_processing_status` calls | terminal state |
+|---|---|---|---|---|---|---|
+| 08 | 1 | `c24f27032ba6431017a6ffbeee91bf4d` | `Seed 08 Batch Watcher`, BR-7731 | **1124s** | **75** | `terminated` |
+| 08 | 2 | `3f247f0b2b6a431017a6ffbeee91bf55` | `Seed 08 Batch Watcher`, BR-2298 | **1116s** | **75** | `terminated` |
+
+Both meet seed 08's bar — *"the same tool called repeatedly with no change in its result, ≥ 10 calls"* — at 75 calls each, with every call returning the identical constant payload. Neither carries an operator write.
+
+**The two durations agree to within 8 seconds (1124s / 1116s) at an identical 75 calls.** Combined with the discarded rep 1's 1075s, that is a platform execution ceiling, not variance in the loop itself — which sharpens §2.7: the *ceiling* is stable; what varied was how far the earlier runs got before hitting it. `state_reason` reads `execution_failed` on both, and rows 17 and 19 both quote it.
+
+### 2.9 Final fixture manifest — the ten scored targets
+
+| seed | rep | target | fixture state |
+|---|---|---|---|
+| 02 | 1 | `c5fcd3c72b6e4310f243fed2ce91bf26` | completed 25s |
+| 02 | 2 | `ba4dd38b2b6e4310f243fed2ce91bf62` | completed 21s |
+| 05 | 1, 2 | **none, by design** | absence verified: 0 plans ever for agent `a4b7ef5d…`; trigger `bfb77d6c…` `active=false`; m2m gate `ba30d877…` `active=true`. Ticket `25e32b4b2b228310f243fed2ce91bf22` inserted 20:06:44 |
+| 06 | 1 | `281d57c72bea031017a6ffbeee91bfc8` | completed 16s, `count: 0`, status success |
+| 06 | 2 | `ff6d1fcb2b6e4310f243fed2ce91bf26` | completed 16s, `count: 0`, status success |
+| 07 | 1 | `b52d5f0b2bea031017a6ffbeee91bfec` | completed 18s, ticket `e6dcdf07…` |
+| 07 | 2 | `7fad9f4f2b6e4310f243fed2ce91bf20` | completed 18s, ticket `36dc1347…` |
+| 08 | 1 | `c24f27032ba6431017a6ffbeee91bf4d` | terminated 1124s, 75 calls |
+| 08 | 2 | `3f247f0b2b6a431017a6ffbeee91bf55` | terminated 1116s, 75 calls |
+
+**Seed 07's bar is confirmed at runtime, not merely carried.** Rows 13 and 15 both independently report the `tool_output_bloat` latency flag from `agent_trace` at **58,471** and **58,462** chars against the 20,000 threshold — the spec's stated verification route, exercised by the pass itself. This closes the loop #187 opened: the bar's *quantity* was always real; only its stated *source* (a `response_length` column on `sn_aia_tools_execution`) was wrong.
+
+---
+
+## 3. The twenty scored runs — all fired, none scored
+
+**All twenty terminated. No row was voided.** §AN-6 predicted ≤2 voids encountered and 10 valid rows per arm; **0 voids were encountered and each arm has 10 rows.** Row 01 was proposed for voiding mid-pass and that proposal was withdrawn on measurement (§2.6 Error 2).
+
+Terminal states across the twenty:
+
+| terminal state | rows |
+|---|---|
+| `completed` (native) | 01, 03, 05, 07, 09, 11, 13, 15, 17, 19 — **all 10 native rows** |
+| `complete` (custom) | 02, 04, 10, 14, 16, 18, 20 — 7 custom rows |
+| `failed (LLM reasoning failed, no fix_report)` | 06, 08 — both seed-05 custom rows |
+| `failed (fix_report rejected by validation)` | 12 |
+
+Rows 06, 08 and 12 are **scored, not void**, per §A3 as amended by §AK: the platform did not fail those executions; the runs' own reasoning or output validation did. This matches v13's precedent of scoring `failed (fix_report rejected)` rows.
+
+**Artefacts written as the stage ran, per §AN7:** `benchmark/v14-rows.json` (20 entries) and `benchmark/v14-reports/row-01.md` … `row-20.md` (20 files, verbatim). Committed per seed block so no report was ever held only in conversation context.
+
+**NO TALLY HAS BEEN COMPUTED.** §AN6 seals the row-level `ambiguous` count, the column-flag tally, the out-of-sample/anchor partition and both arms' gate figures until all twenty packets have been scored and returned. Nothing in this file states or implies one. AN-4 and AN-5 are read off report shape and are sealed on identical terms; the operator has necessarily read every report while building these artefacts, and per-row observations recorded in `operator_note` are deliberately confined to that field, which renders into no packet.
+
+**Still outstanding before the first packet reaches a scorer**, both carried from §1.11 and §1.12 and neither discharged by this stage:
+
+1. **§AN7 item 11** — add the `scoring-v14` entry to `PACKET_SETS`, update the hardcoded membership literal in the same test, and confirm `npm test` green.
+2. **§AN7 item 14** — exercise `buildAll('v14')`. It is still called by nothing; the synthetic `v98` path is not a substitute, and treating it as one is the defect item 14 exists to name.
+
+A third item is now due with them: several rows carry `tool_calls: null` and `run_id: null` in the manifest, recorded as PENDING rather than guessed. These must be backfilled from `x_snc_troubleshoot_audit` before packets are built.
+
