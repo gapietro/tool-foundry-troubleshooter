@@ -1,8 +1,9 @@
 # v13 — the determinacy check (build `5fb7648`, #166)
 
 > **The pass is keyed to a commit, not a version token.** §AI's heading says `2026.08.1008`, an
-> earlier title here said `2026.08.1009`, and the repo is now `2026.08.1010` — three labels for one
-> pass, none of which identifies the code under test. **The code under test is `5fb7648`**
+> earlier title here said `2026.08.1009`, the repo was `2026.08.1010` when this file landed and is
+> `2026.08.1101` as of the stage-3 sitting — four labels for one pass, none of which identifies the
+> code under test. **The code under test is `5fb7648`**
 > (= `sys_app.version` `2026.08.1003`), and `git log 5fb7648..HEAD -- src/` is empty. §W7/§AB6 say
 > version strings are not evidence; §1.1 records an item that was wrong precisely because it trusted
 > one. Naming the commit is the same rule applied to this file's own title.
@@ -14,8 +15,13 @@ Infrastructure (§AI7 items 11 and 12) merged in `b36a09d`, also before run 1.
 > as they were returned by the tool that produced them, and **two clocks appear**. `sn_aia_message`
 > and `x_snc_troubleshoot_run` rows carry **UTC** (§1.6, §1.7: `00:48`–`00:53`). `sn_aia_execution_plan`
 > rows and `servicenow_aia_trace` carry **instance local time**, UTC−4 (§2.2 onward: `21:24`–`21:48`).
-> The same seed-01 rep-1 plan therefore appears as `01:22:54` in §2.4's staleness note and `21:25:38`
-> in §2.7's manifest — a 4-hour offset, not a discrepancy. **This matters operationally:** §3.3's
+> The seed-01 rep-1 retry `c343e7be…` therefore reads `01:25:38` from the Table API and `21:25:38` in
+> §2.7's manifest — a 4-hour offset, not a discrepancy. **Do not pair it with §2.4's staleness note:**
+> that note's `01:22:54` is the **void** plan `dfa22b7a…`, a different execution three minutes
+> earlier (local `21:22:54`), and reading the two as one plan makes the offset look like 3h57m and
+> the clocks look unreliable. Both pairs are exactly 4h; the referents differ. (Verified live
+> 2026-08-11: the API returns `01:22:54` and `01:25:38` for the two plans respectively.)
+> **This matters operationally:** §3.3's
 > "messages created after the final tool call" rule compares a `sn_aia_message` timestamp (UTC)
 > against a trace tool-call time (local), and an operator who does not convert will mis-slice the
 > report by four hours. Convert before comparing, or compare only within one source.
@@ -289,6 +295,50 @@ All four are newly worded rather than reused from v12, so no seeded execution in
 **All eight execution-producing fixtures are complete.** Seed 05 produces no execution by
 design, so the pass needs eight, not ten.
 
+### 2.4 Seed 01 will not fire from a bare sys_id — the invocation, not the agent
+
+**This subsection has been cut back to what survived review.** Its original text claimed *"both
+seed-01 attempts stalled"* and that the retry's outcome was *"unresolved and the first thing the next
+session must check"*. Both statements were already false when written — §2.3's table records the
+retry completing in 67s — and the #169 review found them still standing, pointing a future operator
+at a resolved question. The stale text is removed rather than annotated in place, because a runbook
+another session executes is the one document where a superseded paragraph is a hazard rather than a
+record.
+
+**Correction, #166 stage-3 sitting.** That removal was applied but the superseded block was left in
+place *as well*, 135 lines further down — so the file carried both versions and an operator reading
+linearly ended on the withdrawn one. The duplicate is now deleted, and this subsection moved ahead of
+§2.4a so the void run is explained before the sections that refer back to it. The review's cut had
+also taken three still-cited items with it, restored below: the read-staleness note (§1's clock
+convention and §2.6 both cite it by name), the verbatim input-schema capture, and the stall
+presentation §2.5's discriminator callout compares itself against. Dropped deliberately, not
+restored: the claim that `sn_aia_execution_plan.agent` "carries the agent's display name" — read back
+through `servicenow_query` it returns the reference **sys_id**, so plan→seed mapping is by sys_id
+unless `displayValue` is requested.
+
+**What holds:** the first attempt (`dfa22b7a…`) supplied only the ticket sys_id, and the agent
+responded by emitting an input schema and waiting in `collect_input_from_user` — `Mode: Interactive`,
+with nothing to answer it. Verbatim, as the agent's own message:
+
+```json
+[{"name":"ticket_description","prompt":"What is the request or issue described in the ticket? …",
+  "dataType":"text"},{"name":"affected_users","prompt":"…"}]
+```
+
+The seed spec's Trigger section requires the sys_id **plus an urgent-sounding description**.
+Supplying both works, on every attempt since. The run is a **void** under §A3, recorded and replaced.
+
+> **How a stall presents — recorded here in the wording §2.5 later corrects.** `State: In progress`
+> with `Duration: 0s`, **indefinitely**: at a glance indistinguishable from a slow run. The
+> discriminator as first written was `TOOL CALLS (0)` **plus** an agent message carrying an input
+> schema. §2.5 is the correction and supersedes this line — the two halves are not independent, and
+> treating the second as optional is what cost this pass a false stall call.
+
+> **A read-staleness note, matching §3.0's warning in v12's file.** The **void** plan `dfa22b7a…` was
+> created at 01:22:54 and a `sys_created_on>=javascript:gs.minutesAgoStart(3)` query run immediately
+> afterwards returned **zero** records; the same query at `minutesAgoStart(10)` returned it. Do not
+> read an empty narrow-window result as "the agent did not fire".
+
 ### 2.4a Seed 01's defect, confirmed live and it is sharper than "the value is wrong"
 
 Rep 1's `set_ticket_priority` returned **`[OK]` in 250ms**. The ticket afterwards:
@@ -384,36 +434,6 @@ Seed 04 rep 1 likewise fires `summarise_ticket` once, the unmapped-capability pa
 
 **All four bench tickets read `priority` empty and `sys_mod_count: 0` at handoff** — no write has
 landed on any of them, so every seed-01/04 fixture is intact and uncontaminated.
-
-### 2.4 Seed 01 will not fire from a bare sys_id — the invocation, not the agent
-
-**This subsection has been cut back to what survived review.** Its original text claimed *"both
-seed-01 attempts stalled"* and that the retry's outcome was *"unresolved and the first thing the next
-session must check"*. Both statements were already false when written — §2.4a records the retry
-completing in 67s — and the #169 review found them still standing, pointing a future operator at a
-resolved question. The stale text is removed rather than annotated in place, because a runbook
-another session executes is the one document where a superseded paragraph is a hazard rather than a
-record.
-
-**Correction, #166 stage-3 sitting.** That removal was applied but the superseded block was left in
-place *as well*, 135 lines further down — so the file carried both versions and an operator reading
-linearly ended on the withdrawn one. The duplicate is now deleted. The review's cut had also taken
-the read-staleness note below with it, which §1's clock convention and §2.6 both still cite by name;
-it is restored here. Dropped deliberately in the same pass: the claim that
-`sn_aia_execution_plan.agent` "carries the agent's display name" — read back through
-`servicenow_query` it returns the reference **sys_id**, so plan→seed mapping is by sys_id unless
-`displayValue` is requested.
-
-**What holds:** the first attempt (`dfa22b7a…`) supplied only the ticket sys_id, and the agent
-responded by emitting an input schema (`ticket_description`, `affected_users`) and waiting in
-`collect_input_from_user` — `Mode: Interactive`, with nothing to answer it. The seed spec's Trigger
-section requires the sys_id **plus an urgent-sounding description**. Supplying both works, on every
-attempt since. The run is a **void** under §A3, recorded and replaced.
-
-> **A read-staleness note, matching §3.0's warning in v12's file.** The plan for seed 01 rep 1 was
-> created at 01:22:54 and a `sys_created_on>=javascript:gs.minutesAgoStart(3)` query run immediately
-> afterwards returned **zero** records; the same query at `minutesAgoStart(10)` returned it. Do not
-> read an empty narrow-window result as "the agent did not fire".
 
 ---
 
