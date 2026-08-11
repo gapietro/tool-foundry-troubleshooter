@@ -220,11 +220,61 @@ All four are newly worded rather than reused from v12, so no seeded execution in
 | 04 | 1 | `a513a33e2b624718f243fed2ce91bf4e` | `Seed 04 Summarizer` on ticket `64c2abbe…` | **completed 21s**, 1 tool call `summarise_ticket` (685ms) |
 | 02 | 2 | `d96323b22b2e0bd817a6ffbeee91bf04` | `Seed 02 Request Router`, parking permit | **completed** |
 | 03 | 2 | `656323b22b2e0bd817a6ffbeee91bfb7` | `Seed 03 Category Router`, Facilities category | **completed** |
-| 04 | 2 | `ea63a3b22b2e0bd817a6ffbeee91bfb0` | `Seed 04 Summarizer` on ticket `c5c2a77a…` | in progress at handoff |
+| 04 | 2 | `ea63a3b22b2e0bd817a6ffbeee91bfb0` | `Seed 04 Summarizer` on ticket `c5c2a77a…` | **completed** |
 | 01 | 1 | `dfa22b7a2b624718f243fed2ce91bf12` | `Seed 01 Ticket Prioritizer`, sys_id only | **VOID — stalled, see 2.4** |
-| 01 | 1 (retry) | `c343e7be2b624718f243fed2ce91bfd3` | `Seed 01 Ticket Prioritizer`, sys_id + urgent description | in progress at handoff, 0 tool calls |
-| 01 | 2 | — | not yet fired (ticket `5cc267be…` staged) | — |
-| 05 | 1, 2 | — | absence, not yet verified | — |
+| **01** | **1** | **`c343e7be2b624718f243fed2ce91bfd3`** | `Seed 01 Ticket Prioritizer`, sys_id + urgent description | **completed 67s**, 1 tool call `set_ticket_priority` (250ms, **OK**) |
+| 01 | 2 | `1c65237e2b2e0bd817a6ffbeee91bfff` | `Seed 01 Ticket Prioritizer` on ticket `5cc267be…` | **stalled — see 2.5** |
+| 05 | 1, 2 | — | absence; **blocked**, see 2.6 | — |
+
+**Seven of the eight execution-producing fixtures are complete.** Seed 05 produces no execution by
+design, so the pass needs eight, not ten.
+
+### 2.4a Seed 01's defect, confirmed live and it is sharper than "the value is wrong"
+
+Rep 1's `set_ticket_priority` returned **`[OK]` in 250ms**. The ticket afterwards:
+
+| field | value |
+|---|---|
+| `priority` | **empty** |
+| `sys_mod_count` | **0** |
+
+`sys_mod_count: 0` is the part worth having. The write did not land wrong — **it never happened at
+all**, and the tool still reported success. A diagnosis that stops at "the priority is wrong" has
+not reached the defect; the record was never updated, and the tool's own status is actively
+misleading. This is the schema mismatch the seed exists to plant (a word forwarded to an
+Integer-typed column), observed end to end.
+
+### 2.5 Seed 01 rep 2 stalled in a SECOND shape, and it is not the rep 1 shape
+
+`1c65237e…` was invoked with the same corrected prose form that made rep 1 work — sys_id plus an
+urgent description. It did not ask for input. It called **`organize_general_knowledge`** — an OOB
+tool, not one of the seed's own — and then sat in `AIA ReAct Engine [ONGOING]` with **0 tool calls**
+recorded and no agent message after `21:34:45`.
+
+So seed 01 has now stalled twice, in two different ways, from two different invocations:
+
+| attempt | invocation | stall shape |
+|---|---|---|
+| `dfa22b7a…` | sys_id only | emitted an input schema, waited in `collect_input_from_user` |
+| `1c65237e…` | sys_id + description | called an OOB knowledge tool, then hung |
+
+Rep 1's success between them (`c343e7be…`, same prose form as the second) means **this is not a
+deterministic property of the invocation** — the same input shape both worked and hung. That makes
+it a flakiness finding about the seed-01 agent, not a recipe error, and it is the single biggest
+open risk to the pass: seed 01 supplies 4 of the 20 scored rows and its fixture is not reliably
+reproducible.
+
+**Do not re-fire rep 2 blind.** Read `1c65237e…`'s terminal state first — if it eventually completes,
+the stall was latency and the row is usable; if it is still `In progress` with 0 tool calls, void it
+per §A3, re-fire, and record both.
+
+### 2.6 Seed 05 is blocked on seed 01 rep 2, and the reason is a protocol constraint
+
+Seed 05's fixture is an **absence**: insert a bench ticket, then verify **zero execution plans
+created instance-wide** across a multi-minute silence window (v12 §3.58; the qualification measured
+~1s from insert to plan when the trigger *is* active). That check cannot run while any other agent
+is executing — seed 01 rep 2 is currently creating plan rows, so the silence window would be
+contaminated by construction. **Seed 05 must be the last fixture produced.**
 
 Seed 02 rep 1 reproduces v12's shape exactly: a routing request answered by a character counter.
 Seed 04 rep 1 likewise fires `summarise_ticket` once, the unmapped-capability path.
