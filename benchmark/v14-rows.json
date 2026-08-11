@@ -298,5 +298,55 @@
     "triggering_record": null,
     "invocation": "POST /api/x_snc_troubleshoot/v1/troubleshooter/analyze {\"execution\": \"ff6d1fcb2b6e4310f243fed2ce91bf26\", \"mode\": \"diagnose\"}",
     "operator_note": "NOT VOID \u2014 this is v13's `failed (fix_report rejected)` shape, which \u00a7A3/\u00a7AK scores. The report was produced and then rejected: an UNCONFIRMED trace-only root cause cited 1 evidence item against 2 layers marked SWEPT. The rejected report is preserved verbatim in v14-reports/row-12.md. Like row 10, it reasons about the `incident` table rather than the bench table."
+  },
+  {
+    "row": 13,
+    "arm": "native",
+    "seed": "07",
+    "rep": 1,
+    "terminal": "completed",
+    "wall_clock": "291s",
+    "tool_calls": null,
+    "distinct_tools": [
+      "agent_trace",
+      "agent_config",
+      "schema_lookup",
+      "query_table",
+      "genai_log",
+      "read_artifact"
+    ],
+    "layers_swept": "7/7 claimed SWEPT + platform logs UNAVAILABLE (syslog caller-restricted)",
+    "layers_available": "7/7",
+    "holds": 0,
+    "tool_limit": 25,
+    "target_execution": "b52d5f0b2bea031017a6ffbeee91bfec",
+    "run_id": null,
+    "run_number": null,
+    "triggering_record": "e6dcdf072bea031017a6ffbeee91bfe4",
+    "invocation": "servicenow_aia_execute on agent \"Agent Doctor\"; waitForCompletion=false; session f20a630f2be2431017a6ffbeee91bfc3 -> plan 8f0a2bcf2be2431017a6ffbeee91bf97",
+    "operator_note": "LLM P95 97,065ms \u2014 by far the pass maximum, consistent with a 58K-char tool return inflating every subsequent prompt. Names the tool_output_bloat flag at 58,471 chars against the 20,000 threshold (RC-2, layer 3). AN-5 TRIPWIRE STATUS: this report cites tool_output_bloat and does NOT name instruction_bloat. OPERATOR OBSERVATION, NOT A SCORE: RC-1 lists the table's 8 columns as sys_id, short_description, priority, u_caller, u_description, u_impact, u_resolution, u_ticket_number \u2014 the five u_* names do not exist (the real 8 are sys_id, short_description, priority, sys_created_on, sys_created_by, sys_updated_on, sys_updated_by, sys_mod_count). Third native row to invent schema detail while getting the field COUNT right."
+  },
+  {
+    "row": 14,
+    "arm": "custom",
+    "seed": "07",
+    "rep": 1,
+    "terminal": "complete",
+    "wall_clock": "~40s",
+    "tool_calls": null,
+    "distinct_tools": [
+      "agent_trace",
+      "schema_lookup"
+    ],
+    "layers_swept": "2/7 (L1, L4)",
+    "layers_available": "7/7",
+    "holds": 0,
+    "tool_limit": 25,
+    "target_execution": "b52d5f0b2bea031017a6ffbeee91bfec",
+    "run_id": "889ba74b2b26431017a6ffbeee91bfdf",
+    "run_number": "TR1000308",
+    "triggering_record": "e6dcdf072bea031017a6ffbeee91bfe4",
+    "invocation": "POST /api/x_snc_troubleshoot/v1/troubleshooter/analyze {\"execution\": \"b52d5f0b2bea031017a6ffbeee91bfec\", \"mode\": \"diagnose\"}",
+    "operator_note": "Report accepted (status complete). Files a single root cause at layer 1 about an unpopulated priority field. Does not mention tool_output_bloat. Like rows 10 and 12, its schema evidence refers to the `incident` table rather than the bench table."
   }
 ]
