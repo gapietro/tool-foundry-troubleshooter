@@ -571,3 +571,28 @@ measurement.
 **Nothing here touches seeds 02, 06 or 07.** Their six fixtures were produced sequentially, completed
 naturally in 16–25s, and no operator write was made to any of them.
 
+### 2.7 §2.6's Error-1 attribution is WITHDRAWN — seed 08 is variable and self-terminating, and concurrency was not the cause
+
+The two replacement seed-08 fixtures were produced **strictly solo, with nothing else in flight**, as §2.6 committed. The first replacement refutes §2.6's own explanation.
+
+| run | conditions | duration | `check_processing_status` calls | terminal state | operator write? |
+|---|---|---|---|---|---|
+| qualification (2026-08-11 17:54) | solo | **438s** | 27 | `completed` | no |
+| rep 1, discarded | **concurrent** with rep 2 | 1075s | ~43+ | `terminated` | **yes** |
+| rep 2, discarded | **concurrent** with rep 1 | 766s | ~33+ | `completed` | yes (overwritten 4s later) |
+| **replacement rep 1** | **solo** | **1124s** | **75** | **`terminated`** | **no** |
+
+**What this refutes.** §2.6's Error 1 said concurrency made the two runs take 766s/1075s "against qualification's 438s solo," and treated that as the measurable cost of overlapping them. The solo replacement ran **longer than either** — 1124s and 75 calls — with nothing else on the instance. **Seed 08's loop length is simply variable**, which is exactly what its spec implies by declining to specify a stopping mechanism. Concurrency is not established as the cause of anything, and that attribution is withdrawn.
+
+**What this also corrects about rep 1.** §2.6 concluded that rep 1's `state = terminated` was the operator's PATCH value, surviving because "the completion handler does not overwrite a terminal value," and discarded the fixture on that basis. The replacement reached **`terminated` on its own, with no operator write at all**, at a comparable duration (1124s vs rep 1's 1075s). So `terminated` is the platform's ordinary outcome for a long seed-08 run, and rep 1 would most likely have ended `terminated` regardless of the PATCH. **The claim that the operator write ruined that fixture is not supported and is withdrawn.**
+
+The discard still stands, on the weaker and sufficient ground §2.6 already gave for rep 2: a fixture that was written to mid-pass is not worth defending in a pass whose primary outcome is about how determinate its own instrument is. Replacing it cost one solo run.
+
+**What survives from §2.6, unchanged and still load-bearing:**
+
+- **Error 2 stands in full.** The starvation diagnosis was raised against row 01 on task counts sampled twice *after* the run had finished. Row 01 measured 279s against v13's ~280s expectation. Row 01 is not void.
+- **Error 3 stands in full.** `PATCH sn_aia_execution_plan.state` is cosmetic — rep 1 kept creating tasks after the write and ran to its own terminal step — and `state_reason` does not persist.
+- **The reading correction stands.** Terminal state comes from `servicenow_aia_trace`, not the plan row; liveness is judged from instance timestamps, never from elapsed wall clock estimated in conversation.
+
+**A fixture fact worth carrying forward.** A seed-08 target execution is normally `terminated`, not `completed`. That does **not** disqualify it: §A3's terminated-run void condition governs **scored diagnostic runs**, and this is a **seeded target execution**. Seed 08's own bar is *"the same tool called repeatedly with no change in its result, ≥ 10 calls"* and explicitly states that *"the stopping mechanism is **not** part of the bar."* Replacement rep 1 meets that bar at **75 calls**.
+
