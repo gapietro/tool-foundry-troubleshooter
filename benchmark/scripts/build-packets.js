@@ -775,6 +775,26 @@ function reportHeader(row) {
 const REJECTION_SPLIT = /\n+-{3,}\nVALIDATOR REJECTION\n/
 
 /**
+ * The OTHER way a run can end with no accepted report, added for v14 (#175).
+ *
+ * Until v14 every `failed` row had been failed BY THE VALIDATOR: the model
+ * produced a report, the harness rejected it, and both halves went in the
+ * packet. v14 rows 06 and 08 failed EARLIER than that — the reasoning loop
+ * could not be parsed, so no report body was ever produced and the fix-report
+ * validator never ran. The old shape could not represent that: the only slot
+ * for a failure was labelled "VALIDATOR REJECTION", and putting a reasoning
+ * error there would have told twenty scorers something untrue about how the
+ * run failed.
+ *
+ * So a `failed` terminal is now satisfied by EITHER marker, and each one says
+ * what actually happened. This is additive: no row that was representable
+ * before is treated differently now. §AK left the adjacent case (`genai_down`
+ * with no report body) explicitly undecided; this does not decide it, it only
+ * gives the artifact a truthful shape.
+ */
+const NO_REPORT_SPLIT = /\n+-{3,}\nNO REPORT PRODUCED\n/
+
+/**
  * The report body. Custom runs store a structured `fix_report`; native runs
  * emit markdown prose. Both are reproduced in the form the arm produced —
  * v9 did the same, and normalising one into the other would edit the artifact
@@ -783,13 +803,30 @@ const REJECTION_SPLIT = /\n+-{3,}\nVALIDATOR REJECTION\n/
 function reportBody(row, raw) {
     const out = []
 
+    const noReportSplit = raw.match(NO_REPORT_SPLIT)
+
     if (/failed/.test(row.terminal)) {
         out.push(
-            'This run terminated with **no accepted report**. What follows is the report body the model' +
-                " produced, verbatim, followed by the harness validator's verbatim rejection. **A rejected" +
-                ' report is still scored** — it is the only record of what the model produced.'
+            noReportSplit
+                ? 'This run terminated with **no report at all**. The reasoning loop failed before any' +
+                      ' report body was produced, so there is nothing the model wrote to show and the' +
+                      " harness's fix-report validator never ran. What follows is the harness's verbatim" +
+                      ' terminal error. **Score what the run produced, which is nothing** — that is itself' +
+                      ' the observation, not a gap in the record.'
+                : 'This run terminated with **no accepted report**. What follows is the report body the model' +
+                      " produced, verbatim, followed by the harness validator's verbatim rejection. **A rejected" +
+                      ' report is still scored** — it is the only record of what the model produced.'
         )
         out.push('')
+    }
+
+    if (noReportSplit) {
+        out.push('**Harness terminal error, verbatim:**')
+        out.push('')
+        out.push('```')
+        out.push(raw.slice(noReportSplit.index + noReportSplit[0].length).trim())
+        out.push('```')
+        return out.join('\n')
     }
 
     const split = raw.match(REJECTION_SPLIT)
@@ -1030,10 +1067,20 @@ function buildAll(pass) {
         // both are one manifest edit away.
         const raw = readInput(path.join(paths.reports, 'row-' + n + '.md'), paths.pass, "this row's report")
         const hasRejection = REJECTION_SPLIT.test(raw)
-        if (/failed/.test(row.terminal) !== hasRejection) {
+        const hasNoReport = NO_REPORT_SPLIT.test(raw)
+        // A `failed` terminal must be accounted for by exactly one of the two
+        // shapes, and a passing row by neither. Both markers at once is a
+        // manifest/report contradiction, not a richer record.
+        if (hasRejection && hasNoReport) {
+            mismatched.push(
+                name + ': the report carries BOTH a validator rejection and a no-report marker; ' +
+                    'a run either produced a body that was rejected or produced none at all'
+            )
+        } else if (/failed/.test(row.terminal) !== (hasRejection || hasNoReport)) {
             mismatched.push(
                 name + ': terminal is "' + row.terminal + '" but the report ' +
-                    (hasRejection ? 'DOES' : 'does NOT') + ' carry a validator rejection'
+                    (hasRejection || hasNoReport ? 'DOES' : 'does NOT') +
+                    ' carry a validator rejection or a no-report marker'
             )
         }
 

@@ -357,6 +357,55 @@ describe('a full --pass build, end to end (the gate no test covered)', () => {
         expect(report).toMatch(/dispatched/i)
     })
 
+    // §AN7 item 14 exists because #176 left buildAll('v13') permanently
+    // throwing and nothing noticed — a parallel path stayed green. Running the
+    // CLI once by hand is exactly the substitution that item warns about, so
+    // the v14 path is pinned here, where it runs on every suite.
+    test("buildAll('v14') builds all twenty rows (§AN7 item 14)", () => {
+        const quiet = jest.spyOn(console, 'warn').mockImplementation(() => {})
+        try {
+            expect(gen.buildAll('v14')).toHaveLength(20)
+        } finally {
+            quiet.mockRestore()
+        }
+    })
+
+    // The two shapes a `failed` row can take. Until v14 only the first existed,
+    // and a run that died BEFORE producing a body had nowhere truthful to go:
+    // the sole failure slot was labelled VALIDATOR REJECTION, which would have
+    // told twenty scorers the fix-report validator ran when it never did.
+    test('a failed row is satisfied by EITHER a validator rejection or a no-report marker', () => {
+        const quiet = jest.spyOn(console, 'warn').mockImplementation(() => {})
+        let built
+        try {
+            built = gen.buildAll('v14')
+        } finally {
+            quiet.mockRestore()
+        }
+        const byRow = (n) => built.find((p) => p.row.row === n)
+
+        // Rows 06 and 08: reasoning failed before any report body existed.
+        for (const n of [6, 8]) {
+            const p = byRow(n)
+            expect(p.row.terminal).toMatch(/failed/)
+            expect(p.body).toMatch(/no report at all/i)
+            expect(p.body).toMatch(/Harness terminal error, verbatim/)
+            // It must NOT claim a validator rejection it never had.
+            expect(p.body).not.toMatch(/validator rejection, verbatim/i)
+        }
+
+        // Row 12: the model DID produce a body and the validator rejected it.
+        const twelve = byRow(12)
+        expect(twelve.row.terminal).toMatch(/failed/)
+        expect(twelve.body).toMatch(/no accepted report/i)
+        expect(twelve.body).toMatch(/Harness validator rejection, verbatim/)
+        expect(twelve.body).not.toMatch(/no report at all/i)
+
+        // And a passing row carries neither shape.
+        expect(byRow(1).body).not.toMatch(/no report at all/i)
+        expect(byRow(1).body).not.toMatch(/validator rejection, verbatim/i)
+    })
+
     /**
      * The destructive branch is unit-tested, NOT driven end to end.
      *

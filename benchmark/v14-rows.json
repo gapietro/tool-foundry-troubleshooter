@@ -204,7 +204,7 @@
     "rep": 1,
     "terminal": "completed",
     "wall_clock": "274s",
-    "tool_calls": null,
+    "tool_calls": 15,
     "distinct_tools": [
       "agent_trace",
       "agent_config",
@@ -212,18 +212,18 @@
       "query_table",
       "genai_log",
       "log_analysis",
-      "read_artifact"
+      "read_artifact (x9)"
     ],
     "layers_swept": "7/7 (L1, L2, L3, L4, L5, L6, L7)",
     "layers_available": "7/7",
     "holds": 0,
     "tool_limit": 25,
     "target_execution": "281d57c72bea031017a6ffbeee91bfc8",
-    "run_id": null,
-    "run_number": null,
+    "run_id": "7a262f8f2b62431017a6ffbeee91bf3c",
+    "run_number": "TR1000303",
     "triggering_record": null,
     "invocation": "servicenow_aia_execute on agent \"Agent Doctor\"; waitForCompletion=false; session d426a78f2b62431017a6ffbeee91bf5e -> plan e426a78f2b62431017a6ffbeee91bfc1",
-    "operator_note": "LLM P95 17,628ms (third native run at/above the 15,000ms instruction_bloat threshold \u2014 supports Ruling 7's premise that the threshold sits inside this instance's ordinary variance). tool_calls/run_id PENDING from the audit table. OPERATOR OBSERVATION, NOT A SCORE: the report correctly finds `category` absent, then cites a `type` (String, max 40) column as present and claims query_table confirmed values hardware/software on it. Operator re-read the dictionary: x_snc_tsbench_ticket has 8 fields and NO `type` column (non-system columns are priority and short_description only), so the proposed Fix 1 (addQuery('type', category)) targets a column that does not exist. Recorded here and NOT injected into any scorer-facing field; the seed spec already ships the true column list."
+    "operator_note": "LLM P95 17,628ms (third native run at/above the 15,000ms instruction_bloat threshold \u2014 supports Ruling 7's premise that the threshold sits inside this instance's ordinary variance). OPERATOR OBSERVATION, NOT A SCORE: the report correctly finds `category` absent, then cites a `type` (String, max 40) column as present and claims query_table confirmed values hardware/software on it. Operator re-read the dictionary: x_snc_tsbench_ticket has 8 fields and NO `type` column (non-system columns are priority and short_description only), so the proposed Fix 1 (addQuery('type', category)) targets a column that does not exist. Recorded here and NOT injected into any scorer-facing field; the seed spec already ships the true column list."
   },
   {
     "row": 10,
@@ -232,7 +232,7 @@
     "rep": 1,
     "terminal": "complete",
     "wall_clock": "~30s",
-    "tool_calls": null,
+    "tool_calls": 2,
     "distinct_tools": [
       "agent_trace",
       "query_table"
@@ -246,7 +246,7 @@
     "run_number": "TR1000304",
     "triggering_record": null,
     "invocation": "POST /api/x_snc_troubleshoot/v1/troubleshooter/analyze {\"execution\": \"281d57c72bea031017a6ffbeee91bfc8\", \"mode\": \"diagnose\"}",
-    "operator_note": "First NON-EMPTY custom fix_report of the pass (rows 02/04 returned root_causes: [], rows 06/08 failed outright). Files two root causes at layers 1 and 5. tool_calls PENDING from the audit table."
+    "operator_note": "First NON-EMPTY custom fix_report of the pass (rows 02/04 returned root_causes: [], rows 06/08 failed outright). Files two root causes at layers 1 and 5."
   },
   {
     "row": 11,
@@ -255,7 +255,7 @@
     "rep": 2,
     "terminal": "completed",
     "wall_clock": "284s",
-    "tool_calls": null,
+    "tool_calls": 15,
     "distinct_tools": [
       "agent_trace",
       "agent_config",
@@ -263,15 +263,15 @@
       "query_table",
       "genai_log",
       "log_analysis",
-      "read_artifact"
+      "read_artifact (x9)"
     ],
     "layers_swept": "6/7 SWEPT + platform logs UNAVAILABLE (L1-L7 claimed; syslog DENIED)",
     "layers_available": "7/7",
     "holds": 0,
     "tool_limit": 25,
     "target_execution": "ff6d1fcb2b6e4310f243fed2ce91bf26",
-    "run_id": null,
-    "run_number": null,
+    "run_id": "2b08e3432be2431017a6ffbeee91bfe7",
+    "run_number": "TR1000305",
     "triggering_record": null,
     "invocation": "servicenow_aia_execute on agent \"Agent Doctor\"; waitForCompletion=false; session 4d086f032be2431017a6ffbeee91bf92 -> plan 9108af032be2431017a6ffbeee91bf98",
     "operator_note": "LLM P95 30,626ms \u2014 the highest of the pass; four of six native runs so far sit at or above the 15,000ms instruction_bloat threshold. Files RC-1 at layer 4 (missing category column) AND a co-primary RC-2 asserting the table is 'genuinely empty (0 rows)', with Fix 2 'seed the table'. OPERATOR-VERIFIED FIXTURE FACT, recorded NOT as a score: x_snc_tsbench_ticket held 22 rows at this moment (COUNT aggregate). UNRESOLVED and needing its own investigation after the pass: the report attributes the zero to query_table itself returning unfiltered_row_count: 0 / verdict: genuinely_empty. If the TOOL returned that, this is a harness defect rather than a model fabrication \u2014 plausible mechanism is a cross-scope read (query_table runs in x_snc_troubleshoot; the bench table is owned by x_snc_tsbench, and Build Rule #42 says a Fluent Table() installs with zero ACLs). Not investigated mid-pass per \u00a7T9."
@@ -283,7 +283,7 @@
     "rep": 2,
     "terminal": "failed (fix_report rejected by validation)",
     "wall_clock": "~30s",
-    "tool_calls": null,
+    "tool_calls": 2,
     "distinct_tools": [
       "agent_trace",
       "schema_lookup"
@@ -306,22 +306,23 @@
     "rep": 1,
     "terminal": "completed",
     "wall_clock": "291s",
-    "tool_calls": null,
+    "tool_calls": 16,
     "distinct_tools": [
       "agent_trace",
       "agent_config",
       "schema_lookup",
-      "query_table",
-      "genai_log",
-      "read_artifact"
+      "query_table (x2)",
+      "genai_log (x3)",
+      "log_analysis",
+      "read_artifact (x7)"
     ],
     "layers_swept": "7/7 claimed SWEPT + platform logs UNAVAILABLE (syslog caller-restricted)",
     "layers_available": "7/7",
     "holds": 0,
     "tool_limit": 25,
     "target_execution": "b52d5f0b2bea031017a6ffbeee91bfec",
-    "run_id": null,
-    "run_number": null,
+    "run_id": "9e1aefcf2be2431017a6ffbeee91bf2b",
+    "run_number": "TR1000307",
     "triggering_record": "e6dcdf072bea031017a6ffbeee91bfe4",
     "invocation": "servicenow_aia_execute on agent \"Agent Doctor\"; waitForCompletion=false; session f20a630f2be2431017a6ffbeee91bfc3 -> plan 8f0a2bcf2be2431017a6ffbeee91bf97",
     "operator_note": "LLM P95 97,065ms \u2014 by far the pass maximum, consistent with a 58K-char tool return inflating every subsequent prompt. Names the tool_output_bloat flag at 58,471 chars against the 20,000 threshold (RC-2, layer 3). AN-5 TRIPWIRE STATUS: this report cites tool_output_bloat and does NOT name instruction_bloat. OPERATOR OBSERVATION, NOT A SCORE: RC-1 lists the table's 8 columns as sys_id, short_description, priority, u_caller, u_description, u_impact, u_resolution, u_ticket_number \u2014 the five u_* names do not exist (the real 8 are sys_id, short_description, priority, sys_created_on, sys_created_by, sys_updated_on, sys_updated_by, sys_mod_count). Third native row to invent schema detail while getting the field COUNT right."
@@ -333,9 +334,10 @@
     "rep": 1,
     "terminal": "complete",
     "wall_clock": "~40s",
-    "tool_calls": null,
+    "tool_calls": 3,
     "distinct_tools": [
       "agent_trace",
+      "read_artifact",
       "schema_lookup"
     ],
     "layers_swept": "2/7 (L1, L4)",
@@ -356,22 +358,23 @@
     "rep": 2,
     "terminal": "completed",
     "wall_clock": "368s",
-    "tool_calls": null,
+    "tool_calls": 18,
     "distinct_tools": [
       "agent_trace",
       "agent_config",
       "schema_lookup",
-      "query_table",
-      "genai_log",
-      "read_artifact"
+      "query_table (x2)",
+      "genai_log (x2)",
+      "log_analysis",
+      "read_artifact (x10)"
     ],
     "layers_swept": "7/7 claimed SWEPT (L6 partial) + platform logs UNAVAILABLE",
     "layers_available": "7/7",
     "holds": 0,
     "tool_limit": 25,
     "target_execution": "7fad9f4f2b6e4310f243fed2ce91bf20",
-    "run_id": null,
-    "run_number": null,
+    "run_id": "822ceb0f2b26431017a6ffbeee91bf4d",
+    "run_number": "TR1000309",
     "triggering_record": "36dc13472bea031017a6ffbeee91bf75",
     "invocation": "servicenow_aia_execute on agent \"Agent Doctor\"; waitForCompletion=false; session 631c670f2b26431017a6ffbeee91bfb0 -> plan bb1c670f2b26431017a6ffbeee91bfe1",
     "operator_note": "LLM P95 69,942ms. Names tool_output_bloat at 58,462 chars against the 20,000 threshold, filed as RC-4 of four. AN-5 TRIPWIRE STATUS: cites tool_output_bloat, does NOT name instruction_bloat. Unlike rows 09/11/13 this report does not invent column names \u2014 it reports field_count 8 and cites only the genuine missing-`category` warning."
@@ -383,9 +386,10 @@
     "rep": 2,
     "terminal": "complete",
     "wall_clock": "~40s",
-    "tool_calls": null,
+    "tool_calls": 3,
     "distinct_tools": [
       "agent_trace",
+      "read_artifact",
       "schema_lookup"
     ],
     "layers_swept": "2/7 (L1, L4)",
@@ -406,20 +410,21 @@
     "rep": 1,
     "terminal": "completed",
     "wall_clock": "297s",
-    "tool_calls": null,
+    "tool_calls": 14,
     "distinct_tools": [
       "agent_trace",
       "agent_config",
-      "genai_log",
-      "read_artifact"
+      "genai_log (x2)",
+      "log_analysis",
+      "read_artifact (x9)"
     ],
     "layers_swept": "5/7 SWEPT (L1,L2,L3,L6,L7); L4/L5 NOT SWEPT with stated reasons; platform logs UNAVAILABLE",
     "layers_available": "7/7",
     "holds": 0,
     "tool_limit": 25,
     "target_execution": "c24f27032ba6431017a6ffbeee91bf4d",
-    "run_id": null,
-    "run_number": null,
+    "run_id": "97197f872b2a8310f243fed2ce91bf26",
+    "run_number": "TR1000311",
     "triggering_record": null,
     "invocation": "servicenow_aia_execute on agent \"Agent Doctor\"; waitForCompletion=false; session 6a09ff472b2a8310f243fed2ce91bf4d -> plan ef0937872b2a8310f243fed2ce91bf61",
     "operator_note": "LLM P95 30,707ms. Files RC-1 PRIMARY at layer 3 (tool script is a hardcoded constant with no terminal branch) and places instructions at layer 2 as CONTRIBUTING, not primary. Independently flags that max_auto_executions=10 did not bind against 75 tool calls, marked UNCONFIRMED with a stated confirmation route."
@@ -431,9 +436,10 @@
     "rep": 1,
     "terminal": "complete",
     "wall_clock": "~60s",
-    "tool_calls": null,
+    "tool_calls": 3,
     "distinct_tools": [
       "agent_trace",
+      "read_artifact",
       "schema_lookup"
     ],
     "layers_swept": "2/7 (L1, L4)",
@@ -454,20 +460,21 @@
     "rep": 2,
     "terminal": "completed",
     "wall_clock": "289s",
-    "tool_calls": null,
+    "tool_calls": 13,
     "distinct_tools": [
       "agent_trace",
       "agent_config",
       "genai_log",
-      "read_artifact"
+      "log_analysis",
+      "read_artifact (x9)"
     ],
     "layers_swept": "5/7 SWEPT (L1,L2,L3,L6,L7); L4/L5 NOT SWEPT with stated reasons; platform logs UNAVAILABLE",
     "layers_available": "7/7",
     "holds": 0,
     "tool_limit": 25,
     "target_execution": "3f247f0b2b6a431017a6ffbeee91bf55",
-    "run_id": null,
-    "run_number": null,
+    "run_id": "2d8b77cf2b6e431017a6ffbeee91bf2e",
+    "run_number": "TR1000313",
     "triggering_record": null,
     "invocation": "servicenow_aia_execute on agent \"Agent Doctor\"; waitForCompletion=false; session 817bbb8f2b6e431017a6ffbeee91bfe2 -> plan 4e7b7f8f2b6e431017a6ffbeee91bf07",
     "operator_note": "LLM P95 27,318ms. Same shape as row 17: RC-1 PRIMARY at layer 3 (hardcoded constant, no terminal branch), instructions layer 2 as CONTRIBUTING. Quotes the tool script's own comment verbatim. Adds RC-4 at layer 7 (no use case, no trigger links)."
@@ -479,9 +486,10 @@
     "rep": 2,
     "terminal": "complete",
     "wall_clock": "~60s",
-    "tool_calls": null,
+    "tool_calls": 3,
     "distinct_tools": [
       "agent_trace",
+      "read_artifact",
       "schema_lookup"
     ],
     "layers_swept": "2/7 (L1, L4)",
