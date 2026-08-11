@@ -196,5 +196,56 @@
     "triggering_record": "25e32b4b2b228310f243fed2ce91bf22",
     "invocation": "POST /api/x_snc_troubleshoot/v1/troubleshooter/analyze with agent + timeframe",
     "operator_note": "NOT VOID, same basis as row 06 (\u00a7A3/\u00a7AK: the run's reasoning failed, the platform did not fail the execution). IDENTICAL error to row 06 \u2014 'unknown action: agent_config' \u2014 so the custom arm fails REPRODUCIBLY on the agent+timeframe path while succeeding with agent_config on the `execution` path in rows 02 and 04. Both seed-05 custom rows therefore produced no report at all."
+  },
+  {
+    "row": 9,
+    "arm": "native",
+    "seed": "06",
+    "rep": 1,
+    "terminal": "completed",
+    "wall_clock": "274s",
+    "tool_calls": null,
+    "distinct_tools": [
+      "agent_trace",
+      "agent_config",
+      "schema_lookup",
+      "query_table",
+      "genai_log",
+      "log_analysis",
+      "read_artifact"
+    ],
+    "layers_swept": "7/7 (L1, L2, L3, L4, L5, L6, L7)",
+    "layers_available": "7/7",
+    "holds": 0,
+    "tool_limit": 25,
+    "target_execution": "281d57c72bea031017a6ffbeee91bfc8",
+    "run_id": null,
+    "run_number": null,
+    "triggering_record": null,
+    "invocation": "servicenow_aia_execute on agent \"Agent Doctor\"; waitForCompletion=false; session d426a78f2b62431017a6ffbeee91bf5e -> plan e426a78f2b62431017a6ffbeee91bfc1",
+    "operator_note": "LLM P95 17,628ms (third native run at/above the 15,000ms instruction_bloat threshold \u2014 supports Ruling 7's premise that the threshold sits inside this instance's ordinary variance). tool_calls/run_id PENDING from the audit table. OPERATOR OBSERVATION, NOT A SCORE: the report correctly finds `category` absent, then cites a `type` (String, max 40) column as present and claims query_table confirmed values hardware/software on it. Operator re-read the dictionary: x_snc_tsbench_ticket has 8 fields and NO `type` column (non-system columns are priority and short_description only), so the proposed Fix 1 (addQuery('type', category)) targets a column that does not exist. Recorded here and NOT injected into any scorer-facing field; the seed spec already ships the true column list."
+  },
+  {
+    "row": 10,
+    "arm": "custom",
+    "seed": "06",
+    "rep": 1,
+    "terminal": "complete",
+    "wall_clock": "~30s",
+    "tool_calls": null,
+    "distinct_tools": [
+      "agent_trace",
+      "query_table"
+    ],
+    "layers_swept": "2/7 (L1, L5)",
+    "layers_available": "7/7",
+    "holds": 0,
+    "tool_limit": 25,
+    "target_execution": "281d57c72bea031017a6ffbeee91bfc8",
+    "run_id": "8497af4f2ba2431017a6ffbeee91bf92",
+    "run_number": "TR1000304",
+    "triggering_record": null,
+    "invocation": "POST /api/x_snc_troubleshoot/v1/troubleshooter/analyze {\"execution\": \"281d57c72bea031017a6ffbeee91bfc8\", \"mode\": \"diagnose\"}",
+    "operator_note": "First NON-EMPTY custom fix_report of the pass (rows 02/04 returned root_causes: [], rows 06/08 failed outright). Files two root causes at layers 1 and 5. tool_calls PENDING from the audit table."
   }
 ]
