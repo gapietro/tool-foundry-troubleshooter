@@ -348,5 +348,55 @@
     "triggering_record": "e6dcdf072bea031017a6ffbeee91bfe4",
     "invocation": "POST /api/x_snc_troubleshoot/v1/troubleshooter/analyze {\"execution\": \"b52d5f0b2bea031017a6ffbeee91bfec\", \"mode\": \"diagnose\"}",
     "operator_note": "Report accepted (status complete). Files a single root cause at layer 1 about an unpopulated priority field. Does not mention tool_output_bloat. Like rows 10 and 12, its schema evidence refers to the `incident` table rather than the bench table."
+  },
+  {
+    "row": 15,
+    "arm": "native",
+    "seed": "07",
+    "rep": 2,
+    "terminal": "completed",
+    "wall_clock": "368s",
+    "tool_calls": null,
+    "distinct_tools": [
+      "agent_trace",
+      "agent_config",
+      "schema_lookup",
+      "query_table",
+      "genai_log",
+      "read_artifact"
+    ],
+    "layers_swept": "7/7 claimed SWEPT (L6 partial) + platform logs UNAVAILABLE",
+    "layers_available": "7/7",
+    "holds": 0,
+    "tool_limit": 25,
+    "target_execution": "7fad9f4f2b6e4310f243fed2ce91bf20",
+    "run_id": null,
+    "run_number": null,
+    "triggering_record": "36dc13472bea031017a6ffbeee91bf75",
+    "invocation": "servicenow_aia_execute on agent \"Agent Doctor\"; waitForCompletion=false; session 631c670f2b26431017a6ffbeee91bfb0 -> plan bb1c670f2b26431017a6ffbeee91bfe1",
+    "operator_note": "LLM P95 69,942ms. Names tool_output_bloat at 58,462 chars against the 20,000 threshold, filed as RC-4 of four. AN-5 TRIPWIRE STATUS: cites tool_output_bloat, does NOT name instruction_bloat. Unlike rows 09/11/13 this report does not invent column names \u2014 it reports field_count 8 and cites only the genuine missing-`category` warning."
+  },
+  {
+    "row": 16,
+    "arm": "custom",
+    "seed": "07",
+    "rep": 2,
+    "terminal": "complete",
+    "wall_clock": "~40s",
+    "tool_calls": null,
+    "distinct_tools": [
+      "agent_trace",
+      "schema_lookup"
+    ],
+    "layers_swept": "2/7 (L1, L4)",
+    "layers_available": "7/7",
+    "holds": 0,
+    "tool_limit": 25,
+    "target_execution": "7fad9f4f2b6e4310f243fed2ce91bf20",
+    "run_id": "07be274f2b66431017a6ffbeee91bfff",
+    "run_number": "TR1000310",
+    "triggering_record": "36dc13472bea031017a6ffbeee91bf75",
+    "invocation": "POST /api/x_snc_troubleshoot/v1/troubleshooter/analyze {\"execution\": \"7fad9f4f2b6e4310f243fed2ce91bf20\", \"mode\": \"diagnose\"}",
+    "operator_note": "root_causes: [] and fixes: [] with an `inconclusive` block; its schema evidence cites sn_aia_agent_tool_m2m rather than the bench table. Does not mention the bloat."
   }
 ]
