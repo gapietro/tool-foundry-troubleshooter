@@ -1928,7 +1928,7 @@ PaAgentLoop.prototype = {
     _finishFailedFixReport: function (runId, problems, rawDraft) {
         var errText = 'fix_report failed validation and could not be repaired: ' + this._joinProblems(problems)
         this._runs().appendTranscript(runId, { actor: 'system', result_digest: errText })
-        var closeRes = this._runs().close(runId, 'failed', { error: errText, fixReport: rawDraft })
+        this._runs().close(runId, 'failed', { error: errText, fixReport: rawDraft })
         return {
             success: false,
             outcome: 'failed',
@@ -1963,7 +1963,7 @@ PaAgentLoop.prototype = {
         var closeOpts = { error: errText }
         if (stashed) closeOpts.fixReport = stashed.report
 
-        var closeRes = this._runs().close(runId, 'failed', closeOpts)
+        this._runs().close(runId, 'failed', closeOpts)
         return { success: false, outcome: 'failed', error: errText, run_id: runId }
     },
 

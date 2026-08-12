@@ -1181,7 +1181,7 @@ describe('sweepStaleNative', () => {
     })
 
     test('DOES close a native run whose only audit rows are also stale', () => {
-        const { mgr, world } = load({
+        const { mgr } = load({
             now: now,
             world: {
                 rows: {
