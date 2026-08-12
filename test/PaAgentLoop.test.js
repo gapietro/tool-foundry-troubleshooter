@@ -819,9 +819,21 @@ describe('audit context plumbing', () => {
     // M1 (final whole-branch review): `no_audit_rows` means the trail WAS
     // readable — it answered "zero tools invoked" — so the old wording
     // ("audit trail unavailable") misrepresented a successful query as a
-    // failed one. Only the citation/sweep cross-checks were skipped, and
-    // only because there is nothing yet to cite.
-    test('M1: no_audit_rows records the trail as READABLE with zero invoked tools, not "unavailable"', () => {
+    // failed one.
+    //
+    // #191 AMENDS M1's SECOND HALF. M1 fixed the transcript WORDING but left
+    // the context saying `auditAvailable:false`, on the rationale recorded in
+    // `_trailTools`' header: "for #79b's citation cross-check that distinction
+    // does not matter — an unverifiable citation and an unsupported one are
+    // both 'do not convict'." That holds for a run that can still go and
+    // gather evidence. It is FALSE for the terminal report this context
+    // validates: a run that invoked nothing makes every SWEPT claim
+    // demonstrably false, not merely unverifiable, and skipping the check is
+    // what let TR1000315/TR1000316 file six unsupported sweep claims
+    // unchallenged. `no_audit_rows` is now passed through as an AVAILABLE
+    // trail whose answer is the empty set — the same reading `_trailTools`
+    // has always given it.
+    test('#191: no_audit_rows reaches validation as an AVAILABLE trail answering "zero tools"', () => {
         const runs = fakeRunManager()
         const fixReport = fakeFixReport([{ valid: true, normalized: { ok: 1 } }])
         const audit = fakeAuditLogger({ available: false, degraded: 'no_audit_rows', tools: [] })
@@ -829,7 +841,28 @@ describe('audit context plumbing', () => {
         const loop = load({ runManager: runs, fixReport: fixReport, auditLogger: audit })
         loop._handleFixReport('run1', { failure_summary: 'x' })
 
+        expect(fixReport.contextCalls[0].auditAvailable).toBe(true)
+        expect(fixReport.contextCalls[0].invokedTools).toEqual([])
+    })
+
+    test('#191: a GENUINE degradation still reaches validation as unavailable — it convicts nobody', () => {
+        const runs = fakeRunManager()
+        const fixReport = fakeFixReport([{ valid: true, normalized: { ok: 1 } }])
+        const audit = fakeAuditLogger({ available: false, degraded: 'glide_unavailable', tools: [] })
+
+        const loop = load({ runManager: runs, fixReport: fixReport, auditLogger: audit })
+        loop._handleFixReport('run1', { failure_summary: 'x' })
+
         expect(fixReport.contextCalls[0].auditAvailable).toBe(false)
+    })
+
+    test('M1: the no_audit_rows transcript note still reads as readable, not unavailable', () => {
+        const runs = fakeRunManager()
+        const fixReport = fakeFixReport([{ valid: true, normalized: { ok: 1 } }])
+        const audit = fakeAuditLogger({ available: false, degraded: 'no_audit_rows', tools: [] })
+
+        const loop = load({ runManager: runs, fixReport: fixReport, auditLogger: audit })
+        loop._handleFixReport('run1', { failure_summary: 'x' })
 
         const notes = runs.transcript.filter((e) => String(e.result_digest).indexOf('no_audit_rows') !== -1)
         expect(notes.length).toBe(1)

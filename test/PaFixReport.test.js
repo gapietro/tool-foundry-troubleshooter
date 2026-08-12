@@ -1591,16 +1591,24 @@ describe('finding 2 — layer 5 (Data) is aligned with the data citation source'
 // context that should fail OPEN exactly like `auditAvailable:false` does.
 // =========================================================================
 
-describe('finding 3 — auditAvailable:true with an empty invokedTools list fails OPEN, not closed', () => {
-    test('an empty invokedTools array disables the audit-backed checks entirely, same as auditAvailable:false', () => {
-        const reports = load()
+// #191 AMENDS finding 3. The two cases above were lumped together as one
+// "failure shape wearing a different hat", and while `_auditContext` mapped a
+// zero-tool run to `auditAvailable:false`, the empty-array case was pure
+// defence — unreachable in production, so failing it open cost nothing.
+//
+// It is reachable now: `no_audit_rows` is passed through as an available trail
+// answering the empty set, because a TERMINAL report from a run that invoked
+// nothing has demonstrably false sweep claims rather than merely unverifiable
+// ones. So the two cases split:
+//
+//   invokedTools: []                  the trail ANSWERED "nothing" -> CHECK
+//   invokedTools: ['', null, '  ']    a malformed context          -> SKIP
+//
+// Finding 3's actual safety property — a context this code cannot interpret
+// convicts nobody — is preserved exactly; only the conflation is gone.
 
-        const result = reports.validate(validReport(), { auditAvailable: true, invokedTools: [] })
-
-        expect(result.valid).toBe(true)
-    })
-
-    test('an invokedTools array of only blanks/whitespace/null also disables the checks', () => {
+describe('finding 3 (as amended by #191) — a malformed list fails OPEN, an answered-empty one does not', () => {
+    test('an invokedTools array of only blanks/whitespace/null still disables the checks', () => {
         const reports = load()
 
         const result = reports.validate(validReport(), {
@@ -1618,6 +1626,81 @@ describe('finding 3 — auditAvailable:true with an empty invokedTools list fail
         const result = reports.validate(validReport(), auditCtx(['agent_trace']))
 
         expect(result.valid).toBe(false)
+    })
+
+    test('auditAvailable:false with an empty list still fails OPEN — a degraded trail convicts nobody', () => {
+        const reports = load()
+
+        const result = reports.validate(validReport(), { auditAvailable: false, invokedTools: [] })
+
+        expect(result.valid).toBe(true)
+    })
+})
+
+// =========================================================================
+// #191 — the zero-tool-call terminal report.
+//
+// Live shape, TR1000315 / TR1000316 on gpinst01 (2026-08-11): on the
+// `agent`+`timeframe` path there is no execution to trace, so the model filed
+// a terminal fix_report on its FIRST reasoning turn having invoked no tool at
+// all, declaring layer 1 UNAVAILABLE and layers 2-7 SWEPT.
+//
+// Every one of those six sweep claims is false and the trail proves it, but
+// the cross-check that says so was disabled by the very emptiness that made
+// the claims false. The only surviving rule was the layer-1-UNAVAILABLE
+// corroboration rule, which rejected for a reason the model could not act on
+// in a tool-less repair turn — so the run failed with the real defect
+// unnamed.
+// =========================================================================
+
+describe('#191 zero-tool-call terminal report', () => {
+    test('the live shape: layer 1 UNAVAILABLE + layers 2-7 SWEPT on an empty trail → unsupported sweep claim', () => {
+        const reports = load()
+        const layers = sweptLayers()
+        layers[1] = {
+            status: 'UNAVAILABLE',
+            reason: 'No execution plan exists to analyze the execution trace',
+        }
+
+        const result = reports.validate(validReport({ layers_swept: layers }), {
+            auditAvailable: true,
+            invokedTools: [],
+        })
+
+        expect(result.valid).toBe(false)
+        const sweep = result.problems.filter((p) => p.indexOf('unsupported sweep claim') !== -1)
+        expect(sweep.length).toBe(1)
+        expect(sweep[0]).toContain('6 layer(s)')
+        expect(sweep[0]).toContain('none')
+    })
+
+    test('the sweep claim is an EVIDENCE problem — only a run that can still call a tool can fix it', () => {
+        const reports = load()
+        const layers = sweptLayers()
+        layers[1] = { status: 'UNAVAILABLE', reason: 'no execution plan exists' }
+
+        const result = reports.validate(validReport({ layers_swept: layers }), {
+            auditAvailable: true,
+            invokedTools: [],
+        })
+
+        expect(result.evidenceProblems.some((p) => p.indexOf('unsupported sweep claim') !== -1)).toBe(true)
+    })
+
+    test('an honest zero-tool report claiming NO sweeps raises no sweep problem', () => {
+        const reports = load()
+        const layers = sweptLayers()
+        const nums = [1, 2, 3, 4, 5, 6, 7]
+        for (let i = 0; i < nums.length; i++) {
+            layers[nums[i]] = { status: 'NOT_SWEPT', reason: 'no tool called yet' }
+        }
+
+        const result = reports.validate(validReport({ layers_swept: layers }), {
+            auditAvailable: true,
+            invokedTools: [],
+        })
+
+        expect(result.problems.some((p) => p.indexOf('unsupported sweep claim') !== -1)).toBe(false)
     })
 })
 

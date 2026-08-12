@@ -17,6 +17,51 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1113 — 2026-08-11
+
+**An empty audit trail is an answer, not a degradation (#191, part 1 of 2).**
+`src/server/PaAgentLoop.js` + `src/server/PaFixReport.js` + both test files. Validation layer
+only — the depth gate is untouched, so §Y6's bar and `REQUIRE_RETRIEVAL_TO_RELEASE` are as v13
+and v14 measured them.
+
+- **Root cause, from the model output itself** (`sys_generative_ai_log` `af199457…`, turn 1 of
+  `TR1000315`): the model filed a terminal `fix_report` on its FIRST reasoning turn with zero
+  tool calls, declaring layer 1 `UNAVAILABLE` and **layers 2-7 `SWEPT`** with empty reasons.
+- **Why the depth gate allowed it, and why #191's stated candidate is withdrawn.** The issue
+  pointed at the unreadable-trail short-circuit (`_depthGate`, `:1806`), which allows without
+  setting `_gateReleased`. That path never ran: the trail was readable and empty. The allow came
+  from the no-declared-gap branch — `unsweptGaps` counts only `NOT_SWEPT`, so a blanket false
+  `SWEPT` declares no gap, `open.length === 0`, and the gate released permanently. **The gate is
+  not malfunctioning**: it enforces *admitted* gaps by design (§H8 item 3 — the harness must
+  never name a tool itself), and a report admitting nothing is unholdable by construction.
+- **The defect is that the check written for exactly this draft could not fire.**
+  `_checkSweptClaims` (#79b) exists to refute a `SWEPT` claim the trail does not support. It
+  returns early on `!ctx.auditEnabled`, and `_buildCheckContext` required a **non-empty** tool
+  list — so a run that swept nothing was precisely the run whose false sweep claims were
+  unfalsifiable. Upstream, `_auditContext` mapped `no_audit_rows` to `auditAvailable:false`,
+  making the combination unreachable in the first place.
+- **Both halves fixed, and the rationale being overturned is named.** `_trailTools` has always
+  read `no_audit_rows` as *readable with zero tools*; `_auditContext` did not, on the reasoning
+  in its sibling's header — "for #79b's citation cross-check that distinction does not matter,
+  an unverifiable citation and an unsupported one are both do-not-convict." That holds for a run
+  that can still gather evidence and **fails for a terminal report**, where the trail proves the
+  sweep claims false rather than merely unverified. `no_audit_rows` now reaches validation as an
+  available trail answering the empty set.
+- **Finding 3 (2026-08-02) is amended, not discarded.** It lumped "empty list" in with
+  "malformed list" as one failure shape. Those now split by *why* the list is empty: a raw `[]`
+  is the trail answering (**check**); entries that all normalize away, or a non-array, are a
+  context this code cannot interpret (**skip**). Finding 3's actual safety property — an
+  uninterpretable context convicts nobody — is preserved exactly. Genuine degradations
+  (`glide_unavailable`, `query_failed`) still fail open, with the transcript note unchanged.
+- **Scope limit, stated plainly.** This makes the run fail for the *true* reason and names the
+  real defect to the model; it does not on its own make the arm produce a report, because the
+  tool-less repair turn still cannot gather evidence (`MAX_EVIDENCE_RETURNS: 0` is §W6-ruled and
+  deliberately untouched). Part 2 — a depth-gate floor that holds a terminal action on an empty
+  trail regardless of what `layers_swept` claims — **changes scored instrument and is gated
+  behind its own `DECISION.md` pre-registration.** Not shipped here.
+- Verified by jest only (1699 tests, 33 suites). No live re-run: the fix changes which problems a
+  rejected report carries, and both measured runs were already `failed`.
+
 ## 2026.08.1112 — 2026-08-11
 
 **The retry answers the failure it actually got (#188).** `src/server/PaLlmProxy.js` +

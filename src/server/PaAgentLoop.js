@@ -602,26 +602,51 @@ PaAgentLoop.prototype = {
             res = null
         }
 
-        var available = !!(res && res.available === true)
+        var reason = this._str(res && res.degraded ? res.degraded : 'query_failed')
+        var answered = !!(res && res.available === true)
+
+        // #191 — `no_audit_rows` IS AN ANSWER, NOT A DEGRADATION.
+        //
+        // `PaAuditLogger.invokedTools()` collapses four situations into
+        // `available:false`, and this is the one that is not a failure: the
+        // query ran fine and reported that this run invoked nothing.
+        // `_trailTools` has always read it that way for the depth gate; this
+        // method did not, and its header gave the reason — "for #79b's
+        // citation cross-check that distinction does not matter, an
+        // unverifiable citation and an unsupported one are both do-not-
+        // convict."
+        //
+        // That reasoning holds for a run that can still go and gather
+        // evidence. It fails for the TERMINAL report this context validates.
+        // A run that invoked nothing does not have unverifiable sweep claims;
+        // it has demonstrably FALSE ones, and the trail is what proves it.
+        // Measured: TR1000315 and TR1000316 each filed a fix_report on their
+        // first reasoning turn declaring layers 2-7 SWEPT with zero tool
+        // calls, and `_checkSweptClaims` — the check written for exactly that
+        // draft — was disabled by the same emptiness that made the claims
+        // false. Both runs then failed on the one rule that is not audit-
+        // gated, naming a symptom instead of the defect.
+        //
+        // Genuine degradations are unchanged and still fail OPEN: a Glide
+        // hiccup must never convict an honest report.
+        var available = answered || reason === 'no_audit_rows'
+
         if (!available) {
-            var reason = this._str(res && res.degraded ? res.degraded : 'query_failed')
-            var note
-            if (reason === 'no_audit_rows') {
-                // M1 (final whole-branch review): the trail WAS readable
-                // here — the query ran fine and answered "this run invoked
-                // nothing." The old wording ("audit trail unavailable")
-                // read, to an analyst scanning the transcript, as the gate
-                // having failed open when it had not; only the
-                // citation/sweep cross-checks were skipped, and only
-                // because there is nothing yet to cite.
-                note =
+            this._runs().appendTranscript(runId, {
+                actor: 'system',
+                result_digest:
+                    'audit trail unavailable (' + reason + ') — citation and sweep cross-checks SKIPPED for this report',
+            })
+        } else if (!answered) {
+            // M1 (final whole-branch review): the trail WAS readable here, and
+            // wording it as "unavailable" read to an analyst scanning the
+            // transcript as the gate having failed open when it had not.
+            this._runs().appendTranscript(runId, {
+                actor: 'system',
+                result_digest:
                     'audit trail readable (no_audit_rows) — this run invoked zero tools; citation and sweep ' +
-                    'cross-checks SKIPPED for this report'
-            } else {
-                note =
-                    'audit trail unavailable (' + reason + ') — citation and sweep cross-checks SKIPPED for this report'
-            }
-            this._runs().appendTranscript(runId, { actor: 'system', result_digest: note })
+                    'cross-checks APPLIED against the empty set',
+            })
         }
 
         return {
