@@ -643,4 +643,123 @@ A second defect in the same function: on a mid-probe throw it returned before re
 
 ---
 
+## 5. Known limitations — the benchmark instrument (closed 2026-08-12)
+
+**Status: the benchmark is closed. The nine issues catalogued here were closed as
+*documented, not fixed*. This section is what replaces them.**
+
+### 5.0 Why this section exists
+
+Task 12 was a **decision gate**: one fork, asking whether the native agent was good enough
+or whether the custom harness had to be built. It answered `<5/10 → full custom harness`,
+Phase 1b was built, and the gate's job ended there.
+
+It did not end there in practice. Each benchmark pass produced findings about the pass;
+each finding became an issue; each fix needed a pre-registration; each pre-registration was
+reviewed and produced findings about the ledger's own integrity. Measured on 2026-08-12:
+103 issues created and 84 closed in fourteen days, with the open board flat at ~19 because
+**inflow matched outflow**, and nine of those nineteen descended from benchmark passes in
+two chains (`#188 → #204 → #205` and `#201-review → #202, #203 → #207`). That loop has no
+fixed point — a self-scrutinising instrument always finds more to scrutinise.
+
+The decision the instrument existed to inform has been made and acted on. Refining it
+further buys measurement precision on a fork that is already behind us, so it stops here.
+The defects below are real and are recorded honestly; they are **not** scheduled.
+
+### 5.1 What the scoreboard is allowed to say
+
+Carried forward from the ledger, because these constraints outlive the issues:
+
+- **Both arms are quoted together** (§AD7). Last scored pass, v14: gate native **5/10 =
+  50.0%**, custom **0/10 = 0.0%**.
+- **No figure may be claimed without a scorer** (§AI4 / §AN / §AQ4 / §AU4). Determinacy
+  counts from a pass with no scorer are determinacy facts only, never gate figures.
+- **§AQ3 stands:** a v15+ custom gate figure may be reported *absolutely* but **never
+  differenced** against v12/v13/v14 — the instrument changed underneath those numbers.
+- **§AO3:** changing a registered term needs its own pre-registration, never a rider on
+  another change. (Honoured here by closing rather than amending.)
+
+### 5.2 Determinacy is not correctness — the finding that ends the pass
+
+The instrument measures whether a report is **admissible**, and got steadily better at it
+while **correctness went unmeasured**. Two results make this concrete, and they are the
+strongest argument for stopping:
+
+- **§AO2** — a row scored **6/6** while proposing a fix at a **column that does not
+  exist**. Full marks, wrong answer.
+- **§AU/§AV** — retargeting the depth gate produced 4/4 tool calls and 4/4 `data` citations
+  against 0-of-4 baselines; **every registered prediction passed and no revert trigger
+  fired**. It was reverted anyway, because reps reaching the seed's actual root cause went
+  **4/4 → 0/4**. `TR1000324` is the first honestly-sourced two-source report ever measured
+  on this path, and it is *wrong*.
+
+Sharpening admissibility gates further cannot fix this. A correctness axis would be a new
+instrument, not another pass of this one.
+
+### 5.3 Open defects in the instrument — documented, not fixed
+
+| Was | Defect | Mechanism | Measurement |
+|---|---|---|---|
+| #203 | One refused tool call disables **both** audit-gated honesty checks for the whole `fix_report` | A refused call leaves `trailAnsweredEmpty` false → `auditAvailable` false → `auditEnabled` false, so `_checkSweptClaims` (`PaFixReport.js:494`) and `_checkCitationSupported` (`:751`) both return immediately. A zero-evidence report can then validate on the capped release. | **Reachable by construction** — `PaLlmProxy._validate:197` checks only that `tool` is a non-empty string and `PaAgentLoop._step:366` dispatches with no name check, so the registry is the only vocabulary gate. **Never observed: 0 registry refusals across all 301 runs** (probe sensitivity verified — see §5.5). |
+| #207 | The action-vocabulary retry hands the model an **unvalidated tool name**, manufacturing #203's trigger | `PaLlmProxy._buildRetryPrompt:417-425` emits a copy-ready `{"action":"tool_call","tool":"<offender>","args":{...}}` exemplar without checking `offender` against the registry. Its "deliberately NOT coupled to the tool registry" rationale (`:354-358`) was true when written and was falsified by #200's counter split — **§AT6's own ruling arriving one file over**. | Class observed **2 of 301 runs (~0.7%)** — TR1000300/TR1000302, `unknown action: agent_config`. Stayed off the registry gate only because both offenders were real tool names. Harmful (hallucinated) variant: **0 of 2, unmeasured**. |
+| #202 | The dispatch-side hold clear strips the floor's block on a **refused** call, burning the hold budget | `_holdActive` (`PaAgentLoop.js:426`) clears a record-nothing hold on *any* dispatch. A run can burn both holds and exit `capped:true` without ever being told its calls put nothing on record. Raises the §AQ5 trigger-2 rate on a path that previously took an immediate release. | Unmeasured. |
+| #204 | Half the no-execution path's reports die at the two-distinct-sources evidence rule with exactly one source | Root-caused, and **the issue's own filed premise is refuted** — it is not "gathers evidence, fails to use it". `distinctOther` counts `entry.source`, the model's **self-assigned label** (`PaFixReport.js:717-728`), and `_checkCitationSupported` asks only whether *any* tool of that class ran *anywhere* in the run (`:785`) — it never compares the citation's **target** to the tool's target. So the rule measures **label diversity, not evidential independence**, and the two reps that failed are **the two that told the truth**. | 2 of 4 reps failed (§AR1). Determinacy fact only. |
+| #205 | The depth gate has **no subject operand**, and directing it at a data layer turns that into fabrication | `_normRequest` yields free-form text and `target_table` is blank in practice, so nothing states what a run is diagnosing in a form the gate can compare against. Target-blindness is **not uniformly harmless across layers**: a *schema* sweep on the wrong table is inert, but a *data* sweep on the wrong table returns `genuinely_empty`, which reads as a **positive finding** and licenses a confident wrong root cause. | §AU measured it: 4/4 reps queried `task` instead of `x_snc_tsbench_ticket` and filed *"the target record does not exist"*. |
+
+**A fix for #205 may not infer the subject from model output** — that is #173/§AL's standing
+ruling (a gate whose operand comes from the thing it guards is released by the guarded
+party). A real operand requires `_normRequest` producing a structured subject: a
+**request-contract change**, which is why this was never a tie-break tweak.
+
+### 5.4 Corrections to the record
+
+Closed as corrections; the corrected fact is what matters and is stated here.
+
+- **#183** — §AL cited `target_table` as written on every call. It is a **conditional** write
+  (`PaAuditLogger:372`) and the column is **blank in practice** — verified live across 26
+  audit rows. The audit field is `tool_name` (not `tool`), and `action_type` is
+  `intent`/`result`, so there are **two rows per dispatch**.
+- **#187** — seed-07's qualification bar queries **a column that does not exist**, and its
+  "genuine ACL denial" note is the bad-field trap it claims to have ruled out (a nonexistent
+  field returns *Access denied*, mimicking a missing-ACL failure). Seed 07 should not be
+  used to qualify an ACL behaviour without re-deriving the bar.
+- **#110** — `schemaText()` renders the **entire** layer-to-tool map into every prompt, so
+  §H8's *"the harness never names a tool"* premise was already qualified when written. Any
+  argument resting on the model not being told tool names is unsound.
+- **#107** — the #99 spec's no-redaction argument **conflates transient prompt use with data
+  at rest**. The two need separate treatment if redaction is revisited.
+
+### 5.5 Method notes worth keeping
+
+- **A trigger set cannot bound a risk its own section declared out of scope** (§AV). §AU6
+  excluded correctness on the premise the change "touches neither axis directly"; that
+  exclusion was itself a *prediction*, it was false, and no trigger could see the collapse.
+  A scope exclusion load-bearing enough to gate a merge needs the same falsifiability as
+  anything in the predictions table.
+- **A falsifier must be the exact complement of its prediction** (§AV3a). AU-2 was `>=2 of
+  4` with falsifier `0 of 4`, leaving `1 of 4` in neither.
+- **A moved condition can invalidate the prose that justified it** (§AT6) — instantiated
+  twice: once in a code comment, once at ledger level (§AR1a), and once across files (#207).
+- **A null result is only worth its probe's sensitivity.** The #203 probe returned 0 hits
+  across 301 runs; it was trustworthy only because each link was verified rather than
+  assumed — no pre-dispatch validation, `_digest` clips at 200 chars with the refusal text
+  at ~char 26 behind a never-silent marker, `_prunePromptWindow` deletes only
+  `prompt_digest` and never removes entries, and `LIKE` was shown to bite on the column
+  (case-insensitively) with live controls. Record the controls next to the null, always.
+- **A fixture that agrees with the code by construction is a second copy of the bug**
+  (R-27), which is why the instrument's own green tests never caught any of §5.3.
+
+### 5.6 What would justify reopening
+
+Not a new finding about the instrument — those are unbounded. Only one of:
+
+1. **A correctness axis is commissioned** as its own instrument, with a bar that scores
+   whether a root cause is *right*, not whether a report is *admissible* (§5.2).
+2. **The custom harness is put in front of real users**, making the defects in §5.3
+   reachable in production rather than in a benchmark seed.
+3. **A defect in §5.3 is observed live** — in particular a registry refusal, currently
+   0 of 301.
+
+---
+
 *Next steps agreed in spar: fold changes 2.1–2.4 into `docs/IMPLEMENTATION_PLAN.md` (new collector task; scorecard field; anchor keying rule) and `docs/LOW_LEVEL_DESIGN.md` (§4.6 anchor spec, §7 protocol, §8 items). Drift review after Phase 1a build compares the built system to this record.*
