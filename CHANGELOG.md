@@ -17,6 +17,80 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1201 — 2026-08-12
+
+### #204 — the absence-diagnosis target: pre-registered, measured, reverted
+
+**Net effect on `src/`: none.** This release is ledger and evidence. The behaviour change it
+describes was built, measured against a live instance, and reverted in the same session.
+
+**The finding, which is methodological and outranks the change.** `DECISION.md` §AU registered a
+narrowing of the depth gate's floor-class tie-break: on an absence diagnosis (layer 1
+`UNAVAILABLE`), prefer the layer-5 gap, so the run gathers the `data` source that can actually
+corroborate an absence. Four reps on seed 05 (`benchmark/raw-evidence-v15-au-target.md`) passed
+**every** registered prediction — `query_table` 4 of 4 and a `data` citation 4 of 4, both against
+0-of-4 baselines, with zero `partial` runs and zero capped exits — and **no revert trigger fired.**
+
+It was reverted anyway. Every rep queried `task` rather than `x_snc_tsbench_ticket`, got
+`0 rows / genuinely_empty`, and filed *"the target record does not exist"* proposing the record be
+created. Reps reaching the seed's actual root cause went **4 of 4 (§AR) → 0 of 4**. Determinacy
+rose while correctness collapsed, and the change under test is what moved it — §AO2's separation
+demonstrated at the validator rather than the scorer.
+
+**Two rules earned:**
+
+1. **A trigger set cannot bound a risk its own section declared out of scope.** §AU6 excluded
+   correctness — *"Determinacy and correctness are separate axes"* — and then declined to measure
+   it, so none of §AU5's four triggers could see the collapse. The exclusion silently gated a
+   merge. A scope exclusion load-bearing enough to do that deserves the same falsifiability as the
+   predictions table. (§AV2 as first written attributed a stronger clause to §AU6 that belongs to
+   §AQ6; caught in review of PR #206 and corrected there rather than quietly, since a ledger's
+   value is that its errors stay visible in it.)
+2. **#173's target-blindness is not uniformly harmless across layers.** A *schema* sweep on the
+   wrong table yields an inert citation — literally what §AR's reps did and ignored. A *data* sweep
+   on the wrong table yields `genuinely_empty`, which reads as a **positive finding** and licenses
+   a confident wrong conclusion. §AL ruled a gate *released* by inference over model output is
+   released by the model; the dual is that a gate *directing* at a subject-dependent layer is
+   answered against a subject the model invents.
+
+**Also learned:** the two halves of #204 are coupled. Rep 2 was rejected by the **unchanged**
+`_checkCitationSupported`, because the relabel route passed in §AR only thanks to the
+`schema_lookup` call that discharged the layer-4 target. The gate's target choice determines
+whether the evidence rule's class-level check can be fooled at all, so registration 2 must be
+re-derived rather than written to #204's original framing.
+
+### Added
+- `DECISION.md` §AU — pre-registration (committed before any gate code), §AV1–§AV6 — verdict and
+  ruling, §AV7 — the revert executed and verified.
+- `benchmark/raw-evidence-v15-au-target.md` — four reps, target-flip probes, mechanism, and the
+  live flat-form (`#151`/§AD5) draft that proved the self-canonicalising predicate load-bearing.
+- `LEARNING.md` — *tightening a validator can recreate the defect it inherits* (failure modes).
+
+### Changed
+- Nothing under `src/`. `94cb916` is reverted by `56bb249`; `git diff main -- src/` is empty.
+
+### Fixed
+- #188 **closed by premise check, not by a build** — its headline ("the custom arm cannot diagnose
+  a no-execution scenario at all") is refuted by §AR's 4-of-4 tool calls and 2-of-4 validated
+  reports, measured on its own path with its own fix in the build. The repair was #191's floor, not
+  #188's commit.
+
+### Notes
+- **Two review findings from PR #206 are folded in**, both about the ledger rather than code:
+  §AV2's misattributed quote (corrected in place, with the correction recorded), and **§AV3a** — a
+  registration defect in §AU4 itself. AU-2 predicted *"≥2 of 4"* with falsifier *"0 of 4"*, leaving
+  **1 of 4 in neither**; deliberately not amended retroactively, since editing a registered
+  prediction after seeing the data is what registration exists to prevent. Rule recorded for every
+  future registration: a falsifier must be the exact complement of its prediction.
+- **#204** remains open as the evidence-rule half, blocked on **#205**.
+- **#205** filed and labelled `next` — the depth gate's missing subject operand. A fix may not
+  infer the subject from model output (§AL/#173, unreopened), so it is a request-contract change.
+- No gate or pass-level figure is claimed in either arm (ruling 6). §AQ3's non-differencing rule
+  stands: a v15+ custom gate figure may be reported absolutely, never differenced against
+  v12/v13/v14.
+
+---
+
 ## 2026.08.1119 — 2026-08-11
 
 **The §AQ floor's disarm conjunct read the wrong counter (#200).** One failed or refused tool call
