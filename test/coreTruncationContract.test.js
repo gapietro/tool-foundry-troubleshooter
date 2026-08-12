@@ -20,6 +20,9 @@ const { makeQueryingGlideRecordSecure } = require('./_glideStub')
 
 /** Cores that read through PaToolReadKit and therefore owe the contract. */
 const KIT_CORES = [
+    // #41 — migrated 2026-08-12. It was the last exemption, kept since #36
+    // because it was the only core verified against real sn_aia_* rows.
+    'PaToolAgentTrace',
     'PaToolAgentConfig',
     'PaToolGenAiLog',
     'PaToolSchemaLookup',
@@ -53,13 +56,10 @@ describe('every kit-based core surfaces the bounds it hit (R-24)', () => {
     })
 
     it('names the cores that are exempt, and why', () => {
-        // PaToolAgentTrace carries its own inline read layer and was
-        // deliberately not migrated onto the kit (it is the only core verified
-        // against real sn_aia_* rows). PaToolReadArtifact performs no bounded
-        // record reads at all — it pages an attachment through the store.
-        // Both are exemptions with reasons, recorded here so the list cannot
-        // grow silently.
-        expect(sourceOf('PaToolAgentTrace')).toContain('_readRows')
+        // ONE exemption left (#41 migrated PaToolAgentTrace 2026-08-12):
+        // PaToolReadArtifact performs no bounded record reads at all — it pages
+        // an attachment through the store, so the truncation contract has no
+        // subject there. Recorded so the list cannot grow silently.
         expect(sourceOf('PaToolReadArtifact')).toContain('PAGED_OUTPUT')
 
         const toolsDir = path.join(__dirname, '..', 'src', 'server', 'tools')
@@ -70,9 +70,7 @@ describe('every kit-based core surfaces the bounds it hit (R-24)', () => {
 
         // A new core must be classified deliberately: either it uses the kit
         // and owes the contract above, or it is listed as an exemption here.
-        expect(present.sort()).toEqual(
-            KIT_CORES.concat(['PaToolAgentTrace', 'PaToolReadArtifact']).sort()
-        )
+        expect(present.sort()).toEqual(KIT_CORES.concat(['PaToolReadArtifact']).sort())
     })
 })
 
@@ -118,17 +116,17 @@ describe('no kit-based core re-derives truncation from a length', () => {
         expect(HEURISTIC.test(kitSrc)).toBe(true)
     })
 
-    it('records that PaToolAgentTrace is exempt and what the exemption costs', () => {
-        // It keeps its own inline read layer (deliberately unmigrated - it is
-        // the only core verified against real sn_aia_* rows), so it still
-        // infers truncation from a length comparison in three places. The cost
-        // is real and bounded: an exactly-full task, tool-call or conversation
-        // page is reported as truncated. Recorded rather than hidden, with a
-        // follow-up to migrate it.
+    it('PaToolAgentTrace no longer infers truncation from a length (#41)', () => {
+        // This test used to assert the exemption's COST: three sites inferring
+        // truncation from `rows.length >= MAX`, so an exactly-full task,
+        // tool-call or conversation page was reported as truncated. The
+        // migration removed all three; it is kept as a zero-assertion rather
+        // than deleted, because the count going back up is exactly the
+        // regression this file exists to catch.
         const trace = sourceOf('PaToolAgentTrace')
         const occurrences = trace.split('\n').filter((l) => HEURISTIC.test(l)).length
 
-        expect(occurrences).toBe(3)
+        expect(occurrences).toBe(0)
     })
 })
 
@@ -232,6 +230,12 @@ describe('every core answers with its status intact on an adverse path', () => {
 
     /** The field each core must always answer with, however it degrades. */
     const REQUIRED = {
+        // #41 — joined the kit-based set. A bare sys_id is the shape the
+        // native runtime actually hands this core (R-9).
+        PaToolAgentTrace: {
+            args: 'plan0000000000000000000000000001',
+            fields: ['resolution', 'evidence_basis'],
+        },
         PaToolAgentConfig: { args: undefined, fields: ['resolution', 'evidence_basis'] },
         PaToolGenAiLog: { args: undefined, fields: ['mode', 'evidence_basis'] },
         PaToolSchemaLookup: { args: 'sn_aia_agent', fields: ['mode', 'table_exists', 'evidence_basis'] },

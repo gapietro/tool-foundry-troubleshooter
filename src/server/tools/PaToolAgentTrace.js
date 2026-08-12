@@ -96,7 +96,26 @@ PaToolAgentTrace.prototype = {
     MAX_MESSAGES: 100,
     MAX_CS_MESSAGES: 20,
 
-    initialize: function () {},
+    /**
+     * @param {Object} [options] {readKit} — injection point for tests, matching
+     *        every other core. #41: this core was the last one outside
+     *        PaToolReadKit, exempted in #36 because it was the only one
+     *        verified against real `sn_aia_*` rows and rewriting its read path
+     *        mid-stack was risk for no diagnostic gain. The exemption's cost
+     *        was real and test-pinned: three sites inferred truncation from
+     *        `rows.length >= MAX`, so an EXACTLY-FULL page was reported as
+     *        truncated, and it missed R-25 `fromRowRead` and R-26
+     *        `denied_tables`/`denial_note` entirely.
+     */
+    initialize: function (options) {
+        var o = options || {}
+        this._readKit = o.readKit || null
+    },
+
+    _k: function () {
+        if (!this._readKit) this._readKit = new PaToolReadKit()
+        return this._readKit
+    },
 
     // =======================================================================
     // Entry point
@@ -175,7 +194,7 @@ PaToolAgentTrace.prototype = {
                 if (!resolved.plan_sys_id) {
                     data.resolution.note = resolved.note
                     data.resolution.candidates = resolved.candidates
-                    return { success: true, data: data }
+                    return this._answer(data)
                 }
                 planSysId = resolved.plan_sys_id
                 data.resolution.matched_agents = resolved.matched_agents
@@ -186,7 +205,7 @@ PaToolAgentTrace.prototype = {
                 var recent = this._recentPlans(a, data)
                 data.resolution.candidates = recent.candidates
                 data.resolution.note = recent.note
-                return { success: true, data: data }
+                return this._answer(data)
             }
 
             // ---- Step 1: plan header -------------------------------------
@@ -204,7 +223,7 @@ PaToolAgentTrace.prototype = {
                     'sn_aia_execution_plan is not readable from scope x_snc_troubleshoot. ' +
                         'This is a cross-scope privilege gap, not an absent execution.'
                 )
-                return { success: true, data: data }
+                return this._answer(data)
             }
             if (!planRead.row) {
                 data.notes.push(
@@ -213,7 +232,7 @@ PaToolAgentTrace.prototype = {
                         '". The table read succeeded, so this is a genuine absence, not a permission problem. ' +
                         'An agent that never triggered leaves no plan at all — check triggers via agent_config.'
                 )
-                return { success: true, data: data }
+                return this._answer(data)
             }
 
             var plan = planRead.row
@@ -251,7 +270,7 @@ PaToolAgentTrace.prototype = {
                 join_fields_valid: toolCallRead.join_fields_valid || null,
                 read_status: toolCallRead.status,
                 note: toolCallRead.note || null,
-                truncated_at: toolCallRead.rows.length >= this.MAX_TOOL_CALLS ? this.MAX_TOOL_CALLS : null,
+                truncated_at: toolCallRead.truncated_at || null,
             }
             data.notes.push(this._taskVsToolCallNote(data.task_stats, data.tool_call_stats))
 
@@ -316,9 +335,8 @@ PaToolAgentTrace.prototype = {
             }
 
             phase = 'finalize'
-            data.evidence_basis = this._evidenceBasis(data)
 
-            return { success: true, data: data }
+            return this._answer(data)
         } catch (e) {
             // R-1: the exception object is deliberately NOT read. On a
             // cross-scope denial, touching it throws a second time and escapes
@@ -920,7 +938,7 @@ PaToolAgentTrace.prototype = {
             read_status: read ? read.status : 'unknown',
             by_status: byStatus,
             by_type: byType,
-            truncated_at: rows.length >= this.MAX_TASKS ? this.MAX_TASKS : null,
+            truncated_at: read && read.truncated_at ? read.truncated_at : null,
         }
     },
 
@@ -1341,52 +1359,19 @@ PaToolAgentTrace.prototype = {
      * was from July. Wrong data wearing a confident label is precisely the
      * failure mode this tool exists to catch in other people's agents.
      */
+    // #41 — DELEGATED TO PaToolReadKit. Call sites are unchanged on purpose:
+    // this core's value is its tool-specific logic (binding resolution,
+    // message ordering, error mining), and rewriting ~40 call sites to reach
+    // the kit directly would have risked that logic for no behavioural gain.
+    // What the delegation buys is the kit's MEASURED truncation (it reads
+    // limit+1, so `truncated_at` is a fact rather than the `rows.length >= MAX`
+    // guess this core used), plus R-25 `fromRowRead` and R-26 `denied_tables`.
     _readRows: function (table, queryFn, fields, displayFields, limit, orderBy, data) {
-        var result = { table: table, status: 'DENIED', rows: [], missing_fields: [] }
-
-        try {
-            var gr = new GlideRecordSecure(table)
-            if (queryFn) queryFn(gr)
-            this._applyOrder(gr, orderBy)
-            if (limit) gr.setLimit(limit)
-            gr.query()
-
-            result.missing_fields = this._missingFields(gr, fields)
-
-            while (gr.next()) {
-                result.rows.push(this._pluck(gr, fields, displayFields))
-            }
-            result.status = result.rows.length > 0 ? 'ok' : 'empty'
-        } catch (e) {
-            // R-1: do NOT touch e. Record and move on.
-            result.status = 'DENIED'
-        }
-
-        this._noteRead(data, table, result.status)
-        this._noteFieldWarnings(data, table, result.missing_fields)
-        return result
+        return this._k().readRows(table, queryFn, fields, displayFields, limit, orderBy, data)
     },
 
     _readOne: function (table, sysId, fields, displayFields, data) {
-        var result = { table: table, status: 'DENIED', row: null, missing_fields: [] }
-
-        try {
-            var gr = new GlideRecordSecure(table)
-            result.missing_fields = this._missingFields(gr, fields)
-            if (gr.get(sysId)) {
-                result.row = this._pluck(gr, fields, displayFields)
-                result.status = 'ok'
-            } else {
-                result.status = 'empty'
-            }
-        } catch (e) {
-            // R-1: do NOT touch e.
-            result.status = 'DENIED'
-        }
-
-        this._noteRead(data, table, result.status)
-        this._noteFieldWarnings(data, table, result.missing_fields)
-        return result
+        return this._k().readOne(table, sysId, fields, displayFields, data)
     },
 
     /**
@@ -1409,31 +1394,7 @@ PaToolAgentTrace.prototype = {
     },
 
     _pluck: function (gr, fields, displayFields) {
-        var row = {}
-        var i
-
-        for (i = 0; i < fields.length; i++) {
-            var f = fields[i]
-            try {
-                var v = gr.getValue(f)
-                row[f] = v === null || v === undefined ? '' : String(v)
-            } catch (e) {
-                row[f] = ''
-            }
-        }
-
-        var disp = displayFields || []
-        for (i = 0; i < disp.length; i++) {
-            var d = disp[i]
-            try {
-                var dv = gr.getDisplayValue(d)
-                if (dv && String(dv) !== row[d]) row[d + '_display'] = String(dv)
-            } catch (e) {
-                // display value unavailable; the raw value already landed above
-            }
-        }
-
-        return row
+        return this._k().pluck(gr, fields, displayFields)
     },
 
     /**
@@ -1632,11 +1593,7 @@ PaToolAgentTrace.prototype = {
      * exactly when it is most needed.
      */
     _refValue: function (v) {
-        if (v === null || v === undefined) return ''
-        var s = this._trim(String(v))
-        var low = s.toLowerCase()
-        if (low === 'undefined' || low === 'null') return ''
-        return s
+        return this._k().refValue(v)
     },
 
     _buildHeader: function (plan, planSysId) {
@@ -1906,7 +1863,7 @@ PaToolAgentTrace.prototype = {
             })
         }
         out.message_read_status = csRead.status
-        out.messages_truncated_at = csRead.rows.length >= this.MAX_CS_MESSAGES ? this.MAX_CS_MESSAGES : null
+        out.messages_truncated_at = csRead.truncated_at || null
         if (out.messages_truncated_at) {
             out.truncation_note =
                 'Only the first ' +
@@ -1922,8 +1879,57 @@ PaToolAgentTrace.prototype = {
      * rendered from empty data. This block states, per section, which rows the
      * output actually came from.
      */
+    /**
+     * The ONE exit. #41 — found by the R-24/R-25 cross-core contract the moment
+     * this core joined the kit-based set: four of the five `return` paths
+     * (agent unresolved, recent-plans listing, plan DENIED, plan absent) went
+     * out WITHOUT `evidence_basis`, so on exactly the adverse paths where a
+     * reader most needs to tell a permission gap from an absence, the field
+     * that says which one it was did not exist.
+     *
+     * The denial path is the sharpest case: it pushed a note saying "this is a
+     * cross-scope privilege gap, not an absent execution" and then omitted the
+     * structured `denied_tables`/`denial_note` a consumer would parse.
+     *
+     * Routing every exit through here is what makes that structural rather
+     * than four remembered call sites — the same argument R-24 makes about
+     * truncations.
+     */
+    _answer: function (data) {
+        data.evidence_basis = this._evidenceBasis(data)
+        return { success: true, data: data }
+    },
+
     _evidenceBasis: function (data) {
+        var k = this._k()
+
+        // #41 — the two axes this core owed the R-24 contract and did not pay
+        // while it was exempt. Both are surfaced whether or not the section
+        // that hit the bound thought to mention it; that structural placement
+        // is the whole point of R-24, and the reason four review rounds on a
+        // sibling core produced four silent caps before it existed.
+        var truncations = data.truncations || {}
+        var truncationNote = k.anyTruncation(data)
+            ? 'One or more reads hit their ceiling — see truncations. Any count or absence derived from ' +
+              'those tables is a LOWER BOUND, not a complete answer.'
+            : null
+
+        // R-26, the third axis. An empty collection has three causes — nothing
+        // matched, the page was clipped, or the read was refused — and they are
+        // not interchangeable.
+        var denied = k.deniedTables(data)
+        var denialNote = denied.length
+            ? 'These tables were DENIED: ' +
+              denied.join(', ') +
+              '. Any empty result above that depends on them is a permission gap, NOT an absence, and ' +
+              'must not be reported as one.'
+            : null
+
         return {
+            truncations: truncations,
+            truncation_note: truncationNote,
+            denied_tables: denied,
+            denial_note: denialNote,
             statement:
                 'Every count below is the number of rows actually read. A zero with read status "ok"/"empty" ' +
                 'is a genuine absence; a zero with "DENIED" is a permission gap and says nothing about the run.',
