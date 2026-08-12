@@ -359,33 +359,94 @@ PaLlmProxy.prototype = {
      */
     _buildRetryPrompt: function (originalPrompt, reason) {
         var text = originalPrompt + '\n\nYour previous response could not be parsed: ' + reason + '.'
+        var closer = '\n\nYour JSON was otherwise well formed — do not change its formatting, ' +
+            'change the envelope. Respond with JSON only, just the JSON object.'
+        var generic = ' Respond with JSON only, matching the required schema exactly — no prose, ' +
+            'no markdown fence, just the JSON object.'
 
-        var unknown = /^unknown action:\s*(.+)$/.exec(this._normPrompt(reason))
-        if (unknown) {
-            var offender = unknown[1].replace(/^\s+|\s+$/g, '')
-            return (
-                text +
-                '\n\n"' +
-                offender +
-                '" is not one of the three legal values for the "action" key. ' +
-                'The legal actions are exactly: tool_call, answer, fix_report.' +
-                '\n\nIf "' +
-                offender +
-                '" is a TOOL you want to call, it belongs in the "tool" key inside a ' +
-                'tool_call envelope, not in the "action" key. Send it as:' +
-                '\n  {"action":"tool_call","tool":"' +
-                offender +
-                '","args":{...}}' +
-                '\n\nYour JSON was otherwise well formed — do not change its formatting, ' +
-                'change the envelope. Respond with JSON only, just the JSON object.'
-            )
+        var normReason = this._normPrompt(reason)
+
+        // Review of #188: the SIBLING structural failures are the same defect
+        // one slot over. `{"action":"tool_call","args":{…}}` — right action
+        // word, `tool` key still missing — is the nearest neighbour of the
+        // observed collapse, and it used to land in the generic branch and be
+        // told to drop a markdown fence it never sent.
+        var missingKey = this._MISSING_KEY_ADVICE[normReason]
+        if (missingKey) {
+            return text + '\n\n' + missingKey + closer
         }
 
+        // `[\s\S]` not `.` — a newline inside the action value would otherwise
+        // bypass this branch entirely and fall back to formatting advice.
+        var unknown = /^unknown action:\s*([\s\S]+)$/.exec(normReason)
+        if (!unknown) {
+            return text + generic
+        }
+
+        var offender = unknown[1].replace(/^\s+|\s+$/g, '')
+
+        // `_parseResponse` builds the reason by string-concatenating whatever
+        // sat in the action slot, so a non-string action arrives here already
+        // flattened ('[object Object]', 'true', …). There is no usable name to
+        // lecture about, and a lecture quoting '[object Object]' teaches the
+        // model nothing — the generic advice is the honest answer.
+        if (!offender || offender.length > 80 || offender.indexOf('[object ') === 0) {
+            return text + generic
+        }
+
+        // A legal action mangled by invisible whitespace or a stray character
+        // trims back to a legal value here. Telling the model that "tool_call"
+        // is not one of tool_call/answer/fix_report is self-contradictory, and
+        // it cannot see the difference, so it has no repair to make and the
+        // one retry is wasted exactly as in the #188 trace.
+        for (var i = 0; i < this._LEGAL_ACTIONS.length; i++) {
+            if (offender === this._LEGAL_ACTIONS[i]) {
+                return (
+                    text +
+                    '\n\nThe "action" value must be the bare string "' + this._LEGAL_ACTIONS[i] +
+                    '" with no leading or trailing whitespace and no other characters around it. ' +
+                    'Check for a stray space inside the quotes.' +
+                    closer
+                )
+            }
+        }
+
+        // JSON.stringify, not manual quoting: an offender containing a quote or
+        // backslash would otherwise make the EXEMPLAR itself invalid JSON, and
+        // handing the model malformed JSON to copy burns the only retry left.
+        var quoted = JSON.stringify(offender)
         return (
             text +
-            ' Respond with JSON only, matching the required schema exactly — no prose, ' +
-            'no markdown fence, just the JSON object.'
+            '\n\n' + quoted + ' is not one of the three legal values for the "action" key. ' +
+            'The legal actions are exactly: tool_call, answer, fix_report.' +
+            '\n\nIf ' + quoted + ' is a TOOL you want to call, it belongs in the "tool" key ' +
+            'inside a tool_call envelope, not in the "action" key. Send it as:' +
+            '\n  {"action":"tool_call","tool":' + quoted + ',"args":{...}}' +
+            closer
         )
+    },
+
+    _LEGAL_ACTIONS: ['tool_call', 'answer', 'fix_report'],
+
+    /**
+     * Keyed by the EXACT reason strings `_parseResponse` emits for a response
+     * that parsed as JSON and then failed a structural check. Each names the
+     * missing key, because that is the actual repair — none of these are
+     * formatting problems, and formatting advice is a no-op for all of them.
+     */
+    _MISSING_KEY_ADVICE: {
+        'tool_call is missing a tool name':
+            'Your envelope is a tool_call but has no "tool" key. The tool NAME goes in "tool", ' +
+            'and its arguments in "args": {"action":"tool_call","tool":"<tool name>","args":{...}}',
+        'answer is missing text':
+            'Your envelope is an answer but has no "text" key. The answer itself goes in "text" ' +
+            'as a string: {"action":"answer","text":"<your final answer>"}',
+        'fix_report is missing a report object':
+            'Your envelope is a fix_report but has no "report" object. The report goes in ' +
+            '"report" as a JSON OBJECT, not a string: {"action":"fix_report","report":{...}}',
+        'parsed value is not a JSON object':
+            'You sent a JSON array or scalar. The response must be a single JSON OBJECT whose ' +
+            '"action" key is one of: tool_call, answer, fix_report.',
     },
 
     _normPrompt: function (value) {

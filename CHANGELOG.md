@@ -42,6 +42,20 @@ two-digit daily counter. Incremented on every merge to `main`.
   exercised live.** The improvement is proven by unit test, *not* attributable to this change by
   the live runs. The 2/2-then-0/2 split suggests the collapse is stochastic rather than
   deterministic; four runs cannot settle that.
+- **Review of PR #192 found the same defect in five more slots, all fixed here.** The sibling
+  structural failures (`tool_call is missing a tool name`, `answer is missing text`, `fix_report
+  is missing a report object`) were still getting formatting advice for non-formatting problems —
+  including `{"action":"tool_call","args":{…}}`, the *nearest neighbour* of the observed collapse.
+  They now name the missing key. In the new branch itself: a legal action mangled by invisible
+  whitespace trimmed back to a legal value and produced the self-contradiction *"tool_call" is not
+  one of tool_call/answer/fix_report*; an offender containing a quote made the **exemplar itself**
+  invalid JSON (now `JSON.stringify`d); a non-string action produced an `[object Object]` lecture
+  (now falls back to generic); and `.` could not cross a newline, so a multi-line action value
+  bypassed the branch (now `[\s\S]` with an 80-char cap).
+- **Incidental, found while testing:** `_parseResponse` slices from the first `{` to the last `}`,
+  so an array wrapping one object parses clean and `parsed value is not a JSON object` is
+  **unreachable** through `reason()`. Its advice mapping is kept as defensive cover and asserted
+  directly rather than through a fabricated end-to-end path.
 - **A second, distinct blocker found and NOT fixed here.** Both post-fix reps reached fix-report
   validation and failed the **two-distinct-sources evidence rule**, having filed a report with
   **zero tool calls** (no `x_snc_troubleshoot_audit` rows), so there were no sources to cite.
