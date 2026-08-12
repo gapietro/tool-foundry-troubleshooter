@@ -55,6 +55,24 @@ const VOLATILE_FIELDS = new Set([
 ])
 
 /**
+ * Columns MEASURED to be capped shorter than values this app builds, with the
+ * cap that was measured. A truncation is excused only for a column listed here
+ * and only when the stored value is exactly this long — anything shorter is a
+ * different value that happens to share a prefix, not the column giving up at
+ * its limit.
+ *
+ * Keep this list measured. Every entry is a place where a real content
+ * difference can be downgraded to a note, so an assumed cap here is a hole in
+ * the probe rather than a convenience.
+ *
+ * short_description: 80 — measured on gpinst01, six of this app's route
+ * descriptions exceed it and the platform drops the tail at install.
+ */
+const CAPPED_COLUMNS = {
+    short_description: 80,
+}
+
+/**
  * `''`, `null` and "the instance did not return this field" are the same state.
  * Line endings are normalized because the platform rewrites them on store, and
  * without this every script include reports a mismatch on its whole body.
@@ -136,11 +154,17 @@ function compareRecord(expected, actual, options) {
         // descriptions are longer. Worth fixing in source, but it is not the
         // deploy being broken — and a check that stays red on a healthy deploy
         // trains the reader to ignore the whole report.
-        // `act.length > 0` is load-bearing: the empty string is a prefix of
-        // everything, so without it a field that installed as EMPTY — total
-        // absence, the thing most worth catching — was reported as a tidy
-        // platform truncation and downgraded out of the failure list.
-        if (act.length > 0 && act.length < exp.length && exp.slice(0, act.length) === act) {
+        // The excuse is granted ONLY where the column's cap was measured, and
+        // only when the instance value sits exactly ON that cap.
+        //
+        // The first version downgraded any prefix relationship, which is a hole
+        // straight through the tier: an append-only stale deploy — extra lines
+        // at the end of a script include — leaves the instance holding a strict
+        // prefix of what we built, and `truncated` is a note that does not
+        // redden the exit code. The probe would have reported "TRUNCATED BY THE
+        // PLATFORM" and exited 0 on precisely the stale-deploy class it exists
+        // to catch. (Found in review of PR #229, before it could mislead anyone.)
+        if (CAPPED_COLUMNS[field] === act.length && act.length < exp.length && exp.slice(0, act.length) === act) {
             findings.push({
                 kind: 'truncated',
                 table: expected.table,
@@ -183,6 +207,7 @@ function firstDifference(a, b) {
 }
 
 module.exports = {
+    CAPPED_COLUMNS: CAPPED_COLUMNS,
     compareRecord: compareRecord,
     firstDifference: firstDifference,
     normalize: normalize,

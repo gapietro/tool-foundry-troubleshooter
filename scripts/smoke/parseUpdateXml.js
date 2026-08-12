@@ -18,7 +18,7 @@
  */
 
 /** Fields are flat inside the record element, so a scan is enough. */
-function scanFields(inner) {
+function scanFields(inner, defects) {
     const fields = {}
     let i = 0
 
@@ -59,7 +59,11 @@ function scanFields(inner) {
         // the element's end tag — otherwise a script body containing the
         // literal `</script>` would truncate itself.
         let searchFrom = gt + 1
-        const afterOpen = inner.slice(gt + 1)
+        // `trimStart` matters: an exporter that puts a newline between the open
+        // tag and the CDATA marker would defeat a bare startsWith, and then the
+        // close-tag search finds a literal `</script>` INSIDE the body and cuts
+        // the value there — surfacing as a mismatch on a healthy deploy.
+        const afterOpen = inner.slice(gt + 1).trimStart()
         if (afterOpen.startsWith('<![CDATA[')) {
             const cdataEnd = inner.indexOf(']]>', gt + 1)
             if (cdataEnd !== -1) searchFrom = cdataEnd + 3
@@ -68,6 +72,10 @@ function scanFields(inner) {
         const closeTag = '</' + name + '>'
         const close = inner.indexOf(closeTag, searchFrom)
         if (close === -1) {
+            // Never dropped silently. A missing close tag still leaves a record
+            // carrying a table and a sys_id, so the probe would have compared a
+            // PARTIAL field set and reported success over the gap.
+            defects.push('field "' + name + '" has no closing tag')
             i = gt + 1
             continue
         }
@@ -109,13 +117,14 @@ function parseUpdateXml(xml) {
     // `table="..."`, and 39 of 160 do not — the table is then only the record
     // element's own name. Requiring the attribute made the probe silently blind
     // to a quarter of the payload while reporting success on the rest.
+    const defects = []
     const tableMatch = /<record_update\b[^>]*\btable="([^"]+)"/.exec(xml)
     const attrTable = tableMatch ? tableMatch[1] : null
 
     const wrapperOpen = xml.indexOf('<record_update')
     const wrapperEnd = xml.lastIndexOf('</record_update>')
     if (wrapperOpen === -1 || wrapperEnd === -1) {
-        return { table: attrTable, sysId: null, fields: {} }
+        return { table: attrTable, sysId: null, fields: {}, defects: defects }
     }
 
     const body = xml.slice(xml.indexOf('>', wrapperOpen) + 1, wrapperEnd)
@@ -123,7 +132,7 @@ function parseUpdateXml(xml) {
     // The record element is the first element inside the wrapper, and its name
     // is the table when the wrapper did not say.
     const recordOpen = /<([A-Za-z0-9_]+)\b[^>]*>/.exec(body)
-    if (!recordOpen) return { table: attrTable, sysId: null, fields: {} }
+    if (!recordOpen) return { table: attrTable, sysId: null, fields: {}, defects: defects }
 
     const recordName = recordOpen[1]
     const table = attrTable || recordName
@@ -131,12 +140,13 @@ function parseUpdateXml(xml) {
     const innerEnd = body.lastIndexOf('</' + recordName + '>')
     const inner = body.slice(innerStart, innerEnd === -1 ? body.length : innerEnd)
 
-    const fields = scanFields(inner)
+    const fields = scanFields(inner, defects)
 
     return {
         table: table,
         sysId: fields.sys_id || null,
         fields: fields,
+        defects: defects,
     }
 }
 

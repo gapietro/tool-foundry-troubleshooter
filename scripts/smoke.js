@@ -69,18 +69,53 @@ const path = require('path')
 
 const { parseUpdateXml } = require('./smoke/parseUpdateXml')
 const { compareRecord } = require('./smoke/compare')
-const { naturalKeyFor } = require('./smoke/naturalKey')
+const { hasNaturalKey, naturalKeyFor, NATURAL_KEYS } = require('./smoke/naturalKey')
 
 const UPDATE_DIR = path.join(__dirname, '..', 'dist', 'app', 'update')
 
+/**
+ * Composite-key separator: a NUL, which cannot occur in a table or column
+ * name. Written as an escape rather than as a literal byte — a raw NUL in
+ * source makes the file binary to grep and to every other line-oriented tool.
+ */
+const SEP = '\u0000'
+
+/** Row ceiling for a natural-key read; a response ON it is treated as unread. */
+const NATURAL_LIMIT = 2000
+
 /** Instance query URLs get long; keep each one comfortably inside limits. */
 const CHUNK = 40
+
+/**
+ * Tables the instance refuses to serve over the Table API even to an admin —
+ * MEASURED on gpinst01, both returning 403 "Insufficient rights to query
+ * records". Records in these tables cannot be probed, and that is a standing
+ * property of the platform rather than a fault in this run.
+ *
+ * EVERY OTHER read failure is a FAILURE, and the distinction is the whole point.
+ * Treating all unreadable results as a note meant an expired credential, a
+ * wrong alias or an unreachable instance made every query fail, produced zero
+ * non-note findings, and printed "deploy smoke passed - 0 of 160 records" with
+ * exit 0. A probe that verified nothing exited green: the exact "claiming
+ * coverage we do not have" error this file's header cites §AQ for.
+ * (Found in review of PR #229.)
+ */
+const REFUSED_TABLES = new Set([
+    'sys_gen_ai_feature_mapping',
+    'sys_gen_ai_strategy_mapping',
+])
 
 function parseArgs(argv) {
     const args = { alias: null, build: true, install: true }
     for (let i = 0; i < argv.length; i++) {
         if (argv[i] === '--alias') {
-            args.alias = argv[++i]
+            // A bare `--alias` used to leave args.alias undefined, and both the
+            // install and the probe then silently fell through to the DEFAULT
+            // alias — a typo deploying to the wrong instance and reporting a
+            // clean pass for it. (Review of PR #229.)
+            const value = argv[++i]
+            if (!value || value.startsWith('--')) fail('--alias needs an instance alias')
+            args.alias = value
         } else if (argv[i] === '--no-install') {
             args.install = false
         } else if (argv[i] === '--no-build') {
@@ -164,6 +199,10 @@ function loadBuiltRecords() {
             records.push({ unparseable: file })
             return
         }
+        if (parsed.defects.length > 0) {
+            records.push({ malformed: file, defects: parsed.defects })
+            return
+        }
         records.push(parsed)
     })
     return records
@@ -194,13 +233,17 @@ function main() {
 
     const built = loadBuiltRecords()
     const unparseable = built.filter(function (r) { return r.unparseable })
-    const records = built.filter(function (r) { return !r.unparseable })
+    const malformed = built.filter(function (r) { return r.malformed })
+    const records = built.filter(function (r) { return !r.unparseable && !r.malformed })
 
     process.stdout.write('→ probing ' + records.length + ' built records against the instance\n')
 
     const findings = []
     unparseable.forEach(function (r) {
         findings.push({ kind: 'unparseable', file: r.unparseable })
+    })
+    malformed.forEach(function (r) {
+        findings.push({ kind: 'malformed', file: r.malformed, detail: r.defects.join('; ') })
     })
 
     groupByTable(records).forEach(function (tableRecords, table) {
@@ -224,9 +267,12 @@ function knownFieldsFrom(actualRecords) {
 
 function probeTable(table, tableRecords, alias, findings) {
     // Table metadata is identified by natural key, not sys_id — see
-    // scripts/smoke/naturalKey.js for the measurement that forced this.
-    const natural = tableRecords[0] ? naturalKeyFor(tableRecords[0]) : null
-    if (natural) return probeByNaturalKey(table, tableRecords, natural.fields, alias, findings)
+    // scripts/smoke/naturalKey.js for the measurement that forced this. The
+    // decision is made from the TABLE, never from whichever record was read
+    // first; a per-record shortcut here reintroduced the false-MISSING bug.
+    if (hasNaturalKey(table)) {
+        return probeByNaturalKey(table, tableRecords, NATURAL_KEYS[table], alias, findings)
+    }
 
     chunk(tableRecords, CHUNK).forEach(function (batch) {
         const sysIds = batch.map(function (r) { return r.sysId })
@@ -262,14 +308,35 @@ function probeByNaturalKey(table, tableRecords, keyFields, alias, findings) {
         if (value && leadValues.indexOf(value) === -1) leadValues.push(value)
     })
 
-    const result = query(table, leadField + 'IN' + leadValues.join(','), 2000, alias)
-    if (!result.ok) {
-        findings.push({ kind: 'unreadable', table: table, count: tableRecords.length, error: result.error })
+    // Chunked like the sys_id path, and for the same reason: an unchunked
+    // `IN` list can outgrow the URL limit CHUNK exists to respect.
+    const actualRecords = []
+    let readFailed = null
+    chunk(leadValues, CHUNK).forEach(function (batch) {
+        if (readFailed) return
+        const result = query(table, leadField + 'IN' + batch.join(','), NATURAL_LIMIT, alias)
+        if (!result.ok) {
+            readFailed = result.error
+            return
+        }
+        // A response sitting exactly on the limit may have been cut, and the
+        // rows we did not see would be reported MISSING with a confident Build
+        // Rule #34 citation. Refuse to guess. (Review of PR #229.)
+        if (result.records.length >= NATURAL_LIMIT) {
+            readFailed = 'response hit the ' + NATURAL_LIMIT + '-row limit; results may be truncated'
+            return
+        }
+        result.records.forEach(function (record) { actualRecords.push(record) })
+    })
+
+    if (readFailed) {
+        findings.push({ kind: 'unreadable', table: table, count: tableRecords.length, error: readFailed })
         return
     }
+    const result = { records: actualRecords }
 
     const compositeKey = function (fieldsOf) {
-        return keyFields.map(function (f) { return String(fieldsOf[f] === undefined ? '' : fieldsOf[f]) }).join(' ')
+        return keyFields.map(function (f) { return String(fieldsOf[f] === undefined ? '' : fieldsOf[f]) }).join(SEP)
     }
 
     const knownFields = knownFieldsFrom(result.records)
@@ -316,8 +383,11 @@ function summarize(allFindings, kind, heading) {
  */
 function report(allFindings, total) {
     let probed = total
-    const NOTE_KINDS = ['uncomparable', 'unasserted', 'truncated', 'unreadable']
-    const findings = allFindings.filter(function (f) { return NOTE_KINDS.indexOf(f.kind) === -1 })
+    const NOTE_KINDS = ['uncomparable', 'unasserted', 'truncated']
+    const isExpectedRefusal = function (f) { return f.kind === 'unreadable' && REFUSED_TABLES.has(f.table) }
+    const findings = allFindings.filter(function (f) {
+        return NOTE_KINDS.indexOf(f.kind) === -1 && !isExpectedRefusal(f)
+    })
 
     summarize(allFindings, 'uncomparable', 'not comparable — dist declares these, the table has no such column')
     summarize(allFindings, 'unasserted', 'not asserted — dist set no value, so the instance value is unchecked')
@@ -329,20 +399,24 @@ function report(allFindings, total) {
     // failing on it would leave the probe permanently red. But they must never
     // be counted as passing either — claiming coverage we do not have is the
     // exact error the §AQ near-miss was made of.
-    const unreadable = allFindings.filter(function (f) { return f.kind === 'unreadable' })
-    let notProbed = 0
-    if (unreadable.length > 0) {
+    const expectedRefusals = allFindings.filter(isExpectedRefusal)
+    if (expectedRefusals.length > 0) {
         process.stdout.write('\nNOT PROBED — the instance refused to read these:\n')
-        unreadable.forEach(function (f) {
-            notProbed += f.count
+        expectedRefusals.forEach(function (f) {
             process.stdout.write('  ' + f.table + ' (' + f.count + ' records) — ' + f.error + '\n')
         })
     }
-    probed -= notProbed
+
+    // EVERY unread record comes off the count, not just the expected refusals.
+    // Otherwise a run that read nothing at all still reported "156 of 160",
+    // which is the same overclaim in a smaller font.
+    allFindings.forEach(function (f) {
+        if (f.kind === 'unreadable') probed -= f.count
+    })
 
     if (findings.length === 0) {
         process.stdout.write('\n✓ deploy smoke passed — ' + probed + ' of ' + total + ' records present and matching\n')
-        process.exit(0)
+        return
     }
 
     process.stdout.write('\n✗ deploy smoke FAILED — ' + findings.length + ' finding(s) over ' + probed + ' of ' + total + ' records\n\n')
@@ -361,6 +435,12 @@ function report(allFindings, total) {
                 ' (first differs at char ' + at + ' of ' + f.expected.length + ')' +
                 '\n              expected ' + windowed(f.expected, at) +
                 '\n              actual   ' + windowed(f.actual, at) + '\n')
+        } else if (f.kind === 'unreadable') {
+            process.stdout.write('  UNREADABLE  ' + f.table + ' (' + f.count + ' records) — ' + f.error +
+                '\n              nothing is known about these records; they are NOT passing\n')
+        } else if (f.kind === 'malformed') {
+            process.stdout.write('  MALFORMED   ' + f.file + ' — ' + f.detail +
+                '\n              the probe would compare only a PARTIAL field set for this record\n')
         } else if (f.kind === 'unkeyed') {
             process.stdout.write('  UNKEYED     ' + f.table + ' ' + f.sysId +
                 '\n              natural-keyed table, but this record lacks its key fields — not probed\n')
@@ -370,7 +450,10 @@ function report(allFindings, total) {
     })
 
     process.stdout.write('\n')
-    process.exit(1)
+    // `process.exitCode` rather than `process.exit()`: exiting immediately after
+    // a write can truncate a piped stdout, which in CI drops the very finding
+    // list the run exists to produce. (Review of PR #229.)
+    process.exitCode = 1
 }
 
 /** 60 characters either side of the divergence, with an ellipsis where cut. */

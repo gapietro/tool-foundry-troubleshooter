@@ -397,3 +397,86 @@ describe('platform truncation is disclosed, not called a broken deploy', () => {
         expect(compareRecord(e, { x: 'short and then some' })[0].kind).toBe('mismatch')
     })
 })
+
+describe('truncation is only excused where a cap was MEASURED (review #229, finding 2)', () => {
+    const { CAPPED_COLUMNS } = require('../scripts/smoke/compare')
+
+    test('an append-only stale deploy is a MISMATCH, not a platform truncation', () => {
+        // The defect: the downgrade fired on any prefix relationship, and
+        // `truncated` is a note that does not redden the exit code. A stale
+        // deploy whose change was append-only — extra lines at the end of a
+        // script include — leaves the instance holding a strict prefix of what
+        // we built. The probe called it a tidy platform cap and exited 0 on
+        // exactly the class it exists to catch.
+        const e = { table: 'sys_script_include', sysId: 'a', fields: { script: 'var a = 1\nvar b = 2\n' } }
+        const findings = compareRecord(e, { script: 'var a = 1\n' })
+        expect(findings[0].kind).toBe('mismatch')
+    })
+
+    test('short_description at exactly 80 is the measured cap, and stays a note', () => {
+        const e = { table: 'sys_ws_operation', sysId: 'a', fields: { short_description: 'a'.repeat(120) } }
+        const findings = compareRecord(e, { short_description: 'a'.repeat(80) })
+        expect(findings[0].kind).toBe('truncated')
+    })
+
+    test('a capped column stopping short of its cap is a mismatch — the cap is the whole signal', () => {
+        // 79 characters is not the column giving up at its limit; it is a
+        // different value that happens to share a prefix.
+        const e = { table: 'sys_ws_operation', sysId: 'a', fields: { short_description: 'a'.repeat(120) } }
+        expect(compareRecord(e, { short_description: 'a'.repeat(79) })[0].kind).toBe('mismatch')
+    })
+
+    test('CAPPED_COLUMNS is exported and carries the measured length, not a guess', () => {
+        expect(CAPPED_COLUMNS.short_description).toBe(80)
+    })
+})
+
+describe('parseUpdateXml robustness (review #229, findings 6 and 7)', () => {
+    test('CDATA is recognized even with whitespace after the open tag', () => {
+        // Without this, indexOf finds a literal `</script>` INSIDE the body and
+        // truncates the field there — surfacing as a mismatch, or worse as a
+        // truncation note, on a completely healthy deploy.
+        const xml = [
+            '<record_update table="t">',
+            '  <t action="INSERT_OR_UPDATE">',
+            '    <sys_id>a</sys_id>',
+            '    <script>\n      <![CDATA[var s = "</script>"; var t = 1;]]>\n    </script>',
+            '  </t>',
+            '</record_update>',
+        ].join('\n')
+        expect(parseUpdateXml(xml).fields.script).toBe('var s = "</script>"; var t = 1;')
+    })
+
+    test('a field whose close tag is missing is reported, not silently dropped', () => {
+        // A dropped field left the record looking parseable while the probe
+        // compared a partial field set and reported success over it.
+        const xml = [
+            '<record_update table="t">',
+            '  <t action="INSERT_OR_UPDATE">',
+            '    <sys_id>a</sys_id>',
+            '    <broken>no close tag here',
+            '  </t>',
+            '</record_update>',
+        ].join('\n')
+        expect(parseUpdateXml(xml).defects.length).toBeGreaterThan(0)
+    })
+
+    test('a clean record reports no defects', () => {
+        expect(parseUpdateXml(XML).defects).toEqual([])
+    })
+})
+
+describe('hasNaturalKey is a property of the TABLE (review #229, finding 3)', () => {
+    const { hasNaturalKey } = require('../scripts/smoke/naturalKey')
+
+    test('the decision does not depend on any one record', () => {
+        // The defect: the whole table's keying strategy was decided from
+        // tableRecords[0]. One record missing a key field sent every record of
+        // that table back to sys_id keying — under which sys_db_object and
+        // sys_dictionary are reported MISSING while citing Build Rule #34, the
+        // confident-wrong-cause outcome naturalKey.js exists to eliminate.
+        expect(hasNaturalKey('sys_dictionary')).toBe(true)
+        expect(hasNaturalKey('sys_db_object')).toBe(true)
+        expect(hasNaturalKey('sys_script_include')).toBe(false)
+    })
+})

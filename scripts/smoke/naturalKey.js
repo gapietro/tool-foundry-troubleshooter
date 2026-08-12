@@ -69,7 +69,20 @@ function naturalKeyFor(record) {
     return { query: parts.join('^'), fields: keyFields }
 }
 
+/**
+ * Whether a TABLE is natural-keyed. The keying strategy is a property of the
+ * table, never of whichever record happened to be read first: deciding it from
+ * one record meant a single record missing a key field sent the entire table
+ * back to sys_id keying — under which sys_db_object and sys_dictionary are
+ * reported MISSING while citing Build Rule #34, which is the confident-wrong-
+ * cause outcome this file exists to eliminate. (Review of PR #229.)
+ */
+function hasNaturalKey(table) {
+    return Object.prototype.hasOwnProperty.call(NATURAL_KEYS, table)
+}
+
 module.exports = {
+    hasNaturalKey: hasNaturalKey,
     naturalKeyFor: naturalKeyFor,
     NATURAL_KEYS: NATURAL_KEYS,
 }
