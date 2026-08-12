@@ -114,3 +114,37 @@ export const auditCreate = Acl({
     roles: [troubleshootAdmin],
     adminOverrides: true,
 })
+
+// ---------------------------------------------------------------------------
+// REST endpoint — issue #74
+//
+// All five `troubleshooterApi` routes shipped `authentication: true,
+// authorization: true` with NO role restriction, so any authenticated user
+// could create unlimited diagnostic runs via POST /analyze. Exposure was
+// partially bounded underneath (every tool is read-only and destructive:false
+// behind PaToolRegistry's fail-closed gate; reads go through
+// GlideRecordSecure), so this was never a path to data the caller could not
+// already reach — but an unbounded run-creation surface is a real cost and
+// resource-exhaustion concern, and each run spends LLM calls.
+//
+// Decided rather than left open (the issue's own prescription was "don't
+// leave it undecided"): the REST surface is for people who OPERATE the
+// Troubleshooter, which is the role that already exists for exactly that.
+//
+// `x_snc_troubleshoot.user` is deliberately NOT granted execute. That role
+// reads diagnostic output — a Fix Report on a run someone else commissioned —
+// and giving it the ability to commission runs would collapse the distinction
+// the two roles exist to draw.
+//
+// `securityAttribute: 'user_is_authenticated'` keeps the platform's own
+// authenticated check in the chain rather than replacing it with the role
+// test alone.
+// ---------------------------------------------------------------------------
+export const troubleshooterApiExecute = Acl({
+    $id: Now.ID['acl-rest-troubleshooter-execute'],
+    type: 'rest_endpoint',
+    name: 'troubleshooter',
+    operation: 'execute',
+    roles: [troubleshootAdmin],
+    securityAttribute: 'user_is_authenticated',
+})

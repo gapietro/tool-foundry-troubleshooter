@@ -113,6 +113,52 @@ PaAuditLogger.prototype = {
         return this._write('error', params, ['error', 'output'])
     },
 
+    /**
+     * A call the registry REFUSED before it ever ran (issue #75).
+     *
+     * `PaToolRegistry.dispatch` refuses on two gates — unknown tool, and the
+     * fail-closed destructive gate — and both `return` before `logIntent`, so
+     * until this existed an attempt to invoke an unknown or destructive tool
+     * left NO trace anywhere. That is precisely the event a security or audit
+     * review wants to see, and the destructive gate's own rationale is that
+     * Phase 3's confirmation flow can stand on an honest record of everything
+     * the model attempted.
+     *
+     * THIS ROW IS NOT EVIDENCE, AND THE READERS ENFORCE THAT. `invokedTools`
+     * and `toolCalls` both skip `refused` rows. Two things depend on it:
+     *
+     *   1. Fabrication. `_checkCitationSupported` asks "was this tool ever
+     *      invoked in this run" — if a refusal counted, a model could name a
+     *      nonexistent tool, be refused, cite it, and have the citation
+     *      confirmed by its own failed attempt.
+     *   2. Gate semantics. `_auditedDispatchCount` and the §AQ depth-gate
+     *      floor mean "a call that could actually have gathered". A refused
+     *      call gathered nothing, so a run whose only dispatch was refused
+     *      must still read as an empty trail — exactly as it did before this
+     *      method existed. Adding an audit row deliberately does NOT change
+     *      any gate's behaviour.
+     *
+     * So: the TABLE is complete, the EVIDENCE READERS are not. That split is
+     * the design, not an oversight.
+     */
+    logRefusal: function (params) {
+        return this._write('refused', params, ['error', 'input'])
+    },
+
+    /**
+     * Rows that record an attempt rather than a retrieval. Read by both
+     * evidence readers so the exclusion lives in one place; see `logRefusal`.
+     */
+    NON_EVIDENCE_ACTIONS: ['refused'],
+
+    _isEvidenceRow: function (actionType) {
+        var a = this._norm(actionType)
+        for (var i = 0; i < this.NON_EVIDENCE_ACTIONS.length; i++) {
+            if (this.NON_EVIDENCE_ACTIONS[i] === a) return false
+        }
+        return true
+    },
+
     // =======================================================================
     // The read side
     // =======================================================================
@@ -205,6 +251,11 @@ PaAuditLogger.prototype = {
             while (gr.next()) {
                 var name = this._normToolName(gr.getValue('tool_name'))
                 if (!name) continue
+                // #75 — a REFUSED row records an attempt the registry blocked
+                // before the tool ran. It is on the trail for the audit
+                // reader, but it is not evidence: counting it here would let a
+                // refused call support a citation. See `logRefusal`.
+                if (!this._isEvidenceRow(gr.getValue('action_type'))) continue
                 if (this._indexOfTool(tools, name) === -1) tools.push(name)
 
                 // #121: the SAME pass, deliberately. This method is on the
@@ -312,6 +363,9 @@ PaAuditLogger.prototype = {
                 if (!name) continue
 
                 var action = this._normToolName(gr.getValue('action_type'))
+                // #75 — same exclusion as invokedTools: a refused attempt is
+                // not a call. See `logRefusal` for why the split exists.
+                if (!this._isEvidenceRow(action)) continue
                 calls.push({
                     tool: name,
                     action: action,

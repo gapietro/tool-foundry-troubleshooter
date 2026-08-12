@@ -315,6 +315,28 @@ PaAgentLoop.prototype = {
         // the call here.
         this._resetGate()
 
+        // #73 — claim the run before any reasoning happens. `_checkStuckRuns`
+        // finds dead workers by looking for custom runs left at 'running' past
+        // the worker budget; until this call existed, no custom run ever
+        // reached that state and the check could not match by construction
+        // (measured: 214 custom runs, zero ever 'running').
+        //
+        // FAIL-OPEN, deliberately. A refused or failed transition means the
+        // row is missing or someone else claimed it — neither is a reason to
+        // refuse to diagnose, and converting a monitoring gap into a run
+        // failure would be a strictly worse trade. The return is ignored on
+        // purpose; the transcript note is what a reader needs.
+        var claimed = this._runs().markRunning(rid)
+        if (!claimed || claimed.success !== true) {
+            this._runs().appendTranscript(rid, {
+                actor: 'system',
+                result_digest:
+                    'run not claimed as running: ' +
+                    ((claimed && claimed.error) || 'unknown') +
+                    ' — proceeding; stuck-run detection may not see this run',
+            })
+        }
+
         var req = this._normRequest(request)
         var playbook = this._loadPlaybook()
         var promptBlock = this._safePromptBlock()

@@ -129,6 +129,126 @@ PaRestHandlers.prototype = {
         this._eventQueueFn = typeof o.eventQueue === 'function' ? o.eventQueue : null
         this._checks = this._isArray(o.checks) ? o.checks : null
         this._nowFn = typeof o.now === 'function' ? o.now : null
+        // Issue #170. Injected so `emit` is testable with zero Glide; the
+        // platform global is resolved lazily in `_errorApi` when absent. An
+        // EXPLICIT `null` is honoured as "no error API" so a test can drive
+        // the fallback branch — hence `hasOwnProperty`, not `||`.
+        this._serviceErrorApi = Object.prototype.hasOwnProperty.call(o, 'serviceErrorApi')
+            ? o.serviceErrorApi
+            : null
+        this._serviceErrorApiPinned = Object.prototype.hasOwnProperty.call(o, 'serviceErrorApi')
+    },
+
+    // =======================================================================
+    // Response emission (issue #170)
+    // =======================================================================
+
+    /**
+     * Write a handler result onto the Scripted REST `response`.
+     *
+     * WHY THIS EXISTS AT ALL, given every handler already returns
+     * `{status, body}` and the route script could just write both.
+     *
+     * Because that is exactly what the routes did, and it LOSES the message on
+     * every non-2xx. Measured live on gpinst01: `POST /analyze` with
+     * `{"mode":"diagnose"}` reaches the caller as a bare `400 Bad Request`
+     * with no body, while `_validateAnalyze` had correctly returned
+     * *'one of execution, agent+timeframe, or logs is required'*. The
+     * handler's contract — "names the exact missing input, never a generic
+     * bad request" — was true and unreachable.
+     *
+     * The cause is the ENVELOPE. A ServiceNow REST error body is
+     * `{error:{message,detail},status:'failure'}`; ours was `{error:'<string>'}`,
+     * so a client reading `error.message` gets `undefined` and falls back to
+     * the HTTP reason phrase. Control measured the same day: a native 400
+     * (`GET /api/now/table/x_nonexistent_table_xyz`) DOES surface its detail
+     * through the same transport — so the transport was never the culprit and
+     * the issue's "maybe MCP drops it" hypothesis is refuted.
+     *
+     * `response.setError(ServiceError)` is the platform's supported way to
+     * produce that envelope, and it sets the status itself — so the 2xx path
+     * and the error path are genuinely different calls, not one call with a
+     * different number. That asymmetry is the whole reason this is a method
+     * and not two lines in a Fluent template (which Build Rule #43 makes a
+     * hostile place for branching anyway).
+     *
+     * FAIL-OPEN: if the platform error API cannot be reached, fall back to the
+     * old status+body write. A missing global must not turn a 400 into a
+     * thrown 500 — that would convict the caller of our plumbing gap.
+     *
+     * @param {Object} response the Scripted REST response object
+     * @param {Object} result {status, body} from any handler on this class
+     * @returns {undefined}
+     */
+    emit: function (response, result) {
+        if (!response) return
+
+        var r = this._isPlainObject(result) ? result : {}
+        var status = typeof r.status === 'number' && r.status > 0 ? r.status : 500
+        var body = this._isPlainObject(r.body) ? r.body : {}
+
+        if (status < 400) {
+            response.setStatus(status)
+            if (typeof response.setContentType === 'function') {
+                response.setContentType('application/json')
+            }
+            response.setBody(r.body)
+            return
+        }
+
+        var api = this._errorApi()
+        if (!api || typeof api.ServiceError !== 'function' || typeof response.setError !== 'function') {
+            // Fail-open — the pre-#170 behaviour, which is still better than
+            // throwing on an instance where sn_ws_err is unreachable.
+            response.setStatus(status)
+            if (typeof response.setContentType === 'function') {
+                response.setContentType('application/json')
+            }
+            response.setBody(r.body)
+            return
+        }
+
+        var se = new api.ServiceError()
+        se.setStatus(status)
+        se.setMessage(this._errorMessage(body, status))
+        if (typeof se.setDetail === 'function') {
+            se.setDetail(this._errorDetail(body))
+        }
+        response.setError(se)
+    },
+
+    /**
+     * The message a caller actually reads. Never empty — an error that names
+     * only its number is the defect #170 filed, and a body that arrived
+     * without a usable `error` should still say which status it was.
+     */
+    _errorMessage: function (body, status) {
+        var e = body ? body.error : null
+        if (this._nonEmptyString(e)) return e
+        // Tolerate an already-nested envelope rather than emitting '[object Object]'.
+        if (this._isPlainObject(e) && this._nonEmptyString(e.message)) return e.message
+        return 'request failed with status ' + status
+    },
+
+    /** Detail carries the structured body so nothing the handler said is lost. */
+    _errorDetail: function (body) {
+        try {
+            return JSON.stringify(body)
+        } catch (err) {
+            // R-1: `err` untouched.
+            return ''
+        }
+    },
+
+    /** Lazily resolve `sn_ws_err`; an explicitly injected value always wins. */
+    _errorApi: function () {
+        if (this._serviceErrorApiPinned) return this._serviceErrorApi
+        if (this._serviceErrorApi) return this._serviceErrorApi
+        if (typeof sn_ws_err !== 'undefined') {
+            this._serviceErrorApi = sn_ws_err
+            return this._serviceErrorApi
+        }
+        return null
     },
 
     // =======================================================================
@@ -409,7 +529,11 @@ PaRestHandlers.prototype = {
         var reply =
             action.action === 'answer' && typeof action.text === 'string' ? action.text : this._str(reasoned.raw)
 
-        this._runs().appendTranscript(runId, { actor: 'llm', args_digest: 'message: ' + messageText })
+        // #74 — the CALLER authored this turn, not the model. Labelling it
+        // 'llm' put words in the model's mouth in the one artefact this tool
+        // exists to make trustworthy. The reply below is genuinely the
+        // model's, and keeps 'llm'.
+        this._runs().appendTranscript(runId, { actor: 'user', args_digest: 'message: ' + messageText })
         this._runs().appendTranscript(runId, { actor: 'llm', result_digest: reply })
 
         return { status: 200, body: { run_id: runId, reply: reply } }
@@ -451,6 +575,7 @@ PaRestHandlers.prototype = {
         var checks = this._checks || this._statusChecks()
         var results = []
         var ready = true
+        var callerDependentFailure = false
 
         for (var i = 0; i < checks.length; i++) {
             var c = checks[i]
@@ -466,11 +591,49 @@ PaRestHandlers.prototype = {
             var st = result && this._nonEmptyString(result.status) ? result.status : 'error'
             var detail = result && result.detail !== undefined ? result.detail : null
 
-            results.push({ check: c.name, status: st, detail: detail })
-            if (st !== 'ok') ready = false
+            var row = { check: c.name, status: st, detail: detail }
+
+            // #74 / R-19b — a check whose outcome depends on WHO IS ASKING
+            // must not stand in for a system-wide health signal.
+            // `micro_invocation` makes a live PaLlmProxy.reason() call, which
+            // needs privileges a non-admin caller does not have, so a
+            // perfectly healthy system reported ready:false to them. The check
+            // still runs and is still reported — it is the only one that
+            // proves a call completes end to end — it just no longer speaks
+            // for the system.
+            if (this._isCallerDependent(c.name)) {
+                row.caller_dependent = true
+                if (st !== 'ok') callerDependentFailure = true
+            } else if (st !== 'ok') {
+                ready = false
+            }
+
+            results.push(row)
         }
 
-        return { status: 200, body: { ready: ready, checks: results } }
+        var body = { ready: ready, checks: results }
+        // Only when it actually explains something — an always-present note is
+        // noise a reader learns to skip, and this one has to be read on the
+        // one response where `ready:true` sits next to a failing check.
+        if (callerDependentFailure) {
+            body.caller_dependent_note =
+                'A check marked caller_dependent failed. Those checks reflect the CALLING ' +
+                'user privileges, not system health — a non-admin caller can see one fail on a ' +
+                'healthy instance — so they do not affect `ready`. Re-run as an admin to test them.'
+        }
+
+        return { status: 200, body: body }
+    },
+
+    /** Checks whose result reflects the CALLER rather than the system (#74). */
+    CALLER_DEPENDENT_CHECKS: ['micro_invocation'],
+
+    _isCallerDependent: function (name) {
+        var n = this._str(name)
+        for (var i = 0; i < this.CALLER_DEPENDENT_CHECKS.length; i++) {
+            if (this.CALLER_DEPENDENT_CHECKS[i] === n) return true
+        }
+        return false
     },
 
     /** The production check list — see the file header's "/status — R-19b"

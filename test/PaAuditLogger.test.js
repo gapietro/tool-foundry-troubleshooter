@@ -951,3 +951,93 @@ describe('toolCalls', () => {
         })
     })
 })
+
+// ===========================================================================
+// logRefusal — issue #75
+//
+// `PaToolRegistry.dispatch` refuses on two gates (unknown tool, and the
+// fail-closed destructive gate) and BOTH return before `logIntent`, so an
+// attempt to invoke an unknown or destructive tool left zero trace. The
+// destructive gate's whole rationale is that Phase 3's confirmation flow can
+// rely on an honest record of every tool the model ATTEMPTED — which is
+// exactly the event a security review wants, and exactly the one not written.
+//
+// THE SPLIT THAT MAKES THIS SAFE, and it is the point of the design:
+//   - the AUDIT TABLE records every attempt, refusals included (#75);
+//   - the EVIDENCE READERS (`invokedTools`, `toolCalls`) still report only
+//     calls that RAN.
+// Without the second half this would open a fabrication hole — a model could
+// call a nonexistent tool, be refused, cite it, and have
+// `_checkCitationSupported` confirm the tool "was invoked". It also keeps
+// `_auditedDispatchCount` and the §AQ depth-gate floor meaning exactly what
+// they meant before: a refused call still corroborates nothing.
+// ===========================================================================
+
+describe('logRefusal', () => {
+    test('writes a row with action_type refused, naming the attempted tool', () => {
+        const { logger, world } = load({})
+        const res = logger.logRefusal({
+            runId: RUN,
+            toolName: 'not_a_tool',
+            error: 'Unknown tool "not_a_tool".',
+        })
+
+        expect(res.logged).toBe(true)
+        const rows = world.tables[AUDIT_TABLE]
+        expect(rows).toHaveLength(1)
+        expect(rows[0].action_type).toBe('refused')
+        expect(rows[0].tool_name).toBe('not_a_tool')
+        expect(rows[0].run).toBe(RUN)
+        expect(String(rows[0].output)).toMatch(/Unknown tool/)
+    })
+
+    test('records the attempt even when the tool name is unregistered garbage', () => {
+        const { logger, world } = load({})
+        logger.logRefusal({ runId: RUN, toolName: 'DROP TABLE incident', error: 'refused' })
+        expect(world.tables[AUDIT_TABLE][0].tool_name).toBe('DROP TABLE incident')
+    })
+
+    test('is total — junk params still produce a result object, never a throw', () => {
+        const { logger } = load({})
+        expect(() => logger.logRefusal(null)).not.toThrow()
+        expect(() => logger.logRefusal('not json')).not.toThrow()
+    })
+
+    test('a refused row is NOT counted as an invoked tool (no fabrication hole)', () => {
+        const { logger } = load({})
+        logger.logRefusal({ runId: RUN, toolName: 'query_table', error: 'refused' })
+
+        const used = logger.invokedTools(RUN)
+        // The only row in the trail is a refusal, so the run invoked nothing.
+        expect(used.tools).toEqual([])
+        expect(used.available).toBe(false)
+        // The ambiguity #191 cares about is preserved exactly: a run whose
+        // only dispatch was refused still reads as an empty trail, so no gate
+        // changes behaviour because of this row.
+        expect(used.degraded).toBe('no_audit_rows')
+    })
+
+    test('a refused row is NOT reported as a call by toolCalls', () => {
+        const { logger } = load({})
+        logger.logRefusal({ runId: RUN, toolName: 'query_table', error: 'refused' })
+
+        const calls = logger.toolCalls(RUN)
+        expect(calls.calls).toEqual([])
+        expect(calls.available).toBe(false)
+    })
+
+    test('a refusal alongside a real call leaves the real call intact and alone', () => {
+        const { logger, world } = load({})
+        logger.logIntent({ runId: RUN, toolName: 'agent_trace', input: '{}' })
+        logger.logRefusal({ runId: RUN, toolName: 'evil_tool', error: 'refused' })
+
+        expect(logger.invokedTools(RUN).tools).toEqual(['agent_trace'])
+        expect(logger.toolCalls(RUN).calls.map((c) => c.tool)).toEqual(['agent_trace'])
+
+        // …and BOTH rows are on record for the audit reader. That is the whole
+        // split: the table is complete, the evidence readers are not.
+        const rows = world.tables[AUDIT_TABLE]
+        expect(rows).toHaveLength(2)
+        expect(rows.map((r) => r.action_type).sort()).toEqual(['intent', 'refused'])
+    })
+})

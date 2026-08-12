@@ -181,7 +181,13 @@ PaRunManager.prototype = {
     SUMMARIZE_THRESHOLD: 10,
     KEEP_RECENT: 5,
 
-    ACTORS: ['llm', 'tool', 'system'],
+    // #74 — 'user' added because `/runs/{id}/message` was labelling the
+    // CALLER's own turn `llm`, and an unknown actor normalises to 'system'
+    // rather than erroring, so the mislabel had to be fixed here as well as at
+    // the call site or it would have silently become 'system' instead.
+    // A diagnostic tool whose value is a trustworthy audit trail cannot have a
+    // transcript that misattributes who said what.
+    ACTORS: ['llm', 'tool', 'system', 'user'],
 
     /** close() legality — the ONLY transitions this class permits. */
     LEGAL_CLOSE_SOURCES: ['queued', 'running'],
@@ -454,6 +460,48 @@ PaRunManager.prototype = {
      *          never throws (R-19b: the caller must never see a status that
      *          contradicts what actually happened to the row).
      */
+    /**
+     * `queued` -> `running`, the transition that was missing (issue #73).
+     *
+     * `PaRestHandlers._checkStuckRuns` looks for custom runs sitting at
+     * `status:'running'` past the worker budget — that is how a dead worker is
+     * meant to be noticed. But `createRun` forces `queued` and nothing ever
+     * moved a run off it, so the query could not match by construction.
+     * Measured on gpinst01 2026-08-12 over 214 custom runs: complete 159,
+     * failed 54, queued 1, **running zero** — and that one stuck `queued` run
+     * was exactly the case the check exists for, invisible to it.
+     *
+     * NOT folded into `close()`: `queued -> running` is in that method's
+     * ILLEGAL list deliberately, because `close` is the terminal transition
+     * and widening it would let a worker "close" a run into a live state.
+     * Same guard shape, opposite end of the lifecycle.
+     *
+     * Idempotence is deliberately NOT offered — a second call means two
+     * workers believe they own the run, which is worth surfacing rather than
+     * absorbing, and `_checkStuckRuns` is the only consumer of the state.
+     *
+     * @param {String} runId
+     * @returns {Object} {success:true, run_id, status:'running'} | {success:false, error}
+     */
+    markRunning: function (runId) {
+        var rid = this._str(runId)
+        if (!rid) return { success: false, error: 'run id is required' }
+
+        var gr = this._getRun(rid)
+        if (!gr) return { success: false, error: 'run not found: ' + rid }
+
+        var current = gr.getValue('status')
+        if (current !== 'queued') {
+            return { success: false, error: 'illegal transition: ' + (current || '(empty)') + ' -> running' }
+        }
+
+        if (!this._writeUpdate(gr, { status: 'running' })) {
+            return { success: false, error: 'update failed' }
+        }
+
+        return { success: true, run_id: rid, status: 'running' }
+    },
+
     close: function (runId, status, options) {
         var o = options || {}
         var rid = this._str(runId)

@@ -13,6 +13,10 @@ declare global {
                         table: 'sys_security_acl'
                         id: '7638b54b4b3c48f4a0338091585485b6'
                     }
+                    'acl-rest-troubleshooter-execute': {
+                        table: 'sys_security_acl'
+                        id: 'fdf885e9428b41a985152a95f060c3bc'
+                    }
                     'acl-run-create': {
                         table: 'sys_security_acl'
                         id: '4dfedd8032fd4606b01702968f568fb4'
@@ -1279,6 +1283,17 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_choice'
+                        id: 'c8ed71b66031463fb89a3eefee827f74'
+                        key: {
+                            name: 'x_snc_troubleshoot_audit'
+                            element: 'action_type'
+                            value: 'refused'
+                            language: 'en'
+                            dependent_value: 'NULL'
+                        }
+                    },
+                    {
                         table: 'sys_gen_ai_feature_mapping'
                         id: 'ce70f923528c4844a643aa417cc7c7f3'
                         key: {
@@ -1512,6 +1527,19 @@ declare global {
                         key: {
                             parent_capability: '0bf0bc13a7414399a1482d21de01231d'
                             resource_capability: '0bf0bc13a7414399a1482d21de01231d'
+                        }
+                    },
+                    {
+                        table: 'sys_security_acl_role'
+                        id: 'fbe9871e814345858f7a8baa7c93b209'
+                        key: {
+                            sys_security_acl: 'fdf885e9428b41a985152a95f060c3bc'
+                            sys_user_role: {
+                                id: 'c3c9f3a9863249f08abc0e7d01cba643'
+                                key: {
+                                    name: 'x_snc_troubleshoot.admin'
+                                }
+                            }
                         }
                     },
                     {
