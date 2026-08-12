@@ -40,9 +40,12 @@ demonstrated at the validator rather than the scorer.
 **Two rules earned:**
 
 1. **A trigger set cannot bound a risk its own section declared out of scope.** §AU6 excluded
-   correctness on the premise that the change "touches neither axis directly". That exclusion was
-   itself a prediction, it was false, and no trigger could see the collapse. A scope exclusion
-   load-bearing enough to gate a merge deserves the same falsifiability as the predictions table.
+   correctness — *"Determinacy and correctness are separate axes"* — and then declined to measure
+   it, so none of §AU5's four triggers could see the collapse. The exclusion silently gated a
+   merge. A scope exclusion load-bearing enough to do that deserves the same falsifiability as the
+   predictions table. (§AV2 as first written attributed a stronger clause to §AU6 that belongs to
+   §AQ6; caught in review of PR #206 and corrected there rather than quietly, since a ledger's
+   value is that its errors stay visible in it.)
 2. **#173's target-blindness is not uniformly harmless across layers.** A *schema* sweep on the
    wrong table yields an inert citation — literally what §AR's reps did and ignored. A *data* sweep
    on the wrong table yields `genuinely_empty`, which reads as a **positive finding** and licenses
@@ -73,6 +76,12 @@ re-derived rather than written to #204's original framing.
   #188's commit.
 
 ### Notes
+- **Two review findings from PR #206 are folded in**, both about the ledger rather than code:
+  §AV2's misattributed quote (corrected in place, with the correction recorded), and **§AV3a** — a
+  registration defect in §AU4 itself. AU-2 predicted *"≥2 of 4"* with falsifier *"0 of 4"*, leaving
+  **1 of 4 in neither**; deliberately not amended retroactively, since editing a registered
+  prediction after seeing the data is what registration exists to prevent. Rule recorded for every
+  future registration: a falsifier must be the exact complement of its prediction.
 - **#204** remains open as the evidence-rule half, blocked on **#205**.
 - **#205** filed and labelled `next` — the depth gate's missing subject operand. A fix may not
   infer the subject from model output (§AL/#173, unreopened), so it is a request-contract change.

@@ -7721,11 +7721,27 @@ validated): `TR1000324` validated, so 1 of 4.
 **On the registered instrument this change passes on every count.** §AV2 is why it must not ship
 anyway.
 
-### AV2. §AU6's central assumption is FALSIFIED, and it outranks §AV1
+### AV2. §AU6's scope exclusion does not survive the measurement, and that outranks §AV1
 
-§AU6 declared correctness out of scope on the grounds that *"determinacy and correctness are
-separate axes and this change touches neither directly."* The second half of that sentence is
-false, and this pass is what falsifies it.
+§AU6 excluded correctness from scope in these words, verbatim: *"**Whether the reports are RIGHT.**
+§AC8, and §AO2's demonstration that a row can score 6/6 while proposing a fix at a column that does
+not exist. `TR1000319` is the standing local example … Determinacy and correctness are separate
+axes."*
+
+**Quoted exactly because the first draft of this section did not.** That draft attributed to §AU6
+the clause *"and this change touches neither directly"* — which belongs to **§AQ6**, not §AU6, and
+was imported here from the section §AU was modelled on. Caught in review of PR #206. The
+misattribution mattered for the reason the reviewer gave: a future section re-deriving this
+section's rule would `grep` §AU6, fail to find the sentence, and be unable to tell a misquote from
+an append-only violation. Recorded rather than silently corrected, per §AR1a — a ledger's value is
+that its errors are visible in it.
+
+**The ruling survives the correction, on narrower and more accurate grounds.** §AU6 made no
+explicit prediction that the change leaves correctness untouched; what it asserted is that the two
+axes are *separate*, and then declined to measure one of them. This pass refutes the implicit half
+— on this path the axes moved together and in opposite directions — and, more importantly, shows
+that the *declining to measure* is what did the damage. The rule §AV4 draws does not need §AU6 to
+have made a strong claim; it needs only that a scope exclusion silently gated a merge.
 
 | | §AR (pre-§AU) | §AU (this pass) |
 |---|---|---|
@@ -7764,6 +7780,28 @@ converts target-blindness from an inefficiency into a fabrication path.**
 adds the dual: a gate that *directs* at a layer whose evidence is subject-dependent will be
 answered against a subject the model invents. Both follow from the same missing operand, and #204
 is the second site to pay for it.
+
+### AV3a. A registration defect in §AU4 itself, found in review and NOT retroactively repaired
+
+**AU-2 is not a complete partition.** It predicts *"≥2 of 4 file a `data` citation"* and registers
+its falsifier as *"0 of 4"* — so an outcome of **exactly 1 of 4 satisfies neither**, and §AV1's
+verdict column would have had no defined value for it. AU-1, AU-3 and AU-4 are all complete
+partitions; only AU-2 has the gap. Found by `/code-review` on PR #206.
+
+**It did not bite here** — the measurement was 4 of 4 — and it is deliberately **not** amended in
+§AU4, because editing a registered prediction after seeing the data is the exact move the
+registration exists to prevent. It is recorded here instead.
+
+Had the reps come in at 1 of 4, *"not falsified, no trigger fired"* and *"the prediction failed"*
+would both have been arguable **after** the data existed, by whoever preferred the reading — which
+is precisely the degree of freedom §Z6 and `LEARNING.md`'s *testing — shaky* entry (a threshold
+consulted after the data exists is a degree of freedom, not a criterion) were written to close.
+That entry was about *ordering*; this is the same defect in *shape*, and the pass came within one
+rep of paying for it.
+
+**Rule for every future registration in this file: a prediction's falsifier must be the exact
+complement of the prediction.** AU-2 should have read *"falsified by ≤1 of 4"*. Cheap to check —
+read the two cells together and ask which outcomes fall in neither.
 
 ### AV4. Ruling
 
