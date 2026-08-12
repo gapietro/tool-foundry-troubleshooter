@@ -7201,13 +7201,49 @@ the `empty_trail` hold — `transcriptLIKEHOLD (empty_trail)` matches 4 of 4.
 
 1. *Any run finishes `partial` with an `empty_trail` hold.* Zero runs finished `partial`. Not fired.
 2. *More than one rep takes the `capped:true` exit.* **0 of 4** — `transcriptLIKEhold cap was
-   reached` matches nothing. `MAX_HOLDS` is 2 and every rep spent exactly 2 holds, so the cap check
-   was live on all four third-terminal-actions; R1's trail-check-before-cap ordering released them
-   as genuine compliance instead. Threshold was >1. Not fired.
+   reached` matches nothing. `MAX_HOLDS` is 2 and **every rep spent exactly 2 holds, verified per
+   rep** (`empty_trail` 4 of 4, `gaps` 4 of 4 — evidence §1), so the cap check was live on all four
+   third-terminal-actions; R1's trail-check-before-cap ordering released them as genuine compliance
+   instead. Threshold was >1. Not fired.
 3. *`_holdBlock`'s `empty_trail` text names a tool.* It does not — text quoted in the evidence
    §0.4. Not fired.
 
 **The floor stands.**
+
+### AR1a. The shipped floor is NARROWER than §AQ2 pre-registered, and §AR must say so
+
+Found by `/code-review` on PR #197, after that PR had merged. **§AQ2's snippet specifies:**
+
+```
+if (release.length === 0) {            // #191 THE FLOOR
+```
+
+**`PaAgentLoop.js:1161` ships:**
+
+```
+if (release.length === 0 && this._dispatchCount === 0) {
+```
+
+The conjunct is right and its reasoning is sound — an empty `release` is **not** proof the run
+invoked nothing, because `no_audit_rows` reads identically for a systematic audit write loss, and
+without the conjunct the harness would make two contradictory claims about one run (`_auditContext`
+writing *"audit trail LOST WRITES — this run dispatched N tool call(s)"* while the gate floors that
+same run for having called nothing). It arrived as a #193 review finding and is documented at
+`PaAgentLoop.js:1145-1160` and in the `2026.08.1115` CHANGELOG entry.
+
+**It was never written into the decision ledger.** Before this section, `_dispatchCount` appeared
+**zero times** in `DECISION.md`. §AR opened by inviting the reader to audit spec-to-verdict fidelity
+with `git log -p benchmark/DECISION.md` — and that audit would have concluded the built floor
+matched the pre-registered condition, because the ledger contained nothing to contradict it.
+
+Recorded as a deviation, not a defect: the floor as built is **strictly narrower** than the floor as
+registered, so every §AR1 result was produced by a gate that holds on a *subset* of what §AQ2
+described. AQ-1 and AQ-2 are unaffected in direction (a narrower floor can only fire less often, and
+it fired 4 of 4). The rule this earns, stated for the next pre-registration: **when a review changes
+the registered condition between pre-registration and build, the amendment belongs in the ledger at
+that moment — a code comment and a CHANGELOG bullet are not the ledger**, and §AQ's own opening
+claim ("§A through §AQ are unmodified") is precisely what makes the ledger the thing a reader
+trusts.
 
 ### AR2. What was NOT predicted, and is the more interesting result
 
