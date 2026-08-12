@@ -43,6 +43,26 @@ merged.**
   *correctness* question this change does not claim to answer (§AC8, unamended). AQ-3/AQ-4 are
   tripwires that count toward nothing. **No gate-figure prediction is filed**, so Ruling 6 forbids
   claiming one afterwards.
+- **The spec listed the properties a review may check, and the review found three more — that is
+  the finding, and it is recorded rather than quietly folded in.** `/code-review` on PR #194
+  raised six items against the first draft, all six accepted after verification against source,
+  and two of them made this section's own predictions **unmeasurable**: (a) `_holdNote` branches
+  only on `no_layer_report`, so a floor hold would emit `layer(s)  declared NOT_SWEPT` — an empty
+  list and a claim that is false on this path — leaving a floor hold byte-indistinguishable from a
+  degenerate `gaps` hold, so AQ-3 and revert trigger 1 could not be evaluated at all; (b) the I1
+  `_holdActive` clear tests `_anyOf(_heldTools, …)` and the floor deliberately leaves `_heldTools`
+  null, so a model that complies by calling a tool would still carry *"a terminal action is not
+  available yet"* into its next prompt — I1's own defect on a new path, landing on the turn AQ-1
+  and AQ-2 measure. Both are now enumerated properties with specified behaviour, alongside the
+  `_depthGate` return-contract update.
+- **Two logical defects in the section's own instrument, both fixed.** Revert trigger 2 read "the
+  capped-release rate rises above its v14 level", and the comparable v14 rows issued **no holds at
+  all**, so the baseline was 0 and *any* single non-compliant rep would have fired it — while AQ-1
+  predicts ≥3 of 4, making one non-compliant rep a **predicted-pass** outcome that trips a
+  no-re-litigation revert. Now bounded at >1 of 4. And "baseline is 0-of-4 on every count" was
+  wrong for AQ-3/AQ-4: they are negative tripwires, trivially *satisfied* 4-of-4 before a floor
+  existed, and the sentence inverted them into starting failed so any non-firing would read as an
+  improvement the floor earned. Scoped to AQ-1/AQ-2.
 - **Three revert triggers, no re-litigation**, including the one that would prove the placement
   argument wrong (`partial` with a floor hold in the transcript).
 - `MAX_EVIDENCE_RETURNS` (`0`, §W6) and `REQUIRE_RETRIEVAL_TO_RELEASE` (`false`, §Y6/§AL4) are

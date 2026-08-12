@@ -7057,22 +7057,50 @@ if (open.length === 0) {
 }
 ```
 
-Five properties, each of which is a thing a review may check:
+**Eight properties, each of which is a thing a review may check.** Items 5-7 were added after the
+first draft of this section was reviewed; each is a collaborator the floor's return value flows
+into that the draft did not name, and two of them made this section's own predictions
+unmeasurable. Recorded rather than quietly folded in, because *"the spec listed the properties a
+review may check and the review found three more"* is the finding.
 
 1. **It sits BELOW the `MAX_HOLDS` cap.** The cap is tested fourth and is unmoved, so the floor can
    never outlive it: worst case is two held turns and then a flagged `capped:true` release. This is
    R2's lesson applied rather than re-learned — a hold path the cap cannot reach rides to
    `MAX_ITERATIONS` and finishes `partial`, which is a pre-registered revert trigger (C1).
 2. **It records nothing.** `_heldTools` stays null, so the hold is NOT sticky and each turn
-   re-derives. One tool call empties the condition and the run proceeds normally.
+   re-derives.
 3. **It intercepts one path only.** The `no_layer_report` hold (non-`fix_report` actions) and the
    `gaps` hold (declared gaps, empty trail) are untouched, because both already hold. Only the
    allow at `open.length === 0` changes, and only when the trail is empty.
 4. **It names no tool.** `_holdBlock` gains an `empty_trail` branch worded like the existing
-   `no_layer_report` one ("call a tool", never *which*), and `_scrubToolNames` continues to strip
-   any name the model's own reason text re-injects. §H8 item 3 is preserved; **if this block names
-   a tool the acceptance test is vacuous and the change is void.**
-5. **It reads `release`, not `trail.tools`.** So it inherits `REQUIRE_RETRIEVAL_TO_RELEASE`, which
+   `no_layer_report` one ("call a tool", never *which*). **Note what does NOT protect this path:**
+   that branch returns early and renders no model-authored text, so there is nothing for
+   `_scrubToolNames` to strip and the §H8 item 3 guarantee rests **entirely on the authored
+   wording**. §S is the standing reminder that this harness has named its tools before without
+   noticing. **If this block names a tool the acceptance test is vacuous and the change is void.**
+5. **`_holdActive` must be cleared on compliance, and property 2 is why it is not automatic.** The
+   I1 clear (`PaAgentLoop.js:391`) is `_anyOf(this._heldTools, [action.tool])`, and the floor
+   leaves `_heldTools` null, so `_anyOf(null, …)` is false and the block survives: the model
+   complies by calling a tool and its **next** prompt still carries *"a terminal action is not
+   available yet"*. That is the exact defect I1 was written to fix, reintroduced on a new path,
+   landing on the turn AQ-1 and AQ-2 measure. The floor's clear condition is therefore **any
+   successful dispatch while the active hold is `empty_trail`** — the floor asks for a tool call,
+   not a *particular* tool call, so any call discharges the prompt block. (The pre-existing
+   `no_layer_report` hold shares this defect and is out of scope here; filed separately.)
+6. **`_holdNote` gains its own branch, and AQ4/AQ5 depend on it.** `_holdNote`
+   (`PaAgentLoop.js:1553`) branches only on `no_layer_report`; everything else falls through to the
+   `gaps` wording. An `empty_trail` hold carries `gaps: []`, so the transcript would read
+   `HOLD: terminal action refused — layer(s)  declared NOT_SWEPT with no tool call behind them.` —
+   an empty layer list and a claim that is **false** on this path, since nothing was declared
+   `NOT_SWEPT`. **A floor hold would be byte-indistinguishable from a degenerate `gaps` hold, which
+   makes AQ-3 and revert trigger 1 unfalsifiable as this section originally wrote them.** The
+   branch must emit a distinct marker naming `empty_trail`, under the same 200-char `DIGEST_CHARS`
+   ceiling.
+7. **`_depthGate`'s return contract is updated in the same commit.** Its docblock currently states
+   `kind` is `''` on every ALLOW path and that *"only the two HOLD paths use the other two
+   values"*, and enumerates `target` per path. A third `kind` breaks that enumeration, and the
+   docblock is the only written spec of the return shape.
+8. **It reads `release`, not `trail.tools`.** So it inherits `REQUIRE_RETRIEVAL_TO_RELEASE`, which
    **stays `false`** — §Y6's bar is not cleared here and this section does not reopen it (§AL4).
 
 ### AQ3. What it costs, declared before it is spent
@@ -7092,9 +7120,15 @@ which spends budget the `partial` guard is watching. AQ5's first trigger is the 
 
 ### AQ4. Predictions, filed before any run
 
-Baseline is 0-of-4 on every count: v14 rows 06/08 (#188, died at the parser) and the two post-fix
-reps `TR1000315`/`TR1000316` (#191, died at validation). Four reps of the seed-05
-`agent`+`timeframe` path, run under the smoke protocol, custom arm only.
+Four reps of the seed-05 `agent`+`timeframe` path, run under the smoke protocol, custom arm only.
+
+**The baseline is 0-of-4 for AQ-1 and AQ-2 ONLY** — v14 rows 06/08 (#188, died at the parser) and
+the two post-fix reps `TR1000315`/`TR1000316` (#191, died at validation) recorded no tool call and
+no valid report between them. **AQ-3 and AQ-4 do not share that baseline and must not be read
+against it:** they are negative tripwires, and with no floor in existence both were *trivially
+satisfied* 4-of-4 rather than failed 0-of-4. Saying "0-of-4 on every count" would invert them into
+claiming the tripwires start failed, so that any non-firing reads as an improvement the floor
+earned. It is not — a silent tripwire is the null result.
 
 | # | Prediction | Falsified by |
 |---|---|---|
@@ -7116,11 +7150,18 @@ carried at §AN) applies: a gate prediction not filed may not be claimed afterwa
 1. **Any run finishes `partial` with an `empty_trail` hold in its transcript.** C1's original
    trigger, unmodified. The cap is supposed to make this unreachable; if it is reached, the
    placement argument in AQ2 item 1 is wrong.
-2. **The capped-release rate on the custom arm rises above its v14 level** on comparable rows —
-   the floor spending hold budget that trail-backed releases used to consume, which is the gate
-   giving up more often wearing the costume of a gate holding more often.
-3. **`_holdBlock`'s `empty_trail` text names a tool**, by authoring or by an unscrubbed reason.
-   §S is the standing reminder that this harness has named its tools before without noticing.
+2. **MORE THAN ONE of the four reps takes the `capped:true` exit** after spending its holds on the
+   floor. The threshold is deliberate and the first draft of this trigger did not have one: it
+   read *"the capped-release rate rises above its v14 level"*, and on the comparable v14 rows the
+   gate issued **no holds at all** (they died at the parser), so that baseline is 0 and **any**
+   single non-compliant rep would have tripped it. AQ-1 predicts ≥3 of 4 comply — i.e. one
+   non-compliant rep is a **predicted-pass** outcome, which would have fired a no-re-litigation
+   revert trigger on the success case. A trigger that fires on the outcome the section predicts is
+   not a trigger; it is a guaranteed revert with extra steps. Bounded at >1 of 4, which is the
+   same thing as "AQ-1 failed, and expensively".
+3. **`_holdBlock`'s `empty_trail` text names a tool.** By authoring — per AQ2 item 4 there is no
+   model-authored text on this path and therefore no scrubbing to fall back on. §S is the standing
+   reminder that this harness has named its tools before without noticing.
 
 ### AQ6. What this does not decide
 
