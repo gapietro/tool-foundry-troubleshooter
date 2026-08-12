@@ -1479,38 +1479,10 @@ PaAgentLoop.prototype = {
         //    in production (every tool in `_layerToolMap` is scorable and
         //    `_openGaps` drops malformed gaps); it is a degraded-path
         //    improvement, not a measured one.
-        //    #204 (§AU): ON AN ABSENCE DIAGNOSIS THE TIE-BREAK PREFERS LAYER
-        //    5. Measured across §AR's four seed-05 reps: layer 4
-        //    (schema_lookup) and layer 5 (query_table — log_analysis is
-        //    dropped as shared) both score fan-out 1, so the floor class is
-        //    {4, 5} and "lowest layer number" took layer 4 by exactly one.
-        //    The model called schema_lookup, R1 matched, `_gateReleased`
-        //    latched permanently, and layers 5 and 6 were abandoned unswept.
-        //
-        //    That is the wrong half of the pair to abandon. When layer 1 is
-        //    UNAVAILABLE the report is diagnosing an ABSENCE, and `data` is
-        //    the only non-trace source that can corroborate one: `config` is
-        //    where the finding itself came from, and `schema` is a column
-        //    definition, not an event — it cannot witness that nothing ran.
-        //    Layer 5's dedicated tool produces exactly that source.
-        //
-        //    TIE-BREAK ONLY (§AU property 1). The floor-class test below is
-        //    unchanged, so this can never select a gap the ranking would have
-        //    excluded — it decides between EQUALS, which is the same thing
-        //    #116 left the model's declaration doing at step 2. It is inert
-        //    unless layer 5 is itself in the floor class (property 2), and it
-        //    adds no hold path, so cap accounting is untouched (property 5).
-        var preferLayer = this._safeTraceUnavailable(report) ? 5 : -1
-
         if (chosen === null) {
             for (i = 0; i < open.length; i++) {
                 if (this._gapFanOut(open[i], fanOut) !== floor) continue
-                if (chosen === null) {
-                    chosen = open[i]
-                    continue
-                }
-                if (chosen.layer === preferLayer) continue
-                if (open[i].layer === preferLayer || open[i].layer < chosen.layer) chosen = open[i]
+                if (chosen === null || open[i].layer < chosen.layer) chosen = open[i]
             }
         }
 
@@ -1568,24 +1540,6 @@ PaAgentLoop.prototype = {
      * model declared nothing", which falls to the structural rank — a strictly
      * milder degradation than losing the gate.
      */
-    /**
-     * #204 (§AU). Guarded read of the absence-diagnosis predicate, in the
-     * shape `_safeGaps` / `_safeDeclaredLayers` / `_safeFanOut` all use: a
-     * broken or absent PaFixReport must degrade the GATE, never trap the run.
-     *
-     * `false` is the FAIL-SAFE direction on purpose — it is the behaviour the
-     * gate had before §AU, so a degraded collaborator costs the layer-5
-     * preference and nothing else.
-     */
-    _safeTraceUnavailable: function (report) {
-        try {
-            return this._reports().traceUnavailable(report) === true
-        } catch (e) {
-            // R-1: `e` is deliberately not inspected.
-            return false
-        }
-    },
-
     _safeDeclaredLayers: function (report) {
         try {
             var layers = this._reports().declaredLayers(report)

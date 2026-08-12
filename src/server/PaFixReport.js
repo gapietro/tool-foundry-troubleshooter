@@ -320,36 +320,6 @@ PaFixReport.prototype = {
      * case: nothing fired, so there is no sn_aia_execution_plan row, and the
      * old rule made a correct diagnosis structurally unreportable.
      */
-    /**
-     * #204 (DECISION.md §AU). PUBLIC absence-diagnosis predicate: does this
-     * draft declare layer 1 UNAVAILABLE — "nothing ever ran"?
-     *
-     * `PaAgentLoop._selectTarget` reads it to prefer the layer-5 gap in the
-     * floor-class tie-break, because on an absence diagnosis `data` is the
-     * only non-trace source that can independently corroborate (`config` is
-     * where the finding came from; `schema` is a column definition, not an
-     * event). §AU property 3 claims the gate reads THE SAME operand branch
-     * (B) of the evidence rule keys off, which is why this delegates to
-     * `_isTraceUnavailable` rather than re-testing `.status` — a second
-     * implementation could drift and falsify the claim.
-     *
-     * IT CANONICALISES FOR ITSELF, for `unsweptGaps`' reason (#155): the gate
-     * calls this on the RAW draft, never through `validate`, so the flat
-     * `{"1": "UNAVAILABLE"}` form (#151 / §AD5) would otherwise read false and
-     * the tie-break would go silently INERT — old behaviour, no error, on
-     * exactly the drafts #151 made reachable.
-     *
-     * PURE: no Glide, no audit query, no validation side effects.
-     *
-     * @param {*} report a fix_report draft; any shape (R-9)
-     * @returns {Boolean} false for anything malformed
-     */
-    traceUnavailable: function (report) {
-        return this._isTraceUnavailable(
-            this._withCanonicalLayersSwept(this._isPlainObject(report) ? report : {})
-        )
-    },
-
     _isTraceUnavailable: function (report) {
         var ls = this._isPlainObject(report.layers_swept) ? report.layers_swept : {}
         var entry = ls[1]

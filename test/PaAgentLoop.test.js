@@ -75,7 +75,7 @@ function fakeRunManager() {
     }
 }
 
-function fakeFixReport(validateResults, gaps, declared, traceUnavail) {
+function fakeFixReport(validateResults, gaps, declared) {
     const calls = []
     const contextCalls = []
     const renderCalls = { markdown: [], json: [] }
@@ -137,14 +137,6 @@ function fakeFixReport(validateResults, gaps, declared, traceUnavail) {
         },
         declaredLayers: function () {
             return declared === undefined ? [] : declared
-        },
-        // #204 / §AU. The absence-diagnosis predicate the floor-class
-        // tie-break reads. Defaults FALSE so every pre-existing test in this
-        // file keeps exercising the ordinary lowest-layer tie-break — §AU
-        // property 1 is that nothing outside an absence diagnosis moves, and
-        // a fake defaulting the other way would hide a violation of it.
-        traceUnavailable: function () {
-            return traceUnavail === true
         },
     }
 }
@@ -3894,137 +3886,5 @@ describe('depth gate (#121) — retrieval-aware release', () => {
 
         expect(load({})._releaseSet(trail)).toEqual(['a', 'b'])
         expect(load({ requireRetrievalToRelease: true })._releaseSet(trail)).toEqual(['a'])
-    })
-})
-
-// ---------------------------------------------------------------------------
-// #204 / DECISION.md §AU — the absence-diagnosis target
-//
-// Registered BEFORE this code (§AU, committed f48656d). Measured defect, from
-// §AR's four seed-05 reps: the model declares layers 4, 5 and 6 NOT_SWEPT;
-// `_gapFanOut` takes the MIN fan-out per gap, so layer 4 (schema_lookup = 1)
-// and layer 5 (query_table = 1, log_analysis dropped as shared) both sit in
-// the floor class; step 3's structural tie-break — lowest layer number —
-// takes layer 4 by exactly one. The model calls schema_lookup, R1 matches,
-// `_gateReleased` latches PERMANENTLY, and layers 5 and 6 are abandoned.
-//
-// On an absence diagnosis `data` is the only non-trace source that can
-// independently corroborate: `config` is where the finding itself came from
-// and `schema` is a column definition, not an event. Layer 5's dedicated tool
-// produces exactly that source. So the tie-break hands the target to the one
-// floor-class layer whose source cannot corroborate an absence and abandons
-// the one that can.
-//
-// THE CHANGE IS THE TIE-BREAK ONLY (§AU property 1): floor-class membership is
-// untouched, so this can never select a gap the existing ranking would have
-// excluded.
-// ---------------------------------------------------------------------------
-describe('absence-diagnosis target (#204 / §AU)', () => {
-    const GAP2 = { layer: 2, name: 'Instructions', reason: 'r2', tools: ['agent_config'] }
-    const GAP4 = { layer: 4, name: 'Data schemas', reason: 'r4', tools: ['schema_lookup'] }
-    const GAP5 = { layer: 5, name: 'Data', reason: 'r5', tools: ['query_table', 'log_analysis'] }
-    const GAP6 = { layer: 6, name: 'GenAI stack', reason: 'r6', tools: ['genai_log', 'log_analysis'] }
-    const FIX = { action: 'fix_report', report: { layers_swept: {} } }
-
-    function gateLoop(invoked, gaps, declared, absence) {
-        return load({
-            auditLogger: fakeAuditLogger({ available: true, tools: invoked }),
-            fixReport: fakeFixReport([], gaps, declared, absence),
-        })
-    }
-
-    test('THE §AU CHANGE: on an absence diagnosis layer 5 takes the floor-class tie-break', () => {
-        // The measured seed-05 shape: layers 4, 5, 6 open, nothing declared.
-        // Pre-§AU this returned layer 4 with tools ['schema_lookup'].
-        const gate = gateLoop(['agent_trace'], [GAP4, GAP5, GAP6], [], true)._depthGate('RUN1', FIX)
-        expect(gate.hold).toBe(true)
-        expect(gate.target.layer).toBe(5)
-        expect(gate.target.tools).toEqual(['query_table'])
-    })
-
-    test('the release set is query_table ALONE — schema_lookup no longer discharges it', () => {
-        // The defect end to end: the model complied with schema_lookup and the
-        // gate released permanently. It must not.
-        let invoked = ['agent_trace']
-        const loop = load({
-            auditLogger: {
-                invokedTools: function () {
-                    return { available: true, tools: invoked.slice() }
-                },
-            },
-            fixReport: fakeFixReport([], [GAP4, GAP5, GAP6], [], true),
-        })
-
-        expect(loop._depthGate('RUN1', FIX).hold).toBe(true)
-
-        invoked = ['agent_trace', 'schema_lookup']
-        expect(loop._depthGate('RUN1', FIX).hold).toBe(true)
-
-        invoked = ['agent_trace', 'schema_lookup', 'query_table']
-        expect(loop._depthGate('RUN1', FIX).hold).toBe(false)
-    })
-
-    test('PROPERTY 1: without an absence diagnosis the lowest-layer tie-break is unmoved', () => {
-        const gate = gateLoop(['agent_trace'], [GAP4, GAP5, GAP6], [], false)._depthGate('RUN1', FIX)
-        expect(gate.target.layer).toBe(4)
-        expect(gate.target.tools).toEqual(['schema_lookup'])
-    })
-
-    test('PROPERTY 2: inert when layer 5 is not open, even on an absence diagnosis', () => {
-        const gate = gateLoop(['agent_trace'], [GAP2, GAP4], [], true)._depthGate('RUN1', FIX)
-        expect(gate.target.layer).toBe(4)
-    })
-
-    test('PROPERTY 2: it cannot promote layer 5 over a CHEAPER gap', () => {
-        // Floor-class membership is untouched. If some gap ever scores below
-        // layer 5's fan-out, that gap still wins — §AU changes which of two
-        // EQUALS is chosen, never the ranking itself. Here layer 5 (fan-out 1)
-        // is the floor and layer 6 (fan-out 2) is not, so 5 wins on rank
-        // rather than on the new tie-break; the assertion that matters is
-        // that a non-floor gap is never selected.
-        const gate = gateLoop(['agent_trace'], [GAP5, GAP6], [], true)._depthGate('RUN1', FIX)
-        expect(gate.target.layer).toBe(5)
-    })
-
-    test('PROPERTY 5: no new hold path — one hold, cap accounting unchanged', () => {
-        const loop = gateLoop(['agent_trace'], [GAP4, GAP5, GAP6], [], true)
-        const gate = loop._depthGate('RUN1', FIX)
-        expect(gate.hold).toBe(true)
-        expect(gate.kind).toBe('gaps')
-        expect(gate.capped).toBe(false)
-        expect(loop._holdCount).toBe(1)
-    })
-
-    test('PROPERTY 6: the hold note names the target LAYER and no tool (§H8 item 3)', () => {
-        const loop = gateLoop(['agent_trace'], [GAP4, GAP5, GAP6], [], true)
-        const gate = loop._depthGate('RUN1', FIX)
-        const note = loop._holdNote(gate)
-        expect(note).toContain('5')
-        expect(note).not.toContain('query_table')
-        expect(note).not.toContain('schema_lookup')
-    })
-
-    test('PROPERTY 6: the hold BLOCK names no tool either', () => {
-        const loop = gateLoop(['agent_trace'], [GAP4, GAP5, GAP6], [], true)
-        const gate = loop._depthGate('RUN1', FIX)
-        const block = loop._holdBlock(gate)
-        expect(block).not.toContain('query_table')
-        expect(block).not.toContain('schema_lookup')
-    })
-
-    test('a broken traceUnavailable degrades to the OLD tie-break, never a throw (R-1)', () => {
-        // Fail-safe direction: if the predicate is unavailable the gate must
-        // behave exactly as it did before §AU, not hold differently and not
-        // trap the run. Same treatment `_safeGaps` gives a broken collaborator.
-        const loop = load({
-            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
-            fixReport: Object.assign(fakeFixReport([], [GAP4, GAP5, GAP6], []), {
-                traceUnavailable: function () {
-                    throw new Error('collaborator down')
-                },
-            }),
-        })
-        const gate = loop._depthGate('RUN1', FIX)
-        expect(gate.target.layer).toBe(4)
     })
 })
