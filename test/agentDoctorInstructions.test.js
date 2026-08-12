@@ -10,6 +10,7 @@
 
 const fs = require('fs')
 const path = require('path')
+const { stripComments } = require('./_stripComments')
 
 const INSTRUCTIONS_PATH = path.join(__dirname, '..', 'docs', 'agent', 'agent-doctor-instructions.md')
 
@@ -139,9 +140,10 @@ describe('the Fluent agent carries the instructions verbatim', () => {
             path.join(__dirname, '..', 'src', 'fluent', 'agent-doctor.now.ts'),
             'utf8'
         )
-        const code = fluent
-            .replace(/\/\*\*[\s\S]*?\*\//g, '') // strip block comments
-            .replace(/\/\/.*$/gm, '') // strip line comments
+        // #27 — string-aware, so a `//` inside a string or template cannot
+        // silently blind this guard by stripping a real call off the tail of
+        // its line. See test/_stripComments.js.
+        const code = stripComments(fluent)
         expect(code).not.toMatch(/^\s*triggerConfig\s*:/m)
     })
 
@@ -158,9 +160,10 @@ describe('the Fluent agent carries the instructions verbatim', () => {
             path.join(__dirname, '..', 'src', 'fluent', 'agent-doctor.now.ts'),
             'utf8'
         )
-        const code = fluent
-            .replace(/\/\*\*[\s\S]*?\*\//g, '') // strip block comments
-            .replace(/\/\/.*$/gm, '') // strip line comments
+        // #27 — string-aware, so a `//` inside a string or template cannot
+        // silently blind this guard by stripping a real call off the tail of
+        // its line. See test/_stripComments.js.
+        const code = stripComments(fluent)
         expect(code).not.toMatch(/Now\.ref\s*\(/)
     })
 

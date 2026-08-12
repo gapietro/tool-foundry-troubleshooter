@@ -216,6 +216,8 @@ Four things to carry forward rather than rediscover:
 
 ## Task 9: Script-Tool Adapters (Native Harness Bridge)
 
+**DONE — PR #23, merged 2026-07-31 (version `2026.07.3110`).**
+
 **Files:**
 - Create: `src/server/adapters/PaScriptToolAdapter.js`
 - Create: `src/server/adapters/` — one thin wrapper per tool (7: agent_trace, agent_config, genai_log, schema_lookup, query_table, log_analysis, read_artifact)
@@ -231,10 +233,14 @@ Four things to carry forward rather than rediscover:
 
 ## Task 10: Agent Doctor — Native AI Agent Definition
 
+**DONE — PR #25 / issue #24, merged 2026-07-31 (version `2026.07.3111`).**
+
 **Files:**
 - Create: `src/fluent/agent-doctor.now.ts` — a Fluent `AiAgent`: name, description, instructions (the Task 3 native rendering, inline as one backtick template), the 7 script tools with input descriptions, supervised-mode flags (all off — every tool read-only), output transformation "None" for tools / conversational for the agent. Every tool description follows the K26 Lab 3 **three-section framework** (Purpose incl. when-not-to-use · Understanding Tool Inputs · Understanding Tool Outputs & Error Handling) — we hold our own tools to the bar the config tool scores customer tools against
 
 **What:** Agent Doctor, created by the SDK. 7 tools sits at the top of the platform's 5–7 guidance — do NOT add more; anything else goes through query_table.
+
+> **What actually shipped in Task 10 (reconciled 2026-08-12, issue #29):** **two** tools — `agent_trace` and `read_artifact` — not seven. That was the deliberate vertical-slice scope from `docs/BUILD_BRIEF_Phase1a_VerticalSlice.md` (*"Do not build all seven tools in Task 10. One tool, end to end."*), not a shortfall. The remaining five — `agent_config`, `genai_log`, `schema_lookup`, `query_table`, `log_analysis` — landed as the Tasks 7–8 stack (#36–#40). The "7 script tools" in the Files list above describes the FINISHED agent, which is what it now carries; it never described this task's deliverable. Stated here because a reader comparing the task text to the merge would otherwise conclude five tools went missing.
 
 > **Changed 2026-07-30 (DESIGN.md R-13).** This task previously specified a hand-written `agent-doctor.json` "created on-instance via Foundry's existing use-case automation (~8 API calls)". That is MCP-side creation of an artifact the SDK owns, which CLAUDE.md forbids: *"SDK owns creation. Agents, tools, tables, flows — defined as Fluent DSL in `src/fluent/`."* The agent is now a Fluent artifact, versioned in git and deployed by `now-sdk install`. Pattern: `.claude/context/sdk-examples/ai-agent.now.ts`.
 

@@ -162,7 +162,10 @@ describe('the shared comment stripper (test/_stripComments.js)', () => {
     })
 
     it('blanks a line comment and keeps the code before it', () => {
-        expect(stripComments("var x = 1 // leak")).toBe('var x = 1 ')
+        // #27 — the stripper now BLANKS rather than truncates, so column
+        // offsets survive as well as line numbers (the name this test always
+        // had). Trailing width is the comment's, replaced space-for-space.
+        expect(stripComments('var x = 1 // leak')).toBe('var x = 1        ')
     })
 
     it('leaves a source with no comments untouched', () => {
