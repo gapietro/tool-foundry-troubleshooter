@@ -7533,3 +7533,161 @@ now caps. So this change can raise the capped-exit rate on that path specificall
 its own registered decision and repairing it inside this PR is the §AO3 mistake §AT was written to
 avoid, so it is filed separately — but the interaction is recorded here rather than left for a pass
 to discover in its trigger counts.
+
+---
+
+## AU. Pre-registration — the absence-diagnosis target, registration 1 of 2 (`#204`)
+
+**Written and committed before a single line of gate code. §A through §AT are unmodified** —
+`git log -p benchmark/DECISION.md` is the check, in the form §W, §Z, §AC, §AE, §AF, §AG, §AH, §AI,
+§AK, §AL, §AN and §AQ all used. **This section claims no result.**
+
+**It is explicitly registration 1 of 2, and the ordering is the ruling.** #204's root cause has two
+halves — a gate that abandons the only layer able to corroborate an absence, and an evidence rule
+that counts the model's self-assigned `source` label rather than the evidence. The obvious repair
+is the second one. **Shipping it first would reproduce #78's own failure mode**: with no rep ever
+calling `query_table`, target-binding the citation check takes the seed-05 path from 2-of-4
+validated to **0-of-4**, and a correct diagnosis of an absence becomes structurally unreportable —
+precisely the defect #78 exists to prevent. So the validator change is **blocked** on this one, not
+merely paired with it. This section moves the gate so the honest path becomes reachable; only once
+that is measured may registration 2 close the dishonest one. They must not ship together: a
+combined change cannot attribute the movement, which is §AN1a's single-variable problem the v14
+pass already paid for once.
+
+### AU1. The defect, measured
+
+Four reps, seed-05 `agent`+`timeframe`, custom arm (§AR1, `benchmark/raw-evidence-v15-aq-floor.md`).
+All four invoked the **identical tool set** — `agent_config`, `read_artifact`,
+`schema_lookup(x_snc_tsbench_ticket)`; `TR1000319` added `agent_config(section:triggers)` — and
+reached the identical finding. **No rep called `query_table`.** Layer 5 is `NOT_SWEPT` in all four
+final reports.
+
+The gate is why. On the second draft the model declared layers 4, 5 and 6 `NOT_SWEPT`, and
+`_selectTarget` ranked them:
+
+| open gap | dedicated tools | `_gapFanOut` (min) |
+|---|---|---|
+| layer 4 | `schema_lookup` | **1** |
+| layer 5 | `query_table` (`log_analysis` dropped, fan-out 3) | **1** |
+| layer 6 | `genai_log` (2), `log_analysis` (3) | 2 |
+
+Floor is 1, so the floor class is **{4, 5}**. No floor-class member was named in the draft's own
+text, so step 2 declined and step 3's structural tie-break — *lowest layer number* — chose **layer
+4 by exactly one**. `_heldTools` became `['schema_lookup']`; the model called it; R1 matched and set
+`_gateReleased = true` **permanently**. Layers 5 and 6 were abandoned, unswept, with the gate spent.
+
+**The consequence, stated as the defect:** on an absence diagnosis, `data` is the only non-trace
+source that can independently corroborate. `config` is where the finding itself came from, and
+`schema` is a column definition, not an event — it cannot witness that nothing ran. Layer 5's
+dedicated tool is `query_table`, which produces exactly that source. **The tie-break therefore
+hands the target to the one floor-class layer whose source cannot corroborate an absence, and
+permanently abandons the one that can.** The four reps then split 2/2 on whether the model
+relabelled a `config` citation as `schema` — the second half of #204, out of scope here.
+
+This is not a `_selectTarget` malfunction. #116's floor-class rule is working as designed; the
+tie-break simply has no notion that one layer's source is load-bearing for this class of
+diagnosis, because until #204 nothing had measured that it was.
+
+### AU2. The change, stated precisely enough to falsify
+
+**On an absence diagnosis, layer 5 wins the floor-class tie-break.**
+
+In `_selectTarget` step 3 and nowhere else, when the report declares layer 1 `UNAVAILABLE`, prefer
+the layer-5 gap among floor-class members; otherwise the existing lowest-layer tie-break is
+unchanged.
+
+**Seven properties, each a thing a review may check.**
+
+1. **Tie-break only — floor-class membership is untouched.** The candidate set is exactly what
+   #109/#116 already computed, so this can never select a gap the existing ranking would have
+   excluded. Strict subset, the §AT3 bound: it reads no more runs into a target than the current
+   rule already admits as equals.
+2. **It fires only where layer 5 is ALREADY in the floor class.** If `query_table`'s fan-out ever
+   stops being 1, or layer 5 is not open, the condition is inert. It cannot promote layer 5 over a
+   cheaper gap.
+3. **It reads a declaration the model already makes and already pays for.** `layers_swept["1"]
+   .status === 'UNAVAILABLE'` is the same operand branch (B) of the evidence rule keys off
+   (`_isTraceUnavailable`, `PaFixReport.js:310`). No new model-authored operand enters the gate.
+4. **It does NOT infer the run's subject.** §AL/#173 ruled that a gate deriving its subject from
+   model output is released by the model. This compares layer NUMBERS, which are structural — no
+   `target_table` comparison, no operand read out of model prose. The #173 line is not crossed.
+5. **Release stays total.** `_gateReleased` semantics are unchanged. This changes WHICH gap must be
+   discharged, not how many, so no new hold path exists and `_holdCount` accounting is untouched —
+   **§AQ5 trigger 2's rate is not raised by construction.**
+6. **`_holdNote` and `_holdBlock` wording is unchanged** — they name the target LAYER, never a
+   tool (§H8 item 3). §S is the standing reminder that this harness has named its tools before
+   without noticing. **If the layer-5 branch causes either to name a tool the change is void.**
+7. **The escape is real and is priced.** A model can dodge the layer-5 target by not declaring
+   layer 1 `UNAVAILABLE` — but branch (B) is then unavailable to it and it must produce a trace
+   citation, which `_checkSweptClaims` and `_checkCitationSupported` police against the audit
+   trail. The dodge costs more than compliance. This is a bound, not a guarantee, and it is stated
+   here so a pass that observes the dodge can recognise it rather than re-derive it.
+
+### AU3. What it costs, declared before it is spent
+
+**§AQ3's non-differencing rule compounds rather than resets.** The custom arm's gate figure was
+already incomparable across v13/v14 → v15 because of the floor. This moves target selection as
+well, so the rule stands unchanged and unweakened: **a v15+ custom gate figure may be reported
+absolutely and may NOT be differenced against v12 (6/10 native, 0/10 custom), v13 (4/10, 0/10) or
+v14 (5/10, 0/10).** The native arm does not run this gate; §AD7 still requires both arms be quoted
+together.
+
+Second cost: `query_table` is a heavier call than `schema_lookup` and may return an artifact,
+costing a `read_artifact` page and up to two extra turns on affected runs. AU5 trigger 2 bounds it.
+
+Third cost, named because it is the point: **registration 2 will likely make the validated-report
+count go DOWN.** Today's 2-of-4 is spurious — both passes rest on a citation mislabelled `schema`
+naming a table the run never read. A later honest 0-of-4 or 1-of-4 is the instrument improving, and
+§AQ3's ban on differencing happens to protect that reading rather than obscure it.
+
+### AU4. Predictions, filed before any run
+
+Four reps of the seed-05 `agent`+`timeframe` path, run under the smoke protocol, custom arm only.
+
+**The baseline is 0-of-4 for AU-1 and AU-2 ONLY** — §AR's four reps called no `query_table` and
+filed no `data` citation between them. **AU-3 and AU-4 do not share that baseline and must not be
+read against it:** they are negative tripwires, trivially satisfied today rather than failed, and
+§AQ4's warning applies verbatim — a silent tripwire is the null result, not an earned improvement.
+
+| # | Prediction | Falsified by |
+|---|---|---|
+| **AU-1** | ≥3 of 4 reps record a **`query_table` call** (`x_snc_troubleshoot_audit`, `tool_name=query_table`) | ≤2 of 4 |
+| **AU-2** | ≥2 of 4 reps file a `fix_report` whose `root_causes[0].evidence` contains a **`data`** citation | 0 of 4 |
+| **AU-3** | **Zero** runs finish `partial` | any such run |
+| **AU-4** | **At most one** of 4 takes the `capped:true` exit | 2 or more |
+
+**AU-1 is the primary.** AU-2 is secondary and deliberately measures the *source*, not validation:
+a run can still pass validation by the relabel route this section leaves open on purpose, so
+"passed validation" would not distinguish the honest path from the one registration 2 exists to
+close. **No prediction is filed on the pass-level gate figure**, in either direction — ruling 6
+(§AI4, carried at §AN and §AQ4) applies: a gate prediction not filed may not be claimed afterwards.
+
+### AU5. Revert triggers — any one reverts the change, no re-litigation
+
+1. **Any run finishes `partial`.** AQ5 trigger 1's form. Property 5 argues no new hold path exists;
+   if a run rides to `MAX_ITERATIONS` that argument is wrong.
+2. **Two or more of the four reps take the `capped:true` exit.** Threshold set at 2 for AQ5 trigger
+   2's reason: AU-1 predicts ≥3 of 4 comply, so one non-compliant rep is a **predicted-pass**
+   outcome and a trigger firing on it would be a guaranteed revert with extra steps.
+3. **`_holdNote` or `_holdBlock` names a tool on the layer-5 branch.** By authoring — property 6.
+4. **Zero of four reps produce a `fix_report` that passes validation.** §AR measured 2 of 4 on this
+   path. AU-2 predicts ≥2 file a `data` citation, so a total collapse of validation would mean the
+   change traded a working path for a heavier one — strictly worse at the thing the arm already
+   did.
+
+### AU6. What this does not decide
+
+- **Whether the evidence rule should be target-bound.** That is registration 2, and it is BLOCKED
+  on this section being measured. The relabel route (`config` evidence labelled `schema`, citing a
+  table the run never read) stays open here **deliberately** — closing it before the honest path
+  exists is the #78 reproduction this section's preamble rules out.
+- **Whether the reports are RIGHT.** §AC8, and §AO2's demonstration that a row can score 6/6 while
+  proposing a fix at a column that does not exist. `TR1000319` is the standing local example: its
+  fix is a no-op (`active: 0` → `active: 0`, *"No change required"*) citing a `usecase_deprecated`
+  field that does not exist. Determinacy and correctness are separate axes.
+- **Whether `_selectTarget`'s tie-break is right for any other diagnosis class.** The change is
+  conditioned on layer 1 `UNAVAILABLE` and claims nothing outside it.
+- **`MAX_EVIDENCE_RETURNS` (`0`, §W6) or `REQUIRE_RETRIEVAL_TO_RELEASE` (`false`, §Y6/§AL4).** Both
+  frozen. Neither is a lever this section is permitted to pull, and a future section proposing
+  either must clear its own bar, not this one's.
+- **Anything about the native arm.** It does not run `_depthGate`.
