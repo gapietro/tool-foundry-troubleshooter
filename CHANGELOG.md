@@ -17,6 +17,44 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1115 — 2026-08-11
+
+**The depth-gate empty-trail floor, built to §AQ (#191 part 2b).** `src/server/PaAgentLoop.js` +
+`test/PaAgentLoop.test.js`. **This ships the CODE. It does not run the pass** — AQ-1 through AQ-4
+are unmeasured, and nothing here may be quoted as evidence for or against them.
+
+- **The floor.** At the `open.length === 0` allow and nowhere else: if the release set is empty,
+  hold with `kind: 'empty_trail'`. Everything above that line enforces a gap the model **admitted**
+  — which is the design (§H8 item 3) and also the hole, since a draft that admits nothing is
+  unholdable. `unsweptGaps` counts only `NOT_SWEPT`, so `TR1000315`'s layers 2-7 `SWEPT` on zero
+  tool calls declared nothing and released the gate permanently.
+- **All eight §AQ properties implemented and individually tested**, including the three the PR #194
+  review added. The two that were load-bearing: **`_holdNote` gained its own branch** — without it
+  an `empty_trail` hold falls through to the gaps wording and renders `layer(s)  declared
+  NOT_SWEPT` with an empty list and a false claim, leaving a floor hold byte-indistinguishable
+  from a degenerate `gaps` hold and making AQ-3 and revert trigger 1 unmeasurable; and
+  **`_holdActive` gained a floor clause** (`_holdActiveKind`) — the I1 clear tests
+  `_anyOf(_heldTools, …)`, the floor leaves `_heldTools` null, so without it a model that complied
+  by calling a tool would carry *"a terminal action is not available yet"* into its next prompt,
+  on the exact turn AQ-1/AQ-2 measure.
+- **`_holdBlock`'s new branch names no tool, and the protection it does NOT have is stated in the
+  code.** That branch returns early and renders no model-authored text, so `_scrubToolNames` has
+  nothing to strip and §H8 item 3 rests entirely on the authored wording. It says evidence is
+  required and that a tool is how you get it; it never says which.
+- **`_depthGate`'s return contract updated in the same commit**, per §AQ property 7 — including the
+  consequence that is easy to miss: **`gaps: []` no longer implies ALLOW.** Read `hold`, never the
+  gap list.
+- **One existing test changed, deliberately and in the open.** I2 ("an empty recorded release set
+  does not deadlock the run") passed `tools: []`, incidental to what it tests — its property is
+  that an empty **recorded** set (`_heldTools`) does not latch sticky, nothing about the trail.
+  Under the floor an empty trail holds on its own account, which would have masked I2 behind a
+  different mechanism. Its fixture now supplies one tool, keeping the first hold identical (the
+  recorded gap's `tools` is `[]`, so no trail can close it) while letting the second draft reach
+  the allow I2 exists to assert. The empty-trail-does-not-deadlock case is covered separately by
+  the §AQ property 1 cap tests.
+- Verified by jest only: **33 suites, 1712 tests** (10 new). **Not installed, not exercised against
+  gpinst01, and the four §AQ reps have not been run** — the pre-registered predictions remain open.
+
 ## 2026.08.1114 — 2026-08-11
 
 **Pre-registration — the depth-gate empty-trail floor (#191 part 2).** `benchmark/DECISION.md`

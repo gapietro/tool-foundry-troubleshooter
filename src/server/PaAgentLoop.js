@@ -388,8 +388,19 @@ PaAgentLoop.prototype = {
             // and the dispatched tool's own name; `_depthGate` still does
             // the real (trail-backed) release check the next time a
             // terminal action is attempted.
-            if (this._anyOf(this._heldTools, [this._str(action.tool)])) {
+            //
+            // #191 §AQ property 5: the FLOOR needs its own clause. Its hold
+            // records nothing (property 2), so `_heldTools` is null and
+            // `_anyOf(null, …)` is false — without this the block survives a
+            // compliant tool call and rides into the very next prompt, which
+            // is I1's own defect on a new path, landing on the turn AQ-1 and
+            // AQ-2 measure. The floor asks for A tool call, not a PARTICULAR
+            // one, so any dispatch discharges it. The gate still re-derives
+            // from the trail on the next terminal action, so a tool that ran
+            // and retrieved nothing is caught there, not papered over here.
+            if (this._holdActiveKind === 'empty_trail' || this._anyOf(this._heldTools, [this._str(action.tool)])) {
                 this._holdActive = null
+                this._holdActiveKind = ''
             }
             return { terminal: false }
         }
@@ -401,6 +412,10 @@ PaAgentLoop.prototype = {
             var gate = this._depthGate(runId, action)
             if (gate.hold) {
                 this._holdActive = this._holdBlock(gate.gaps, gate.kind, gate.target)
+                // #191 — which hold is active, so the dispatch-side clear can
+                // tell the floor's (discharged by ANY call) from the gaps
+                // hold's (discharged only by a recorded tool).
+                this._holdActiveKind = gate.kind
                 this._runs().appendTranscript(runId, {
                     actor: 'system',
                     result_digest: this._holdNote(gate),
@@ -420,6 +435,7 @@ PaAgentLoop.prototype = {
                 })
             }
             this._holdActive = null
+            this._holdActiveKind = ''
         }
 
         if (action.action === 'answer') {
@@ -781,6 +797,9 @@ PaAgentLoop.prototype = {
         this._heldTools = null
         this._heldTarget = null
         this._holdActive = null
+        // #191 — the KIND of the currently active hold block, so the
+        // dispatch-side clear can distinguish the floor from a gaps hold.
+        this._holdActiveKind = ''
         // C1: how many holds this run has issued, across every hold path.
         this._holdCount = 0
 
@@ -1004,17 +1023,24 @@ PaAgentLoop.prototype = {
      *
      * @param {String} runId
      * @param {Object} action the terminal action the model just emitted
-     * @returns {Object} {hold:Boolean, gaps:Array, kind:'gaps'|'no_layer_report'|'',
+     * @returns {Object} {hold:Boolean, gaps:Array, kind:'gaps'|'no_layer_report'|'empty_trail'|'',
      *          target:{layer:Number,source:'declared'|'ranked',tools:[String],
      *          fanOut:Number}|null, capped:Boolean}
      *          — `kind` is `''` on every ALLOW path (already released, an
      *          unreadable trail, every declared gap closed, or no gap
-     *          declared at all); only the two HOLD paths use the other two
-     *          values. `target` (issue #109) is the single gap `_heldTools`
-     *          was narrowed to, and is `null` on every ALLOW path, on the
-     *          `no_layer_report` path, and whenever `_selectTarget` found
-     *          nothing scorable and `_heldTools` fell back to the #103
-     *          union instead. `capped` (C1) is `true` on exactly ONE path:
+     *          declared **on a non-empty trail**); only the THREE HOLD paths
+     *          use the other values. `empty_trail` (#191, §AQ) is the floor:
+     *          a terminal action attempted with an empty release set, which
+     *          no declaration can reach because it is the ABSENCE of one —
+     *          it carries `gaps: []` and `target: null`, records nothing, and
+     *          is therefore never sticky. `target` (issue #109) is the single
+     *          gap `_heldTools` was narrowed to, and is `null` on every ALLOW
+     *          path, on the `no_layer_report` and `empty_trail` paths, and
+     *          whenever `_selectTarget` found nothing scorable and
+     *          `_heldTools` fell back to the #103 union instead. Note that
+     *          `gaps: []` no longer implies ALLOW: read `hold`, never the
+     *          gap list, to tell the two apart. `capped` (C1) is `true` on
+     *          exactly ONE path:
      *          the ALLOW issued because `MAX_HOLDS` was reached and the
      *          trail never showed the target closed. Every other result —
      *          hold or allow, trail-backed release included — is `false`.
@@ -1093,6 +1119,32 @@ PaAgentLoop.prototype = {
 
         var open = this._openGaps(this._safeGaps(action.report), release)
         if (open.length === 0) {
+            // #191 THE FLOOR (DECISION.md §AQ, pre-registered before this
+            // code). Everything above this line enforces a gap the model
+            // ADMITTED. That is the design — §H8 item 3, the harness must
+            // never name a tool itself — and it is also the hole: a draft
+            // that admits nothing is unholdable by construction.
+            //
+            // Measured live, both reps (TR1000315/TR1000316): a terminal
+            // fix_report on the FIRST reasoning turn, zero tool calls, layer
+            // 1 UNAVAILABLE and layers 2-7 SWEPT. `unsweptGaps` counts only
+            // NOT_SWEPT, so `open` is empty and the gate released
+            // permanently on a run that had investigated nothing.
+            //
+            // An empty release set cannot support a terminal report whatever
+            // `layers_swept` claims, so this is the one case the declaration
+            // cannot reach. It records NOTHING (§AQ property 2): `_heldTools`
+            // stays null, the hold never latches sticky, and each turn
+            // re-derives — one tool call empties the condition. It sits BELOW
+            // the cap (property 1), which is R2's lesson applied rather than
+            // re-learned: a hold path the cap cannot reach rides to
+            // MAX_ITERATIONS and finishes `partial`, a pre-registered revert
+            // trigger. And it reads `release` (property 8), so it inherits
+            // REQUIRE_RETRIEVAL_TO_RELEASE, which stays false.
+            if (release.length === 0) {
+                this._holdCount += 1
+                return { hold: true, gaps: [], kind: 'empty_trail', target: null, capped: false }
+            }
             this._gateReleased = true
             return { hold: false, gaps: [], kind: '', target: null, capped: false }
         }
@@ -1470,6 +1522,28 @@ PaAgentLoop.prototype = {
             return lines.join('\n')
         }
 
+        // #191 §AQ property 4. NOTE WHAT DOES NOT PROTECT THIS BRANCH: it
+        // returns early and renders no model-authored text, so there is
+        // nothing for `_scrubToolNames` to strip and the §H8 item 3
+        // guarantee rests ENTIRELY on the wording below. §S is the standing
+        // reminder that this harness has named its tools before without
+        // noticing. Say that evidence is required and that a tool is how you
+        // get it; never say WHICH — the acceptance test measures exactly the
+        // choice this text must not make.
+        if (kind === 'empty_trail') {
+            lines.push(
+                'Your draft accounts for the seven layers, but this run has not called a single ' +
+                    'tool — so every layer you marked as swept was swept against nothing, and there ' +
+                    'is no evidence on record for any claim in the report.'
+            )
+            lines.push('')
+            lines.push(
+                'A layer that could not be read is not a layer that was swept. Either go and look ' +
+                    'at one, or mark honestly what you have not looked at and say why.'
+            )
+            return lines.join('\n')
+        }
+
         lines.push('Your draft marks these layers NOT_SWEPT, each with a reason you wrote:')
         var list = this._isArray(gaps) ? gaps : []
         for (var i = 0; i < list.length; i++) {
@@ -1553,6 +1627,21 @@ PaAgentLoop.prototype = {
     _holdNote: function (gate) {
         if (gate.kind === 'no_layer_report') {
             return 'HOLD: terminal action refused — no layer report on record; gate unreleased.'
+        }
+
+        // #191 §AQ property 6. Without this branch an `empty_trail` hold
+        // falls through to the gaps wording below, where `gate.gaps` is `[]`
+        // — rendering `layer(s)  declared NOT_SWEPT with no tool call behind
+        // them`: an empty list, and a claim that is FALSE on this path, since
+        // nothing was declared NOT_SWEPT. That is the whole point of the
+        // floor. A floor hold would then be byte-indistinguishable from a
+        // degenerate `gaps` hold, which makes §AQ's own AQ-3 and revert
+        // trigger 1 unmeasurable — both are stated in terms of "an
+        // `empty_trail` hold in the transcript". Kept inside PaRunManager's
+        // 200-char DIGEST_CHARS for the reason every note here is (#72 /
+        // §G3a: a longer note is truncated SILENTLY).
+        if (gate.kind === 'empty_trail') {
+            return 'HOLD (empty_trail): terminal action refused — no tool call on record for this run; a report needs something behind it.'
         }
         var nums = []
         var list = this._isArray(gate.gaps) ? gate.gaps : []
