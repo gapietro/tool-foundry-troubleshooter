@@ -175,7 +175,7 @@ export default [
 
     // --- Tooling that runs on Node, not on the platform ---------------------
     {
-        files: ['benchmark/scripts/**/*.js'],
+        files: ['benchmark/scripts/**/*.js', 'scripts/**/*.js'],
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: 'commonjs',

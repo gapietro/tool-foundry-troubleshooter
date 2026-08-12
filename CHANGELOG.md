@@ -17,6 +17,65 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1211 — 2026-08-12
+
+### Added — the deploy smoke tier (#220)
+
+`npm run smoke` — build, install, then compare every record in `dist/app/update/*.xml` against
+what the instance actually holds. This closes the **deploy half** of #220's exposure: until now
+every platform-behaviour claim in this repo was established by hand, and `ci.yml`'s own header
+said so.
+
+Expectations are derived from the payload, not from a hand-written manifest, so the probe cannot
+go stale as the app grows artifacts — and comparing *what we asked for* against *what happened*
+keeps it clear of R-27 ("a fixture that agrees with the code by construction is a second copy of
+the bug").
+
+**It works: on its first honest run it caught gpinst01 running `2026.08.1203` while local was
+`2026.08.1210`** — a stale deploy, across 20 `sys_module` paths and 2 script bodies. That is the
+§AQ near-miss class (`sys_updated_on` does not move on `now-sdk install`, so a timestamp probe
+reads a merged-but-undeployed commit as live), caught automatically for the first time.
+
+### Not covered, and not pretended away
+
+Creating a run and driving it to terminal state needs an authenticated **write**, and the
+`now-sdk` CLI has none (`auth · init · download · build · install · dependencies · transform ·
+clean · pack · explain · query`). The alternatives were exporting an instance credential into the
+environment — the boundary `CLAUDE.md` draws, since the MCP broker exists to keep secrets out of
+shells and transcripts — or coupling the write to install, which would fire a synthetic diagnostic
+run on every unrelated deploy and pollute the benchmark's own tables. The runtime half stays a
+live-MCP exercise.
+
+### Five platform behaviours measured while building it
+
+All five were found by running the probe against gpinst01, not by reading docs:
+
+1. **The SDK emits two `record_update` wrapper shapes.** 121 of 160 carry `table="..."`; 39 do not,
+   and the table is only the record element's name. Requiring the attribute made the probe blind to
+   a quarter of the payload *while reporting success on the rest*.
+2. **The platform mints its own `sys_id` for table metadata.** dist declares `sys_db_object`
+   `b69939bf…` for `x_snc_troubleshoot_audit`; the instance holds `76a9a56f…`. Keyed by sys_id the
+   probe called two healthy tables MISSING and cited Build Rule #34 — a confident citation of the
+   wrong cause. `sys_db_object` and `sys_dictionary` are now natural-keyed.
+3. **dist declares columns the target table does not have.** `sn_aia_agent` has no `acl`, `active`
+   or `external` column; install drops them silently. Reported as `uncomparable` — a disclosed
+   blind spot rather than permanent red.
+4. **An empty value in dist is an absence of assertion, not an assertion of emptiness.** The SDK
+   emits `<virtual/>` for fields it holds no value for and the platform stores its column default,
+   which produced 72 findings of pure noise across 24 healthy dictionary rows.
+5. **`short_description` is capped at 80 characters and the tail is dropped at install** — six of
+   this app's route descriptions are longer. Reported as `truncated`; the source fix is separate.
+
+`sys_gen_ai_feature_mapping` and `sys_gen_ai_strategy_mapping` return **403 "Insufficient rights to
+query records" even to an admin**, so 4 records cannot be probed at all. They are subtracted from
+the probed count rather than reported as failures *or* counted as passing — the pass line reads
+"156 of 160", because claiming coverage we do not have is the error §AQ was made of.
+
+### Changed
+
+- `eslint.config.mjs` — the Node-tooling block now covers `scripts/**/*.js` alongside
+  `benchmark/scripts/**`.
+
 ## 2026.08.1210 — 2026-08-12
 
 ### `/next` re-check after PR #227 — board unmoved, `BACKLOG.md` header refreshed
