@@ -17,6 +17,27 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1210 — 2026-08-12
+
+### `/next` re-check after PR #227 — board unmoved, `BACKLOG.md` header refreshed
+
+Ranking re-run against the post-#227 board: **0 open PRs**, 6 open issues, 104 closed. Nothing was
+filed and nothing was reordered, so the rubric is not re-run in the file — **#212 stays #1 and stays
+`next`**, and blockers-to-gate is still **1**. #216 (retention/purge, next gate) and #220 (integration
+tier, grade sitting 2) hold positions 2 and 3.
+
+What actually changed is #212's *next action*, and the header now says so: with
+`benchmark/EXTRACTOR-BRIEF.md` merged, the work is no longer a build step but a **session handoff** —
+hand the brief to a fresh session and nothing else.
+
+One line was added that is worth keeping past this release. §AW11a's rule binds the **dispatching
+session**, and the reason is now stated where it bites: *reading `BACKLOG.md` is what contaminates*.
+Its **Current gate** section restates answer-key content for a calibration row, deliberately — the gate
+is not readable without naming what §AO2 got wrong. So the file that tells you the pick is also the
+file that disqualifies you from executing it, and that is a property of the instrument rather than an
+oversight. The ranking session records the pick; it cannot be the author, and neither can anything it
+spawns.
+
 ## 2026.08.1209 — 2026-08-12
 
 ### The dispatch brief, and a deny-list retired for an allowlist after its third failure
