@@ -7691,3 +7691,119 @@ close. **No prediction is filed on the pass-level gate figure**, in either direc
   frozen. Neither is a lever this section is permitted to pull, and a future section proposing
   either must clear its own bar, not this one's.
 - **Anything about the native arm.** It does not run `_depthGate`.
+
+---
+
+## AV. Verdict — the absence-diagnosis target, measured (`#204`)
+
+**§AU was pre-registered at `f48656d` and the change built at `94cb916`, both before these reps.
+§A through §AU are unmodified** — `git log -p benchmark/DECISION.md` is the check. Measurements:
+`benchmark/raw-evidence-v15-au-target.md`. Four reps, seed-05 `agent`+`timeframe`, custom arm only,
+gpinst01, 2026-08-12.
+
+### AV1. The scoreboard §AU4 asked for
+
+| # | prediction | falsified by | measured | verdict |
+|---|---|---|---|---|
+| **AU-1** (primary) | ≥3 of 4 reps record a `query_table` call | ≤2 of 4 | **4 of 4** | **PASS** |
+| **AU-2** | ≥2 of 4 file a `data` citation | 0 of 4 | **4 of 4** | **PASS** |
+| **AU-3** | zero runs finish `partial` | any such run | **0** | tripwire silent |
+| **AU-4** | at most one `capped:true` exit | 2 or more | **0** | tripwire silent |
+
+Baseline was 0 of 4 on AU-1 and AU-2 (§AR: no rep called `query_table` or filed a `data` citation).
+The target flip is confirmed directly: `layer 5 (ranked) must be reached` matches **4 of 4** and
+`layer 4 (ranked)` matches **0 of 4**.
+
+**No revert trigger fired.** Trigger 1 (partial): 0. Trigger 2 (≥2 capped): 0. Trigger 3 (hold
+names a tool): the note names the layer in all four, matching the unit test. Trigger 4 (zero
+validated): `TR1000324` validated, so 1 of 4.
+
+**On the registered instrument this change passes on every count.** §AV2 is why it must not ship
+anyway.
+
+### AV2. §AU6's central assumption is FALSIFIED, and it outranks §AV1
+
+§AU6 declared correctness out of scope on the grounds that *"determinacy and correctness are
+separate axes and this change touches neither directly."* The second half of that sentence is
+false, and this pass is what falsifies it.
+
+| | §AR (pre-§AU) | §AU (this pass) |
+|---|---|---|
+| reps calling `query_table` | 0 of 4 | **4 of 4** |
+| reps filing a `data` citation | 0 of 4 | **4 of 4** |
+| reps passing validation | 2 of 4 | **1 of 4** |
+| **reps reaching the seed's actual root cause** | **4 of 4** | **0 of 4** |
+
+Every rep queried **`task`** rather than `x_snc_tsbench_ticket`, got `0 rows / genuinely_empty`,
+and filed *"the target record does not exist"* with a fix proposing the record be created. §AR's
+four reps all reached `sn_aia_trigger_configuration` `active='0'` — the seed's answer, at the
+specific gate. **The change traded four correct diagnoses for four fabricated ones and improved
+every registered metric while doing it.**
+
+`TR1000324` is the sharpest single artifact: it validated, on `data` + `config` citations that are
+both genuinely supported by tools it actually invoked — the first honestly-sourced two-source
+report ever measured on this path — and it is wrong. §AO2 showed a row scoring 6/6 while naming a
+column that does not exist; this shows the same thing at the validator rather than the scorer, and
+caused by the change under test rather than merely coincident with it.
+
+### AV3. The mechanism, and the general rule it earns
+
+The hold says *"layer 5 (ranked) must be reached"* and names no tool, table or subject — correct,
+per §H8 item 3. **The gate has no subject operand at all** (§AL/#173: nothing on the request states
+what the run is diagnosing in comparable form). So "sweep layer 5" is answerable only by the model
+choosing a table, and it chose wrong four times out of four.
+
+**#173's target-blindness is not uniformly harmless across layers.** A *schema* sweep on the wrong
+table yields an inert citation — literally what §AR's reps did, calling
+`schema_lookup(x_snc_tsbench_ticket)` and ignoring the result. A *data* sweep on the wrong table
+yields `0 rows, genuinely_empty`, which reads as a **positive finding** and licenses a confident
+wrong conclusion. **Directing a subject-blind gate at a layer whose evidence is subject-dependent
+converts target-blindness from an inefficiency into a fabrication path.**
+
+§AL ruled that a gate *released* by an inference over model output is released by the model. This
+adds the dual: a gate that *directs* at a layer whose evidence is subject-dependent will be
+answered against a subject the model invents. Both follow from the same missing operand, and #204
+is the second site to pay for it.
+
+### AV4. Ruling
+
+**The §AU change does not ship, and the reason is not a registered trigger.** Every trigger §AU5
+filed stayed silent; the disqualifying fact is §AV2, which §AU6 explicitly placed out of scope on a
+premise this pass refuted. Recording that plainly rather than letting a clean scoreboard carry the
+decision is the whole point of separating the instrument from the verdict.
+
+**A trigger set cannot bound a risk its own section declared out of scope.** §AU5's four triggers
+were well-formed and measured what they claimed; none of them could see a correctness collapse
+because §AU6 had ruled correctness untouched. The lesson is not "write more triggers" — it is that
+a scope exclusion is a *prediction*, and one load-bearing enough to gate a merge deserves the same
+falsifiability as anything in the predictions table.
+
+**What survives, and should be kept:** the tie-break machinery is correct and unit-tested; the
+self-canonicalising `traceUnavailable` is verified load-bearing by rep 3's live flat-form draft
+(§1.5); and §AV5's finding about registration 2 is a real result this pass bought.
+
+**No gate or pass-level figure is claimed, in either arm.** §AU4 filed no such prediction and
+ruling 6 (§AI4, carried at §AN, §AQ4, §AU4) forbids claiming one afterwards. No scorer ran, no
+packet was built, no rubric was applied. §AQ3's non-differencing rule stands unchanged.
+
+### AV5. What this pass bought for registration 2
+
+Rep 2 was rejected by the **unchanged** `_checkCitationSupported` — *"cites `schema` but this run
+never invoked a tool that reads it"*. #204's relabel route passed in §AR only because those runs
+called `schema_lookup` to discharge the layer-4 target, which laundered the mislabel; removing that
+call removed the laundering.
+
+So the two halves of #204 are coupled in a way the issue did not see: **the gate's target choice
+determines whether the evidence rule's class-level check can be fooled at all.** Registration 2
+must be re-derived from that, not written to #204's original framing — and it remains blocked,
+since this pass did not deliver a reachable honest path.
+
+### AV6. What this does not decide
+
+- **Whether the depth gate should have a subject operand.** §AV3 sharpens the case; §AL's ruling
+  that one derived from model output is worthless stands, so a real operand would have to come from
+  the request, and `_normRequest` does not currently produce one. Its own section.
+- **Whether the §AQ floor should change.** Untouched here; it fired 4 of 4 as designed.
+- **`MAX_EVIDENCE_RETURNS` (`0`, §W6) or `REQUIRE_RETRIEVAL_TO_RELEASE` (`false`, §Y6/§AL4).**
+  Both frozen, neither this section's lever.
+- **Anything about the native arm.** It does not run `_depthGate`.
