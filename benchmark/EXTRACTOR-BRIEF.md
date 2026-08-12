@@ -17,9 +17,24 @@ Two artifacts, both authored **before** either is run against the corpus:
 
 **(a) A claim extractor.** Input: the prose body of one diagnostic report. Output: a list of
 discrete, machine-checkable factual claims the report makes *about the ServiceNow instance* — the
-kind of claim that is either true or false of the instance, independent of whether the diagnosis is
-good. Claims about schema (a table has / does not have a field), about record existence, and about
-counts are the target shape. Recommendations, judgements, and hedges are not claims.
+kind of claim that is **either true or false of the instance, independent of whether the diagnosis
+is any good.** That property is the definition; treat it as the test, not any list of examples.
+Recommendations, judgements, hedges and predictions are not claims.
+
+Extract every claim meeting that definition, whatever it is about — schema, configuration, records,
+state, relationships, execution history. **No enumeration of claim shapes is given, deliberately**
+(§5), and you should not infer one from the fact that some shapes are easier to adjudicate than
+others: what is extracted and what is adjudicable are different questions, settled at different
+stages, and conflating them biases the instrument at the stage where bias is invisible.
+
+**Extraction may use a model.** The registration makes extraction a language problem and adjudication
+a mechanical one — see §7 for what "deterministic" does and does not require of you. Run the
+extraction over the corpus **once** and freeze its output as an artifact; do not re-run it after
+inspecting the results.
+
+**Adjudicability is not your filter.** Emit the claim even when you doubt the adjudicator can settle
+it. A claim the adjudicator returns `unresolvable` on is a correctly handled claim; a claim you
+declined to emit is invisible, and invisible is the one outcome the recall figure cannot detect.
 
 **(b) A deterministic adjudicator.** Input: one extracted claim. Output: exactly one of three
 verdicts, defined in §2. It performs a **metadata membership test** against a live instance. It
@@ -42,8 +57,9 @@ The split is load-bearing: extraction is a language problem, adjudication is not
 
 > *An instrument's inability to observe must never be recorded as an observation.*
 
-This repo shipped a defect where a data sweep against the wrong table returned "genuinely empty",
-which read as a positive finding and licensed a confident wrong conclusion. An oracle that collapses
+This project has already shipped, and measured, a defect of exactly this shape: a probe that could
+not see what it was looking for reported a confident absence, the absence read as a positive
+finding, and a wrong conclusion followed with no diagnostic signal anywhere. An oracle that collapses
 *"I cannot see"* into *"the claim is false"* reproduces the exact defect it exists to detect. A
 `refuted` you cannot stand behind is worse than an `unresolvable`.
 
@@ -53,10 +69,35 @@ which read as a positive finding and licensed a confident wrong conclusion. An o
    a query filtered on that field succeeds.** On this platform a *nonexistent field name* comes back
    as `Access denied`, byte-identical to a genuinely missing read ACL. The query path can lie; the
    metadata path has no failing step to misread.
-2. **Every negative is control-paired.** A claimed-absent field is `refuted` only when, *in the same
-   call and the same auth context*, a probe for a field **known to exist on that same table** passes.
-   Control fails → `unresolvable`, never `refuted`. A null result is worth exactly its probe's
-   sensitivity, so the control is recorded next to the null, always.
+2. **Any verdict resting on a null or absent observation is control-paired.** If the evidence for
+   your verdict is *"the probe returned nothing"* — whichever way that cuts — then in the **same call
+   and the same auth context** you must also probe something **known to be present** on that same
+   target. Control fails → `unresolvable`, never a verdict. A null result is worth exactly its
+   probe's sensitivity, so the control is recorded next to the null, always.
+
+   **Note the direction, because the registration stated it the other way round and that is now
+   corrected** (§AW11c). The dangerous case is a report claiming a thing is **present** and the
+   metadata read coming back empty — an empty read is indistinguishable from a broken read, and this
+   is where an uncontrolled `refuted` is manufactured. The opposite case — a report claiming a thing
+   is *absent*, refuted by observing it present — rests on a positive observation that is
+   self-evidencing and needs no control. The rule above is stated over the *evidence's* shape, not
+   the *claim's*, so it covers both without you having to work out which is which.
+
+### 2.2 The reference state is the run, not today — and you cannot see the run
+
+The adjudicator reads a **live** instance. The claims were written about that instance **as it stood
+when the reports were produced**, some time ago, and the instance has been used since.
+
+**Therefore: if a claim's truth can have changed between then and now, it is `unresolvable`, and it
+is `unresolvable` even when today's read looks decisive.** A claim that was false then can read true
+today, and the burn cannot be repeated to correct it. Structural facts — what a table's schema
+declares — are stable enough to adjudicate. Anything counting, listing, or asserting the existence of
+individual records is not, and a confident verdict there is a fabricated one.
+
+This is the §2 rule applied to time rather than to permissions: *the instrument's inability to
+observe the past must not be recorded as an observation about it.* You are not being asked to
+work around this. Routing those claims to `unresolvable` **is** the correct handling, and the
+registration already predicts a non-trivial number of them.
 
 ---
 
@@ -70,8 +111,14 @@ look harmless, files you are merely curious about, and files referenced by the o
 | `benchmark/EXTRACTOR-BRIEF.md` | This file |
 | `benchmark/scorecard-template.md` | The report *shape* — the only description of report structure you get |
 | `benchmark/v14-reports/*.md` | The 20 raw report bodies. **This is your corpus and your only sample of real report prose** |
-| `src/**`, `test/**` | Codebase conventions, ES5/Rhino constraints, existing test style |
-| `package.json`, `eslint.config.mjs` | Toolchain |
+| `./src/**`, `./test/**` — **repository root only** | Codebase conventions, ES5/Rhino constraints, existing test style |
+| `./package.json`, `./eslint.config.mjs` | Toolchain |
+
+> **The two `src`/`test` rows are anchored to the repository root and the anchor is load-bearing.**
+> There is a second, unrelated `src/` tree nested under `benchmark/`, and **it is an answer key** —
+> it declares the fixtures' true structure. An unanchored glob, or a `grep -r` from the repo root,
+> reaches it. Confine every search to `./src` and `./test` explicitly; do not let a recursive tool
+> decide the boundary for you.
 
 **This is an allowlist, not a deny-list, and the inversion is deliberate.** Previous versions of this
 procedure enumerated forbidden files. Enumeration covers the cases its author thought of; three
@@ -81,11 +128,13 @@ was written. A closed allowlist has no default-admit.
 **If you believe you need a path not listed above, stop and ask the operator.** Do not decide for
 yourself that a file is safe. You are not in a position to know — that is the entire point of §5.
 
-**Specifically and without exception, do not open** `benchmark/DECISION.md`, `BACKLOG.md`,
-`GRADE.md`, `CHANGELOG.md`, `DESIGN.md`, `benchmark/README.md`, `benchmark/v14-rows.json`,
-`benchmark/scorecard-v14.md`, `benchmark/v14-ambiguity-flags.json`, `benchmark/scoring-v14/**`, or
-any `benchmark/raw-evidence-*.md`. This list is redundant with the allowlist and is given only so
-that a slip is obvious rather than subtle.
+**Specifically and without exception, do not open** `benchmark/seed-app/**` (**including its nested
+`src/`**), `benchmark/seeds/**`, `benchmark/DECISION.md`, `BACKLOG.md`, `GRADE.md`, `CHANGELOG.md`,
+`DESIGN.md`, `benchmark/README.md`, `benchmark/v14-rows.json`, `benchmark/scorecard-v14.md`,
+`benchmark/v14-ambiguity-flags.json`, `benchmark/scoring-v14/**`, or any
+`benchmark/raw-evidence-*.md`. This list is redundant with the allowlist and is given only so that a
+slip is obvious rather than subtle — **the allowlist governs; if the two ever disagree, the
+allowlist wins and you ask.**
 
 ---
 
@@ -145,7 +194,13 @@ execute a blind instrument; it may not author one.
   including the control-failure path, must have a test each. The control-failure → `unresolvable`
   path is the one that matters most and the one easiest to leave uncovered.
 - **No network calls at import time.** The instance client is injected, not constructed inline.
-- **Deterministic output ordering**, so two runs over the same input diff cleanly.
+- **Deterministic output ordering**, so two runs over the same input diff cleanly. **This is a
+  requirement on serialisation, not on the extractor's inference.** A model-backed extractor is
+  expected (§1) and is not required to be reproducible; what must be deterministic is the
+  *adjudicator*, and the ordering and formatting of whatever the extractor emits — sort the claim
+  list by a stable key, do not let map iteration or arrival order into the output. The extraction
+  pass over the corpus is run **once** and its output frozen as a committed artifact, which is what
+  makes the downstream figures reproducible without the model being so.
 
 ---
 

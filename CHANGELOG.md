@@ -57,7 +57,37 @@ Two further constraints, both absent from the registration and both material:
   the executor cannot influence the result. Without the split, a blind session would also have to
   hold live instance credentials and burn the calibration set.
 
-Recorded in `DECISION.md` **§AW11b** with §AW4's table marked retired, and in `BACKLOG.md`. Docs only
+### Code review found four more, one of them in the registration — §AW11c and §AW11d
+
+`/code-review` on the PR returned six findings, all in the new brief, and they are recorded because
+**three of them are the same failure the brief was written to fix, occurring inside the fix**:
+
+- **§AW11c — `DECISION.md` §AW3's control rule is bound to the wrong claim direction, and is
+  corrected.** It required a positive control when refuting a *claimed-absent* field — a positive
+  observation that is self-evidencing and needs no control — while leaving uncontrolled the direction
+  that does need it: a claim that something **is present**, refuted by a metadata read coming back
+  **empty**, where an empty read and a broken read are the same bytes. Restated over the *evidence's*
+  shape rather than the *claim's*: **any verdict resting on a null or absent observation is
+  control-paired.** An amendment on §AT3's bound — it can only move verdicts from `refuted` to
+  `unresolvable`, never the reverse, so it cannot manufacture a better figure. The finding underneath
+  is the larger one: this is the **fourth** time in §AW that a correctly-named risk got a guard
+  pointed one operand away from it. *Naming the risk and binding the guard are separate acts, and
+  this project has never yet failed at the first.*
+- **§AW11d — a second-order leak inside the repair.** The brief's §2 rationale used a harness token
+  present in exactly **2 of the 20 permitted reports**, one a calibration row. The answer-token grep
+  cited above missed it because that grep was keyed to *row-distinguishing* tokens and this one is
+  generic vocabulary. **The scan that clears an artifact must be keyed to the corpus, not to the
+  answer** — now run that way, and clean.
+- **§AW11d — the allowlist's own path syntax was default-admit.** `src/**`, `test/**` literally
+  admits `benchmark/seed-app/src/**`, the fixtures' Fluent source, which declares their true
+  structure; a `grep -r` from the repo root reaches it without the author opening anything on the
+  deny list. Anchored to `./src`, `./test`. **An allowlist inherits the ambiguity of its globs**,
+  which is the one way a closed list can still leak.
+- **§AW11d — §1 enumerated three claim shapes mapping one-to-one onto the three calibration rows'
+  false claims.** Replaced with the defining property and an explicit instruction not to infer a
+  shape list. Temporal scope stated separately: the reference state is the run, not today.
+
+Recorded in `DECISION.md` **§AW11b/c/d** with §AW4's table marked retired, and in `BACKLOG.md`. Docs only
 — no `src/` change, no run fired. **The calibration set is still unspent and the instrument intact;
 cost to the figures remains none**, on §AW11a's bound that every change here strictly narrows what an
 author may see.

@@ -8285,3 +8285,66 @@ the pass would need a blind session to also hold live instance credentials and r
 compounds two hard constraints for no gain.
 
 **Cost to the figures: none**, on §AW11a's bound. Recorded, not filed as issues, per §AW7 clause 3.
+
+### AW11c. §AW3's control rule is attached to the wrong claim direction — corrected
+
+Added **2026-08-12**, from code review of PR #227, on the same pre-burn bound as §AW11a/b.
+
+§AW3 reads: *"A claimed-absent field is adjudicated `refuted` only when a probe for a field known to
+exist on the same table, in the same auth context, passes in the same call."* **The control is
+attached to the direction that does not need it.**
+
+Refuting a *claimed-absent* field means **observing the field present** — a positive observation,
+self-evidencing, with no failing step to misread. The direction that needs the control is the
+opposite one: a report claiming a field **is present**, refuted by a metadata read that comes back
+**empty**. An empty read and a broken read are the same bytes, which is the entire reason §AW3 exists
+— and as written, §AW3 leaves that case uncontrolled while spending its guard on the safe one.
+
+**Corrected statement, and it is stated over the evidence rather than the claim:**
+
+> **Any verdict whose evidence is a null or absent observation must be control-paired**, in the same
+> call and the same auth context, against something known to be present on the same target. Control
+> fails → `unresolvable`.
+
+Quantifying over the *evidence's* shape rather than the *claim's* covers both directions without the
+adjudicator's author having to classify the claim first — the classification step being where the
+original wording went wrong. §AW3's sentence is superseded by this one; the rest of §AW3 stands.
+
+**Why this is an amendment and not a new registered term**, on §AT3's bound: it strictly *narrows*
+what may be recorded as `refuted`. It adds a control requirement to the claim direction that carries
+the corpus's known false claims, and removes one only where the control was vacuous. It can therefore
+move verdicts from `refuted` to `unresolvable` and never the reverse — it cannot manufacture a better
+figure, in either the veracity or the recall column. **Cost to the figures: none.**
+
+**The finding underneath, worth more than the correction.** §AW3 was written to prevent exactly this
+failure, names the failure correctly in its own prose, and then binds the guard to the wrong operand
+— for the same reason §AW11a's guards did: *the case its author pictured was the one where the
+report says "absent", because that is the shape the guard's motivating example took.* This is the
+fourth time in §AW that a correctly-identified risk got a guard pointed one operand away from it
+(§AF2, §AM, §AW11a defect 9, here). **Naming the risk and binding the guard are separate acts, and
+this project has never yet failed at the first.**
+
+### AW11d. Three further brief defects from the same review, fixed in `EXTRACTOR-BRIEF.md`
+
+Recorded for completeness; none amend a registered term.
+
+- **A second-order leak inside the repair.** The brief's §2 rationale described the motivating defect
+  using a harness token that appears in exactly **2 of the 20 permitted reports**, one of them a
+  calibration row — so a compliant author meeting it in the corpus could recognise the described
+  defect and tune toward it. Rewritten to state the defect's *shape* with no vocabulary shared with
+  the corpus. **This is defect 11's mechanism reappearing inside defect 11's own fix** (a string
+  becomes answer-key material retroactively), and it was found by review rather than by the
+  answer-token grep, because the grep was keyed to row-distinguishing tokens and this token is
+  generic. **The scan that clears an artifact must be keyed to the corpus, not to the answer.**
+- **The allowlist's `src/**`, `test/**` rows admitted `benchmark/seed-app/src/**`** — the fixtures'
+  Fluent source, which declares their true structure. A `grep -r` from the repo root reaches it
+  without the author opening anything on the redundant deny list. Rows anchored to `./src`, `./test`,
+  with the nested tree named. **An allowlist inherits the ambiguity of its path syntax**, which is
+  the one way a closed list can still be default-admit.
+- **§1 enumerated three target claim shapes that mapped one-to-one onto the calibration rows' three
+  false claims** — a weaker form of the same leak, and in tension with §AW5's E-2 besides. Replaced
+  with the defining property (*true or false of the instance independent of diagnosis quality*) and
+  an explicit instruction not to infer a shape list. §AW11a defect 10's ruling stands — the *class*
+  is unavoidably disclosed by any brief — but a 1:1 enumeration is narrower than the class.
+  Temporal scope stated separately (§2.2 of the brief): the reference state is the run, not today,
+  so state-dependent claims are `unresolvable` by construction rather than by judgement.
