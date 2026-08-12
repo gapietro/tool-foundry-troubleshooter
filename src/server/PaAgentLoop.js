@@ -444,6 +444,17 @@ PaAgentLoop.prototype = {
     _dispatchTool: function (runId, action) {
         var toolName = this._str(action.tool)
         var args = action.args
+
+        // #191 — counted BEFORE dispatch, and it counts ATTEMPTS.
+        //
+        // `_auditContext` uses this to tell "the trail answered zero" from
+        // "the trail lost its writes", so every direction it can be wrong in
+        // must fall toward NOT convicting. An attempt that throws, or that a
+        // tool refuses without auditing (#75), still means this run tried to
+        // gather — and a run that tried must never be convicted on a trail
+        // that came back empty.
+        this._dispatchCount += 1
+
         var result = this._tools().dispatch(toolName, args, { run_id: runId })
 
         this._runs().appendTranscript(runId, {
@@ -629,9 +640,44 @@ PaAgentLoop.prototype = {
         //
         // Genuine degradations are unchanged and still fail OPEN: a Glide
         // hiccup must never convict an honest report.
-        var available = answered || reason === 'no_audit_rows'
+        //
+        // AND `no_audit_rows` IS NOT ON ITS OWN PROOF OF ZERO TOOL CALLS
+        // (#191 review finding 1). `PaAuditLogger.invokedTools()` returns that
+        // reason whenever the query succeeded and yielded no usable row, and
+        // its own header names the other way to get there: a SYSTEMATIC write
+        // loss, every row for the run gone (`_write` swallows `insert_failed`,
+        // and the reader skips rows whose `tool_name` came back blank). That
+        // case used to fail open. Passing the reason through blindly would
+        // make it convict a run that really did call tools and really did cite
+        // what they returned — #78's fail-closed defect, arriving through the
+        // one door this module exists to guard.
+        //
+        // So the empty trail is corroborated against a fact this class holds
+        // ITSELF and the audit table cannot corrupt: how many tool calls the
+        // loop dispatched. The two sources must AGREE before an empty trail is
+        // allowed to convict —
+        //
+        //   dispatched 0, rows 0   they agree; the trail answered  -> CHECK
+        //   dispatched >0, rows 0  they disagree; writes were lost -> SKIP
+        //
+        // A disagreement is exactly the state in which this code does not know
+        // what happened, which is the state #78 says must not convict.
+        var trailAnsweredEmpty = reason === 'no_audit_rows' && this._dispatchCount === 0
+        var available = answered || trailAnsweredEmpty
 
-        if (!available) {
+        if (!available && reason === 'no_audit_rows') {
+            // #191 — the disagreement case, recorded as the distinct event it
+            // is. "Unavailable (no_audit_rows)" would read as an ordinary
+            // degradation and hide the one fact worth escalating: this run
+            // dispatched tools and NONE of them left a row, which is a
+            // systematic audit write failure, not a quiet run.
+            this._runs().appendTranscript(runId, {
+                actor: 'system',
+                result_digest:
+                    'audit trail LOST WRITES — this run dispatched ' + this._dispatchCount + ' tool call(s) and the ' +
+                    'trail returned zero rows; citation and sweep cross-checks SKIPPED for this report',
+            })
+        } else if (!available) {
             this._runs().appendTranscript(runId, {
                 actor: 'system',
                 result_digest:
@@ -753,6 +799,13 @@ PaAgentLoop.prototype = {
         // is safe to call on a fresh instance that has never run.
         this._iteration = 0
         this._startMs = 0
+
+        // #191 — tool calls this run DISPATCHED, counted in-process by
+        // `_dispatchTool` and read by `_auditContext`. Per-RUN for the reason
+        // #130 gives above: a carried count is one run's evidence answering
+        // for another's, and here it would answer the one question that
+        // decides whether an empty trail may convict.
+        this._dispatchCount = 0
     },
 
     /**

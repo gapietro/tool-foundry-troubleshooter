@@ -845,6 +845,56 @@ describe('audit context plumbing', () => {
         expect(fixReport.contextCalls[0].invokedTools).toEqual([])
     })
 
+    // #191 review finding 1. `no_audit_rows` is NOT proof the run invoked
+    // nothing: `PaAuditLogger`'s own header says a SYSTEMATIC write loss
+    // ("every row for a run lost") degrades to the same zero rows, and it
+    // relied on that case failing open. Passing the reason through blindly
+    // would convict a run that really did call tools and really did cite what
+    // they returned — the #78 fail-closed defect, through the one door this
+    // module exists to guard.
+    //
+    // The discriminator is a fact the harness holds ITSELF: the loop counts
+    // the tool calls it dispatched. Zero dispatched and zero rows agree — the
+    // trail answered. One or more dispatched and zero rows disagree — the
+    // trail lost writes, and a disagreement must never convict.
+    test('#191: zero rows AND zero dispatched tools agree — the trail answered, checks apply', () => {
+        const runs = fakeRunManager()
+        const fixReport = fakeFixReport([{ valid: true, normalized: { ok: 1 } }])
+        const audit = fakeAuditLogger({ available: false, degraded: 'no_audit_rows', tools: [] })
+
+        const loop = load({ runManager: runs, fixReport: fixReport, auditLogger: audit })
+        loop._handleFixReport('run1', { failure_summary: 'x' })
+
+        expect(fixReport.contextCalls[0].auditAvailable).toBe(true)
+    })
+
+    test('#191: zero rows but tools WERE dispatched — systematic write loss, fails OPEN', () => {
+        const runs = fakeRunManager()
+        const fixReport = fakeFixReport([{ valid: true, normalized: { ok: 1 } }])
+        const audit = fakeAuditLogger({ available: false, degraded: 'no_audit_rows', tools: [] })
+        const tools = fakeTools([{ ok: true }])
+
+        const loop = load({ runManager: runs, fixReport: fixReport, auditLogger: audit, toolRegistry: tools })
+        loop._dispatchTool('run1', { tool: 'agent_trace', args: {} })
+        loop._handleFixReport('run1', { failure_summary: 'x' })
+
+        expect(fixReport.contextCalls[0].auditAvailable).toBe(false)
+    })
+
+    test('#191: the dispatch count is per-RUN — a fresh run does not inherit the last one', () => {
+        const runs = fakeRunManager()
+        const fixReport = fakeFixReport([{ valid: true, normalized: { ok: 1 } }])
+        const audit = fakeAuditLogger({ available: false, degraded: 'no_audit_rows', tools: [] })
+        const tools = fakeTools([{ ok: true }])
+
+        const loop = load({ runManager: runs, fixReport: fixReport, auditLogger: audit, toolRegistry: tools })
+        loop._dispatchTool('run1', { tool: 'agent_trace', args: {} })
+        loop._resetGate()
+        loop._handleFixReport('run2', { failure_summary: 'x' })
+
+        expect(fixReport.contextCalls[0].auditAvailable).toBe(true)
+    })
+
     test('#191: a GENUINE degradation still reaches validation as unavailable — it convicts nobody', () => {
         const runs = fakeRunManager()
         const fixReport = fakeFixReport([{ valid: true, normalized: { ok: 1 } }])

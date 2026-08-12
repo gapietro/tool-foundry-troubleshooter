@@ -53,6 +53,21 @@ and v14 measured them.
   context this code cannot interpret (**skip**). Finding 3's actual safety property — an
   uninterpretable context convicts nobody — is preserved exactly. Genuine degradations
   (`glide_unavailable`, `query_failed`) still fail open, with the transcript note unchanged.
+- **`no_audit_rows` alone is NOT proof of zero tool calls, and the first cut of this fix assumed
+  it was** (caught in `/code-review` on PR #193). `PaAuditLogger`'s own header names the other way
+  to reach zero rows — a **systematic write loss**, every row for the run gone (`_write` swallows
+  `insert_failed`; the reader skips rows whose `tool_name` came back blank) — and relied on that
+  case failing open. Passing the reason through blindly would have convicted a run that really did
+  call tools and really did cite what they returned: #78's fail-closed defect, arriving through the
+  one door the module exists to guard. **The empty trail is now corroborated against a fact the
+  loop holds itself and the audit table cannot corrupt** — `_dispatchCount`, counted in
+  `_dispatchTool` before dispatch (attempts, so every way it can be wrong falls toward not
+  convicting) and reset per run. Zero dispatched + zero rows **agree** → the trail answered, checks
+  apply. Any dispatched + zero rows **disagree** → writes were lost, checks skip, and the
+  transcript records `audit trail LOST WRITES` rather than a generic degradation, because a run
+  that dispatched tools and left no rows is an escalation, not a quiet run. `PaAuditLogger`'s
+  docblock — the source of truth that argued the false premise ("a run that reached a fix report
+  necessarily called at least one tool") — is corrected in the same commit.
 - **Scope limit, stated plainly.** This makes the run fail for the *true* reason and names the
   real defect to the model; it does not on its own make the arm produce a report, because the
   tool-less repair turn still cannot gather evidence (`MAX_EVIDENCE_RETURNS: 0` is §W6-ruled and
