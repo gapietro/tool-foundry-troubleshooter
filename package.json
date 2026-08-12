@@ -1,6 +1,6 @@
 {
   "name": "x-snc-troubleshoot",
-  "version": "2026.08.1210",
+  "version": "2026.08.1211",
   "description": "",
   "license": "UNLICENSED",
   "imports": {
@@ -12,6 +12,7 @@
     "transform": "now-sdk transform",
     "types": "now-sdk dependencies",
     "test": "jest",
+    "smoke": "node scripts/smoke.js",
     "lint": "eslint ."
   },
   "jest": {
