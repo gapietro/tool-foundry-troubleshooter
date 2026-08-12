@@ -47,11 +47,20 @@ directory. Two corollaries now load-bearing:
   deny-list — and a session that has run `/next` is contaminated by construction, because
   `BACKLOG.md` restates the answer.
 
-Remedy is structural: author from a fresh session in a scope that was never told the answer. §AW4's
-table gains `BACKLOG.md`, `GRADE.md` and the auto-memory, and its attestation now asks *"did any
-system-injected context surface facts about specific benchmark rows"* — the question that caught
-both, and the one a reviewer cannot answer from outside, because **an author cannot list what it
-never chose to read.**
+Remedy is structural, and it is written into §AW4's **normative** text, not only into §AW11a's
+narrative: the deny-list table gains `BACKLOG.md`, `GRADE.md` and the auto-memory, and two binding
+requirements follow it — the author must run from a session whose context never carried the answer
+(neither a neutral working directory nor a redacted memory file suffices alone), and the attestation
+**must** answer *"did any system-injected context surface facts about specific benchmark rows"*,
+recorded even when the answer is *none*. That question caught both dispatches, and a reviewer cannot
+answer it from outside, because **an author cannot list what it never chose to read.**
+
+> Caught by `/code-review` on PR #226 and worth recording: the first draft of this release described
+> the attestation amendment in §AW11a and in this entry, and **never applied it to §AW4** — the one
+> section a compliant author reads. A next author would have found a purely read-based deny-list,
+> opened nothing on it, and truthfully attested blindness while carrying the identical injected
+> contamination. **Documenting a repair is not making it** — §AW11's *"invoking a rule is not
+> complying with it"*, committed one section below where it is quoted.
 
 **Defect 10 — the one designated-safe input is not clean.** §AW4 names `scorecard-template.md` as the
 material the extractor is authored against; its §A2 discloses a seed's planted defect, its decoy, and

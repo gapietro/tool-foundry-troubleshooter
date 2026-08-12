@@ -8017,6 +8017,23 @@ report bodies only. **If the author cannot demonstrate it was blind, there is no
 and per §AW8 that means no veracity figure. The burden is on the author to show blinding, not on a
 reviewer to show contamination; the set cannot be re-burned to settle the argument.
 
+**Blinding is a property of the DISPATCHING SESSION, not of the author** (added §AW11a, after two
+dispatches were contaminated before writing a line). The deny-list above governs what an author
+*chooses to read*; it does not govern what its context is *handed*. Two binding requirements follow,
+and they sit here rather than only in §AW11a because this is the section a compliant author reads:
+
+1. **The author must be run from a session whose context never carried the answer** — not from a
+   session that has run `/next` (it must read `BACKLOG.md`), and not as a subagent dispatched by one,
+   since the project auto-memory is injected into every agent spawned from a project-scoped session.
+   Neither a neutral working directory nor a redacted memory file is sufficient on its own: a session
+   that already loaded the memory carries the pre-redaction text into every agent it spawns
+   (measured, not assumed — §AW11a defect 9).
+2. **The attestation must answer: "did any system-injected context — memory file, project reminder,
+   environment note — surface facts about specific benchmark rows?"** This question is mandatory and
+   its answer is recorded even when it is *none*. An author cannot list what it never chose to read,
+   so a read-log alone cannot discharge the burden; this is the only question that caught either
+   contaminated dispatch, and it is one a reviewer cannot answer from outside.
+
 **The calibration set is a consumable, spent once.** Touch the extractor after seeing the recall
 figure and that figure is void — and per §AW8, no recall figure means **no veracity figure either**.
 This is what ends the §5.0 loop: the fuel is gone after one burn. It is un-gameable in the sense

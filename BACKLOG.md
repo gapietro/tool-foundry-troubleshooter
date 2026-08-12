@@ -3,8 +3,8 @@
 Persisted by `/next` so no session re-derives priorities from scratch. Read this first when asked
 what is next. Ranked by gate-distance, not by issue age or severity label.
 
-**Last ranked:** 2026-08-12 (re-checked after PR #225 merged) · at version `2026.08.1207` · board
-6 open / 103 closed · **0 open PRs**
+**Last ranked:** 2026-08-12 (re-checked after PR #225 merged) · shipped at version `2026.08.1208` ·
+board 6 open / 103 closed · 1 open PR (#226, this file's own release)
 
 > The board went 1 → 6 open because `/senior-grade` sitting 1 ran and filed F-03…F-07 as
 > #216–#220. **That is the audit working as designed, not the backlog rotting** — audits are issue
