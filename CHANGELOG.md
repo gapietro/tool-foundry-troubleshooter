@@ -35,11 +35,24 @@ true**. That moves ground truth from the seed spec's expected-label to **instanc
 sharpening the labels, the obvious cheap move, would not have caught one of the three known-bad
 rows.
 
-**Row 09 adjudicated live, as the feasibility proof.** `x_snc_tsbench_ticket` has 8 fields and
+**Row 09 re-confirmed live, as the feasibility proof.** `x_snc_tsbench_ticket` has 8 fields and
 **no `type` column**, so that row's Fix 1 repoints a query at a column that does not exist — at
-6/6, gate-passing. One `sys_dictionary` call settled what §AO2 left open since v14. Row 11 stays
-open between fabrication and the Build Rule #42 harness defect; §AO2's two readings still have
-opposite consequences.
+6/6, gate-passing. **Re-confirmed, not newly adjudicated:** `v14-rows.json` row 09 `operator_note`
+records the operator running the same dictionary read at v14 time and reaching the same
+conclusion. The live read's value is the *drift* data point. **The finding that survives is
+sharper than the adjudication:** that note was deliberately kept out of every scorer-facing field,
+so the instrument had no way to reach a defect the operator already knew about — and the row
+cleared the gate. Row 11 stays open between fabrication and the Build Rule #42 harness defect.
+
+**Eight registration defects found by `/code-review` and repaired before any measurement** (§AW11)
+— legitimately, because §AW's freeze binds *after* the first measurement, which is the whole value
+of registering before building. Three of the eight were the same defect: **3 of 4 predictions were
+unfalsifiable as drafted**, in a section that opens by citing §AU6's collapse as the reason for the
+rule. Invoking a rule is not complying with it. Also corrected: a false arm-asymmetry blocker on
+the rejected Option A (both harnesses write the same audit table), an unreachable falsifier on
+E-1, a blended-cross-arm figure that would have violated §AD7, and — the one with teeth — a
+**named blinding procedure**, since "the extractor is written cold" was an adjective protecting a
+one-shot consumable whose answer key is checked into this repo, and this release adds to it.
 
 **Registered terms.** A **three-valued** verdict (`refuted` / `supported` / `unresolvable`) because
 a two-valued one would launder "I cannot see" into "the claim is false" — the #205 defect this axis
