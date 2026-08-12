@@ -7002,3 +7002,134 @@ outputs, not that they diagnose correctly"* — a weaker criterion than step 3's
 have passed an arm that never found line 42. v13 and v14 both applied the known answer. Step 3 now
 states the binding criterion outright and marks that sentence as that pass's own reading, kept as
 history and not to be re-derived as protocol. The historical paragraph is left standing.
+
+---
+
+## AQ. Pre-registration — the depth-gate empty-trail floor (`2026.08.1114`, #191)
+
+**Written and committed before a single line of gate code. §A through §AP are unmodified** —
+`git log -p benchmark/DECISION.md` is the check, in the form §W, §Z, §AC, §AE, §AF, §AG, §AH, §AI,
+§AK, §AL and §AN all used. **This section claims no result.**
+
+It exists because the change it describes moves an instrument that v13 (§AJ) and v14 (§AO) were
+both scored against. §AO3 is the cautionary case: the operator changed the scorer instruction
+between passes and the v13→v14 determinacy *comparison* was voided even though both passes'
+absolute figures stood. A silent gate change would do the same thing to the custom arm's gate
+figure, one pass later and for the same reason.
+
+### AQ1. The defect, and why #191 part 1 does not close it
+
+Measured live on gpinst01, both reps of the seed-05 `agent`+`timeframe` path (`TR1000315`,
+`TR1000316`, 2026-08-11). The model files a terminal `fix_report` on its **first** reasoning turn
+having called nothing, declaring layer 1 `UNAVAILABLE` and **layers 2-7 `SWEPT`** with empty
+reasons (`sys_generative_ai_log` `af199457…`).
+
+`unsweptGaps` counts only `NOT_SWEPT`. A blanket false `SWEPT` therefore declares no gap,
+`open.length === 0`, and `_depthGate` releases permanently. **This is not a gate malfunction.** The
+gate enforces gaps the model ADMITS, by design — §H8 item 3, the harness must never name a tool
+itself — so a report that admits nothing is unholdable by construction. It is the same shape §AL
+ruled on: the gate lacks an operand, rather than failing to check one it holds.
+
+**#191 part 1 (`f1f9d7a`, `2026.08.1113`) fixed the validation half only.** `_checkSweptClaims`
+can now fire on a genuinely empty trail, so the run fails naming the real defect ("6 layer(s) are
+marked SWEPT but this run never invoked a tool that reads them") instead of a symptom. It does not
+make the arm produce a report: the tool-less repair turn cannot gather evidence, and
+**`MAX_EVIDENCE_RETURNS` stays `0`** — §W6-ruled, refuted 1-of-10, and not reopened here.
+
+So the custom arm's 0/10 on this path is currently attributable to a gate that cannot hold, and
+that is the thing this change moves.
+
+### AQ2. The change, stated precisely enough to falsify
+
+**A floor: an empty release set cannot support a terminal report, whatever `layers_swept` claims.**
+
+Inside `_depthGate`, at the existing no-declared-gap allow and nowhere else:
+
+```
+var open = this._openGaps(this._safeGaps(action.report), release)
+if (open.length === 0) {
+    if (release.length === 0) {            // #191 THE FLOOR
+        this._holdCount += 1
+        return { hold: true, gaps: [], kind: 'empty_trail', target: null, capped: false }
+    }
+    this._gateReleased = true              // unchanged
+    return { hold: false, ... }
+}
+```
+
+Five properties, each of which is a thing a review may check:
+
+1. **It sits BELOW the `MAX_HOLDS` cap.** The cap is tested fourth and is unmoved, so the floor can
+   never outlive it: worst case is two held turns and then a flagged `capped:true` release. This is
+   R2's lesson applied rather than re-learned — a hold path the cap cannot reach rides to
+   `MAX_ITERATIONS` and finishes `partial`, which is a pre-registered revert trigger (C1).
+2. **It records nothing.** `_heldTools` stays null, so the hold is NOT sticky and each turn
+   re-derives. One tool call empties the condition and the run proceeds normally.
+3. **It intercepts one path only.** The `no_layer_report` hold (non-`fix_report` actions) and the
+   `gaps` hold (declared gaps, empty trail) are untouched, because both already hold. Only the
+   allow at `open.length === 0` changes, and only when the trail is empty.
+4. **It names no tool.** `_holdBlock` gains an `empty_trail` branch worded like the existing
+   `no_layer_report` one ("call a tool", never *which*), and `_scrubToolNames` continues to strip
+   any name the model's own reason text re-injects. §H8 item 3 is preserved; **if this block names
+   a tool the acceptance test is vacuous and the change is void.**
+5. **It reads `release`, not `trail.tools`.** So it inherits `REQUIRE_RETRIEVAL_TO_RELEASE`, which
+   **stays `false`** — §Y6's bar is not cleared here and this section does not reopen it (§AL4).
+
+### AQ3. What it costs, declared before it is spent
+
+**The custom arm's gate figure stops being comparable across the v13/v14 → v15 boundary.** v12
+(6/10 native, 0/10 custom), v13 (4/10, 0/10) and v14 (5/10, 0/10) were all measured against a gate
+with no floor. Any v15 custom figure is measured against a different gate.
+
+Stated as the rule the next pass must apply: **the v15 custom gate figure may be reported
+absolutely and may NOT be differenced against v12/v13/v14** — the §AO3 treatment, applied in
+advance rather than discovered afterwards. The native arm is unaffected (it does not run this
+harness), so the native series remains continuous and §AD7 still requires both arms be quoted
+together.
+
+Second cost, smaller and worth naming: two extra LLM turns per affected run in the worst case,
+which spends budget the `partial` guard is watching. AQ5's first trigger is the bound on it.
+
+### AQ4. Predictions, filed before any run
+
+Baseline is 0-of-4 on every count: v14 rows 06/08 (#188, died at the parser) and the two post-fix
+reps `TR1000315`/`TR1000316` (#191, died at validation). Four reps of the seed-05
+`agent`+`timeframe` path, run under the smoke protocol, custom arm only.
+
+| # | Prediction | Falsified by |
+|---|---|---|
+| **AQ-1** | ≥3 of 4 reps record **at least one tool call** (`x_snc_troubleshoot_audit` non-empty) | ≤2 of 4 |
+| **AQ-2** | ≥1 of 4 reps produces a `fix_report` that **passes validation** | 0 of 4 |
+| **AQ-3** | **Zero** runs finish `partial` with a floor hold in the transcript | any such run |
+| **AQ-4** | The floor fires on **no** `execution`-path row — those runs call a tool before any terminal action | any `empty_trail` hold on an `execution` row |
+
+**AQ-1 is the primary.** AQ-2 is secondary and deliberately weak: the floor buys a tool call, and
+whether the model then writes a citable report is a *correctness* question this change does not
+claim to answer (§AC8's caveat, unamended). AQ-3 and AQ-4 are tripwires, not results — neither
+counts toward the change succeeding, and both are revert triggers below.
+
+**No prediction is filed on the pass-level gate figure**, in either direction. Ruling 6 (§AI4,
+carried at §AN) applies: a gate prediction not filed may not be claimed afterwards.
+
+### AQ5. Revert triggers — any one of these reverts the floor, no re-litigation
+
+1. **Any run finishes `partial` with an `empty_trail` hold in its transcript.** C1's original
+   trigger, unmodified. The cap is supposed to make this unreachable; if it is reached, the
+   placement argument in AQ2 item 1 is wrong.
+2. **The capped-release rate on the custom arm rises above its v14 level** on comparable rows —
+   the floor spending hold budget that trail-backed releases used to consume, which is the gate
+   giving up more often wearing the costume of a gate holding more often.
+3. **`_holdBlock`'s `empty_trail` text names a tool**, by authoring or by an unscrubbed reason.
+   §S is the standing reminder that this harness has named its tools before without noticing.
+
+### AQ6. What this does not decide
+
+- **Whether the custom arm can diagnose a no-execution scenario.** It removes one blocker. #188
+  found two on this path; nothing rules out a third.
+- **Whether the reports are RIGHT.** §AC8, and §AO2's demonstration that a row can score 6/6 while
+  proposing a fix at a column that does not exist. Determinacy and correctness are separate axes
+  and this change touches neither directly.
+- **`MAX_EVIDENCE_RETURNS` (`0`, §W6) or `REQUIRE_RETRIEVAL_TO_RELEASE` (`false`, §Y6/§AL4).** Both
+  frozen. Neither is a lever this section is permitted to pull, and a future section proposing
+  either must clear its own bar, not this one's.
+- **Anything about the native arm.** It does not run `_depthGate`.

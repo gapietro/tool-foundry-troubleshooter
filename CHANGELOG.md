@@ -17,6 +17,37 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1114 — 2026-08-11
+
+**Pre-registration — the depth-gate empty-trail floor (#191 part 2).** `benchmark/DECISION.md`
+**§AQ**. Documentation only: **no code changes, and none are permitted until this section is
+merged.**
+
+- **Why it needs a pre-registration at all.** The floor changes `_depthGate`, which v13 (§AJ) and
+  v14 (§AO) were both scored against. §AO3 is the cautionary case one pass back: the operator
+  changed the scorer instruction and the v13→v14 determinacy *comparison* was voided even though
+  both passes' absolute figures stood. A silent gate change does the same thing to the custom
+  arm's gate figure.
+- **The change, in one line:** an empty release set cannot support a terminal report, whatever
+  `layers_swept` claims — sitting **below** the `MAX_HOLDS` cap (R2's lesson applied, not
+  re-learned: a hold path the cap cannot reach rides to `MAX_ITERATIONS` → `partial`, which is
+  C1's pre-registered revert trigger), recording nothing so it never latches sticky, intercepting
+  only the `open.length === 0` allow, and **naming no tool** so §H8 item 3 survives.
+- **The cost is declared in advance rather than discovered afterwards:** the v15 custom gate figure
+  may be reported absolutely and **may not be differenced against v12/v13/v14**. The native arm
+  does not run this harness, so the native series stays continuous and §AD7 still requires both
+  arms be quoted together.
+- **Four predictions filed against a 0-of-4 baseline** (v14 rows 06/08 died at the parser;
+  `TR1000315`/`TR1000316` died at validation). AQ-1 is primary (≥3 of 4 reps record a tool call);
+  AQ-2 is deliberately weak, because whether the model then writes a citable report is a
+  *correctness* question this change does not claim to answer (§AC8, unamended). AQ-3/AQ-4 are
+  tripwires that count toward nothing. **No gate-figure prediction is filed**, so Ruling 6 forbids
+  claiming one afterwards.
+- **Three revert triggers, no re-litigation**, including the one that would prove the placement
+  argument wrong (`partial` with a floor hold in the transcript).
+- `MAX_EVIDENCE_RETURNS` (`0`, §W6) and `REQUIRE_RETRIEVAL_TO_RELEASE` (`false`, §Y6/§AL4) are
+  both **frozen** and explicitly outside what this section may pull.
+
 ## 2026.08.1113 — 2026-08-11
 
 **An empty audit trail is an answer, not a degradation (#191, part 1 of 2).**
