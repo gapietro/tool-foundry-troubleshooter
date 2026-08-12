@@ -7324,7 +7324,8 @@ harness DID, at the moment it changed, not to be reconstructable from a diff lat
 if (this._holdActiveKind === 'empty_trail' || this._anyOf(this._heldTools, [this._str(action.tool)]))
 ```
 
-`no_layer_report` records nothing — `_heldTools` is assigned on exactly ONE line, the `gaps` return
+`no_layer_report` records nothing — `_heldTools` is assigned a NON-NULL value on exactly ONE line
+(`_resetGate` also nulls it; that is the only other assignment), the `gaps` return
 at the foot of `_depthGate` — so `_anyOf(null, …)` is false, the `empty_trail` clause does not
 cover it, and the hold block survived a compliant tool call into the very next prompt. That is I1's
 defect (`PaAgentLoop.js:380-393`) on its third path, and the hold's own text asks for the thing that
@@ -7353,6 +7354,36 @@ own header says so.
 
 **No figure is claimed and no prediction is filed.** Ruling 6 (§AI4, carried at §AN, restated at
 §AR4) applies unchanged.
+
+### AS3a. The decision was argued in prose and guarded by nothing (PR #199 review, finding 1)
+
+**Mutating the condition to a bare `if (true)` — deleting the tool-specific clear for `gaps`
+entirely, the one behaviour §AS2 exists to preserve — left all 1718 tests passing.** Every test on
+this line asserted a block that SHOULD clear; the discriminating case had none. §AS2 named the
+`gaps` distinction as *the decision* while the suite was indifferent to it.
+
+Fixed with the paired negative: a `gaps` hold recording `['schema_lookup']`, a dispatch of
+`agent_config` instead, and the next prompt asserted to STILL carry the hold block. Re-mutated to
+confirm it now fails, and fails alone.
+
+**Rule earned, and it generalises past this PR: when a change's rationale is "these two forms differ
+only in what comes later", the test that pins the difference is the deliverable — not the one that
+pins the fix.** A positive-only suite ratifies whichever form was written.
+
+### AS3b. The floor does NOT self-correct, and §AS2's argument does not reach it (finding 2)
+
+§AS2 justifies the inversion with "the gate re-derives on the next terminal action, so nothing is
+papered over." **True for `gaps` and `no_layer_report`, FALSE for `empty_trail`.** `_dispatchCount`
+is incremented BEFORE dispatch and counts ATTEMPTS deliberately (`_dispatchTool`, so `_auditContext`
+never convicts a run that tried), while the floor reads `release.length === 0 && _dispatchCount ===
+0`. One tool call that fails or is refused therefore moves the conjunct off zero permanently, and
+the floor cannot fire again in that run — the next zero-evidence `fix_report` releases the gate for
+good.
+
+**Pre-existing (#195), not introduced by #196, and NOT fixed here** — the floor's condition is a
+registered §AQ2 term as amended at §AR1a, and repairing it inside an unrelated one-token PR is the
+§AO3 mistake arriving through the door §AQ was built to close. Filed as **#200**; §AS2's scope is
+narrowed in the code comment and above so the claim is not carried further than it holds.
 
 ### AS4. §AQ3's cost is not compounded
 

@@ -24,7 +24,8 @@ test and a ledger entry (§AS).
 
 - **The defect, third path of three.** `_holdActive`'s dispatch-side clear read
   `_holdActiveKind === 'empty_trail' || _anyOf(_heldTools, [tool])`. `no_layer_report` records
-  nothing — `_heldTools` is assigned on exactly ONE line, the `gaps` return at the foot of
+  nothing — `_heldTools` is assigned a NON-NULL value on exactly ONE line (`_resetGate` also nulls
+  it), the `gaps` return at the foot of
   `_depthGate` — so `_anyOf(null, …)` was false, the `empty_trail` clause did not cover it, and the
   hold block survived a compliant tool call into the next prompt. I1's defect on a sibling path, and
   the hold's own text asks for the very thing that failed to discharge it: *"…or call a tool."*
@@ -39,6 +40,18 @@ test and a ledger entry (§AS).
   clear and no rep took the `no_layer_report` route). Same evidentiary footing as #192's retry
   repair. How often runs reach this hold at all remains unmeasured — the path did not exist in the
   build v4 ran against.
+- **PR #199 review, finding 1 — the decision was guarded by nothing.** Mutating the condition to a
+  bare `if (true)`, deleting the tool-specific `gaps` clear entirely, left **all 1718 tests
+  passing**: every test on this line asserted a block that should CLEAR, and none pinned the
+  distinction the change is argued on. Added the paired negative (a `gaps` hold, a dispatch outside
+  the recorded release set, the block asserted to survive) and re-mutated to confirm it now fails
+  alone. §AS3a.
+- **Finding 2 — §AS2's "the gate re-derives" argument does not reach the floor.** `_dispatchCount`
+  counts ATTEMPTS and is incremented before dispatch, so one failed or refused tool call moves
+  `empty_trail`'s `_dispatchCount === 0` conjunct off zero permanently and the §AQ floor can never
+  fire again in that run. **Pre-existing (#195), not introduced here, and deliberately not fixed
+  here** — that conjunct is a registered §AQ2 term (as amended at §AR1a) and repairing it inside an
+  unrelated one-token PR is the §AO3 mistake. Comment scope narrowed, filed as #200. §AS3b.
 - **No gate or pass figure is claimed** (ruling 6, §AI4/§AN/§AR4). §AQ3's differencing ban is
   unchanged and not widened: a v15+ custom gate figure is reportable absolutely, never differenced
   against v12/v13/v14, native series unaffected, both arms quoted together (§AD7).
