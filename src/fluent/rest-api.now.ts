@@ -67,10 +67,8 @@ export const troubleshooterApi = RestApi({
             script: script`(function process(request, response) {
     var body = request.body && request.body.data ? request.body.data : {};
     var ctx = { body: body, pathParams: request.pathParams, userId: gs.getUserID() };
-    var result = new PaRestHandlers().analyze(ctx);
-    response.setStatus(result.status);
-    response.setContentType('application/json');
-    response.setBody(result.body);
+    var handlers = new PaRestHandlers();
+    handlers.emit(response, handlers.analyze(ctx));
 })(request, response);`,
         },
 
@@ -97,10 +95,8 @@ export const troubleshooterApi = RestApi({
             ],
             script: script`(function process(request, response) {
     var ctx = { pathParams: request.pathParams, userId: gs.getUserID() };
-    var result = new PaRestHandlers().getRun(ctx);
-    response.setStatus(result.status);
-    response.setContentType('application/json');
-    response.setBody(result.body);
+    var handlers = new PaRestHandlers();
+    handlers.emit(response, handlers.getRun(ctx));
 })(request, response);`,
         },
 
@@ -129,10 +125,8 @@ export const troubleshooterApi = RestApi({
             script: script`(function process(request, response) {
     var body = request.body && request.body.data ? request.body.data : {};
     var ctx = { body: body, pathParams: request.pathParams, userId: gs.getUserID() };
-    var result = new PaRestHandlers().message(ctx);
-    response.setStatus(result.status);
-    response.setContentType('application/json');
-    response.setBody(result.body);
+    var handlers = new PaRestHandlers();
+    handlers.emit(response, handlers.message(ctx));
 })(request, response);`,
         },
 
@@ -149,10 +143,8 @@ export const troubleshooterApi = RestApi({
             shortDescription:
                 'Deep readiness diagnostics: plugins, own skills (existence and activation), capability-provider mapping, a live micro-invocation, section-2 table readability, stuck-run count. ready is false when any check fails',
             script: script`(function process(request, response) {
-    var result = new PaRestHandlers().status();
-    response.setStatus(result.status);
-    response.setContentType('application/json');
-    response.setBody(result.body);
+    var handlers = new PaRestHandlers();
+    handlers.emit(response, handlers.status());
 })(request, response);`,
         },
 
@@ -168,10 +160,8 @@ export const troubleshooterApi = RestApi({
             authorization: true,
             shortDescription: 'The diagnostic tool roster the custom harness reasons over — PaToolRegistry.list()',
             script: script`(function process(request, response) {
-    var result = new PaRestHandlers().tools();
-    response.setStatus(result.status);
-    response.setContentType('application/json');
-    response.setBody(result.body);
+    var handlers = new PaRestHandlers();
+    handlers.emit(response, handlers.tools());
 })(request, response);`,
         },
     ],

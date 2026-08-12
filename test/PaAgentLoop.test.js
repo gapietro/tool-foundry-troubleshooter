@@ -54,12 +54,21 @@ function fakeTools(dispatchResults) {
     }
 }
 
-function fakeRunManager() {
+function fakeRunManager(overrides) {
     const transcript = []
     const closeCalls = []
+    const markRunningCalls = []
+    const o = overrides || {}
     return {
         transcript: transcript,
         closeCalls: closeCalls,
+        markRunningCalls: markRunningCalls,
+        // #73 — the loop claims the run before reasoning. Defaults to success;
+        // a test drives the fail-open branch with {markRunning: <result>}.
+        markRunning: function (runId) {
+            markRunningCalls.push(runId)
+            return o.markRunning !== undefined ? o.markRunning : { success: true, run_id: runId, status: 'running' }
+        },
         appendTranscript: function (runId, entry) {
             const normalized = Object.assign({}, entry)
             transcript.push(normalized)
@@ -3886,5 +3895,70 @@ describe('depth gate (#121) — retrieval-aware release', () => {
 
         expect(load({})._releaseSet(trail)).toEqual(['a', 'b'])
         expect(load({ requireRetrievalToRelease: true })._releaseSet(trail)).toEqual(['a'])
+    })
+})
+
+// ===========================================================================
+// run claim — issue #73
+//
+// `_checkStuckRuns` finds dead workers by querying custom runs left at
+// `status:'running'` past the worker budget. Nothing ever put a run in that
+// state — measured on gpinst01 over 214 custom runs: complete 159, failed 54,
+// queued 1, running ZERO — so the check could not match by construction, and
+// the one genuinely stuck 'queued' run was invisible to it.
+//
+// The claim is FAIL-OPEN: a refused transition means the row is gone or
+// another worker owns it, and neither is a reason to refuse to diagnose.
+// Turning a monitoring gap into a run failure would be a worse trade.
+// ===========================================================================
+
+describe('run claim (#73)', () => {
+    test('the run is claimed as running before any reasoning happens', () => {
+        const llm = fakeLlm([{ success: true, action: { action: 'answer', text: 'done' }, raw: 'r1' }])
+        const runs = fakeRunManager()
+        const loop = load({ llmProxy: llm, toolRegistry: fakeTools([]), runManager: runs, playbook: 'P', now: () => 0 })
+
+        loop.run('run1', { execution: 'e1' })
+
+        expect(runs.markRunningCalls).toEqual(['run1'])
+        // Claimed BEFORE the model is asked anything — otherwise a worker that
+        // dies inside the first reason() call is still invisible.
+        expect(runs.transcript.map((e) => e.actor)[0]).toBe('llm')
+        expect(llm.calls.length).toBeGreaterThan(0)
+    })
+
+    test('a refused claim does not stop the run, and is recorded', () => {
+        const llm = fakeLlm([{ success: true, action: { action: 'answer', text: 'done' }, raw: 'r1' }])
+        const runs = fakeRunManager({ markRunning: { success: false, error: 'illegal transition: running -> running' } })
+        const loop = load({ llmProxy: llm, toolRegistry: fakeTools([]), runManager: runs, playbook: 'P', now: () => 0 })
+
+        const res = loop.run('run1', { execution: 'e1' })
+
+        expect(res.success).toBe(true)
+        expect(res.outcome).toBe('answer')
+        const notes = runs.transcript.filter((e) => e.actor === 'system' && /not claimed as running/.test(e.result_digest || ''))
+        expect(notes).toHaveLength(1)
+        expect(notes[0].result_digest).toMatch(/illegal transition/)
+    })
+
+    test('a claim that throws nothing but returns null is still fail-open', () => {
+        const llm = fakeLlm([{ success: true, action: { action: 'answer', text: 'done' }, raw: 'r1' }])
+        const runs = fakeRunManager({ markRunning: null })
+        const loop = load({ llmProxy: llm, toolRegistry: fakeTools([]), runManager: runs, playbook: 'P', now: () => 0 })
+
+        const res = loop.run('run1', { execution: 'e1' })
+
+        expect(res.success).toBe(true)
+        expect(runs.transcript.filter((e) => /not claimed as running/.test(e.result_digest || ''))).toHaveLength(1)
+    })
+
+    test('a missing run id is refused before any claim is attempted', () => {
+        const runs = fakeRunManager()
+        const loop = load({ llmProxy: fakeLlm([]), toolRegistry: fakeTools([]), runManager: runs, playbook: 'P', now: () => 0 })
+
+        const res = loop.run('', {})
+
+        expect(res.success).toBe(false)
+        expect(runs.markRunningCalls).toEqual([])
     })
 })

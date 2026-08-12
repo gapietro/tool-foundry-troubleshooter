@@ -732,3 +732,117 @@ describe('tools', () => {
         expect(res).toEqual({ status: 200, body: { tools: list } })
     })
 })
+
+// ===========================================================================
+// emit() — issue #170
+//
+// The handlers return {status, body} and the Fluent route writes them onto
+// `response`. That works for 2xx and SILENTLY LOSES the message on 4xx/5xx:
+// measured live on gpinst01, `POST /analyze {"mode":"diagnose"}` surfaces as
+// a bare `400 Bad Request` with no field named, while `_validateAnalyze` had
+// correctly returned 'one of execution, agent+timeframe, or logs is required'.
+//
+// The cause is the ENVELOPE, not the handler. A ServiceNow error body is
+// `{error:{message,detail},status:'failure'}`; ours is `{error:'<string>'}`,
+// so a generic client reading `error.message` finds undefined and falls back
+// to the HTTP reason phrase. Control run the same day: a native 400
+// (`GET /api/now/table/x_nonexistent_table_xyz`) DOES surface its detail
+// through the same transport, so the transport is not the culprit.
+//
+// `emit` is the one place that decides, so the five route scripts stay
+// one-liners and this stays testable with zero Glide (Build Rule #43 also
+// makes the Fluent template the wrong home for branching logic).
+// ===========================================================================
+
+function fakeResponse() {
+    const calls = { status: [], contentType: [], body: [], error: [] }
+    return {
+        calls: calls,
+        setStatus: function (s) { calls.status.push(s) },
+        setContentType: function (c) { calls.contentType.push(c) },
+        setBody: function (b) { calls.body.push(b) },
+        setError: function (e) { calls.error.push(e) },
+    }
+}
+
+// Minimal stand-in for the platform's sn_ws_err.ServiceError.
+function fakeServiceErrorApi() {
+    const built = []
+    function ServiceError() {
+        this._s = null; this._m = null; this._d = null
+        built.push(this)
+    }
+    ServiceError.prototype.setStatus = function (s) { this._s = s }
+    ServiceError.prototype.setMessage = function (m) { this._m = m }
+    ServiceError.prototype.setDetail = function (d) { this._d = d }
+    return { built: built, api: { ServiceError: ServiceError } }
+}
+
+describe('emit', () => {
+    test('a 2xx result is written as status + JSON body, with no error envelope', () => {
+        const { handlers } = load({})
+        const res = fakeResponse()
+        handlers.emit(res, { status: 200, body: { tools: [] } })
+        expect(res.calls.status).toEqual([200])
+        expect(res.calls.contentType).toEqual(['application/json'])
+        expect(res.calls.body).toEqual([{ tools: [] }])
+        expect(res.calls.error).toEqual([])
+    })
+
+    test('a 4xx result goes through setError so the message reaches the caller (#170)', () => {
+        const se = fakeServiceErrorApi()
+        const { handlers } = load({ serviceErrorApi: se.api })
+        const res = fakeResponse()
+
+        handlers.emit(res, {
+            status: 400,
+            body: { error: 'one of execution, agent+timeframe, or logs is required' },
+        })
+
+        expect(res.calls.error.length).toBe(1)
+        expect(se.built.length).toBe(1)
+        expect(se.built[0]._s).toBe(400)
+        expect(se.built[0]._m).toBe('one of execution, agent+timeframe, or logs is required')
+        // The bare setBody path must NOT also run — that is what produced the
+        // empty body the issue reported.
+        expect(res.calls.body).toEqual([])
+    })
+
+    test('a 5xx result uses the same envelope', () => {
+        const se = fakeServiceErrorApi()
+        const { handlers } = load({ serviceErrorApi: se.api })
+        const res = fakeResponse()
+        handlers.emit(res, { status: 500, body: { error: 'failed to create diagnostic run: unknown' } })
+        expect(se.built[0]._s).toBe(500)
+        expect(se.built[0]._m).toBe('failed to create diagnostic run: unknown')
+    })
+
+    test('falls back to status+body when the platform error API is absent', () => {
+        // Never convict the caller of a platform gap: if sn_ws_err is not
+        // reachable, the old behaviour is still better than throwing.
+        const { handlers } = load({ serviceErrorApi: null })
+        const res = fakeResponse()
+        handlers.emit(res, { status: 400, body: { error: 'boom' } })
+        expect(res.calls.status).toEqual([400])
+        expect(res.calls.body).toEqual([{ error: 'boom' }])
+        expect(res.calls.error).toEqual([])
+    })
+
+    test('an error body with no usable message still names its status', () => {
+        const se = fakeServiceErrorApi()
+        const { handlers } = load({ serviceErrorApi: se.api })
+        const res = fakeResponse()
+        handlers.emit(res, { status: 403, body: {} })
+        expect(se.built[0]._s).toBe(403)
+        expect(typeof se.built[0]._m).toBe('string')
+        expect(se.built[0]._m.length).toBeGreaterThan(0)
+    })
+
+    test('a malformed result is emitted as a 500 rather than throwing', () => {
+        const se = fakeServiceErrorApi()
+        const { handlers } = load({ serviceErrorApi: se.api })
+        const res = fakeResponse()
+        handlers.emit(res, null)
+        expect(se.built[0]._s).toBe(500)
+    })
+})

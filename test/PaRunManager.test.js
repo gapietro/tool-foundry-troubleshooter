@@ -1342,3 +1342,60 @@ describe('sweepStaleNative', () => {
         expect(transcript.filter((e) => e.actor === 'system')).toHaveLength(0)
     })
 })
+
+// ===========================================================================
+// markRunning — issue #73
+//
+// `createRun` forces every run to 'queued' and NOTHING ever moved a custom
+// run off it, so `PaRestHandlers._checkStuckRuns` — which queries
+// `harness=custom^status=running` — could never match. Measured on gpinst01
+// 2026-08-12 across 214 custom runs: complete 159, failed 54, queued 1,
+// running ZERO. The one mechanism designed to spot a dead worker was dead
+// code, and the single stuck 'queued' run was invisible to it.
+//
+// `close()` cannot do this job: 'queued' -> 'running' is in its ILLEGAL list
+// by design, because close() is the terminal transition and widening it would
+// let a worker "close" a run into a non-terminal state.
+// ===========================================================================
+
+describe('markRunning', () => {
+    test('queued -> running is written', () => {
+        const { mgr, world } = load({ world: { rows: { [RUN_TABLE]: [seedRun({ status: 'queued' })] } } })
+        const res = mgr.markRunning('run1')
+
+        expect(res.success).toBe(true)
+        expect(res.status).toBe('running')
+        expect(world.tables[RUN_TABLE][0].status).toBe('running')
+    })
+
+    test('a missing run id is refused', () => {
+        const { mgr } = load({ world: { rows: { [RUN_TABLE]: [] } } })
+        expect(mgr.markRunning('').success).toBe(false)
+    })
+
+    test('an unknown run is refused', () => {
+        const { mgr } = load({ world: { rows: { [RUN_TABLE]: [] } } })
+        const res = mgr.markRunning('nope')
+        expect(res.success).toBe(false)
+        expect(res.error).toMatch(/run not found/)
+    })
+
+    const illegalSources = ['running', 'complete', 'failed', 'awaiting_confirmation']
+    test.each(illegalSources)('%s -> running is refused and leaves the row untouched', (from) => {
+        const { mgr, world } = load({ world: { rows: { [RUN_TABLE]: [seedRun({ status: from })] } } })
+        const res = mgr.markRunning('run1')
+
+        expect(res.success).toBe(false)
+        expect(res.error).toMatch(/illegal transition/)
+        expect(world.tables[RUN_TABLE][0].status).toBe(from)
+    })
+
+    test('close() still accepts running as a source, so the new state is terminal-reachable', () => {
+        const { mgr, world } = load({ world: { rows: { [RUN_TABLE]: [seedRun({ status: 'queued' })] } } })
+        mgr.markRunning('run1')
+        const res = mgr.close('run1', 'complete', {})
+
+        expect(res.success).toBe(true)
+        expect(world.tables[RUN_TABLE][0].status).toBe('complete')
+    })
+})

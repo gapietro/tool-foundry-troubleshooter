@@ -129,6 +129,126 @@ PaRestHandlers.prototype = {
         this._eventQueueFn = typeof o.eventQueue === 'function' ? o.eventQueue : null
         this._checks = this._isArray(o.checks) ? o.checks : null
         this._nowFn = typeof o.now === 'function' ? o.now : null
+        // Issue #170. Injected so `emit` is testable with zero Glide; the
+        // platform global is resolved lazily in `_errorApi` when absent. An
+        // EXPLICIT `null` is honoured as "no error API" so a test can drive
+        // the fallback branch — hence `hasOwnProperty`, not `||`.
+        this._serviceErrorApi = Object.prototype.hasOwnProperty.call(o, 'serviceErrorApi')
+            ? o.serviceErrorApi
+            : null
+        this._serviceErrorApiPinned = Object.prototype.hasOwnProperty.call(o, 'serviceErrorApi')
+    },
+
+    // =======================================================================
+    // Response emission (issue #170)
+    // =======================================================================
+
+    /**
+     * Write a handler result onto the Scripted REST `response`.
+     *
+     * WHY THIS EXISTS AT ALL, given every handler already returns
+     * `{status, body}` and the route script could just write both.
+     *
+     * Because that is exactly what the routes did, and it LOSES the message on
+     * every non-2xx. Measured live on gpinst01: `POST /analyze` with
+     * `{"mode":"diagnose"}` reaches the caller as a bare `400 Bad Request`
+     * with no body, while `_validateAnalyze` had correctly returned
+     * *'one of execution, agent+timeframe, or logs is required'*. The
+     * handler's contract — "names the exact missing input, never a generic
+     * bad request" — was true and unreachable.
+     *
+     * The cause is the ENVELOPE. A ServiceNow REST error body is
+     * `{error:{message,detail},status:'failure'}`; ours was `{error:'<string>'}`,
+     * so a client reading `error.message` gets `undefined` and falls back to
+     * the HTTP reason phrase. Control measured the same day: a native 400
+     * (`GET /api/now/table/x_nonexistent_table_xyz`) DOES surface its detail
+     * through the same transport — so the transport was never the culprit and
+     * the issue's "maybe MCP drops it" hypothesis is refuted.
+     *
+     * `response.setError(ServiceError)` is the platform's supported way to
+     * produce that envelope, and it sets the status itself — so the 2xx path
+     * and the error path are genuinely different calls, not one call with a
+     * different number. That asymmetry is the whole reason this is a method
+     * and not two lines in a Fluent template (which Build Rule #43 makes a
+     * hostile place for branching anyway).
+     *
+     * FAIL-OPEN: if the platform error API cannot be reached, fall back to the
+     * old status+body write. A missing global must not turn a 400 into a
+     * thrown 500 — that would convict the caller of our plumbing gap.
+     *
+     * @param {Object} response the Scripted REST response object
+     * @param {Object} result {status, body} from any handler on this class
+     * @returns {undefined}
+     */
+    emit: function (response, result) {
+        if (!response) return
+
+        var r = this._isPlainObject(result) ? result : {}
+        var status = typeof r.status === 'number' && r.status > 0 ? r.status : 500
+        var body = this._isPlainObject(r.body) ? r.body : {}
+
+        if (status < 400) {
+            response.setStatus(status)
+            if (typeof response.setContentType === 'function') {
+                response.setContentType('application/json')
+            }
+            response.setBody(r.body)
+            return
+        }
+
+        var api = this._errorApi()
+        if (!api || typeof api.ServiceError !== 'function' || typeof response.setError !== 'function') {
+            // Fail-open — the pre-#170 behaviour, which is still better than
+            // throwing on an instance where sn_ws_err is unreachable.
+            response.setStatus(status)
+            if (typeof response.setContentType === 'function') {
+                response.setContentType('application/json')
+            }
+            response.setBody(r.body)
+            return
+        }
+
+        var se = new api.ServiceError()
+        se.setStatus(status)
+        se.setMessage(this._errorMessage(body, status))
+        if (typeof se.setDetail === 'function') {
+            se.setDetail(this._errorDetail(body))
+        }
+        response.setError(se)
+    },
+
+    /**
+     * The message a caller actually reads. Never empty — an error that names
+     * only its number is the defect #170 filed, and a body that arrived
+     * without a usable `error` should still say which status it was.
+     */
+    _errorMessage: function (body, status) {
+        var e = body ? body.error : null
+        if (this._nonEmptyString(e)) return e
+        // Tolerate an already-nested envelope rather than emitting '[object Object]'.
+        if (this._isPlainObject(e) && this._nonEmptyString(e.message)) return e.message
+        return 'request failed with status ' + status
+    },
+
+    /** Detail carries the structured body so nothing the handler said is lost. */
+    _errorDetail: function (body) {
+        try {
+            return JSON.stringify(body)
+        } catch (err) {
+            // R-1: `err` untouched.
+            return ''
+        }
+    },
+
+    /** Lazily resolve `sn_ws_err`; an explicitly injected value always wins. */
+    _errorApi: function () {
+        if (this._serviceErrorApiPinned) return this._serviceErrorApi
+        if (this._serviceErrorApi) return this._serviceErrorApi
+        if (typeof sn_ws_err !== 'undefined') {
+            this._serviceErrorApi = sn_ws_err
+            return this._serviceErrorApi
+        }
+        return null
     },
 
     // =======================================================================
