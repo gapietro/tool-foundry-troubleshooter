@@ -8012,6 +8012,14 @@ is not protected. The extractor author — human or agent — **may not read**:
 | `BACKLOG.md` · `GRADE.md` | Row 09's answer again, in the gate rationale — *and `BACKLOG.md` is the file `/next` requires reading, so the session that ranks the board is contaminated by construction* (added §AW11a) |
 | **The project auto-memory** at `~/.claude/projects/-Users-gpietro-…/memory/` | Restated row 09's answer, row 11's row-count claim, and one seed's planted defect. **Injected into every agent run in this directory — not a file an author chooses to open.** Redacted 2026-08-12; see §AW11a (added §AW11a) |
 
+**This table is RETIRED as the operative guard — see §AW11b.** Two further leak sources were found
+outside it (`benchmark/scorecard-v14.md` §5, `benchmark/v14-ambiguity-flags.json`), which is the
+third failure of the same enumeration. The operative boundary is now the closed **allowlist** in
+`benchmark/EXTRACTOR-BRIEF.md` §3; the table above is retained as a redundant explicit deny, and as
+the record of what was thought sufficient. **Also per §AW11b: the author is not told which rows form
+the sensitivity set** — "measured against the three exactly once" below is an instruction to the
+*operator*, not to the author.
+
 The extractor is authored against `benchmark/scorecard-template.md` (report *shape*) and the raw
 report bodies only. **If the author cannot demonstrate it was blind, there is no recall figure** —
 and per §AW8 that means no veracity figure. The burden is on the author to show blinding, not on a
@@ -8225,3 +8233,118 @@ Recorded, not filed as issues, per §AW7 clause 3. **Cost to the figures: none.*
 strictly *narrows* what an author may see, so it can only reduce contamination, never manufacture a
 better recall figure — and that bound is what makes this an amendment rather than a new registered
 term (§AT3).
+
+### AW11b. Defect 11, and the deny-list is retired for an allowlist
+
+Added **2026-08-12**, under §AW11's licence and on the same bound as §AW11a: still before any
+measurement, and every change here strictly *narrows* what an author may see.
+
+**Defect 11 — two leak sources §AW4 never named, found by grep rather than by review.**
+
+Preparing the dispatch brief, a search of the repository for the calibration rows' distinguishing
+tokens returned two sources outside §AW4's table:
+
+| Source | What it leaks |
+|---|---|
+| `benchmark/scorecard-v14.md` §5 | **All three calibration rows' answers in prose** — row 13's nonexistent columns named verbatim, row 11's true count, row 09's fix target. The most complete disclosure in the repository, and the file an author would most naturally open when asked to understand a pass |
+| `benchmark/v14-ambiguity-flags.json` `_caution` | Row 09's answer, in a 2.6 KB metadata file whose name promises nothing but flag counts |
+
+Neither was withheld deliberately; both were written months before this axis was conceived, for
+readers with no reason to be blind. That is the mechanism, and it is not one review catches: **§AW4
+enumerated the sources whose authors knew they held answers.** A file becomes an answer key
+retroactively, when a later instrument declares what the answer is — so the set of leak sources is
+not knowable at the time the deny-list is written.
+
+**The repair is structural, not another two rows.** §AW4's deny-list is retired in favour of a
+closed **allowlist**, stated in `benchmark/EXTRACTOR-BRIEF.md` §3: the author may read
+`scorecard-template.md`, `v14-reports/`, `src/`, `test/`, and the toolchain files. Everything else
+is out of bounds, and a path the author believes it needs is requested from the operator rather than
+self-certified. The deny-list survives only as a redundant paragraph, so that a slip is loud.
+
+**Why the inversion rather than an eleventh and twelfth row.** This is the third instance of one
+shape. §AW11 specified blinding as an enumeration; §AW11a defect 9 found the leak was not a file at
+all; defect 11 finds two more files the enumeration could not have named because their status
+changed after it was written. A guard that has failed three times in the same way is not short two
+entries. **A deny-list is default-admit and therefore open by construction; an allowlist is closed.**
+This is §AM2 arriving for the fourth time — *the boundary that holds is one derived from a state the
+guarded party cannot enter* — and here the derived state is simply *not enumerated as permitted*.
+
+**One further constraint, absent from §AW4 and material.** §AW4 names rows 09, 11 and 13 as the
+sensitivity set; the brief does **not**, and must not. Naming the suspect rows to the author would
+license an extractor that fires on those three and scores 3 of 3 while measuring nothing — the
+answer key reached without reading it. The author processes all twenty uniformly and is told only
+that a subset exists. §AW4's own sentence *"recall is measured against the three exactly once"* is
+an instruction to the **operator**, not to the author, and was not distinguished as such until now.
+
+**Third constraint, recorded because it is the thing that makes the dispatch tractable at all:
+contamination bounds authoring, not execution.** The brief splits the work so the blind author
+*freezes* the extractor and adjudicator, and a later — freely contaminated — operator session fires
+the single sweep. Contamination corrupts judgement about what the instrument should match; once
+frozen, execution is deterministic and the executor cannot influence the result. Without this split
+the pass would need a blind session to also hold live instance credentials and run the burn, which
+compounds two hard constraints for no gain.
+
+**Cost to the figures: none**, on §AW11a's bound. Recorded, not filed as issues, per §AW7 clause 3.
+
+### AW11c. §AW3's control rule is attached to the wrong claim direction — corrected
+
+Added **2026-08-12**, from code review of PR #227, on the same pre-burn bound as §AW11a/b.
+
+§AW3 reads: *"A claimed-absent field is adjudicated `refuted` only when a probe for a field known to
+exist on the same table, in the same auth context, passes in the same call."* **The control is
+attached to the direction that does not need it.**
+
+Refuting a *claimed-absent* field means **observing the field present** — a positive observation,
+self-evidencing, with no failing step to misread. The direction that needs the control is the
+opposite one: a report claiming a field **is present**, refuted by a metadata read that comes back
+**empty**. An empty read and a broken read are the same bytes, which is the entire reason §AW3 exists
+— and as written, §AW3 leaves that case uncontrolled while spending its guard on the safe one.
+
+**Corrected statement, and it is stated over the evidence rather than the claim:**
+
+> **Any verdict whose evidence is a null or absent observation must be control-paired**, in the same
+> call and the same auth context, against something known to be present on the same target. Control
+> fails → `unresolvable`.
+
+Quantifying over the *evidence's* shape rather than the *claim's* covers both directions without the
+adjudicator's author having to classify the claim first — the classification step being where the
+original wording went wrong. §AW3's sentence is superseded by this one; the rest of §AW3 stands.
+
+**Why this is an amendment and not a new registered term**, on §AT3's bound: it strictly *narrows*
+what may be recorded as `refuted`. It adds a control requirement to the claim direction that carries
+the corpus's known false claims, and removes one only where the control was vacuous. It can therefore
+move verdicts from `refuted` to `unresolvable` and never the reverse — it cannot manufacture a better
+figure, in either the veracity or the recall column. **Cost to the figures: none.**
+
+**The finding underneath, worth more than the correction.** §AW3 was written to prevent exactly this
+failure, names the failure correctly in its own prose, and then binds the guard to the wrong operand
+— for the same reason §AW11a's guards did: *the case its author pictured was the one where the
+report says "absent", because that is the shape the guard's motivating example took.* This is the
+fourth time in §AW that a correctly-identified risk got a guard pointed one operand away from it
+(§AF2, §AM, §AW11a defect 9, here). **Naming the risk and binding the guard are separate acts, and
+this project has never yet failed at the first.**
+
+### AW11d. Three further brief defects from the same review, fixed in `EXTRACTOR-BRIEF.md`
+
+Recorded for completeness; none amend a registered term.
+
+- **A second-order leak inside the repair.** The brief's §2 rationale described the motivating defect
+  using a harness token that appears in exactly **2 of the 20 permitted reports**, one of them a
+  calibration row — so a compliant author meeting it in the corpus could recognise the described
+  defect and tune toward it. Rewritten to state the defect's *shape* with no vocabulary shared with
+  the corpus. **This is defect 11's mechanism reappearing inside defect 11's own fix** (a string
+  becomes answer-key material retroactively), and it was found by review rather than by the
+  answer-token grep, because the grep was keyed to row-distinguishing tokens and this token is
+  generic. **The scan that clears an artifact must be keyed to the corpus, not to the answer.**
+- **The allowlist's `src/**`, `test/**` rows admitted `benchmark/seed-app/src/**`** — the fixtures'
+  Fluent source, which declares their true structure. A `grep -r` from the repo root reaches it
+  without the author opening anything on the redundant deny list. Rows anchored to `./src`, `./test`,
+  with the nested tree named. **An allowlist inherits the ambiguity of its path syntax**, which is
+  the one way a closed list can still be default-admit.
+- **§1 enumerated three target claim shapes that mapped one-to-one onto the calibration rows' three
+  false claims** — a weaker form of the same leak, and in tension with §AW5's E-2 besides. Replaced
+  with the defining property (*true or false of the instance independent of diagnosis quality*) and
+  an explicit instruction not to infer a shape list. §AW11a defect 10's ruling stands — the *class*
+  is unavoidably disclosed by any brief — but a 1:1 enumeration is narrower than the class.
+  Temporal scope stated separately (§2.2 of the brief): the reference state is the run, not today,
+  so state-dependent claims are `unresolvable` by construction rather than by judgement.
