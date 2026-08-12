@@ -163,6 +163,191 @@ describe('PaLlmProxy.reason — retry contract', () => {
         expect(retryPrompt).toEqual(expect.stringContaining('diagnose this'))
     })
 
+    // =======================================================================
+    // #188 — the collapsed-envelope failure class
+    //
+    // Measured live on gpinst01 (v14 rows 06 and 08, runs TR1000300 /
+    // TR1000302, `sys_generative_ai_log` 09c46b8f… and a5c4ab8f…): the model
+    // emitted a TOOL NAME in the action slot —
+    //
+    //     {"action": "agent_config", "args": {"agent": "Seed 05 …"}}
+    //
+    // — which `_parseResponse` correctly rejects, since the action vocabulary
+    // is tool_call | answer | fix_report. The parser is not the defect.
+    //
+    // The defect is that the ONE allowed retry cannot recover this class: the
+    // re-prompt answered every parse failure with FORMATTING advice ("JSON
+    // only … no prose, no markdown fence"), and that response was already
+    // flawless JSON with no prose and no fence. The model was told to fix the
+    // one thing it had not got wrong, so it changed nothing — the retry
+    // response was BYTE-IDENTICAL to the first on both runs, and the custom
+    // arm could not diagnose a no-execution scenario at all.
+    //
+    // The re-prompt must therefore answer the failure it actually got.
+    // =======================================================================
+
+    test('#188 unknown action naming a tool: the re-prompt teaches the envelope, not formatting', () => {
+        const collapsed = '{"action":"agent_config","args":{"agent":"Seed 05 Ticket Acknowledger"}}'
+        const stub = stubInvoke([
+            { success: true, text: collapsed },
+            { success: true, text: '{"action":"tool_call","tool":"agent_config","args":{"agent":"Seed 05 Ticket Acknowledger"}}' },
+        ])
+        const proxy = load({ invoke: stub.fn })
+
+        const result = proxy.reason('diagnose this')
+
+        expect(stub.calls.length).toBe(2)
+        const retryPrompt = stub.calls[1].prompt
+
+        // It must name the offending value and say what it actually is.
+        expect(retryPrompt).toEqual(expect.stringContaining('agent_config'))
+
+        // It must restate the legal vocabulary — the thing the model got
+        // wrong — rather than only repeating the JSON-shape advice.
+        expect(retryPrompt).toEqual(expect.stringContaining('tool_call'))
+        expect(retryPrompt).toEqual(expect.stringContaining('answer'))
+        expect(retryPrompt).toEqual(expect.stringContaining('fix_report'))
+
+        // And it must show the rewrap concretely, since "matching the required
+        // schema exactly" is precisely what the model already believed it did.
+        expect(retryPrompt).toEqual(
+            expect.stringContaining('"action":"tool_call","tool":"agent_config"')
+        )
+
+        // The recovery this whole test exists for.
+        expect(result.success).toBe(true)
+        expect(result.retried).toBe(true)
+        expect(result.action.action).toBe('tool_call')
+        expect(result.action.tool).toBe('agent_config')
+    })
+
+    test('#188 the "JSON only" invariant and the original prompt survive the new branch', () => {
+        const stub = stubInvoke([
+            { success: true, text: '{"action":"agent_config","args":{}}' },
+            { success: true, text: '{"action":"answer","text":"ok"}' },
+        ])
+        const proxy = load({ invoke: stub.fn })
+
+        proxy.reason('diagnose this')
+
+        const retryPrompt = stub.calls[1].prompt
+        // Task 2 brief, Step 4 — the literal phrase is contractual on EVERY
+        // re-prompt, not only the generic one.
+        expect(retryPrompt).toEqual(expect.stringContaining('JSON only'))
+        expect(retryPrompt).toEqual(expect.stringContaining('diagnose this'))
+    })
+
+    test('#188 a non-vocabulary parse failure still gets the generic formatting advice', () => {
+        const stub = stubInvoke([
+            { success: true, text: 'not json at all' },
+            { success: true, text: '{"action":"answer","text":"ok"}' },
+        ])
+        const proxy = load({ invoke: stub.fn })
+
+        proxy.reason('diagnose this')
+
+        const retryPrompt = stub.calls[1].prompt
+        expect(retryPrompt).toEqual(expect.stringContaining('no markdown fence'))
+        // No envelope lecture where the failure was not about the envelope.
+        expect(retryPrompt).not.toEqual(expect.stringContaining('is a TOOL'))
+    })
+
+    // =======================================================================
+    // #192 review — the same defect in its remaining slots.
+    //
+    // The first fix covered `unknown action:` only. Four neighbours were left
+    // getting formatting advice for non-formatting failures, and the new
+    // branch itself had three ways to emit useless or self-contradictory
+    // guidance. Each case below is one of them.
+    // =======================================================================
+
+    /** Drives one re-prompt and returns it, without asserting on recovery. */
+    function retryPromptFor(firstText) {
+        const stub = stubInvoke([
+            { success: true, text: firstText },
+            { success: true, text: '{"action":"answer","text":"ok"}' },
+        ])
+        load({ invoke: stub.fn }).reason('diagnose this')
+        return stub.calls[1].prompt
+    }
+
+    test('#192 the nearest neighbour — right action word, missing tool key — names the key', () => {
+        // The collapse one slot over. This used to get "no markdown fence".
+        const prompt = retryPromptFor('{"action":"tool_call","args":{"agent":"Seed 05"}}')
+
+        expect(prompt).toEqual(expect.stringContaining('"tool" key'))
+        expect(prompt).toEqual(expect.stringContaining('"action":"tool_call","tool":"<tool name>"'))
+        expect(prompt).not.toEqual(expect.stringContaining('no markdown fence'))
+    })
+
+    test('#192 the other two structural failures name their missing key too', () => {
+        expect(retryPromptFor('{"action":"answer"}')).toEqual(
+            expect.stringContaining('"text" key')
+        )
+        expect(retryPromptFor('{"action":"fix_report","report":"not an object"}')).toEqual(
+            expect.stringContaining('"report" object')
+        )
+    })
+
+    test('#192 the not-an-object reason maps to object advice — though the brace-slice hides it', () => {
+        // Reachability note, found writing this test: `_parseResponse` slices
+        // from the first `{` to the last `}`, so `[{"action":"answer",…}]`
+        // yields the INNER object and parses clean — no retry at all. A slice
+        // bounded by braces can only parse to an object or throw, so
+        // 'parsed value is not a JSON object' is unreachable through reason().
+        // The mapping is kept as defensive cover for that contract changing,
+        // and is asserted directly rather than through a fake end-to-end path.
+        const proxy = load({})
+        const prompt = proxy._buildRetryPrompt('p', 'parsed value is not a JSON object')
+
+        expect(prompt).toEqual(expect.stringContaining('single JSON OBJECT'))
+        expect(prompt).not.toEqual(expect.stringContaining('no markdown fence'))
+    })
+
+    test('#192 an array wrapping one object still parses via the brace-slice, no retry', () => {
+        const stub = stubInvoke([{ success: true, text: '[{"action":"answer","text":"x"}]' }])
+        const result = load({ invoke: stub.fn }).reason('diagnose this')
+
+        expect(stub.calls.length).toBe(1)
+        expect(result.success).toBe(true)
+        expect(result.action).toEqual({ action: 'answer', text: 'x' })
+    })
+
+    test('#192 a legal action mangled by whitespace gets whitespace advice, not a contradiction', () => {
+        const prompt = retryPromptFor('{"action":"tool_call ","tool":"agent_config"}')
+
+        expect(prompt).toEqual(expect.stringContaining('stray space'))
+        // The contradiction the review caught: telling the model that
+        // "tool_call" is not one of tool_call/answer/fix_report.
+        expect(prompt).not.toEqual(expect.stringContaining('is not one of the three legal values'))
+    })
+
+    test('#192 a quote in the action value cannot make the exemplar itself invalid JSON', () => {
+        const prompt = retryPromptFor('{"action":"call \\"agent_config\\"","args":{}}')
+
+        // Pull the exemplar back out and prove it parses.
+        const exemplar = /(\{"action":"tool_call","tool":.*?,"args":\{\.\.\.\}\})/.exec(prompt)
+        expect(exemplar).not.toBeNull()
+        const probe = exemplar[1].replace('{...}', '{}')
+        expect(() => JSON.parse(probe)).not.toThrow()
+        expect(JSON.parse(probe).tool).toBe('call "agent_config"')
+    })
+
+    test('#192 a non-string action falls back to generic rather than lecturing about [object Object]', () => {
+        const prompt = retryPromptFor('{"action":{"name":"agent_config"},"args":{}}')
+
+        expect(prompt).not.toEqual(expect.stringContaining('[object Object]" is a TOOL'))
+        expect(prompt).toEqual(expect.stringContaining('no markdown fence'))
+    })
+
+    test('#192 a newline inside the action value still reaches the envelope branch', () => {
+        const prompt = retryPromptFor('{"action":"agent_config\\n(the tool)","args":{}}')
+
+        // Previously `.` could not cross the newline, so this silently fell
+        // through to formatting advice.
+        expect(prompt).toEqual(expect.stringContaining('is a TOOL you want to call'))
+    })
+
     test('malformed twice: failure, carries the raw text, no third call', () => {
         const stub = stubInvoke([
             { success: true, text: 'nope' },

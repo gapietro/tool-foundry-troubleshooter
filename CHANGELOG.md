@@ -17,6 +17,54 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1112 — 2026-08-11
+
+**The retry answers the failure it actually got (#188).** `src/server/PaLlmProxy.js` +
+`test/PaLlmProxy.test.js`. Deployed to gpinst01; v14 is merged, so §T9's `src/` freeze is lifted.
+
+- **Root cause, from the model output itself** (`sys_generative_ai_log` `09c46b8f…`, `a5c4ab8f…`
+  for v14 rows 06/08): the model collapsed the two-level envelope and put a TOOL NAME in the
+  action slot — `{"action":"agent_config","args":{…}}`. `_parseResponse` is right to reject it;
+  the action vocabulary is `tool_call | answer | fix_report`. **The parser is not the defect.**
+- **The defect is the retry.** `_buildRetryPrompt` answered *every* parse failure with formatting
+  advice ("JSON only … no prose, no markdown fence"), and that response was already flawless JSON
+  with no prose and no fence. Told to fix what it had not got wrong, the model returned a
+  **byte-identical** response on both runs. The `unknown action:` branch now names the offending
+  value, restates the legal vocabulary, and shows the rewrap. Kept free of any `PaToolRegistry`
+  dependency — the guidance is conditional ("if X is a tool"), so it is also correct for a
+  hallucinated name.
+- **Two of #188's premises did not survive and are withdrawn.** `agent_config` was never a legal
+  *action* (rows 02/04 used it as a *tool*, a different slot), and prompt assembly does **not**
+  differ by request shape — `_buildPrompt` is single-sourced, pushing `promptBlock` and
+  `_responseContract()` unconditionally. The parser is in `PaLlmProxy.js`, not `PaAgentLoop.js`.
+- **Attribution limit, stated plainly.** Two post-fix seed-05 reps (`TR1000315`, `TR1000316`) both
+  cleared the parse layer — but **neither collapsed the envelope, so the repaired branch was never
+  exercised live.** The improvement is proven by unit test, *not* attributable to this change by
+  the live runs. The 2/2-then-0/2 split suggests the collapse is stochastic rather than
+  deterministic; four runs cannot settle that.
+- **Review of PR #192 found the same defect in five more slots, all fixed here.** The sibling
+  structural failures (`tool_call is missing a tool name`, `answer is missing text`, `fix_report
+  is missing a report object`) were still getting formatting advice for non-formatting problems —
+  including `{"action":"tool_call","args":{…}}`, the *nearest neighbour* of the observed collapse.
+  They now name the missing key. In the new branch itself: a legal action mangled by invisible
+  whitespace trimmed back to a legal value and produced the self-contradiction *"tool_call" is not
+  one of tool_call/answer/fix_report*; an offender containing a quote made the **exemplar itself**
+  invalid JSON (now `JSON.stringify`d); a non-string action produced an `[object Object]` lecture
+  (now falls back to generic); and `.` could not cross a newline, so a multi-line action value
+  bypassed the branch (now `[\s\S]` with an 80-char cap).
+- **Incidental, found while testing:** `_parseResponse` slices from the first `{` to the last `}`,
+  so an array wrapping one object parses clean and `parsed value is not a JSON object` is
+  **unreachable** through `reason()`. Its advice mapping is kept as defensive cover and asserted
+  directly rather than through a fabricated end-to-end path.
+- **A second, distinct blocker found and NOT fixed here.** Both post-fix reps reached fix-report
+  validation and failed the **two-distinct-sources evidence rule**, having filed a report with
+  **zero tool calls** (no `x_snc_troubleshoot_audit` rows), so there were no sources to cite.
+  #188's headline — the custom arm cannot diagnose a no-execution scenario — **still stands**;
+  the collapsed envelope was the first of at least two causes. Filed separately rather than
+  fixed alongside, because the remedy touches the depth gate and the gate is scored instrument.
+
+---
+
 ## 2026.08.1111 — 2026-08-11
 
 **The smoke gate keeps its target; its second answer is recorded, not binding (#185).** Ruling in
