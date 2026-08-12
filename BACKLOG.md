@@ -60,7 +60,7 @@ registered prediction with no trigger firing while correctness collapsed **4/4 �
 |---|---|---|
 | **1** | **#212 — commission the correctness axis** (`next`) · **Stage 2, in flight** | Removes the release blocker above. It is the only open item that touches the current gate, and §5.2 says no further sharpening of the existing instrument can substitute for it. ~~**Design before build** — `/design-spar` first~~ **Design gate discharged 2026-08-12** (§AW, PR #225). Next action: author the extractor **blind**, freeze it, then burn the calibration set once. See *The blinding constraint* below before starting work — it changes **who** may do it. |
 | 2 | **#216 — no retention or purge for captured customer data** (F-04) | Named one of grade sitting 1's *three largest risks*, and the only open finding that is a **privacy** problem rather than a rigor problem. Blocks the **next** gate (installable on a customer instance / handoff), not this one — so it ranks below #1 but above everything else on the board. |
-| 3 | **#220 — no automated integration tier** (F-07) | The one grade cap still standing after PR #222 lifted *No mandatory CI → B*. **Does not bind today** — raw 72.9 already sits below B+ — so it only starts costing once the score rises. Ranks as the gating item for grade sitting 2, not for now. |
+| 3 | **#220 — no automated integration tier** (F-07) · **deploy half shipped, PR #229** | The one grade cap still standing after PR #222 lifted *No mandatory CI → B*. **Does not bind today** — raw 72.9 already sits below B+ — so it only starts costing once the score rises. Ranks as the gating item for grade sitting 2, not for now. **Worked out of order 2026-08-12** because #1 is un-workable from a session that has run `/next` (see the blinding constraint) and this was the ranked item a contaminated session could touch. `npm run smoke` now covers **deploy**: build → install → compare all 160 `dist/app/update/*.xml` records against the instance. **The runtime half is NOT done** — creating a run needs an authenticated write and the `now-sdk` CLI has none, so it stays a live-MCP exercise. Keep #220 open for it. |
 | — | Phase 2, shrunk — native triage + Fix Report export | The cheapest alternative source of correctness signal: put it in front of real SCs and let production supply the evidence. **Note it does NOT satisfy §5.6 reason 2**, which requires *the custom harness* in front of real users — shipping the native arm reopens nothing, so this buys production evidence on its own merits, not a reopening condition. Ranked below #1 because shipping a UI over an unmeasured diagnosis is the thing #1 exists to prevent. Considered and not chosen 2026-08-12. |
 | — | Close out and package for handoff | `/senior-grade` + `handoff-readiness`. The fallback if #1's design gate concludes a correctness axis cannot be built affordably. Not scheduled. |
 
@@ -139,6 +139,16 @@ Not ranked and not counted as debt. A finding landing here is the register worki
   that spend LLM calls), **#218** (`markRunning` TOCTOU). #218 is here on the grade's own reasoning,
   not by dismissal: it is **deliberate and documented with a stated trade-off**, which is why sitting 1
   reported it P2 *and declined to use it as a cap* — an accidental race would have capped at B.
+- **Six route descriptions exceed the 80-char `short_description` column and are truncated at
+  install.** Measured by the #220 deploy probe on gpinst01, which reports them as `truncated`:
+  `sys_ws_definition` ×1, `sys_ws_operation` ×5. The platform stores the first 80 characters and
+  drops the tail silently. Blocks no gate — the routes work — and the fix is a source edit in
+  `src/fluent/rest-api.now.ts`. Deliberately not filed as an issue and not fixed in PR #229.
+- **Four records cannot be probed at all: `sys_gen_ai_feature_mapping` and
+  `sys_gen_ai_strategy_mapping` return 403 "Insufficient rights to query records" to an admin.**
+  The deploy probe subtracts them from its count rather than passing or failing them, so its
+  headline reads "156 of 160". A standing, disclosed blind spot in the tier — worth knowing before
+  anyone quotes the probe as full coverage.
 - **`DESIGN.md` §5.4 — four corrections to the record** (#183, #187, #110, #107). Facts, not work.
   #187 matters most in practice: **seed 07 must not be used to qualify an ACL behaviour** without
   re-deriving its bar, because its qualification query hits a nonexistent column and a bad field name
