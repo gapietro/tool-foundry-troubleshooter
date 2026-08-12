@@ -7174,3 +7174,99 @@ carried at §AN) applies: a gate prediction not filed may not be claimed afterwa
   frozen. Neither is a lever this section is permitted to pull, and a future section proposing
   either must clear its own bar, not this one's.
 - **Anything about the native arm.** It does not run `_depthGate`.
+
+---
+
+## AR. Verdict — the depth-gate empty-trail floor, measured (`2026.08.1116`, #191)
+
+**§AQ was pre-registered at `4173d6a` and the floor built at `b6d2abe`, both before these reps.
+§A through §AQ are unmodified — `git log -p benchmark/DECISION.md` is the check.** Measurements:
+`benchmark/raw-evidence-v15-aq-floor.md`. Four reps, seed-05 `agent`+`timeframe`, custom arm only,
+gpinst01, 2026-08-11.
+
+### AR1. The scoreboard §AQ4 asked for
+
+| # | prediction | falsified by | measured | verdict |
+|---|---|---|---|---|
+| **AQ-1** (primary) | ≥3 of 4 reps record ≥1 tool call | ≤2 of 4 | **4 of 4** | **PASS** |
+| **AQ-2** | ≥1 of 4 produces a `fix_report` passing validation | 0 of 4 | **2 of 4** | **PASS** |
+| **AQ-3** | zero runs finish `partial` with a floor hold | any such run | **0** | tripwire silent |
+| **AQ-4** | the floor fires on no `execution`-path row | any such hold | **not exercised** | see AR3 |
+
+Baseline was 0 of 4 on AQ-1 and AQ-2 (§AQ4: v14 rows 06/08 died at the parser, `TR1000315`/
+`TR1000316` died at validation, no tool call and no valid report between them). Every rep carries
+the `empty_trail` hold — `transcriptLIKEHOLD (empty_trail)` matches 4 of 4.
+
+**No revert trigger fired.**
+
+1. *Any run finishes `partial` with an `empty_trail` hold.* Zero runs finished `partial`. Not fired.
+2. *More than one rep takes the `capped:true` exit.* **0 of 4** — `transcriptLIKEhold cap was
+   reached` matches nothing. `MAX_HOLDS` is 2 and every rep spent exactly 2 holds, so the cap check
+   was live on all four third-terminal-actions; R1's trail-check-before-cap ordering released them
+   as genuine compliance instead. Threshold was >1. Not fired.
+3. *`_holdBlock`'s `empty_trail` text names a tool.* It does not — text quoted in the evidence
+   §0.4. Not fired.
+
+**The floor stands.**
+
+### AR2. What was NOT predicted, and is the more interesting result
+
+§AQ1 ruled the gate *unholdable by construction* against a report admitting nothing, since
+`unsweptGaps` counts only `NOT_SWEPT`. In all four reps, the turn after the floor fires the model
+stops claiming a blanket `SWEPT` and declares layers honestly `NOT_SWEPT` — which makes the
+**pre-existing `gaps` hold reachable**, and it fires (rep 1 seq 6: *"layer(s) 4, 5, 6 declared
+NOT_SWEPT with no tool call behind them"*).
+
+So the floor did not just buy one tool call. It restored the operand the rest of the gate was
+missing. §AQ2 property 3's claim that the floor "intercepts one path only" is true of the code and
+was never a claim about downstream behaviour; recorded here because a property spec that holds
+literally while the system changes elsewhere is worth naming as a pattern, not smoothing over.
+
+§AQ2 property 5 — the clear the review added, without which the hold block would have survived the
+compliant dispatch and landed on the exact turn AQ-1 and AQ-2 measure — is **verified live**, not
+inferred: the block's text appears in exactly four prompts in `sys_generative_ai_log`, one per run.
+
+### AR3. AQ-4 is untested, and says so
+
+Every rep ran the no-execution (`agent`+`timeframe`) path. **No `execution`-path row ran, so AQ-4
+had nothing to fire on.** It is recorded **not exercised** — not "passed". §AQ4 already ruled that
+a silent tripwire is the null result and must not be read as an improvement the floor earned; the
+same discipline forbids reading an *unrun* tripwire as a clean one. AQ-4 remains open for the first
+pass that puts an execution-path row through this gate.
+
+### AR4. What this closes, and what it does not
+
+**Closes #191's headline.** *"The custom arm files a fix_report with zero tool calls on the
+no-execution path, so the two-distinct-sources evidence rule can never be satisfied"* is refuted:
+4 of 4 call tools and 2 of 4 satisfy the rule. #191 part 2 is done.
+
+**Does not close the path.** Two of four still fail the evidence rule at one distinct source. That
+is a report-quality question this change never claimed (§AQ6, §AC8 unamended).
+
+**No figure is claimed, in either arm.** §AQ4 files no prediction on any gate or pass-level figure
+and ruling 6 (§AI4, carried at §AN) forbids claiming one afterwards. No scorer ran, no packet was
+built, no rubric was applied. The two validated reports are a **determinacy** fact only, and §AO2
+stands: a row can be fully determinate and wrong.
+
+**§AQ3's cost is now incurred and its rule is live.** The custom arm's gate figure is measured
+against a gate with a floor from here on. **A v15+ custom gate figure may be reported absolutely
+and may NOT be differenced against v12 (6/10 native, 0/10 custom), v13 (4/10, 0/10) or v14 (5/10,
+0/10).** The native series is unaffected and §AD7 still requires both arms be quoted together.
+
+**Unblocks #196.** §AQ's four reps are spent, so the `no_layer_report` stale-HOLD fix is no longer
+gated. Its defect did not reproduce on the floor path (AR2 verified the floor's own clear works),
+so #196 stands unmeasured and its one-token fix is unaffected by anything here.
+
+### AR5. A deployment finding that outranks the pass
+
+**The floor was merged and unmerged-from-reality: `b6d2abe` sat in `main` while gpinst01 ran code
+older than both #191 commits.** Caught by the §AQ pre-flight content probe, which is the only
+reason these reps measured the floor rather than its absence.
+
+`sys_updated_on` on this app's script includes **does not move on install** — `PaAgentLoop` read
+`2026-08-02 05:15:25` both before and after an install that provably changed its content. §AN7
+item 1 already forbade trusting a version string; extend it: **trust neither the version string nor
+the row timestamp. Probe content.** A pass that had skipped this probe would have measured the
+pre-floor harness, found the §AQ4 baseline reproducing exactly, and concluded the floor did not
+work — the most expensive kind of wrong answer this project can produce, and it was one skipped
+probe away.
