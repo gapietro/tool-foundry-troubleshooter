@@ -1799,9 +1799,16 @@ describe('depth gate (#103) — _depthGate', () => {
     // claims about one run: the transcript says `audit trail LOST WRITES —
     // this run dispatched 1 tool call(s)` while the gate floors it for having
     // called nothing, burning the whole MAX_HOLDS budget on a false charge.
+    // #200 (§AT) moved the conjunct's counter, not its meaning: the case
+    // below is still exactly the one #191 review finding 1 identified, and
+    // still must not floor. Both counters are set because a real audited
+    // dispatch increments BOTH — `_auditedDispatchCount` is a subset of
+    // `_dispatchCount`, never a replacement, and a test that set only the new
+    // one would describe a state `_dispatchTool` cannot produce.
     test('#191: the floor does NOT fire when the loop dispatched a tool and the trail lost the rows', () => {
         const loop = gateLoop([], 'no_audit_rows', [])
         loop._dispatchCount = 1
+        loop._auditedDispatchCount = 1
 
         const gate = loop._depthGate('RUN1', FIX)
 
@@ -1814,6 +1821,88 @@ describe('depth gate (#103) — _depthGate', () => {
 
         expect(loop._dispatchCount).toBe(0)
         expect(loop._depthGate('RUN1', FIX).kind).toBe('empty_trail')
+    })
+
+    // =====================================================================
+    // #200 / DECISION.md §AT — THE DISARM CONJUNCT READ THE WRONG COUNTER.
+    //
+    // `_dispatchCount` is incremented BEFORE dispatch and counts ATTEMPTS,
+    // deliberately: `_auditContext` uses it to decide whether an empty trail
+    // may CONVICT, so it must overcount. The floor reused it to decide
+    // whether to HOLD, where the same leniency is an escape hatch — one
+    // unknown or refused tool call moved the conjunct off zero permanently
+    // and the floor could never fire again in that run.
+    //
+    // The discriminator is NOT "the dispatch succeeded". It is "the dispatch
+    // reached the registry's audit write": an empty trail is ambiguous only
+    // because a systematic write loss reads like a quiet run, and a call that
+    // never attempted a row cannot explain a missing one. PaToolRegistry
+    // returns on its unknown-tool and destructive gates BEFORE logIntent, and
+    // marks exactly those two returns `dispatched:false`.
+    //
+    // Per §AS3a the deliverable is the test that pins the DISTINCTION, not
+    // the one that pins the fix — the pair below is red/green as a pair.
+    // =====================================================================
+
+    function floorLoop(dispatchResult) {
+        return load({
+            auditLogger: fakeAuditLogger({ available: false, degraded: 'no_audit_rows', tools: [] }),
+            fixReport: fakeFixReport([], []),
+            toolRegistry: fakeTools([dispatchResult]),
+            runManager: fakeRunManager(),
+        })
+    }
+
+    const REFUSED = { success: false, error: 'Unknown tool "bogus".', dispatched: false }
+
+    test('§AT: a REFUSED dispatch does NOT disarm the floor — the empty trail still holds', () => {
+        const loop = floorLoop(REFUSED)
+        loop._dispatchTool('RUN1', { action: 'tool_call', tool: 'bogus', args: {} })
+
+        expect(loop._depthGate('RUN1', FIX).kind).toBe('empty_trail')
+    })
+
+    test('§AT: an EXECUTED dispatch still disarms it — #191 corroboration, unchanged', () => {
+        const loop = floorLoop({ success: true, data: { rows: [] } })
+        loop._dispatchTool('RUN1', { action: 'tool_call', tool: 'schema_lookup', args: {} })
+
+        const gate = loop._depthGate('RUN1', FIX)
+
+        expect(gate.hold).toBe(false)
+        expect(gate.kind).toBe('')
+    })
+
+    // The two counters must DISAGREE on this run — that disagreement is the
+    // whole fix. Collapsing them back into one is what #200 forbids, and
+    // #191 part 1's argument for the lenient one is left verbatim.
+    test('§AT: _dispatchCount keeps its ATTEMPT semantics — a refused call still counts there', () => {
+        const loop = floorLoop(REFUSED)
+        loop._dispatchTool('RUN1', { action: 'tool_call', tool: 'bogus', args: {} })
+
+        expect(loop._dispatchCount).toBe(1)
+        expect(loop._auditedDispatchCount).toBe(0)
+    })
+
+    // Fail direction, pinned: an absent marker COUNTS. A registry that never
+    // learned to mark its refusals — or a core that threw, which audited
+    // logIntent before throwing and therefore could have lost a row — behaves
+    // exactly as it does today, so a stale producer can never manufacture a
+    // hold that was not earned.
+    test('§AT: an ABSENT marker counts as audited — an unmarked result disarms the floor', () => {
+        const loop = floorLoop({ success: false, error: 'the tool failed during dispatch' })
+        loop._dispatchTool('RUN1', { action: 'tool_call', tool: 'schema_lookup', args: {} })
+
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(false)
+    })
+
+    test('§AT: _resetGate clears the audited counter with the rest of the per-run state', () => {
+        const loop = floorLoop({ success: true, data: {} })
+        loop._dispatchTool('RUN1', { action: 'tool_call', tool: 'schema_lookup', args: {} })
+        expect(loop._auditedDispatchCount).toBe(1)
+
+        loop._resetGate()
+
+        expect(loop._auditedDispatchCount).toBe(0)
     })
 
     test('§AQ property 6: _holdNote names empty_trail and does NOT claim a NOT_SWEPT declaration', () => {

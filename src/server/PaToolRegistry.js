@@ -266,6 +266,19 @@ PaToolRegistry.prototype = {
             return {
                 success: false,
                 error: 'Unknown tool "' + toolName + '". Available tools: ' + this.toolNames().join(', ') + '.',
+                // #200 (§AT) — THIS RETURN IS BEFORE `logIntent`, and saying so
+                // is the point. `dispatched:false` marks a call this registry
+                // refused without ever attempting an audit row, so a caller
+                // reasoning about an EMPTY audit trail can tell "nothing was
+                // written because nothing ran" from "nothing was written
+                // because the writes were lost". `PaAgentLoop._depthGate`'s
+                // §AQ floor is that caller; see `_dispatchTool` there.
+                //
+                // Marked on the two PRE-EXECUTION gates only. The catch branch
+                // below is deliberately NOT marked: `logIntent` has already
+                // run by then, so a core that throws did leave a row and its
+                // absence really would be a write loss.
+                dispatched: false,
             }
         }
 
@@ -280,6 +293,9 @@ PaToolRegistry.prototype = {
                     'Tool "' +
                     toolName +
                     '" is not registered as explicitly non-destructive (destructive:false). PaToolRegistry refuses to dispatch destructive or unmarked tools directly — the confirmation flow is Phase 3.',
+                // #200 (§AT) — the second pre-`logIntent` refusal. Same
+                // reasoning as the unknown-tool gate above.
+                dispatched: false,
             }
         }
 
