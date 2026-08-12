@@ -1,0 +1,202 @@
+# Dispatch brief — the claim-veracity extractor (issue #212)
+
+**Read this file first and in full. It is the whole of your instructions.**
+
+You are being asked to author a *blinded* instrument. The reason this brief is long is that three
+previous attempts to blind this work failed, each in a way its designer had not imagined, and every
+constraint below is a repair for a **measured** failure rather than a precaution.
+
+> **This brief contains no answers.** It is safe to read, safe to quote, and safe to carry into a
+> fresh session. It deliberately does not tell you which reports are suspect — see §5.
+
+---
+
+## 1. What you are building
+
+Two artifacts, both authored **before** either is run against the corpus:
+
+**(a) A claim extractor.** Input: the prose body of one diagnostic report. Output: a list of
+discrete, machine-checkable factual claims the report makes *about the ServiceNow instance* — the
+kind of claim that is either true or false of the instance, independent of whether the diagnosis is
+good. Claims about schema (a table has / does not have a field), about record existence, and about
+counts are the target shape. Recommendations, judgements, and hedges are not claims.
+
+**(b) A deterministic adjudicator.** Input: one extracted claim. Output: exactly one of three
+verdicts, defined in §2. It performs a **metadata membership test** against a live instance. It
+contains **no model call and no rubric.** If a claim cannot be reduced to a deterministic test, the
+adjudicator returns `unresolvable` — it never escalates to a judge.
+
+The split is load-bearing: extraction is a language problem, adjudication is not. Do not blur them.
+
+---
+
+## 2. The three-valued verdict — two-valued is forbidden
+
+| Verdict | Meaning |
+|---|---|
+| `refuted` | The instance contradicts the claim, **and a positive control passed** |
+| `supported` | The instance corroborates the claim |
+| `unresolvable` | Cannot be adjudicated — mutable state, ambiguous probe result, or a control that did not pass |
+
+**Why three and not two, in this project's own words:**
+
+> *An instrument's inability to observe must never be recorded as an observation.*
+
+This repo shipped a defect where a data sweep against the wrong table returned "genuinely empty",
+which read as a positive finding and licensed a confident wrong conclusion. An oracle that collapses
+*"I cannot see"* into *"the claim is false"* reproduces the exact defect it exists to detect. A
+`refuted` you cannot stand behind is worse than an `unresolvable`.
+
+### 2.1 Two probe rules that are not negotiable
+
+1. **Field existence is decided by membership in the `sys_dictionary` field list — never by whether
+   a query filtered on that field succeeds.** On this platform a *nonexistent field name* comes back
+   as `Access denied`, byte-identical to a genuinely missing read ACL. The query path can lie; the
+   metadata path has no failing step to misread.
+2. **Every negative is control-paired.** A claimed-absent field is `refuted` only when, *in the same
+   call and the same auth context*, a probe for a field **known to exist on that same table** passes.
+   Control fails → `unresolvable`, never `refuted`. A null result is worth exactly its probe's
+   sensitivity, so the control is recorded next to the null, always.
+
+---
+
+## 3. What you may read — an allowlist, and it is closed
+
+**Read only these paths. Everything else in the repository is out of bounds, including files that
+look harmless, files you are merely curious about, and files referenced by the ones below.**
+
+| Path | Why it is permitted |
+|---|---|
+| `benchmark/EXTRACTOR-BRIEF.md` | This file |
+| `benchmark/scorecard-template.md` | The report *shape* — the only description of report structure you get |
+| `benchmark/v14-reports/*.md` | The 20 raw report bodies. **This is your corpus and your only sample of real report prose** |
+| `src/**`, `test/**` | Codebase conventions, ES5/Rhino constraints, existing test style |
+| `package.json`, `eslint.config.mjs` | Toolchain |
+
+**This is an allowlist, not a deny-list, and the inversion is deliberate.** Previous versions of this
+procedure enumerated forbidden files. Enumeration covers the cases its author thought of; three
+separate leak sources were later found that the list did not name, the last two on the day this brief
+was written. A closed allowlist has no default-admit.
+
+**If you believe you need a path not listed above, stop and ask the operator.** Do not decide for
+yourself that a file is safe. You are not in a position to know — that is the entire point of §5.
+
+**Specifically and without exception, do not open** `benchmark/DECISION.md`, `BACKLOG.md`,
+`GRADE.md`, `CHANGELOG.md`, `DESIGN.md`, `benchmark/README.md`, `benchmark/v14-rows.json`,
+`benchmark/scorecard-v14.md`, `benchmark/v14-ambiguity-flags.json`, `benchmark/scoring-v14/**`, or
+any `benchmark/raw-evidence-*.md`. This list is redundant with the allowlist and is given only so
+that a slip is obvious rather than subtle.
+
+---
+
+## 4. Abort tripwire — check this before your first action, and again if anything surfaces
+
+**If, at any point, you find you already know a specific fact about a specific numbered report in
+this corpus — which one is wrong, what it got wrong, a row count, a field name it named — STOP.**
+
+Do not write a line. Do not attempt to "set it aside" or compensate. Report to the operator:
+what you know, and where it appeared. The dispatch is abandoned and re-run from a clean session.
+
+**Two authors have already hit this tripwire and both aborted correctly. Aborting is a success.**
+Producing a contaminated extractor is the only failure mode that cannot be repaired afterwards,
+because the material it would be validated against can be spent exactly once.
+
+---
+
+## 5. Why you are not told which reports are suspect
+
+A small subset of the 20 reports is known to contain a false claim. **You are not told which, and
+you must not try to work it out.** Process all 20 uniformly.
+
+If you knew the subset, an extractor tuned to fire on those reports would score perfect recall while
+measuring nothing — the instrument would be validated against its own answer key. The recall figure
+is the only evidence that the extractor works at all, and per the registration **a veracity figure
+may not be reported without its recall figure**. Contaminate the recall and the entire pass produces
+no reportable number.
+
+**The corollary that catches people:** do not iterate. Do not build the extractor, look at which
+claims it emitted for which reports, form a theory about which ones matter, and refine. Write it
+against report *shape*, freeze it, hand it back. It is not tuned, by design, and an untuned honest
+recall figure is the deliverable — including if that figure is bad.
+
+---
+
+## 6. Contamination applies to authoring, not to execution
+
+**You do not run the sweep.** You author, freeze, and hand back. The operator fires the single
+sweep afterwards.
+
+This is not an arbitrary split. Contamination corrupts *judgement* — decisions about what the
+extractor should match. Once the extractor and adjudicator are frozen, executing them is
+deterministic, so who runs them cannot influence the result. A contaminated session may safely
+execute a blind instrument; it may not author one.
+
+---
+
+## 7. Acceptance criteria
+
+- **Runs on this codebase's toolchain.** Match existing `src/` conventions; ES5/Rhino-safe if any
+  part is destined for the platform (no `Set`, no `Map`, no arrow functions in platform-bound code).
+  `npx eslint` clean.
+- **Unit tests, written first.** Test the extractor against report prose *you author yourself* as
+  fixtures — not against corpus reports whose claims you have adjudicated. The extractor's behaviour
+  on the corpus must be unobserved until the burn.
+- **The adjudicator is separately testable with the instance stubbed.** Its three-way branch,
+  including the control-failure path, must have a test each. The control-failure → `unresolvable`
+  path is the one that matters most and the one easiest to leave uncovered.
+- **No network calls at import time.** The instance client is injected, not constructed inline.
+- **Deterministic output ordering**, so two runs over the same input diff cleanly.
+
+---
+
+## 8. What you must return
+
+A short written handback containing:
+
+1. **What you built** — files, entry points, how the operator invokes the sweep.
+2. **Extraction heuristics, stated plainly** — what counts as a claim and what you deliberately
+   excluded. This is the document a reviewer checks for shape.
+3. **Known limitations** — claim shapes you expect to miss. Be generous here; an honest predicted
+   miss costs nothing, and a surprise miss after the burn costs the figure.
+4. **The blinding attestation** (§9). Without it there is no recall figure, and therefore no
+   veracity figure, and therefore no pass.
+
+**Reviewers will check shape, lint and tests only.** Nobody will steer your claim-detection
+heuristics, because everyone else on this project is contaminated and steering from a contaminated
+position is tuning against the answer key at one remove — which voids the figure just as surely as
+reading the key would.
+
+---
+
+## 9. The blinding attestation — mandatory, and the second question is the one that counts
+
+Return both answers in writing, even when the answer is "none".
+
+1. **Every file you opened**, as a list. Not a summary — the list.
+2. **"Did any system-injected context — a memory file, a project reminder, an environment note, a
+   pre-loaded instruction, anything you did not choose to open — surface facts about specific
+   numbered reports in this corpus?"**
+
+Question 2 is mandatory because question 1 cannot discharge the burden. **An author cannot list what
+it never chose to read.** Both previous contaminations arrived through injected context while the
+read-log stayed clean, and question 2 is the only check that caught either. A reviewer cannot answer
+it from outside your session — which is why it is asked of you, and why the burden of demonstrating
+blindness sits with you rather than with a reviewer to demonstrate contamination.
+
+The calibration material cannot be re-spent to settle an argument about whether you were blind. An
+unresolved doubt therefore resolves against the instrument, not in its favour.
+
+---
+
+## 10. For the operator dispatching this
+
+**Do not dispatch this as a subagent from a session that has run `/next`, read `BACKLOG.md`, or
+opened any file in §3's exclusion paragraph.** Blinding is a property of the *dispatching session*,
+not of the author: project context is injected into every agent spawned from a project-scoped
+session, and a session that has already loaded contaminated material carries it into every agent it
+spawns — measured, not assumed, including one case where the author was placed outside the
+repository entirely and *still* quoted material that had already been redacted from disk.
+
+Start a **new session**, in a scope that never carried the answer, and give it this file's path.
+
+Neither a neutral working directory nor a redacted memory file is sufficient on its own.

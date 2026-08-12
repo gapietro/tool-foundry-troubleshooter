@@ -8012,6 +8012,14 @@ is not protected. The extractor author — human or agent — **may not read**:
 | `BACKLOG.md` · `GRADE.md` | Row 09's answer again, in the gate rationale — *and `BACKLOG.md` is the file `/next` requires reading, so the session that ranks the board is contaminated by construction* (added §AW11a) |
 | **The project auto-memory** at `~/.claude/projects/-Users-gpietro-…/memory/` | Restated row 09's answer, row 11's row-count claim, and one seed's planted defect. **Injected into every agent run in this directory — not a file an author chooses to open.** Redacted 2026-08-12; see §AW11a (added §AW11a) |
 
+**This table is RETIRED as the operative guard — see §AW11b.** Two further leak sources were found
+outside it (`benchmark/scorecard-v14.md` §5, `benchmark/v14-ambiguity-flags.json`), which is the
+third failure of the same enumeration. The operative boundary is now the closed **allowlist** in
+`benchmark/EXTRACTOR-BRIEF.md` §3; the table above is retained as a redundant explicit deny, and as
+the record of what was thought sufficient. **Also per §AW11b: the author is not told which rows form
+the sensitivity set** — "measured against the three exactly once" below is an instruction to the
+*operator*, not to the author.
+
 The extractor is authored against `benchmark/scorecard-template.md` (report *shape*) and the raw
 report bodies only. **If the author cannot demonstrate it was blind, there is no recall figure** —
 and per §AW8 that means no veracity figure. The burden is on the author to show blinding, not on a
@@ -8225,3 +8233,55 @@ Recorded, not filed as issues, per §AW7 clause 3. **Cost to the figures: none.*
 strictly *narrows* what an author may see, so it can only reduce contamination, never manufacture a
 better recall figure — and that bound is what makes this an amendment rather than a new registered
 term (§AT3).
+
+### AW11b. Defect 11, and the deny-list is retired for an allowlist
+
+Added **2026-08-12**, under §AW11's licence and on the same bound as §AW11a: still before any
+measurement, and every change here strictly *narrows* what an author may see.
+
+**Defect 11 — two leak sources §AW4 never named, found by grep rather than by review.**
+
+Preparing the dispatch brief, a search of the repository for the calibration rows' distinguishing
+tokens returned two sources outside §AW4's table:
+
+| Source | What it leaks |
+|---|---|
+| `benchmark/scorecard-v14.md` §5 | **All three calibration rows' answers in prose** — row 13's nonexistent columns named verbatim, row 11's true count, row 09's fix target. The most complete disclosure in the repository, and the file an author would most naturally open when asked to understand a pass |
+| `benchmark/v14-ambiguity-flags.json` `_caution` | Row 09's answer, in a 2.6 KB metadata file whose name promises nothing but flag counts |
+
+Neither was withheld deliberately; both were written months before this axis was conceived, for
+readers with no reason to be blind. That is the mechanism, and it is not one review catches: **§AW4
+enumerated the sources whose authors knew they held answers.** A file becomes an answer key
+retroactively, when a later instrument declares what the answer is — so the set of leak sources is
+not knowable at the time the deny-list is written.
+
+**The repair is structural, not another two rows.** §AW4's deny-list is retired in favour of a
+closed **allowlist**, stated in `benchmark/EXTRACTOR-BRIEF.md` §3: the author may read
+`scorecard-template.md`, `v14-reports/`, `src/`, `test/`, and the toolchain files. Everything else
+is out of bounds, and a path the author believes it needs is requested from the operator rather than
+self-certified. The deny-list survives only as a redundant paragraph, so that a slip is loud.
+
+**Why the inversion rather than an eleventh and twelfth row.** This is the third instance of one
+shape. §AW11 specified blinding as an enumeration; §AW11a defect 9 found the leak was not a file at
+all; defect 11 finds two more files the enumeration could not have named because their status
+changed after it was written. A guard that has failed three times in the same way is not short two
+entries. **A deny-list is default-admit and therefore open by construction; an allowlist is closed.**
+This is §AM2 arriving for the fourth time — *the boundary that holds is one derived from a state the
+guarded party cannot enter* — and here the derived state is simply *not enumerated as permitted*.
+
+**One further constraint, absent from §AW4 and material.** §AW4 names rows 09, 11 and 13 as the
+sensitivity set; the brief does **not**, and must not. Naming the suspect rows to the author would
+license an extractor that fires on those three and scores 3 of 3 while measuring nothing — the
+answer key reached without reading it. The author processes all twenty uniformly and is told only
+that a subset exists. §AW4's own sentence *"recall is measured against the three exactly once"* is
+an instruction to the **operator**, not to the author, and was not distinguished as such until now.
+
+**Third constraint, recorded because it is the thing that makes the dispatch tractable at all:
+contamination bounds authoring, not execution.** The brief splits the work so the blind author
+*freezes* the extractor and adjudicator, and a later — freely contaminated — operator session fires
+the single sweep. Contamination corrupts judgement about what the instrument should match; once
+frozen, execution is deterministic and the executor cannot influence the result. Without this split
+the pass would need a blind session to also hold live instance credentials and run the burn, which
+compounds two hard constraints for no gain.
+
+**Cost to the figures: none**, on §AW11a's bound. Recorded, not filed as issues, per §AW7 clause 3.

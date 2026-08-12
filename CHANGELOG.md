@@ -17,6 +17,53 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1209 — 2026-08-12
+
+### The dispatch brief, and a deny-list retired for an allowlist after its third failure
+
+`/next` re-ranked and the board did not move: **#212 stays #1 and stays `next`**, 1 blocker to the
+gate, 0 open PRs, 6 open issues (3 on the register). The deliverable is the artifact the previous
+release's two aborted dispatches lacked: **`benchmark/EXTRACTOR-BRIEF.md`**, the answer-free brief a
+clean session can be handed to author the claim-veracity extractor blind.
+
+Writing it surfaced **defect 11**, before any measurement, and it is the same shape as the two in
+§AW11a. A grep for the calibration rows' distinguishing tokens returned two leak sources `DECISION.md`
+§AW4 never named: **`benchmark/scorecard-v14.md` §5**, which discloses all three calibration answers
+in prose and is the file an author would most naturally open to understand a pass, and
+**`benchmark/v14-ambiguity-flags.json`** `_caution`, which restates one of them in a metadata file
+whose name promises only flag counts. Neither was withheld deliberately — both predate the axis. That
+is the mechanism, and review does not catch it: **a file becomes an answer key retroactively**, when a
+later instrument declares what the answer is, so the set of leak sources is not knowable when the
+deny-list is written.
+
+The repair is structural rather than two more rows. **The deny-list is retired for a closed
+allowlist** (brief §3): the author may read the scorecard template, the 20 raw report bodies, `src/`,
+`test/` and the toolchain, and requests anything else from the operator instead of self-certifying it.
+A deny-list is default-admit and therefore open by construction. This is the third failure of one
+enumeration — §AW11 specified blinding as a list, §AW11a defect 9 found the leak was not a file at
+all, defect 11 found two files the list could not have named — and **a guard that has failed three
+times the same way is not short two entries.** §AM2 for the fourth time: the boundary that holds is
+derived, not enumerated.
+
+Two further constraints, both absent from the registration and both material:
+
+- **The author is not told which rows form the sensitivity set.** §AW4 names them; the brief must not.
+  An extractor tuned to fire on exactly those three scores perfect recall while measuring nothing —
+  the answer key reached without reading it. §AW4's *"measured against the three exactly once"* is an
+  instruction to the **operator**, and was not distinguished as such until now.
+- **Contamination bounds authoring, not execution.** The blind author freezes the extractor and
+  adjudicator; a freely contaminated operator session fires the single sweep. Contamination corrupts
+  judgement about what the instrument should match; once frozen, adjudication is deterministic and
+  the executor cannot influence the result. Without the split, a blind session would also have to
+  hold live instance credentials and burn the calibration set.
+
+Recorded in `DECISION.md` **§AW11b** with §AW4's table marked retired, and in `BACKLOG.md`. Docs only
+— no `src/` change, no run fired. **The calibration set is still unspent and the instrument intact;
+cost to the figures remains none**, on §AW11a's bound that every change here strictly narrows what an
+author may see.
+
+---
+
 ## 2026.08.1208 — 2026-08-12
 
 ### Blinding is a property of the dispatching session — found by two aborted dispatches, before any measurement

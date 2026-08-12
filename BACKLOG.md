@@ -88,10 +88,24 @@ may not read. Two consequences that are easy to lose across a `/clear`:
    answer. See §AW11a for the full finding and for defect 10 (`scorecard-template.md` §A2 discloses
    a seed's decoy — ruled acceptable, seed 04 is not in the corpus).
 
-**Status 2026-08-12:** two dispatches, two aborts, nothing authored. Project auto-memory **redacted**
-(backup outside the repo). **Nothing reviewed, nothing merged, and the calibration burn has not
-fired — the instrument is intact and the cost so far is two dispatches.** Next action is a fresh
-session, not another subagent.
+**Status 2026-08-12 (updated):** two dispatches, two aborts, nothing authored. Project auto-memory
+**redacted** (backup outside the repo). **Nothing reviewed, nothing merged, and the calibration burn
+has not fired — the instrument is intact and the cost so far is two dispatches.**
+
+**The dispatch brief now exists: `benchmark/EXTRACTOR-BRIEF.md`.** It is answer-free by construction
+and safe to hand to a clean session. Three things changed with it, all in `DECISION.md` §AW11b:
+
+1. **Defect 11** — two more leak sources §AW4 never named (`benchmark/scorecard-v14.md` §5, which
+   discloses all three calibration answers in prose, and `benchmark/v14-ambiguity-flags.json`
+   `_caution`). Found by grep, not by review. **The deny-list is retired for a closed allowlist**;
+   a guard that has failed three times the same way is not short two entries.
+2. **The author is not told which rows are the sensitivity set.** Naming them would license an
+   extractor that fires on exactly those three and scores perfect recall while measuring nothing.
+3. **The blind author freezes; a contaminated operator fires the sweep.** Contamination bounds
+   *authoring*, not *execution* — once frozen, adjudication is deterministic.
+
+**Next action: start a fresh session in a scope that never carried the answer, and give it
+`benchmark/EXTRACTOR-BRIEF.md`.** Not a subagent of a session that has run `/next`.
 
 ---
 
