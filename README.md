@@ -1,6 +1,6 @@
 # Foundry Troubleshooter
 
-![Version](https://img.shields.io/badge/version-2026.08.1202-blue)
+![Version](https://img.shields.io/badge/version-2026.08.1203-blue)
 
 An AI-powered diagnostic agent that runs **entirely within ServiceNow**. When an AI Agent built with Foundry fails on a customer instance — where external AI tools are prohibited — the Troubleshooter ingests the failing execution, systematically inspects the agent's instructions, tools, schemas, data, and GenAI stack, finds the root cause, and produces a structured **Fix Report** to feed back into the builder AI.
 
@@ -47,9 +47,10 @@ measured to *degrade* a diagnosis is removed or re-derived first. Re-derivation 
 cannot reach a higher band later.
 
 **Current standing:** native is the recommended path **as triage** on this instance — that is what its
-middle band prescribes and no more — and the Phase 1b milestone is not met. Quote the result as
-**native 6/10 · 60% · middle band** with **custom 0/10 · 0% · bottom band** — never one arm without the
-other.
+middle band prescribes and no more — and the Phase 1b milestone is not met. Quote the last scored pass,
+**v14** (`DESIGN.md` §5.1), as **native 5/10 · 50% · middle band** with **custom 0/10 · 0% · bottom
+band** — never one arm without the other. The v12 figures above are retained because they are what
+retired the cross-arm clauses; they are **not** the current standing.
 
 See `docs/ARCHITECTURE_DECISIONS.md` (Decision 0.5, partially superseded) and the benchmark protocol in `docs/IMPLEMENTATION_PLAN.md`.
 
