@@ -1695,6 +1695,174 @@ describe('depth gate (#103) — _depthGate', () => {
         expect(gateLoop(['agent_trace'], undefined, [])._depthGate('RUN1', FIX).hold).toBe(false)
     })
 
+    // =====================================================================
+    // #191 THE FLOOR — DECISION.md §AQ, pre-registered before this code.
+    //
+    // An empty release set cannot support a terminal report, whatever
+    // `layers_swept` claims. Measured live (TR1000315/TR1000316): the model
+    // filed a terminal fix_report on turn 1 with zero tool calls, declaring
+    // layer 1 UNAVAILABLE and layers 2-7 SWEPT. `unsweptGaps` counts only
+    // NOT_SWEPT, so that draft declared no gap and the gate released
+    // permanently -- by design, since the gate enforces ADMITTED gaps (§H8
+    // item 3). The floor is the case the declaration cannot reach.
+    // =====================================================================
+
+    test('§AQ floor: an empty trail HOLDS a terminal report that declares no gap', () => {
+        const gate = gateLoop([], 'no_audit_rows', [])._depthGate('RUN1', FIX)
+
+        expect(gate.hold).toBe(true)
+        expect(gate.kind).toBe('empty_trail')
+        expect(gate.gaps).toEqual([])
+        expect(gate.target).toBe(null)
+        expect(gate.capped).toBe(false)
+    })
+
+    test('§AQ property 2: the floor records NOTHING, so it never latches sticky', () => {
+        const loop = gateLoop([], 'no_audit_rows', [])
+        loop._depthGate('RUN1', FIX)
+
+        expect(loop._heldTools).toBe(null)
+        expect(loop._heldGaps).toBe(null)
+        expect(loop._heldTarget).toBe(null)
+    })
+
+    test('§AQ property 3: a NON-empty trail with no declared gap still ALLOWS — unchanged', () => {
+        expect(gateLoop(['agent_trace'], undefined, [])._depthGate('RUN1', FIX).hold).toBe(false)
+    })
+
+    test('§AQ property 3: declared gaps on an empty trail still take the `gaps` path, not the floor', () => {
+        const gate = gateLoop([], 'no_audit_rows')._depthGate('RUN1', FIX)
+
+        expect(gate.hold).toBe(true)
+        expect(gate.kind).toBe('gaps')
+    })
+
+    test('§AQ property 1: the floor sits BELOW the cap — a spent cap releases instead of flooring', () => {
+        const loop = gateLoop([], 'no_audit_rows', [])
+        loop._holdCount = loop.MAX_HOLDS
+
+        const gate = loop._depthGate('RUN1', FIX)
+
+        expect(gate.hold).toBe(false)
+        expect(gate.capped).toBe(true)
+    })
+
+    test('§AQ property 1: floor holds count against the cap and cannot outlive it', () => {
+        const loop = gateLoop([], 'no_audit_rows', [])
+
+        expect(loop._depthGate('RUN1', FIX).kind).toBe('empty_trail')
+        expect(loop._depthGate('RUN1', FIX).kind).toBe('empty_trail')
+        const third = loop._depthGate('RUN1', FIX)
+
+        expect(loop.MAX_HOLDS).toBe(2)
+        expect(third.hold).toBe(false)
+        expect(third.capped).toBe(true)
+    })
+
+    test('§AQ property 8: the floor reads the RELEASE set — a readable trail of retrievals is not empty', () => {
+        // Non-empty trail under the shipped default: no floor.
+        expect(gateLoop(['schema_lookup'], undefined, [])._depthGate('RUN1', FIX).hold).toBe(false)
+    })
+
+    // The test above cannot FAIL if the floor read `trail.tools` instead of
+    // `release` — at the shipped default the two are identical. These pin the
+    // distinction where it is observable.
+    test('§AQ property 8, pinned: under the strict rule a non-retrieving trail floors', () => {
+        const loop = load({
+            auditLogger: fakeAuditLogger({ available: true, tools: ['schema_lookup'], retrievingTools: [] }),
+            fixReport: fakeFixReport([], []),
+            requireRetrievalToRelease: true,
+        })
+
+        expect(loop._depthGate('RUN1', FIX).kind).toBe('empty_trail')
+    })
+
+    test('§AQ property 8, pinned: under the strict rule a RETRIEVING trail does not floor', () => {
+        const loop = load({
+            auditLogger: fakeAuditLogger({
+                available: true,
+                tools: ['schema_lookup'],
+                retrievingTools: ['schema_lookup'],
+            }),
+            fixReport: fakeFixReport([], []),
+            requireRetrievalToRelease: true,
+        })
+
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(false)
+    })
+
+    // #191 review finding 1. The floor tested `release.length === 0` alone,
+    // but an empty trail is NOT proof the run called nothing — a systematic
+    // audit write loss reads the same way, which is the exact ambiguity
+    // `_auditContext` was given `_dispatchCount` to resolve one function up.
+    // Without the same corroboration here the harness makes two contradictory
+    // claims about one run: the transcript says `audit trail LOST WRITES —
+    // this run dispatched 1 tool call(s)` while the gate floors it for having
+    // called nothing, burning the whole MAX_HOLDS budget on a false charge.
+    test('#191: the floor does NOT fire when the loop dispatched a tool and the trail lost the rows', () => {
+        const loop = gateLoop([], 'no_audit_rows', [])
+        loop._dispatchCount = 1
+
+        const gate = loop._depthGate('RUN1', FIX)
+
+        expect(gate.hold).toBe(false)
+        expect(gate.kind).toBe('')
+    })
+
+    test('#191: the floor still fires when trail and dispatch count AGREE on zero', () => {
+        const loop = gateLoop([], 'no_audit_rows', [])
+
+        expect(loop._dispatchCount).toBe(0)
+        expect(loop._depthGate('RUN1', FIX).kind).toBe('empty_trail')
+    })
+
+    test('§AQ property 6: _holdNote names empty_trail and does NOT claim a NOT_SWEPT declaration', () => {
+        const note = gateLoop([], 'no_audit_rows', [])._holdNote({
+            hold: true,
+            gaps: [],
+            kind: 'empty_trail',
+            target: null,
+            capped: false,
+        })
+
+        expect(note).toContain('empty_trail')
+        expect(note).not.toContain('NOT_SWEPT')
+        // The defect this branch exists to prevent: falling through to the
+        // gaps wording renders an EMPTY layer list.
+        expect(note).not.toMatch(/layer\(s\)\s{2,}/)
+        // PaRunManager truncates silently past DIGEST_CHARS (#72 / §G3a).
+        expect(note.length).toBeLessThanOrEqual(200)
+    })
+
+    test("§AQ property 4: _holdBlock's empty_trail branch names NO tool", () => {
+        const ALL = [
+            'agent_trace',
+            'agent_config',
+            'schema_lookup',
+            'query_table',
+            'genai_log',
+            'log_analysis',
+            'read_artifact',
+        ]
+        const block = gateLoop([], 'no_audit_rows', [])._holdBlock([], 'empty_trail', null)
+
+        expect(block).toContain('## HOLD — a terminal action is not available yet')
+        for (let i = 0; i < ALL.length; i++) {
+            expect(block).not.toContain(ALL[i])
+        }
+    })
+
+    // #191 review finding 2. The block must assert only what this branch has
+    // ESTABLISHED. `_safeGaps` returns [] both for a complete sweep and for a
+    // degraded PaFixReport (its documented catch path), so the block cannot
+    // claim the draft accounts for seven layers — it does not know that.
+    test('#191: the empty_trail block claims nothing about what the draft declared', () => {
+        const block = gateLoop([], 'no_audit_rows', [])._holdBlock([], 'empty_trail', null)
+
+        expect(block).not.toMatch(/accounts for the seven layers/i)
+        expect(block).not.toMatch(/marked as swept/i)
+    })
+
     test('HOLDS on no_audit_rows — zero tool calls is the strongest gap', () => {
         expect(gateLoop([], 'no_audit_rows')._depthGate('RUN1', FIX).hold).toBe(true)
     })
@@ -3072,6 +3240,39 @@ describe('depth gate (#103) — wired into the loop', () => {
         expect(res.outcome).toBe('fix_report')
     })
 
+    // #191 §AQ property 5. I1's clear tests `_anyOf(_heldTools, [tool])`, and
+    // the FLOOR deliberately leaves `_heldTools` null (property 2), so
+    // `_anyOf(null, …)` is false and the block survives a compliant tool
+    // call — I1's own defect on a new path, landing on the turn AQ-1 and
+    // AQ-2 measure. The floor asks for a tool call, not a PARTICULAR one, so
+    // any dispatch discharges its prompt block.
+    test('§AQ property 5: ANY dispatch clears an active empty_trail hold block', () => {
+        let invoked = []
+        const tools = fakeTools((name) => {
+            invoked.push(name)
+            return { success: true, data: {} }
+        })
+        const llm = fakeLlm([
+            { success: true, action: DRAFT, raw: 'r1' },
+            { success: true, action: { action: 'tool_call', tool: 'agent_config', args: {} }, raw: 'r2' },
+            { success: true, action: DRAFT, raw: 'r3' },
+        ])
+        const loop = load({
+            toolRegistry: tools,
+            runManager: fakeRunManager(),
+            llmProxy: llm,
+            // No declared gaps + an empty trail on iteration 1 = the floor.
+            fixReport: fixWith([{ valid: true, normalized: { ok: true } }], []),
+            auditLogger: { invokedTools: () => ({ available: true, tools: invoked.slice() }) },
+            maxIterations: 3,
+        })
+
+        loop.run('RUN1')
+
+        expect(llm.calls[1]).toContain('## HOLD — a terminal action is not available yet')
+        expect(llm.calls[2]).not.toContain('## HOLD — a terminal action is not available yet')
+    })
+
     // -----------------------------------------------------------------------
     // I2 (final whole-branch review): `[]` is truthy in JS. If the recorded
     // release set were ever empty, the old code's `if (this._heldTools)`
@@ -3113,7 +3314,18 @@ describe('depth gate (#103) — wired into the loop', () => {
                     return 'json'
                 },
             },
-            auditLogger: fakeAuditLogger({ available: true, tools: [] }),
+            // #191: a NON-empty trail, and the change is deliberate. This
+            // fixture used to pass `tools: []`, which was incidental to what
+            // I2 tests — the property is that an empty RECORDED set
+            // (`_heldTools`) does not latch sticky, not anything about the
+            // trail. With the §AQ floor an empty trail now holds a terminal
+            // report on its own account, which would mask I2 behind a
+            // different mechanism entirely. One tool keeps the first hold
+            // identical (the recorded gap's `tools` is `[]`, so no trail can
+            // close it) while letting the second draft reach the allow that
+            // I2 exists to assert. The empty-trail-does-not-deadlock case is
+            // covered separately by the §AQ property 1 cap tests.
+            auditLogger: fakeAuditLogger({ available: true, tools: ['agent_trace'] }),
             maxIterations: 3,
         })
 
