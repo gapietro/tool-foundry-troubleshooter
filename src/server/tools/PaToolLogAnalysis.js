@@ -433,7 +433,6 @@ PaToolLogAnalysis.prototype = {
         if (limit > this.MAX_LIMIT) limit = this.MAX_LIMIT
 
         var window = scope.window
-        var self = this
         var since = null
         if (!window.from) {
             since = new GlideDateTime()

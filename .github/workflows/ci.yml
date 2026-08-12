@@ -1,0 +1,57 @@
+# CI — issue #215, from `/senior-grade` sitting 1 findings F-02 and F-09.
+#
+# WHAT THIS GATES, AND WHAT IT DELIBERATELY DOES NOT
+#
+# `now-sdk build` is the typecheck. The only TypeScript in this repo is the nine
+# `src/fluent/*.now.ts` files, and the Fluent plugin type-checks them during the
+# build. There is deliberately NO separate `tsc` step: the previous
+# `src/tsconfig.json` was a solution config with `files: []` whose two referenced
+# projects matched zero files, so `tsc --noEmit -p src/tsconfig.json` exited 0
+# having checked nothing. That chain is deleted rather than repaired, because a
+# CI step that passes vacuously is worse than no step — it reads as a gate.
+#
+# What this canNOT catch is the failure mode this codebase has most often:
+# CLAUDE.md's "builds clean, installs clean, fails at runtime" (Build Rules #19,
+# #33, #34, #40-#43). No green tick here is evidence about instance behaviour.
+# That gap is issue #220 (an on-instance smoke tier) and is not pretended away.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A newer push to the same branch makes an in-flight run obsolete.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: build · test · lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # `npm ci` installs from the lockfile exactly and fails if the lockfile
+      # and package.json have drifted — which is itself a check worth having.
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # Also the typecheck — see the header.
+      - name: Build
+        run: npx now-sdk build
+
+      - name: Test
+        run: npx jest --ci
