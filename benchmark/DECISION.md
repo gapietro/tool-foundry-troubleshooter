@@ -7874,3 +7874,201 @@ run.
 
 **The instance and `main` now agree on the pre-§AU gate**, so the next pass on this path measures
 what §AR measured, and §AR's four reps remain the live baseline for anything that follows.
+
+---
+
+## AW. The claim-veracity axis — pre-registration (issue #212)
+
+Filed **2026-08-12**, before any extractor exists and before any report has been read for this
+purpose. Design settled in a `/design-spar` sitting; this section is that spar's design record and
+is the instrument's registration. **Nothing below may be amended after the first measurement** —
+see §AW7.
+
+`DESIGN.md` §5.6 reason 1 is the reopening condition being exercised. This commissions a **new**
+instrument. It amends no registered term of v1–v14, so §AO3 is satisfied by construction and
+§AQ3 is untouched.
+
+### AW0. The premise in #212 is imprecise, and the correction changes the design
+
+#212 and `DESIGN.md` §5.2 both say correctness "has never been measured." Checked against the
+scorecard, that is not what is true:
+
+- `root_cause_layer_correct` (0/2) and `fix_target_correct` (0/1/2) **are** correctness columns —
+  4 of the rubric's 6 points — and `root_cause_layer_correct` is **one of the two terms in
+  `passes_gate`** (`scorecard-template.md` §A2). Layer-level correctness has been in the gate
+  figure since v9.
+- Ground truth for them already exists and is already independent of the harness: every seed spec
+  declares **Expected root-cause layer** and **Expected fix target**, authored when the defect was
+  injected. That is the property R-27 says most fixtures lack.
+
+§AO2 states the real gap in its own closing line: *"The rubric measures whether a report **names**
+the right layer, targets the right thing, cites evidence, and reads as usable. It does not measure
+whether the report's **factual claims are true**."*
+
+**So what is commissioned here is a claim-veracity axis, not a correctness axis in general.** The
+distinction is load-bearing: it means ground truth must come from **instance state**, not from a
+finer-grained expected-label in the seed spec. Sharpening the labels — the obvious cheap move, and
+the one the issue's title implies — would not have caught a single one of the three known-bad rows.
+
+### AW1. Row 09 adjudicated, before registration, as the feasibility proof
+
+Read live on gpinst01 (Zurich P10 Hotfix 4a) via `sys_dictionary` metadata:
+
+```
+x_snc_tsbench_ticket — 8 fields
+  sys_updated_on, sys_mod_count, priority, sys_updated_by,
+  short_description, sys_id, sys_created_on, sys_created_by
+```
+
+**No `type` column. No `category` column.** Row 09's report claimed `schema_lookup` returned
+*"`type` (String, max 40) present"* and that `query_table` confirmed values `hardware`/`software`
+under it. Both are impossible. Its **Fix 1 repoints the query at a column that does not exist**,
+and it scored `fix_usable_unedited` = 1 and cleared the gate.
+
+Three consequences, recorded because they are what justified proceeding:
+
+1. **The oracle is feasible at trivial cost** — one metadata call adjudicated the case §AO2 left
+   open since v14.
+2. **The drift assumption has its first favourable data point.** §AO2's field account was written
+   at v14 time; today's read agrees with it. Two observations, two moments, one answer. Evidence
+   against fixture-schema drift, not proof.
+3. **§AO2's deliberately-unresolved question is half-answered.** It asked whether row 11's
+   empty-table claim was fabrication or a real harness defect (`query_table` cross-scope against a
+   zero-ACL table, Build Rule #42). Row 09 is now confirmed **fabrication**, which raises the prior
+   on row 11 without settling it. The two readings still have opposite consequences.
+
+### AW2. What the axis measures, and the three-valued verdict
+
+Per claim, one of:
+
+| Verdict | Meaning |
+|---|---|
+| `refuted` | The instance contradicts the claim, **and a positive control passed** |
+| `supported` | The instance corroborates the claim |
+| `unresolvable` | The claim cannot be adjudicated — mutable state, an ambiguous probe result, or a control that did not pass |
+
+**Two-valued is forbidden, and the reason is this project's own defect.** `DESIGN.md` §5.3 (#205):
+*a data sweep on the wrong table returns `genuinely_empty`, which reads as a positive finding and
+licenses a confident wrong root cause.* An oracle that collapses "I cannot see" into "the claim is
+false" reproduces the exact defect it is built to detect.
+
+> **Registered principle:** *An instrument's inability to observe must never be recorded as an
+> observation.*
+
+### AW3. Ground truth, and the disambiguation rule that makes it safe
+
+Truth is a **live read of gpinst01** (Option B of three considered — see §AW9).
+
+**The probe is chosen so its failure mode is distinguishable.** A field's existence is decided by
+**membership in the `sys_dictionary` field list**, never by whether a query filtered on it
+succeeds. This matters because `DESIGN.md` §5.4 (#187) records that a **nonexistent field name
+returns `Access denied`** — the same bytes a genuinely missing read ACL returns. The query path can
+lie; the metadata path has no failing step to misread.
+
+**Every negative is control-paired.** A claimed-absent field is adjudicated `refuted` only when a
+probe for a field known to exist on the same table, in the same auth context, passes in the same
+call. Control fails → `unresolvable`, never `refuted`. This is §5.5's rule for the #203 null probe
+(*"a null result is only worth its probe's sensitivity … record the controls next to the null,
+always"*) applied one layer up, and §AV7 is the precedent: it ran a second probe precisely because
+one negative could not distinguish *reverted* from *never installed*.
+
+**Extraction is a model's job; adjudication is not.** Claims are prose, so an LLM extracts them.
+Adjudication is a **deterministic membership test** over a metadata read — no model judgement, no
+scorer packet, no rubric. Where a claim cannot be reduced to a deterministic test, it is
+`unresolvable` by definition rather than escalated to a judge.
+
+### AW4. The calibration set, and the cold one-shot
+
+**Sensitivity set: v14 rows 09, 11, 13.** All three were identified as suspect by the operator at
+v14 time, for a different purpose, before this instrument was conceived — so the ground truth was
+not authored by the thing being tested. n=3, and honest n=3.
+
+**The extractor is written cold.** It is developed against the report *format* only — not against
+these three rows, not against synthetic seeded claims, not against the other 17 v14 reports.
+Recall is measured against the three **exactly once**.
+
+**The calibration set is a consumable, spent once.** Touch the extractor after seeing the recall
+figure and that figure is void — and per §AW8, no recall figure means **no veracity figure either**.
+This is what ends the §5.0 loop: the fuel is gone after one burn. It is un-gameable in the sense
+#212 asks for because it references **how many times a fixed resource may be consumed**, not any
+property of the results.
+
+Rejected, and why: developing against synthetic seeded claims would raise expected recall but
+carries R-27 in a new dress — a hand-written fabrication is what the operator imagines fabrication
+looks like, not necessarily what the model does, so recall on synthetic faults need not transfer.
+Chosen deliberately over expected performance; the honest null is the deliverable.
+
+### AW5. Scope, and the exclusions stated as falsifiable predictions
+
+Per §5.5 — *a scope exclusion load-bearing enough to gate a merge needs the same falsifiability as
+anything in the predictions table.* §AU6 excluded correctness on an unfalsifiable premise and the
+collapse it missed is why this rule exists.
+
+**In scope:** the **20 frozen v14 reports** (10 native, 10 custom). Not all 60 across v12–v14.
+
+| Exclusion | The prediction it embeds | Falsifier |
+|---|---|---|
+| **E-1 · v12/v13's 40 reports** | Older passes carry strictly more drift risk and add no calibration value, since all three known positives are v14 | Not free: **if AW-2 returns 0, this exclusion is the first thing revisited**, because "no false claims found" would then be indistinguishable from "looked at too few reports" |
+| **E-2 · mutable-state claims (row counts, record existence)** | No mutable-state claim is adjudicable months later from any offline contemporaneous source | **≥1 row-count claim is adjudicable** from an audit payload retained for that run (`PaAuditLogger` persists an `output` payload per `result` row, digested head+tail past `MAX_PAYLOAD_CHARS`) |
+| **E-3 · custom-arm extractor recall** | All three calibration rows are **native**, so recall is a **native-arm figure**; it is assumed to transfer to custom | **≥1 custom-arm row where an operator read finds a claim the extractor did not emit.** This exclusion is the weakest link in the registration and is named as such |
+
+### AW6. Predictions, filed before any extractor exists
+
+Falsifiers are exact complements (§AV3a — AU-2 left `1 of 4` in neither band).
+
+| # | Prediction | Falsifier |
+|---|---|---|
+| **AW-1** | Cold extractor recall on the sensitivity set is **≥ 2 of 3** | **≤ 1 of 3** |
+| **AW-2** | **≥ 1 claim is `refuted`** on a row that scored `passes_gate` = 1 | **0 such rows** |
+| **AW-3** | **≥ 1 claim lands `unresolvable`** — the third verdict is load-bearing, not decorative | **0 `unresolvable`** |
+| **AW-4** | Every schema fact adjudicated that also appears in a contemporaneous v14-era record **agrees** with today's read | **≥ 1 disagreement** — fixture schema drifted, and E-1/AW-1 both need re-reading |
+
+**AW-2 is the one that matters.** It is §5.2's thesis stated as a falsifiable bet: that determinacy
+and veracity come apart on rows the gate passed. Row 09 already satisfies it, so AW-2 is
+**pre-satisfied and therefore weak evidence** — recorded as such rather than claimed as a result.
+Its value is that its falsifier is now impossible, which is itself the finding.
+
+### AW7. Stopping condition — mandatory under #212, written before the first pass
+
+1. **The sensitivity set is spent once** (§AW4).
+2. **The pass is one sweep.** 20 reports, one figure pair (veracity, recall), written here. Done.
+3. **Findings about this instrument default to documented-not-fixed** — recorded in a §AW-closing
+   subsection, not filed as issues. This is the §5.3 pattern, the only mechanism in this project's
+   history that has actually stopped this loop.
+4. **Reopening needs a named condition**, in §5.6's style, written at the time the pass closes —
+   not a general invitation to keep finding things.
+
+### AW8. What the axis may and may not say
+
+- **No veracity figure is reported without its extractor's recall.** *"0 false claims across 20
+  reports"* and *"0 false claims, extractor recall 1 of 3"* are different statements and only the
+  second is one. This is §AD7's both-arms rule in the shape this instrument needs.
+- **Both arms are reported separately** (§AD7). E-3 means the recall figure qualifies the native
+  arm only; the custom-arm veracity figure carries that caveat explicitly.
+- **This axis does not gate.** `passes_gate` keeps its two-term shape untouched. The veracity
+  figure is reported *alongside*, and the two are expected to disagree — the disagreement is the
+  finding, not a defect to reconcile.
+- **§AI4 stands:** no figure without the instrument that produced it.
+
+### AW9. Alternatives rejected
+
+- **A · Contemporaneous replay oracle** — adjudicate *"tool T confirmed X"* against T's recorded
+  output for that `runId`. Drift-immune by construction and catches fabricated citations, the
+  strongest class. **Rejected for pass 1:** all three known positives are false-fact-about-the-world
+  claims, not fabricated-citation claims; the class has **zero observed instances**, and §5.5's
+  rule (a null is worth only its probe's sensitivity) applies to building an instrument for it.
+  Also blocked by an arm asymmetry — the two arms persist evidence in different stores with
+  different retention, and `_digest` clips payloads head+tail. **Held in reserve**, not discarded.
+- **C · Seed-spec closure oracle** — a per-seed fact sheet authored from `benchmark/seed-app`'s
+  Fluent source, consulted offline. Fully reproducible and drift-immune. **Rejected:** it records
+  what was *intended to install*, and Build Rules #41/#42/#44 are a catalogue of *installed ≠
+  declared*; the fact sheet's own correctness would become an unmeasured dependency.
+
+### AW10. What this does not decide
+
+- Whether row 11 is fabrication or the Build Rule #42 harness defect §AO2 named. AW-2's E-2
+  exclusion puts it in `unresolvable` unless its falsifier fires.
+- Whether the native or custom arm is a front door. This axis reports; `passes_gate` decides, and
+  it is unchanged.
+- Anything about v12/v13 (E-1), or about runs not in the v14 manifest.
+- Whether the extractor is any good beyond its one-shot recall. It is not tuned, by design.

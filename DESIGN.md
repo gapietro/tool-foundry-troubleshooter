@@ -763,6 +763,16 @@ Not a new finding about the instrument — those are unbounded. Only one of:
 
 1. **A correctness axis is commissioned** as its own instrument, with a bar that scores
    whether a root cause is *right*, not whether a report is *admissible* (§5.2).
+   **EXERCISED 2026-08-12 — issue #212, pre-registered as `benchmark/DECISION.md` §AW.**
+   Two corrections that section makes to this one, recorded here because §5.2 is where
+   they will be read: (a) *"correctness has never been measured"* is imprecise —
+   `root_cause_layer_correct` and `fix_target_correct` are correctness columns and the
+   former is a `passes_gate` term; the unmeasured axis is narrower, **whether the
+   report's factual claims are true**, which is what §AO2's closing line actually says;
+   (b) **§AO2's row 09 is now adjudicated — fabrication, confirmed by live read.**
+   `x_snc_tsbench_ticket` has no `type` column, so that row's Fix 1 repoints a query at
+   a column that does not exist. This does **not** settle row 11, which §AO2 left open
+   between fabrication and a Build Rule #42 harness defect.
 2. **The custom harness is put in front of real users**, making the defects in §5.3
    reachable in production rather than in a benchmark seed.
 3. **A defect in §5.3 is observed live** — in particular a registry refusal, currently
