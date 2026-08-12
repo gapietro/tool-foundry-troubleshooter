@@ -17,6 +17,29 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1206 — 2026-08-12
+
+### Branch protection now binds admins, and the grade ledger gets a remediation log
+
+`enforce_admins` set to **true** on `main`. Until now the required check could be bypassed with
+`gh pr merge --admin`, and on a solo-maintainer repo that meant every merge — the gate was advisory
+for the only person it applied to. Verified rather than assumed: a direct push to `main` is now
+refused with **`GH006: Protected branch update failed — Required status check "build · test · lint"
+is expected`**. The `/senior-grade` cap *"No mandatory CI → max B"* is fully lifted.
+
+**Escape hatch, written down before it is needed:** if CI ever wedges (broken workflow, GitHub
+outage) this now blocks *everyone*, including the repo owner. Recover with
+`gh api -X DELETE repos/gapietro/tool-foundry-troubleshooter/branches/main/protection/enforce_admins`,
+merge, then re-enable with the same path and `-X POST`.
+
+**`GRADE.md` gains a remediation log** recording F-01, F-02, F-09 and F-11 as closed with their
+evidence. The sitting-1 score and cap analysis are deliberately **not** rewritten: a grade is a
+measurement at a commit, and editing it as fixes land would make sittings incomparable and erase the
+baseline sitting 2 is measured against. This also removes a stale claim of exactly the kind the
+sitting itself docked the repo for — the ledger said "no mandatory CI" while CI was mandatory.
+
+---
+
 ## 2026.08.1205 — 2026-08-12
 
 ### CI exists, lint blocks, and the vacuous typecheck is deleted rather than repaired (#215)
