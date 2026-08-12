@@ -256,6 +256,15 @@ PaToolRegistry.prototype = {
      *        reads run_id from whatever the caller already established.
      * @returns {Object} {success:true, data} | {success:false, error} — the
      *          core's own result (possibly thresholded), never a throw.
+     *          The two refusals this method returns ITSELF — unknown tool, and
+     *          the destructive gate — additionally carry `dispatched:false`,
+     *          because both return BEFORE `logIntent` and so leave no audit
+     *          row that could later be missed. #200 (§AT): keep that field on
+     *          exactly those two returns. `PaAgentLoop._dispatchTool` reads it
+     *          to tell "no row because nothing ran" from "no row because the
+     *          writes were lost", and its rule is ABSENT-MARKER-COUNTS — so
+     *          dropping the field degrades the depth gate SILENTLY rather than
+     *          failing anything, which is why the contract is stated here.
      */
     dispatch: function (name, args, runCtx) {
         var reg = this._registry()

@@ -1626,17 +1626,32 @@ PaAgentLoop.prototype = {
         // choice this text must not make.
         if (kind === 'empty_trail') {
             // #191 review finding 2: assert ONLY what this branch has
-            // established. It knows the run has invoked nothing — the trail
-            // and `_dispatchCount` agree on that, which is the floor's own
-            // entry condition. It does NOT know what the draft declared:
+            // established. It knows nothing this run did reached the RECORD —
+            // the trail and `_auditedDispatchCount` agree on that, which is
+            // the floor's own entry condition.
+            //
+            // #200 (§AT6) NARROWED WHAT THAT SENTENCE MAY SAY. The text used
+            // to read "This run has not called a single tool", which was true
+            // while the entry condition was `_dispatchCount === 0` — an
+            // attempt of any kind disarmed the floor, so reaching here meant
+            // no attempt had been made. Under `_auditedDispatchCount` the
+            // floor fires on a run that DID emit a tool_call the registry
+            // refused, and the old sentence would then contradict the
+            // transcript one entry above it, which shows the call and the
+            // registry's error. Claiming a run made no attempt, to a model
+            // that just made one, is the same defect this comment exists to
+            // prevent — so the claim is anchored on the RECORD, which is the
+            // fact the gate actually holds, and is true under both counters.
+            //
+            // It does NOT know what the draft declared:
             // `_safeGaps` returns `[]` both for a complete sweep and for a
             // degraded PaFixReport (its documented catch path), so any claim
             // about the draft's layer coverage may be false. A hold block
             // that misstates the run's own facts is the wrong instrument for
             // measuring evidential honesty.
             lines.push(
-                'This run has not called a single tool, so there is no evidence on record for any ' +
-                    'claim a report could make.'
+                'No tool call has put any evidence on record for this run, so there is nothing to ' +
+                    'support any claim a report could make.'
             )
             lines.push('')
             lines.push(

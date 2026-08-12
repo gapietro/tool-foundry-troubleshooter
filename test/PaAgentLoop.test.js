@@ -1952,6 +1952,22 @@ describe('depth gate (#103) — _depthGate', () => {
         expect(block).not.toMatch(/marked as swept/i)
     })
 
+    // #200 (§AT6), the same rule one counter later. The floor now fires on
+    // runs that DID emit a tool_call the registry refused, so a block claiming
+    // the run never called anything would contradict the transcript entry
+    // directly above it — telling a model that just complied that it did not.
+    // The block may only assert what the gate holds: nothing reached the
+    // RECORD. True under both counters, which is why it is the right anchor.
+    test('§AT6: the empty_trail block claims nothing about whether the run ATTEMPTED a call', () => {
+        const block = gateLoop([], 'no_audit_rows', [])._holdBlock([], 'empty_trail', null)
+
+        expect(block).not.toMatch(/has not called/i)
+        expect(block).not.toMatch(/not called a single tool/i)
+        expect(block).not.toMatch(/no tool (call )?was (ever )?made/i)
+        // What it MAY say, and does.
+        expect(block).toMatch(/on record/i)
+    })
+
     test('HOLDS on no_audit_rows — zero tool calls is the strongest gap', () => {
         expect(gateLoop([], 'no_audit_rows')._depthGate('RUN1', FIX).hold).toBe(true)
     })

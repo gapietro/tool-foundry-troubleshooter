@@ -52,12 +52,34 @@ bought a run a permanent exit from the floor. Ledger ruling first (§AT), then t
   as §AS3 and #192's retry repair. **No figure is claimed and no prediction is filed** (ruling 6).
 - **Per §AS3a, the deliverable is the test that pins the distinction.** Four mutations run: floor
   reverted to `_dispatchCount`, `_dispatchTool` counting every attempt, and each registry marker
-  deleted in turn — each killed exactly the intended test, alone. 1728 tests pass; `now-sdk build`
+  deleted in turn — each killed exactly the intended test, alone. 1729 tests pass; `now-sdk build`
   clean.
 - **Residual named, not smoothed over (§AT5).** `_auditContext` keeps the lenient counter, so on a
   run whose only dispatch was refused it can still write *"audit trail LOST WRITES"* when no row was
   ever attempted. It fails toward NOT convicting, which is the registered direction; recorded rather
   than fixed.
+- **PR #201 review, finding 2 — the hold text had to narrow with its counter (§AT6).**
+  `_holdBlock`'s `empty_trail` branch read *"This run has not called a single tool"*, true only
+  while the entry condition was `_dispatchCount === 0`. Under the new counter the floor fires on
+  runs that DID emit a refused `tool_call`, so that sentence would contradict the transcript entry
+  directly above it. Re-anchored on the record — *"No tool call has put any evidence on record"* —
+  which is what the gate actually holds and is true under both counters. The justifying comment
+  still cited the old counter: **a moved condition can invalidate the prose that justified it**,
+  §AR1a's failure one level down.
+- **Finding 3 — the §AT5 residual was recorded a layer too shallow, and is corrected.** One refused
+  call makes `auditEnabled` false, which skips **both** audit-gated honesty checks for the whole
+  report — `_checkSweptClaims` (`PaFixReport.js:494`) and `_checkCitationSupported` (`:751`), not
+  merely an imprecise transcript string. That is #200's escape hatch still open one layer down.
+  Not fixed here: `_auditContext`'s direction is #191 part 1 / #78 registered behaviour and
+  narrowing it moves a CONVICTION rule, which needs its own pre-registration. Filed as **#203**.
+- **Finding 1 — §AT3's trigger claim stated more exactly (§AT7).** §AS2's dispatch-side clear strips
+  the floor's hold block on ANY dispatch, refused ones included, so a run can now spend both holds
+  and end on the `capped:true` exit without ever being told its calls put nothing on record. Before
+  this change that run took an immediate release with zero holds. §AQ5's triggers still bound it,
+  but trigger 2 is reachable on a path it was not before. Repairing §AS2's registered clear inside
+  this PR is the §AO3 mistake — filed as **#202**.
+- **Finding 4 — `dispatch`'s `@returns` contract now documents the marker**, since absent-marker-
+  counts means a dropped field degrades the depth gate silently rather than failing anything.
 
 ## 2026.08.1118 — 2026-08-11
 
