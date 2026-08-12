@@ -17,6 +17,41 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1116 — 2026-08-11
+
+**The §AQ floor is measured: AQ-1 and AQ-2 both PASS, no revert trigger fires (#191 part 2, done).**
+Measurement only — no `src/` change. Evidence
+`benchmark/raw-evidence-v15-aq-floor.md`, verdict `benchmark/DECISION.md` §AR.
+
+- **AQ-1 (primary): 4 of 4** reps record at least one tool call, against a 0-of-4 baseline
+  (predicted ≥3 of 4). **AQ-2: 2 of 4** produce a `fix_report` that passes validation (predicted
+  ≥1 of 4). All four carry the `empty_trail` hold.
+- **No revert trigger fired.** Zero runs finished `partial`; **0 of 4** took the `capped:true` exit
+  even though every rep spent both holds — R1's trail-check-before-cap ordering released them as
+  genuine compliance; the hold text names no tool.
+- **#191's headline is refuted.** *"Files a fix_report with zero tool calls, so the
+  two-distinct-sources rule can never be satisfied"* — 4 of 4 now call tools, 2 of 4 satisfy the
+  rule. The other 2 still fail it at one distinct source, which is a report-quality question this
+  change never claimed (§AQ6).
+- **Unpredicted second-order effect (§AR2).** After the floor fires, the model stops claiming a
+  blanket `SWEPT` and declares layers honestly `NOT_SWEPT` — which makes the **pre-existing `gaps`
+  hold reachable**. The floor restored the operand the rest of the gate was missing, not just one
+  tool call.
+- **§AQ2 property 5 verified live**, not inferred: the floor's hold block appears in exactly four
+  `sys_generative_ai_log` prompts, one per run, so it does not survive the compliant dispatch.
+  Corollary: **#196's stale-HOLD defect does not reproduce on the floor path** and is now unblocked.
+- **AQ-4 is recorded `not exercised`, not passed** — every rep ran the no-execution path, so the
+  tripwire had no `execution` row to fire on. An unrun tripwire is not a clean one.
+- **§AQ3's cost is now live:** a v15+ custom gate figure may be reported absolutely and may **not**
+  be differenced against v12/v13/v14. No figure is claimed here — no scorer ran (§AQ4 ruling 6).
+- **Deployment finding that outranks the pass (§AR5).** `b6d2abe` was merged but **not deployed**;
+  gpinst01 was running code older than both #191 commits, caught only by the pre-flight content
+  probe. `sys_updated_on` on this app's script includes **does not move on install** — `PaAgentLoop`
+  read `2026-08-02 05:15:25` before and after an install that changed its content. Trust neither
+  the version string nor the row timestamp; probe content.
+
+---
+
 ## 2026.08.1115 — 2026-08-11
 
 **The depth-gate empty-trail floor, built to §AQ (#191 part 2b).** `src/server/PaAgentLoop.js` +
