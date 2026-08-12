@@ -7807,3 +7807,32 @@ since this pass did not deliver a reachable honest path.
 - **`MAX_EVIDENCE_RETURNS` (`0`, §W6) or `REQUIRE_RETRIEVAL_TO_RELEASE` (`false`, §Y6/§AL4).**
   Both frozen, neither this section's lever.
 - **Anything about the native arm.** It does not run `_depthGate`.
+
+### AV7. The revert, executed and verified
+
+§AV4's ruling carried out at `56bb249` (`git revert` of `94cb916`), same session.
+
+**Reverted in full, including both helpers.** §AV4 said the tie-break machinery and the
+self-canonicalising `traceUnavailable` were worth keeping. On execution that was wrong: with the
+tie-break gone **nothing calls either helper**, so `PaFixReport.traceUnavailable` and
+`PaAgentLoop._safeTraceUnavailable` would have shipped to the instance as dead code retained
+because it had been written rather than because anything needed it. The flat-form finding they
+earned is preserved in the evidence file (§1.5) and §AV2 — a lesson does not need its code to
+survive.
+
+Verification, run and quoted:
+
+| check | result |
+|---|---|
+| `npm test` | 33 suites, **1729** tests, all passed — down exactly 14 from `94cb916`'s 1743, the number the change added |
+| `now-sdk build` | completed successfully |
+| `now-sdk install --alias gpinst01` | rollback context `c3aea3db2ba60b10f243fed2ce91bfff` |
+| probe `PaAgentLoop` `scriptLIKE_safeTraceUnavailable` | **0 records** — the §AU code is off the instance |
+| probe `PaAgentLoop` `scriptLIKEempty_trail` | **1 record** — the §AQ floor is intact, not collateral |
+
+The second probe is the positive control on the first: a single negative probe cannot distinguish
+*"reverted"* from *"the install never landed"*, which is §AR5's hazard read backwards. Both were
+run.
+
+**The instance and `main` now agree on the pre-§AU gate**, so the next pass on this path measures
+what §AR measured, and §AR's four reps remain the live baseline for anything that follows.
