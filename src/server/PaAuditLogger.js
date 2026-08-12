@@ -130,11 +130,27 @@ PaAuditLogger.prototype = {
      * claim is the model's problem, not this method's.
      *
      * A TAGGED result, not a bare array: "no tools were called" and "the
-     * trail is unreadable" must not be the same value. A run that reached a
-     * fix report necessarily called at least one tool, so zero rows means the
-     * trail failed — and a failed trail must not convict an honest report.
-     * Every degraded branch still carries `tools: []` so callers never need a
-     * null check.
+     * trail is unreadable" must not be the same value. Every degraded branch
+     * still carries `tools: []` so callers never need a null check.
+     *
+     * `no_audit_rows` IS AMBIGUOUS, AND CALLERS MUST TREAT IT AS SUCH (#191).
+     * This docblock used to argue the other way — "a run that reached a fix
+     * report necessarily called at least one tool, so zero rows means the
+     * trail failed" — and concluded that the branch fails open correctly. The
+     * premise is false: measured on gpinst01 (`TR1000315`/`TR1000316`,
+     * 2026-08-11) the model filed a terminal `fix_report` on its FIRST
+     * reasoning turn having called nothing at all, so zero rows was the
+     * truthful answer and failing open disarmed every cross-check that would
+     * have convicted the draft.
+     *
+     * So this reason means one of TWO things and this method cannot tell them
+     * apart: **(a)** the run genuinely invoked nothing, or **(b)** a systematic
+     * write loss took every row for the run (see WHAT THIS CANNOT DETECT
+     * below). A caller that acts on it must corroborate against something this
+     * table cannot corrupt before letting an empty trail convict —
+     * `PaAgentLoop._auditContext` compares it with the loop's own in-process
+     * count of dispatched tool calls, and skips the cross-checks whenever the
+     * two disagree.
      *
      * WHAT THIS CANNOT DETECT: a PARTIAL trail. `_write` swallows a per-row
      * `insert_failed` (R-10 — it degrades rather than throwing), so if 3 of 5
@@ -146,9 +162,11 @@ PaAuditLogger.prototype = {
      * resting on one of the 3 that landed still passes correctly — so this
      * gap cannot turn an honest report invalid, but it CAN let a genuinely
      * unsupported claim through unnoticed if the row that would have proven
-     * it is exactly the one that didn't land. Only a SYSTEMATIC failure (every
-     * row for a run lost) is caught here, because that degrades to zero rows
-     * and `_noTools('no_audit_rows')` fails open correctly. Do not assume
+     * it is exactly the one that didn't land. A SYSTEMATIC failure (every row
+     * for a run lost) degrades to zero rows and is reported as
+     * `no_audit_rows` — **indistinguishable here from a run that genuinely
+     * called nothing**, which is why that reason is ambiguous by construction
+     * and the disambiguation belongs to the caller (see above). Do not assume
      * `tools.length > 0` implies total coverage of everything the run did.
      *
      * Build Rule #42: plain GlideRecord — the table has no ACLs, so

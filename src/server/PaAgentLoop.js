@@ -444,6 +444,17 @@ PaAgentLoop.prototype = {
     _dispatchTool: function (runId, action) {
         var toolName = this._str(action.tool)
         var args = action.args
+
+        // #191 — counted BEFORE dispatch, and it counts ATTEMPTS.
+        //
+        // `_auditContext` uses this to tell "the trail answered zero" from
+        // "the trail lost its writes", so every direction it can be wrong in
+        // must fall toward NOT convicting. An attempt that throws, or that a
+        // tool refuses without auditing (#75), still means this run tried to
+        // gather — and a run that tried must never be convicted on a trail
+        // that came back empty.
+        this._dispatchCount += 1
+
         var result = this._tools().dispatch(toolName, args, { run_id: runId })
 
         this._runs().appendTranscript(runId, {
@@ -602,26 +613,86 @@ PaAgentLoop.prototype = {
             res = null
         }
 
-        var available = !!(res && res.available === true)
-        if (!available) {
-            var reason = this._str(res && res.degraded ? res.degraded : 'query_failed')
-            var note
-            if (reason === 'no_audit_rows') {
-                // M1 (final whole-branch review): the trail WAS readable
-                // here — the query ran fine and answered "this run invoked
-                // nothing." The old wording ("audit trail unavailable")
-                // read, to an analyst scanning the transcript, as the gate
-                // having failed open when it had not; only the
-                // citation/sweep cross-checks were skipped, and only
-                // because there is nothing yet to cite.
-                note =
+        var reason = this._str(res && res.degraded ? res.degraded : 'query_failed')
+        var answered = !!(res && res.available === true)
+
+        // #191 — `no_audit_rows` IS AN ANSWER, NOT A DEGRADATION.
+        //
+        // `PaAuditLogger.invokedTools()` collapses four situations into
+        // `available:false`, and this is the one that is not a failure: the
+        // query ran fine and reported that this run invoked nothing.
+        // `_trailTools` has always read it that way for the depth gate; this
+        // method did not, and its header gave the reason — "for #79b's
+        // citation cross-check that distinction does not matter, an
+        // unverifiable citation and an unsupported one are both do-not-
+        // convict."
+        //
+        // That reasoning holds for a run that can still go and gather
+        // evidence. It fails for the TERMINAL report this context validates.
+        // A run that invoked nothing does not have unverifiable sweep claims;
+        // it has demonstrably FALSE ones, and the trail is what proves it.
+        // Measured: TR1000315 and TR1000316 each filed a fix_report on their
+        // first reasoning turn declaring layers 2-7 SWEPT with zero tool
+        // calls, and `_checkSweptClaims` — the check written for exactly that
+        // draft — was disabled by the same emptiness that made the claims
+        // false. Both runs then failed on the one rule that is not audit-
+        // gated, naming a symptom instead of the defect.
+        //
+        // Genuine degradations are unchanged and still fail OPEN: a Glide
+        // hiccup must never convict an honest report.
+        //
+        // AND `no_audit_rows` IS NOT ON ITS OWN PROOF OF ZERO TOOL CALLS
+        // (#191 review finding 1). `PaAuditLogger.invokedTools()` returns that
+        // reason whenever the query succeeded and yielded no usable row, and
+        // its own header names the other way to get there: a SYSTEMATIC write
+        // loss, every row for the run gone (`_write` swallows `insert_failed`,
+        // and the reader skips rows whose `tool_name` came back blank). That
+        // case used to fail open. Passing the reason through blindly would
+        // make it convict a run that really did call tools and really did cite
+        // what they returned — #78's fail-closed defect, arriving through the
+        // one door this module exists to guard.
+        //
+        // So the empty trail is corroborated against a fact this class holds
+        // ITSELF and the audit table cannot corrupt: how many tool calls the
+        // loop dispatched. The two sources must AGREE before an empty trail is
+        // allowed to convict —
+        //
+        //   dispatched 0, rows 0   they agree; the trail answered  -> CHECK
+        //   dispatched >0, rows 0  they disagree; writes were lost -> SKIP
+        //
+        // A disagreement is exactly the state in which this code does not know
+        // what happened, which is the state #78 says must not convict.
+        var trailAnsweredEmpty = reason === 'no_audit_rows' && this._dispatchCount === 0
+        var available = answered || trailAnsweredEmpty
+
+        if (!available && reason === 'no_audit_rows') {
+            // #191 — the disagreement case, recorded as the distinct event it
+            // is. "Unavailable (no_audit_rows)" would read as an ordinary
+            // degradation and hide the one fact worth escalating: this run
+            // dispatched tools and NONE of them left a row, which is a
+            // systematic audit write failure, not a quiet run.
+            this._runs().appendTranscript(runId, {
+                actor: 'system',
+                result_digest:
+                    'audit trail LOST WRITES — this run dispatched ' + this._dispatchCount + ' tool call(s) and the ' +
+                    'trail returned zero rows; citation and sweep cross-checks SKIPPED for this report',
+            })
+        } else if (!available) {
+            this._runs().appendTranscript(runId, {
+                actor: 'system',
+                result_digest:
+                    'audit trail unavailable (' + reason + ') — citation and sweep cross-checks SKIPPED for this report',
+            })
+        } else if (!answered) {
+            // M1 (final whole-branch review): the trail WAS readable here, and
+            // wording it as "unavailable" read to an analyst scanning the
+            // transcript as the gate having failed open when it had not.
+            this._runs().appendTranscript(runId, {
+                actor: 'system',
+                result_digest:
                     'audit trail readable (no_audit_rows) — this run invoked zero tools; citation and sweep ' +
-                    'cross-checks SKIPPED for this report'
-            } else {
-                note =
-                    'audit trail unavailable (' + reason + ') — citation and sweep cross-checks SKIPPED for this report'
-            }
-            this._runs().appendTranscript(runId, { actor: 'system', result_digest: note })
+                    'cross-checks APPLIED against the empty set',
+            })
         }
 
         return {
@@ -728,6 +799,13 @@ PaAgentLoop.prototype = {
         // is safe to call on a fresh instance that has never run.
         this._iteration = 0
         this._startMs = 0
+
+        // #191 — tool calls this run DISPATCHED, counted in-process by
+        // `_dispatchTool` and read by `_auditContext`. Per-RUN for the reason
+        // #130 gives above: a carried count is one run's evidence answering
+        // for another's, and here it would answer the one question that
+        // decides whether an empty trail may convict.
+        this._dispatchCount = 0
     },
 
     /**

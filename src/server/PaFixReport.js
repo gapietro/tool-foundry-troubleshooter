@@ -262,29 +262,53 @@ PaFixReport.prototype = {
      * Everything the checks need that is not in the report itself, resolved
      * ONCE per validate() call.
      *
-     * `auditEnabled` demands an EXPLICIT `true` plus a NON-EMPTY array of
-     * normalized tool names. A missing, malformed or degraded context fails
-     * toward NOT checking, because a broken audit trail convicting an honest
-     * report is a strictly worse outcome than an unverified citation — that
-     * is #78's defect, and reintroducing it through the back door would be
-     * worse than leaving #79 unfixed. The empty-array case is the same
-     * failure shape wearing a different hat: `{auditAvailable:true,
-     * invokedTools:[]}` (or an array of only blanks) matches NO citation and
-     * NO sweep claim, so every check would fail CLOSED at once instead of
-     * skipping — final whole-branch review, finding 3, 2026-08-02.
+     * `auditEnabled` demands an EXPLICIT `true`. A missing or degraded context
+     * fails toward NOT checking, because a broken audit trail convicting an
+     * honest report is a strictly worse outcome than an unverified citation —
+     * that is #78's defect, and reintroducing it through the back door would
+     * be worse than leaving #79 unfixed.
+     *
+     * WHAT AN EMPTY LIST MEANS (#191 amends finding 3, 2026-08-02)
+     * Finding 3 also skipped on an empty `names` array, on the reasoning that
+     * `{auditAvailable:true, invokedTools:[]}` matches NO citation and NO
+     * sweep claim, so every check would fail CLOSED at once. That was safe to
+     * assume because the combination could not occur: `PaAgentLoop`
+     * `_auditContext` mapped a zero-tool run to `auditAvailable:false`.
+     *
+     * It occurs now, and it is not a degradation — it is the trail ANSWERING.
+     * A terminal report from a run that invoked nothing has sweep claims that
+     * are demonstrably FALSE, not merely unverifiable, and "every check fails
+     * at once" is the correct verdict on a report that claims six sweeps on
+     * zero tool calls (TR1000315/TR1000316; see `_checkSweptClaims`).
+     *
+     * So the two cases finding 3 lumped together are split by WHY the list is
+     * empty, which is decidable from the raw input:
+     *
+     *   raw `[]`                    the trail answered "nothing"  -> CHECK
+     *   raw non-empty, names empty  entries this code cannot read -> SKIP
+     *   raw not an array            a context shape it cannot read -> SKIP
+     *
+     * Finding 3's actual safety property is preserved exactly: a context this
+     * code cannot INTERPRET still convicts nobody. Only the conflation between
+     * "unreadable" and "read, and the answer was none" is gone.
      */
     _buildCheckContext: function (report, context) {
         var c = this._isPlainObject(context) ? context : {}
-        var raw = this._isArray(c.invokedTools) ? c.invokedTools : []
+        var wellFormed = this._isArray(c.invokedTools)
+        var raw = wellFormed ? c.invokedTools : []
         var names = []
         for (var i = 0; i < raw.length; i++) {
             var name = this._normToolName(raw[i])
             if (name && this._indexOf(names, name) === -1) names.push(name)
         }
 
+        // Entries were supplied but none survived normalization: the caller
+        // sent something this code cannot interpret, so it must not convict.
+        var malformed = !wellFormed || (raw.length > 0 && names.length === 0)
+
         return {
             traceUnavailable: this._isTraceUnavailable(report),
-            auditEnabled: c.auditAvailable === true && names.length > 0,
+            auditEnabled: c.auditAvailable === true && !malformed,
             invokedTools: names,
         }
     },
