@@ -52,7 +52,29 @@ are unmeasured, and nothing here may be quoted as evidence for or against them.
   recorded gap's `tools` is `[]`, so no trail can close it) while letting the second draft reach
   the allow I2 exists to assert. The empty-trail-does-not-deadlock case is covered separately by
   the §AQ property 1 cap tests.
-- Verified by jest only: **33 suites, 1712 tests** (10 new). **Not installed, not exercised against
+- **The floor CORROBORATES, and the first cut did not — the same defect part 1 fixed, in the
+  collaborator written second** (caught in `/code-review` on PR #195). Testing
+  `release.length === 0` alone convicts on an empty trail, and an empty trail is not proof the run
+  called nothing: `no_audit_rows` reads identically for a **systematic audit write loss**, and
+  under the strict release rule a real, audited, non-retrieving call empties `release` too. The
+  result was the harness making **two contradictory claims about one run** — `_auditContext`, one
+  function up in the same iteration, writing `audit trail LOST WRITES — this run dispatched 1 tool
+  call(s)` while the gate floored that same run for having called nothing and spent the whole
+  `MAX_HOLDS` budget on the false charge. Now `release.length === 0 && _dispatchCount === 0`, the
+  identical rule part 1 established. Compatible with §AQ property 8 — the floor still reads
+  `release`; the conjunct only narrows it.
+- **The hold text now asserts only what the branch has established.** It claimed *"Your draft
+  accounts for the seven layers"*, which `_safeGaps` cannot support: that returns `[]` both for a
+  complete sweep and for a degraded `PaFixReport` (its documented catch path), so the claim may be
+  false — and it silently reversed `_safeGaps`' fail-open contract. A hold block that misstates the
+  run's own facts is the wrong instrument for measuring evidential honesty.
+- **One review finding deliberately NOT fixed here, and filed as #196.** `no_layer_report` shares
+  the `_holdActive` defect exactly (it also records nothing, so `_anyOf(null, …)` is false) and the
+  one-token fix now exists. §AQ property 5 scoped it out explicitly, and that scoping is not
+  bureaucratic: `no_layer_report` is part of the scored instrument, so fixing a second path here
+  would widen the instrument change beyond what was pre-registered — the §AO3 mistake arriving
+  through the door §AQ was written to close. #196 recommends landing it **after** the four reps.
+- Verified by jest only: **33 suites, 1717 tests** (15 new). **Not installed, not exercised against
   gpinst01, and the four §AQ reps have not been run** — the pre-registered predictions remain open.
 
 ## 2026.08.1114 — 2026-08-11

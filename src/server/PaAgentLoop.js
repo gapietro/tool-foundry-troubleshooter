@@ -1141,7 +1141,24 @@ PaAgentLoop.prototype = {
             // MAX_ITERATIONS and finishes `partial`, a pre-registered revert
             // trigger. And it reads `release` (property 8), so it inherits
             // REQUIRE_RETRIEVAL_TO_RELEASE, which stays false.
-            if (release.length === 0) {
+            //
+            // AND IT CORROBORATES, for the same reason `_auditContext` does
+            // (#191 review finding 1). An empty release set is NOT proof this
+            // run called nothing: `no_audit_rows` reads identically for a
+            // systematic audit write loss, and under the strict release rule
+            // a real, audited, non-retrieving call empties `release` too. The
+            // corroborating fact is the one this class holds itself and the
+            // audit table cannot corrupt — `_dispatchCount`.
+            //
+            // Without this conjunct the harness makes TWO CONTRADICTORY
+            // CLAIMS about one run: `_auditContext`, one function up in the
+            // same iteration, writes `audit trail LOST WRITES — this run
+            // dispatched N tool call(s)`, while the gate floors that same run
+            // for having called nothing and spends the entire MAX_HOLDS
+            // budget doing it. Part 1 of #191 established the rule; this is
+            // the same rule, applied to the collaborator that was written
+            // second.
+            if (release.length === 0 && this._dispatchCount === 0) {
                 this._holdCount += 1
                 return { hold: true, gaps: [], kind: 'empty_trail', target: null, capped: false }
             }
@@ -1531,15 +1548,23 @@ PaAgentLoop.prototype = {
         // get it; never say WHICH — the acceptance test measures exactly the
         // choice this text must not make.
         if (kind === 'empty_trail') {
+            // #191 review finding 2: assert ONLY what this branch has
+            // established. It knows the run has invoked nothing — the trail
+            // and `_dispatchCount` agree on that, which is the floor's own
+            // entry condition. It does NOT know what the draft declared:
+            // `_safeGaps` returns `[]` both for a complete sweep and for a
+            // degraded PaFixReport (its documented catch path), so any claim
+            // about the draft's layer coverage may be false. A hold block
+            // that misstates the run's own facts is the wrong instrument for
+            // measuring evidential honesty.
             lines.push(
-                'Your draft accounts for the seven layers, but this run has not called a single ' +
-                    'tool — so every layer you marked as swept was swept against nothing, and there ' +
-                    'is no evidence on record for any claim in the report.'
+                'This run has not called a single tool, so there is no evidence on record for any ' +
+                    'claim a report could make.'
             )
             lines.push('')
             lines.push(
-                'A layer that could not be read is not a layer that was swept. Either go and look ' +
-                    'at one, or mark honestly what you have not looked at and say why.'
+                'A layer that was never read is not a layer that was swept. Either go and look at ' +
+                    'one, or mark honestly what you have not looked at and say why.'
             )
             return lines.join('\n')
         }

@@ -1764,6 +1764,58 @@ describe('depth gate (#103) — _depthGate', () => {
         expect(gateLoop(['schema_lookup'], undefined, [])._depthGate('RUN1', FIX).hold).toBe(false)
     })
 
+    // The test above cannot FAIL if the floor read `trail.tools` instead of
+    // `release` — at the shipped default the two are identical. These pin the
+    // distinction where it is observable.
+    test('§AQ property 8, pinned: under the strict rule a non-retrieving trail floors', () => {
+        const loop = load({
+            auditLogger: fakeAuditLogger({ available: true, tools: ['schema_lookup'], retrievingTools: [] }),
+            fixReport: fakeFixReport([], []),
+            requireRetrievalToRelease: true,
+        })
+
+        expect(loop._depthGate('RUN1', FIX).kind).toBe('empty_trail')
+    })
+
+    test('§AQ property 8, pinned: under the strict rule a RETRIEVING trail does not floor', () => {
+        const loop = load({
+            auditLogger: fakeAuditLogger({
+                available: true,
+                tools: ['schema_lookup'],
+                retrievingTools: ['schema_lookup'],
+            }),
+            fixReport: fakeFixReport([], []),
+            requireRetrievalToRelease: true,
+        })
+
+        expect(loop._depthGate('RUN1', FIX).hold).toBe(false)
+    })
+
+    // #191 review finding 1. The floor tested `release.length === 0` alone,
+    // but an empty trail is NOT proof the run called nothing — a systematic
+    // audit write loss reads the same way, which is the exact ambiguity
+    // `_auditContext` was given `_dispatchCount` to resolve one function up.
+    // Without the same corroboration here the harness makes two contradictory
+    // claims about one run: the transcript says `audit trail LOST WRITES —
+    // this run dispatched 1 tool call(s)` while the gate floors it for having
+    // called nothing, burning the whole MAX_HOLDS budget on a false charge.
+    test('#191: the floor does NOT fire when the loop dispatched a tool and the trail lost the rows', () => {
+        const loop = gateLoop([], 'no_audit_rows', [])
+        loop._dispatchCount = 1
+
+        const gate = loop._depthGate('RUN1', FIX)
+
+        expect(gate.hold).toBe(false)
+        expect(gate.kind).toBe('')
+    })
+
+    test('#191: the floor still fires when trail and dispatch count AGREE on zero', () => {
+        const loop = gateLoop([], 'no_audit_rows', [])
+
+        expect(loop._dispatchCount).toBe(0)
+        expect(loop._depthGate('RUN1', FIX).kind).toBe('empty_trail')
+    })
+
     test('§AQ property 6: _holdNote names empty_trail and does NOT claim a NOT_SWEPT declaration', () => {
         const note = gateLoop([], 'no_audit_rows', [])._holdNote({
             hold: true,
@@ -1798,6 +1850,17 @@ describe('depth gate (#103) — _depthGate', () => {
         for (let i = 0; i < ALL.length; i++) {
             expect(block).not.toContain(ALL[i])
         }
+    })
+
+    // #191 review finding 2. The block must assert only what this branch has
+    // ESTABLISHED. `_safeGaps` returns [] both for a complete sweep and for a
+    // degraded PaFixReport (its documented catch path), so the block cannot
+    // claim the draft accounts for seven layers — it does not know that.
+    test('#191: the empty_trail block claims nothing about what the draft declared', () => {
+        const block = gateLoop([], 'no_audit_rows', [])._holdBlock([], 'empty_trail', null)
+
+        expect(block).not.toMatch(/accounts for the seven layers/i)
+        expect(block).not.toMatch(/marked as swept/i)
     })
 
     test('HOLDS on no_audit_rows — zero tool calls is the strongest gap', () => {
