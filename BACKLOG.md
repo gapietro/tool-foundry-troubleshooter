@@ -3,17 +3,27 @@
 Persisted by `/next` so no session re-derives priorities from scratch. Read this first when asked
 what is next. Ranked by gate-distance, not by issue age or severity label.
 
-**Last ranked:** 2026-08-12 (re-checked after PR #225 merged) · shipped at version `2026.08.1208` ·
-board 6 open / 103 closed · 1 open PR (#226, this file's own release)
+**Last ranked:** 2026-08-12 (re-checked after PR #227 merged) · shipped at version `2026.08.1209` ·
+board 6 open / 104 closed · **0 open PRs**
 
 > The board went 1 → 6 open because `/senior-grade` sitting 1 ran and filed F-03…F-07 as
 > #216–#220. **That is the audit working as designed, not the backlog rotting** — audits are issue
 > generators and run at milestones. Distance-to-gate did not move: it is still 1.
 >
-> **What moved on the 2026-08-12 re-check:** PR #225 merged, landing `benchmark/DECISION.md` §AW —
-> the claim-veracity axis pre-registration. **#212's design gate is discharged.** #212 stays #1 and
-> stays `next`, but its next action is no longer "design it"; it is **build the extractor blind and
-> burn the calibration one-shot**. Ranking otherwise unchanged, so the rubric is not re-run below.
+> **What moved on the 2026-08-12 re-check (PR #225):** `benchmark/DECISION.md` §AW landed — the
+> claim-veracity axis pre-registration. **#212's design gate is discharged.** Its next action stopped
+> being "design it".
+>
+> **What moved on this re-check (PR #227):** `benchmark/EXTRACTOR-BRIEF.md` landed, and the deny-list
+> was retired for a closed allowlist (§AW11b). **#212's next action is now a session handoff, not a
+> build step** — see *The blinding constraint* below, which decides **who** may do it. #212 stays #1
+> and stays `next`; nothing was filed and nothing was reordered, so the rubric is not re-run below.
+>
+> **This ranking session is contaminated and cannot author the extractor.** Reading this file is what
+> contaminates — the *Current gate* section two paragraphs down restates answer-key content for a
+> calibration row. That is deliberate (the gate is unreadable without it) and it is why §AW11a's rule
+> binds the **dispatching session**, not the author's working directory: no agent spawned from a
+> session that has run `/next` is eligible.
 
 ---
 
