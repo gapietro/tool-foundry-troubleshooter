@@ -3,12 +3,17 @@
 Persisted by `/next` so no session re-derives priorities from scratch. Read this first when asked
 what is next. Ranked by gate-distance, not by issue age or severity label.
 
-**Last ranked:** 2026-08-12 (re-ranked after grade sitting 1) · at version `2026.08.1207` · board
-6 open / 103 closed · 1 open PR (#225, the #212 design gate)
+**Last ranked:** 2026-08-12 (re-checked after PR #225 merged) · at version `2026.08.1207` · board
+6 open / 103 closed · **0 open PRs**
 
 > The board went 1 → 6 open because `/senior-grade` sitting 1 ran and filed F-03…F-07 as
 > #216–#220. **That is the audit working as designed, not the backlog rotting** — audits are issue
 > generators and run at milestones. Distance-to-gate did not move: it is still 1.
+>
+> **What moved on the 2026-08-12 re-check:** PR #225 merged, landing `benchmark/DECISION.md` §AW —
+> the claim-veracity axis pre-registration. **#212's design gate is discharged.** #212 stays #1 and
+> stays `next`, but its next action is no longer "design it"; it is **build the extractor blind and
+> burn the calibration one-shot**. Ranking otherwise unchanged, so the rubric is not re-run below.
 
 ---
 
@@ -43,7 +48,7 @@ registered prediction with no trigger firing while correctness collapsed **4/4 �
 
 | # | Item | Why it ranks here |
 |---|---|---|
-| **1** | **#212 — commission the correctness axis** (`next`) | Removes the release blocker above. It is the only open item that touches the current gate, and §5.2 says no further sharpening of the existing instrument can substitute for it. **Design before build** — `/design-spar` first; output lands as a pre-registration in `benchmark/DECISION.md`. |
+| **1** | **#212 — commission the correctness axis** (`next`) · **Stage 2, in flight** | Removes the release blocker above. It is the only open item that touches the current gate, and §5.2 says no further sharpening of the existing instrument can substitute for it. ~~**Design before build** — `/design-spar` first~~ **Design gate discharged 2026-08-12** (§AW, PR #225). Next action: author the extractor **blind**, freeze it, then burn the calibration set once. See *The blinding constraint* below before starting work — it changes **who** may do it. |
 | 2 | **#216 — no retention or purge for captured customer data** (F-04) | Named one of grade sitting 1's *three largest risks*, and the only open finding that is a **privacy** problem rather than a rigor problem. Blocks the **next** gate (installable on a customer instance / handoff), not this one — so it ranks below #1 but above everything else on the board. |
 | 3 | **#220 — no automated integration tier** (F-07) | The one grade cap still standing after PR #222 lifted *No mandatory CI → B*. **Does not bind today** — raw 72.9 already sits below B+ — so it only starts costing once the score rises. Ranks as the gating item for grade sitting 2, not for now. |
 | — | Phase 2, shrunk — native triage + Fix Report export | The cheapest alternative source of correctness signal: put it in front of real SCs and let production supply the evidence. **Note it does NOT satisfy §5.6 reason 2**, which requires *the custom harness* in front of real users — shipping the native arm reopens nothing, so this buys production evidence on its own merits, not a reopening condition. Ranked below #1 because shipping a UI over an unmeasured diagnosis is the thing #1 exists to prevent. Considered and not chosen 2026-08-12. |
@@ -52,7 +57,41 @@ registered prediction with no trigger firing while correctness collapsed **4/4 �
 **The load-bearing constraint on #1** — from §5.0, which measured the failure mode: 103 issues created
 and 84 closed in fourteen days with the board flat because inflow matched outflow. **A pre-registered
 stopping condition must be written before the first pass.** A self-scrutinising instrument has no fixed
-point unless one is declared up front, and that is precisely what the last one lacked.
+point unless one is declared up front, and that is precisely what the last one lacked. §AW7 now carries
+that condition.
+
+### The blinding constraint on #1 — it decides *who* writes the extractor
+
+§AW4 makes the calibration set a **one-shot consumable** and names a deny-list the extractor's author
+may not read. Two consequences that are easy to lose across a `/clear`:
+
+1. **The extractor must be authored by a fresh-context agent, not by the session that ranks the board.**
+   Ranking requires reading *this file*, and this file restates the answer for one calibration row two
+   sections up. A session that has run `/next` is contaminated by construction and cannot be the author.
+   Dispatch with an explicit deny-list and require a written blinding attestation; §AW4 puts the burden
+   of demonstrating blindness on the **author**, not on a reviewer to prove contamination.
+2. **Review the returned extractor for shape, lint and tests only.** Steering its claim-detection
+   heuristics from a contaminated position is tuning against the answer key at one remove, and §AW4
+   voids the recall figure on exactly that — which per §AW8 voids the veracity figure with it.
+
+3. **Blinding is a property of the DISPATCHING SESSION, not of the author — demonstrated twice, and
+   the obvious fix was refuted.** Two authors were dispatched; both aborted on a contamination
+   tripwire before writing a line. Neither opened a deny-listed file. The project **auto-memory** —
+   which restated a calibration row's answer — is injected into every agent spawned from a session
+   scoped to this project. The second dispatch tested the fix: author placed *outside the repo*,
+   memory already redacted on disk. **It was contaminated anyway, quoting the pre-redaction text** —
+   so the injection rides in the dispatching session's context, not the agent's working directory,
+   and **redacting the memory does not clear a session that already loaded it.**
+
+   **Therefore: no agent spawned from a session that has run `/next` can author this.** It must be
+   authored from a **session started fresh after the redaction**, whose context never carried the
+   answer. See §AW11a for the full finding and for defect 10 (`scorecard-template.md` §A2 discloses
+   a seed's decoy — ruled acceptable, seed 04 is not in the corpus).
+
+**Status 2026-08-12:** two dispatches, two aborts, nothing authored. Project auto-memory **redacted**
+(backup outside the repo). **Nothing reviewed, nothing merged, and the calibration burn has not
+fired — the instrument is intact and the cost so far is two dispatches.** Next action is a fresh
+session, not another subagent.
 
 ---
 
