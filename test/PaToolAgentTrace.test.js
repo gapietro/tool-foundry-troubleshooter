@@ -10,10 +10,26 @@
 
 const { loadScriptInclude } = require('./_loadScriptInclude')
 
+/**
+ * #41 — this core now reaches PaToolReadKit for its read layer, so the kit has
+ * to exist in the same vm context AND see the same GlideRecordSecure stub the
+ * test built. Loading the kit with the caller's globals is what makes the
+ * delegation transparent to every existing test.
+ */
+function loadTrace(globals) {
+    const g = globals || {}
+    const kitCtx = loadScriptInclude('PaToolReadKit.js', g)
+    return loadScriptInclude(
+        'tools/PaToolAgentTrace.js',
+        Object.assign({}, g, { PaToolReadKit: kitCtx.PaToolReadKit })
+    )
+}
+
+
 let trace
 
 beforeEach(() => {
-    const ctx = loadScriptInclude('tools/PaToolAgentTrace.js')
+    const ctx = loadTrace()
     trace = new ctx.PaToolAgentTrace()
 })
 
@@ -635,7 +651,7 @@ describe('execution paths run end to end', () => {
     // holds. So "does this name match nothing" is expressed by handing it an
     // empty table set, not by passing a name that should not match.
     function load(tables) {
-        const ctx = loadScriptInclude('tools/PaToolAgentTrace.js', {
+        const ctx = loadTrace({
             GlideRecordSecure: makeGlideRecordSecure(tables || TABLES),
             GlideDateTime: makeGlideDateTime(),
         })
@@ -750,7 +766,7 @@ describe('ordering is applied at the database', () => {
 
     function run(args, tables) {
         const GRS = makeGlideRecordSecure(tables || {})
-        const ctx = loadScriptInclude('tools/PaToolAgentTrace.js', {
+        const ctx = loadTrace({
             GlideRecordSecure: GRS,
             GlideDateTime: makeGlideDateTime(),
         })
@@ -869,7 +885,7 @@ describe('task-vs-tool-call note carries this run\'s counts (issue #85)', () => 
     })
 
     test('the emitted note never claims a count on a denied read', () => {
-        const ctx = loadScriptInclude('tools/PaToolAgentTrace.js', {
+        const ctx = loadTrace({
             GlideRecordSecure: makeQueryingGlideRecordSecure(
                 { sn_aia_execution_plan: [{ sys_id: 'plan0000000000000000000000000001' }] },
                 { denied: ['sn_aia_execution_task', 'sn_aia_tools_execution'] }
@@ -894,7 +910,7 @@ describe('task-vs-tool-call note carries this run\'s counts (issue #85)', () => 
     })
 
     test('the emitted note matches the run\'s own task_stats and tool_call_stats', () => {
-        const ctx = loadScriptInclude('tools/PaToolAgentTrace.js', {
+        const ctx = loadTrace({
             GlideRecordSecure: makeGlideRecordSecure({
                 sn_aia_execution_plan: [{ sys_id: 'plan0000000000000000000000000001' }],
                 sn_aia_execution_task: [
@@ -930,7 +946,7 @@ describe('argument prefix guard (#122)', () => {
     }
 
     function run(args, tables) {
-        const ctx = loadScriptInclude('tools/PaToolAgentTrace.js', {
+        const ctx = loadTrace({
             GlideRecordSecure: makeGlideRecordSecure(tables || {}),
             GlideDateTime: makeGlideDateTime(),
         })
