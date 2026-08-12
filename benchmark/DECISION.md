@@ -8009,11 +8009,30 @@ is not protected. The extractor author — human or agent — **may not read**:
 | `benchmark/DECISION.md` §AO2 | Prose restatement of the same, for rows 09/11/13 |
 | `benchmark/DECISION.md` §AW1 and §AW10 | Row 09's answer, and row 11's expected verdict |
 | `CHANGELOG.md` 2026.08.1207 · `DESIGN.md` §5.6 | Row 09's answer, restated for the release record |
+| `BACKLOG.md` · `GRADE.md` | Row 09's answer again, in the gate rationale — *and `BACKLOG.md` is the file `/next` requires reading, so the session that ranks the board is contaminated by construction* (added §AW11a) |
+| **The project auto-memory** at `~/.claude/projects/-Users-gpietro-…/memory/` | Restated row 09's answer, row 11's row-count claim, and one seed's planted defect. **Injected into every agent run in this directory — not a file an author chooses to open.** Redacted 2026-08-12; see §AW11a (added §AW11a) |
 
 The extractor is authored against `benchmark/scorecard-template.md` (report *shape*) and the raw
 report bodies only. **If the author cannot demonstrate it was blind, there is no recall figure** —
 and per §AW8 that means no veracity figure. The burden is on the author to show blinding, not on a
 reviewer to show contamination; the set cannot be re-burned to settle the argument.
+
+**Blinding is a property of the DISPATCHING SESSION, not of the author** (added §AW11a, after two
+dispatches were contaminated before writing a line). The deny-list above governs what an author
+*chooses to read*; it does not govern what its context is *handed*. Two binding requirements follow,
+and they sit here rather than only in §AW11a because this is the section a compliant author reads:
+
+1. **The author must be run from a session whose context never carried the answer** — not from a
+   session that has run `/next` (it must read `BACKLOG.md`), and not as a subagent dispatched by one,
+   since the project auto-memory is injected into every agent spawned from a project-scoped session.
+   Neither a neutral working directory nor a redacted memory file is sufficient on its own: a session
+   that already loaded the memory carries the pre-redaction text into every agent it spawns
+   (measured, not assumed — §AW11a defect 9).
+2. **The attestation must answer: "did any system-injected context — memory file, project reminder,
+   environment note — surface facts about specific benchmark rows?"** This question is mandatory and
+   its answer is recorded even when it is *none*. An author cannot list what it never chose to read,
+   so a read-log alone cannot discharge the burden; this is the only question that caught either
+   contaminated dispatch, and it is one a reviewer cannot answer from outside.
 
 **The calibration set is a consumable, spent once.** Touch the extractor after seeing the recall
 figure and that figure is void — and per §AW8, no recall figure means **no veracity figure either**.
@@ -8145,3 +8164,64 @@ As drafted, **3 of 4 predictions were unfalsifiable** — a table that would hav
 confirmed" while testing one thing. That is §AU6's failure exactly, committed in the section that
 opens by citing §AU6 as the reason for the rule. **Invoking a rule is not complying with it**, and
 nothing in this project's ledger has ever caught that except review.
+
+### AW11a. Two more defects, found on the first two dispatches — blinding is not authorable from inside
+
+Added **2026-08-12**, still before any measurement, under §AW11's licence: the freeze binds after
+the first burn, and no burn has fired. Neither defect below cost the instrument anything, because
+**both authors aborted before writing a line**. The tripwire that caught them was not in §AW4 — it
+was added ad hoc in the dispatch brief, which is itself the finding.
+
+**Defect 9 — the blinding procedure enumerated files, and the leak was not a file.**
+
+§AW4 was written as a list of sources the author *may not read*. Two authors were dispatched. Neither
+opened a listed source. **Both were contaminated before their first action**, by this project's
+auto-memory, which restated row 09's answer, row 11's row-count claim, and one seed's planted defect,
+and which the harness injects into every agent spawned from a session scoped to this project.
+
+The second dispatch is the informative one, because it tested the obvious fix and **refuted it**. The
+author was placed *outside the repository* with only `scorecard-template.md` copied in, and the
+memory file on disk had already been redacted to pointers. It was contaminated anyway, quoting the
+**pre-redaction** text — so the injection is carried in the **dispatching session's context**, not
+read from disk per agent and not derived from the agent's working directory. Two corollaries, both
+counter-intuitive and both now load-bearing:
+
+- **Redacting the memory does not clear a session that has already loaded it.** The fix takes effect
+  only for sessions started afterwards.
+- **No subagent dispatched from a contaminated session can be blind**, whatever its working
+  directory or deny-list. Blinding is a property of the **dispatching session**, not of the author.
+
+The standing remedy is therefore: **the extractor must be authored from a session started after the
+redaction, in a project scope that was never told the answer** — not from the session that ranks the
+board, and not by any agent that session spawns. §AW4's table is extended (`BACKLOG.md`, `GRADE.md`,
+the auto-memory) and its attestation now asks *"did any system-injected context surface facts about
+specific benchmark rows"* — the question that caught both, and the one a reviewer cannot answer from
+outside, because **an author cannot list what it never chose to read.**
+
+**Defect 10 — the one designated-safe input is not clean.**
+
+§AW4 names `benchmark/scorecard-template.md` as the material the extractor is authored against. The
+second author, reading it under sanction, reported that **§A2 discloses a seed's planted defect, its
+decoy, and the exact profile of a well-formed-but-false fix** — *"seed 4 carries an empty
+`connection` deliberately … a fix that is perfectly well-formed and fixes nothing."* That is a
+worked example of the very class this axis detects, handed to the author by the registration itself.
+
+Mitigating, and the reason this is recorded rather than treated as fatal: **seed 04 is not in the
+corpus** (§AN2 excludes it; v14 ran seeds 02·05·06·07·08), so no calibration row's answer is
+disclosed. What leaks is the *class*, not an instance. **Ruling: the class was already disclosed by
+the brief** — an extractor cannot be specified without saying what it hunts — so redacting §A2 would
+buy nothing while removing the author's only description of report shape. §A2 stays. Recorded so
+that a later reader cannot mistake the silence for the question never having been asked.
+
+**What both defects share, and it is §AM's finding wearing a third costume: two guards pointing the
+same way read as coverage.** The deny-list and the word "cold" both guard the author's *reading*;
+nothing guarded the author's *context*. And §AW11 established "invoking a rule is not complying with
+it" — then specified blinding as an enumeration, which is exactly the shape that misses the vector
+its author could not imagine enumerating. **An enumerated guard covers the cases its author thought
+of; the boundary that holds is one derived from a state the guarded party cannot enter** — §AM2's
+rule, arriving here from the opposite direction.
+
+Recorded, not filed as issues, per §AW7 clause 3. **Cost to the figures: none.** Every change here
+strictly *narrows* what an author may see, so it can only reduce contamination, never manufacture a
+better recall figure — and that bound is what makes this an amendment rather than a new registered
+term (§AT3).
