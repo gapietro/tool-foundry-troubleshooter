@@ -17,6 +17,66 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1208 — 2026-08-12
+
+### Blinding is a property of the dispatching session — found by two aborted dispatches, before any measurement
+
+`/next` re-checked the board after `2026.08.1207` merged. **#212 stays #1 and stays `next`**, but its
+design gate is discharged, so its next action changed from *design it* to *build the extractor blind
+and burn the calibration set*. `BACKLOG.md` records that, plus the standing position so no session
+re-derives it.
+
+Attempting that build is where the release comes from. **Two authors were dispatched to write the
+extractor; both aborted on a contamination tripwire before writing a line.** The calibration set is
+unspent and the instrument is intact — the cost was two dispatches.
+
+`DECISION.md` **§AW11a** records two registration defects, repaired under §AW11's licence (the freeze
+binds after the first burn, and no burn has fired) rather than filed, per §AW7 clause 3.
+
+**Defect 9 — §AW4 enumerated *files* the author may not read, and the leak was not a file.** Neither
+author opened a listed source. Both were contaminated by the project auto-memory, injected before
+their first action, which restated a calibration row's answer. The second dispatch is the
+informative one because it **tested the obvious fix and refuted it**: placed outside the repository,
+with the memory already redacted on disk, it was contaminated anyway — quoting the **pre-redaction**
+text. So the injection rides in the *dispatching session's context*, not the agent's working
+directory. Two corollaries now load-bearing:
+
+- Redacting the memory does not clear a session that already loaded it; the fix binds only on
+  sessions started afterwards.
+- **No subagent dispatched from a contaminated session can be blind**, whatever its cwd or
+  deny-list — and a session that has run `/next` is contaminated by construction, because
+  `BACKLOG.md` restates the answer.
+
+Remedy is structural: author from a fresh session in a scope that was never told the answer. §AW4's
+table gains `BACKLOG.md`, `GRADE.md` and the auto-memory, and its attestation now asks *"did any
+system-injected context surface facts about specific benchmark rows"* — the question that caught
+both, and the one a reviewer cannot answer from outside, because **an author cannot list what it
+never chose to read.**
+
+**Defect 10 — the one designated-safe input is not clean.** §AW4 names `scorecard-template.md` as the
+material the extractor is authored against; its §A2 discloses a seed's planted defect, its decoy, and
+the profile of a well-formed-but-false fix. **Ruled acceptable and left in place:** seed 04 is not in
+the corpus (§AN2; v14 ran 02·05·06·07·08), so the *class* leaks and no calibration row's answer does
+— and the class was already disclosed by the brief, since an extractor cannot be specified without
+saying what it hunts. Recorded so a later reader cannot mistake the silence for the question never
+having been asked.
+
+**Cost to the figures: none.** Every change strictly *narrows* what an author may see, so it can only
+reduce contamination, never manufacture a better recall figure — the §AT3 bound that makes this an
+amendment rather than a new registered term.
+
+The pattern is §AM's, a third time: **two guards pointing the same way read as coverage.** The
+deny-list and the word "cold" both guarded the author's *reading*; nothing guarded its *context*.
+And §AW11 is the section that established *"invoking a rule is not complying with it"* — then
+specified blinding as an enumeration, the shape that misses whatever its author could not think to
+enumerate.
+
+Housekeeping outside the repo, noted because it is not visible in this diff: the project auto-memory
+was redacted to pointers at the five sites that restated answer-key material, with a backup taken
+first.
+
+---
+
 ## 2026.08.1207 — 2026-08-12
 
 ### The claim-veracity axis is pre-registered, and §AO2's row 09 is adjudicated as fabrication
