@@ -100,12 +100,12 @@ four reps, so nothing about the prompt varies between baseline and pass:
 
 Run sequentially, one at a time, custom arm only (§AN7's audit-attribution hazard, §O1).
 
-| rep | run | sys_id | terminal | audit rows | tool calls | `empty_trail` hold | capped exit | verdict |
-|---|---|---|---|---|---|---|---|---|
-| 1 | `TR1000317` | `4490bc532bae831017a6ffbeee91bfc1` | `failed` | 6 | 3 | **yes** | no | evidence rule |
-| 2 | `TR1000318` | `a5e0b8d32bae831017a6ffbeee91bf5a` | `complete` | 6 | 3 | **yes** | no | **`fix_report validated`** |
-| 3 | `TR1000319` | `18217c532b6ec310f243fed2ce91bfd0` | `failed` | 8 | 4 | **yes** | no | evidence rule |
-| 4 | `TR1000320` | `bc71f8d32b6ec310f243fed2ce91bf39` | `complete` | 6 | 3 | **yes** | no | **`fix_report validated`** |
+| rep | run | sys_id | terminal | audit rows | tool calls | `empty_trail` hold | `gaps` hold | holds spent | capped exit | verdict |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | `TR1000317` | `4490bc532bae831017a6ffbeee91bfc1` | `failed` | 6 | 3 | **yes** | yes | **2 = cap** | no | evidence rule |
+| 2 | `TR1000318` | `a5e0b8d32bae831017a6ffbeee91bf5a` | `complete` | 6 | 3 | **yes** | yes | **2 = cap** | no | **`fix_report validated`** |
+| 3 | `TR1000319` | `18217c532b6ec310f243fed2ce91bfd0` | `failed` | 8 | 4 | **yes** | yes | **2 = cap** | no | evidence rule |
+| 4 | `TR1000320` | `bc71f8d32b6ec310f243fed2ce91bf39` | `complete` | 6 | 3 | **yes** | yes | **2 = cap** | no | **`fix_report validated`** |
 
 Audit rows run at exactly 2× the tool-call count on every rep (`PaAuditLogger` writes a pair per
 dispatch). AQ-1 measures non-emptiness, which is unaffected either way; the ratio is recorded
@@ -113,8 +113,19 @@ because a reader counting rows as calls would overstate breadth by double.
 
 **`empty_trail` column** — server-side probe, `transcriptLIKEHOLD (empty_trail)` over the four run
 numbers: **4 of 4 matched.**
+**`gaps` column** — `transcriptLIKEHOLD: terminal action refused` (the `_holdNote` `gaps` wording;
+the `empty_trail` note reads `HOLD (empty_trail): …` and does not match this prefix): **4 of 4
+matched.**
 **`capped exit` column** — `transcriptLIKEhold cap was reached` (the `_cappedNote()` string, which
 `:431` appends as a system transcript row whenever `gate.capped === true`): **0 of 4 matched.**
+
+**Why the `gaps` column is here and not left to rep 1's transcript.** `MAX_HOLDS` is 2, so "the cap
+check was live on the third terminal action" is only true of a run that actually spent both holds.
+The first draft of this file showed the second hold for rep 1 alone and generalised — and rep 3
+demonstrably diverges in shape (4 tool calls, 8 audit rows), so the generalisation was not free.
+Probed per rep instead: **all four spent exactly 2 holds**, so the cap was live on all four and
+§AR1's revert-trigger-2 reasoning (R1 released them, not the cap) is supported for each run rather
+than for one. The verdict — 0 of 4 capped — never depended on this; the *causal explanation* did.
 
 ### 1.1 The mechanism, from rep 1's transcript
 

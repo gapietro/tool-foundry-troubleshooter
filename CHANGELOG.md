@@ -17,6 +17,29 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1117 — 2026-08-11
+
+**PR #197 review findings, all three (#191 follow-up).** Documentation only; no `src/` change.
+
+- **§AR1a, new and the substantive one: the shipped floor is NARROWER than §AQ2 pre-registered.**
+  §AQ2 specifies `if (release.length === 0)`; `PaAgentLoop.js:1161` ships
+  `if (release.length === 0 && this._dispatchCount === 0)`. The conjunct is correct (an empty
+  release is not proof the run invoked nothing — `no_audit_rows` reads identically for a systematic
+  audit write loss) and was documented in code and in the `1115` entry, but **`_dispatchCount`
+  appeared zero times in `DECISION.md`**, so a reader auditing spec→verdict fidelity from the ledger
+  — the check §AR itself invites — would have concluded the built floor matched the registered one.
+  Rule earned: **an amendment to a registered condition belongs in the ledger when it is made**; a
+  code comment and a CHANGELOG bullet are not the ledger.
+- **Per-rep hold counts, probed rather than generalised.** The `1116` evidence showed the second
+  (`gaps`) hold for rep 1 only and generalised to all four, while rep 3 diverges in shape (4 tool
+  calls, 8 audit rows). Re-probed: `gaps` hold **4 of 4**, so every rep spent exactly 2 holds
+  (= `MAX_HOLDS`) and the cap was live on all four. The 0-of-4 capped verdict never depended on
+  this; §AR1's *causal* claim about R1 did.
+- **The #196 corollary is qualified.** "Does not reproduce on the floor path" is true **by
+  construction, not measurement** — #195 built the floor's clear, and no rep exercised the
+  `no_layer_report` path. `DECISION.md` said this correctly; the CHANGELOG bullet did not, and the
+  CHANGELOG is what gets quoted.
+
 ## 2026.08.1116 — 2026-08-11
 
 **The §AQ floor is measured: AQ-1 and AQ-2 both PASS, no revert trigger fires (#191 part 2, done).**
@@ -39,7 +62,10 @@ Measurement only — no `src/` change. Evidence
   tool call.
 - **§AQ2 property 5 verified live**, not inferred: the floor's hold block appears in exactly four
   `sys_generative_ai_log` prompts, one per run, so it does not survive the compliant dispatch.
-  Corollary: **#196's stale-HOLD defect does not reproduce on the floor path** and is now unblocked.
+  Corollary: **#196's stale-HOLD defect does not reproduce on the floor path** — but that is true
+  **by construction, not by measurement**: #195 built the floor's own clear, and #196 concerns the
+  `no_layer_report` path, which **no rep exercised** (all four probed prompts are `empty_trail`).
+  **#196 stands unmeasured** and is unblocked, not answered.
 - **AQ-4 is recorded `not exercised`, not passed** — every rep ran the no-execution path, so the
   tripwire had no `execution` row to fire on. An unrun tripwire is not a clean one.
 - **§AQ3's cost is now live:** a v15+ custom gate figure may be reported absolutely and may **not**
