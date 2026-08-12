@@ -17,6 +17,57 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1114 — 2026-08-11
+
+**Pre-registration — the depth-gate empty-trail floor (#191 part 2).** `benchmark/DECISION.md`
+**§AQ**. Documentation only: **no code changes, and none are permitted until this section is
+merged.**
+
+- **Why it needs a pre-registration at all.** The floor changes `_depthGate`, which v13 (§AJ) and
+  v14 (§AO) were both scored against. §AO3 is the cautionary case one pass back: the operator
+  changed the scorer instruction and the v13→v14 determinacy *comparison* was voided even though
+  both passes' absolute figures stood. A silent gate change does the same thing to the custom
+  arm's gate figure.
+- **The change, in one line:** an empty release set cannot support a terminal report, whatever
+  `layers_swept` claims — sitting **below** the `MAX_HOLDS` cap (R2's lesson applied, not
+  re-learned: a hold path the cap cannot reach rides to `MAX_ITERATIONS` → `partial`, which is
+  C1's pre-registered revert trigger), recording nothing so it never latches sticky, intercepting
+  only the `open.length === 0` allow, and **naming no tool** so §H8 item 3 survives.
+- **The cost is declared in advance rather than discovered afterwards:** the v15 custom gate figure
+  may be reported absolutely and **may not be differenced against v12/v13/v14**. The native arm
+  does not run this harness, so the native series stays continuous and §AD7 still requires both
+  arms be quoted together.
+- **Four predictions filed against a 0-of-4 baseline** (v14 rows 06/08 died at the parser;
+  `TR1000315`/`TR1000316` died at validation). AQ-1 is primary (≥3 of 4 reps record a tool call);
+  AQ-2 is deliberately weak, because whether the model then writes a citable report is a
+  *correctness* question this change does not claim to answer (§AC8, unamended). AQ-3/AQ-4 are
+  tripwires that count toward nothing. **No gate-figure prediction is filed**, so Ruling 6 forbids
+  claiming one afterwards.
+- **The spec listed the properties a review may check, and the review found three more — that is
+  the finding, and it is recorded rather than quietly folded in.** `/code-review` on PR #194
+  raised six items against the first draft, all six accepted after verification against source,
+  and two of them made this section's own predictions **unmeasurable**: (a) `_holdNote` branches
+  only on `no_layer_report`, so a floor hold would emit `layer(s)  declared NOT_SWEPT` — an empty
+  list and a claim that is false on this path — leaving a floor hold byte-indistinguishable from a
+  degenerate `gaps` hold, so AQ-3 and revert trigger 1 could not be evaluated at all; (b) the I1
+  `_holdActive` clear tests `_anyOf(_heldTools, …)` and the floor deliberately leaves `_heldTools`
+  null, so a model that complies by calling a tool would still carry *"a terminal action is not
+  available yet"* into its next prompt — I1's own defect on a new path, landing on the turn AQ-1
+  and AQ-2 measure. Both are now enumerated properties with specified behaviour, alongside the
+  `_depthGate` return-contract update.
+- **Two logical defects in the section's own instrument, both fixed.** Revert trigger 2 read "the
+  capped-release rate rises above its v14 level", and the comparable v14 rows issued **no holds at
+  all**, so the baseline was 0 and *any* single non-compliant rep would have fired it — while AQ-1
+  predicts ≥3 of 4, making one non-compliant rep a **predicted-pass** outcome that trips a
+  no-re-litigation revert. Now bounded at >1 of 4. And "baseline is 0-of-4 on every count" was
+  wrong for AQ-3/AQ-4: they are negative tripwires, trivially *satisfied* 4-of-4 before a floor
+  existed, and the sentence inverted them into starting failed so any non-firing would read as an
+  improvement the floor earned. Scoped to AQ-1/AQ-2.
+- **Three revert triggers, no re-litigation**, including the one that would prove the placement
+  argument wrong (`partial` with a floor hold in the transcript).
+- `MAX_EVIDENCE_RETURNS` (`0`, §W6) and `REQUIRE_RETRIEVAL_TO_RELEASE` (`false`, §Y6/§AL4) are
+  both **frozen** and explicitly outside what this section may pull.
+
 ## 2026.08.1113 — 2026-08-11
 
 **An empty audit trail is an answer, not a degradation (#191, part 1 of 2).**
