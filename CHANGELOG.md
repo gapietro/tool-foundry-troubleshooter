@@ -17,6 +17,47 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1207 — 2026-08-12
+
+### The claim-veracity axis is pre-registered, and §AO2's row 09 is adjudicated as fabrication
+
+Design gate for **#212**, run as `/design-spar`. The output is a pre-registration —
+`benchmark/DECISION.md` **§AW** — and deliberately **no code**: building the extractor in this
+change would make the registration contemporaneous with the thing it constrains, which is what
+"pre-registered" exists to rule out.
+
+**The issue's premise needed correcting first, and the correction reshaped the design.** #212 and
+`DESIGN.md` §5.2 both say correctness "has never been measured". Checked against the scorecard,
+`root_cause_layer_correct` and `fix_target_correct` **are** correctness columns — 4 of the rubric's
+6 points — and the former is one of the two `passes_gate` terms. The genuinely unmeasured axis is
+narrower, and is what §AO2's own closing line says: **whether the report's factual claims are
+true**. That moves ground truth from the seed spec's expected-label to **instance state** —
+sharpening the labels, the obvious cheap move, would not have caught one of the three known-bad
+rows.
+
+**Row 09 adjudicated live, as the feasibility proof.** `x_snc_tsbench_ticket` has 8 fields and
+**no `type` column**, so that row's Fix 1 repoints a query at a column that does not exist — at
+6/6, gate-passing. One `sys_dictionary` call settled what §AO2 left open since v14. Row 11 stays
+open between fabrication and the Build Rule #42 harness defect; §AO2's two readings still have
+opposite consequences.
+
+**Registered terms.** A **three-valued** verdict (`refuted` / `supported` / `unresolvable`) because
+a two-valued one would launder "I cannot see" into "the claim is false" — the #205 defect this axis
+exists to detect. A **metadata-membership** probe with a **paired positive control**, because #187
+records that a nonexistent field returns the same `Access denied` bytes as a missing read ACL;
+§AV7 is the precedent. A **cold, untuned extractor** whose recall is measured **once** against a
+sensitivity set that is **spent once** — that is the stopping condition #212 requires, and it is
+un-gameable because it references resource consumption rather than results. **No veracity figure
+without its recall.** The axis **does not gate**: `passes_gate` is untouched, so §AO3 and §AQ3 hold
+by construction.
+
+Three exclusions carry falsifiers per §5.5. **E-3 is the weakest and is named as such:** all three
+calibration rows are native, so recall is a native-arm figure assumed to transfer to custom.
+
+`BACKLOG.md` re-ranked after grade sitting 1 — board 1 → 6 open, **distance-to-gate still 1**.
+
+---
+
 ## 2026.08.1206 — 2026-08-12
 
 ### Branch protection now binds admins, and the grade ledger gets a remediation log
