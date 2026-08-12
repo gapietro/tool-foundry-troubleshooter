@@ -23,7 +23,7 @@ Branch `main`, worktree clean. Node v26.5.0 · npm 11.17.0 · TypeScript 5.5.4 �
 | `npm audit` | 3 high · 8 moderate · 0 critical (all dev-tree) |
 | `npm outdated` | sdk 4.9.2→4.10.1 · jest 29→30 · typescript 5.5→7.0 |
 | Secrets: working tree + `git log -p --all` (609 commits / 4473 objects) | **clean** |
-| Live read-only verification vs gpinst01 (Zurich P10 Hotfix 4a) | F-01 confirmed installed |
+| Live read-only verification vs gpinst01 (Zurich P10 Hotfix 4a) | F-01 confirmed installed — since **resolved and re-verified**, see F-01 |
 | Lint | **no linter configured** — no `.eslintrc*`, no `eslint.config.*` (F-09) |
 | CI | **no `.github/workflows`** (F-02) |
 
@@ -132,12 +132,24 @@ posture — a BusinessRule on `incident` update is a write-path hook on a table 
 to touch. That the same pair appears from three *other* scopes indicates a scaffold-leak pattern
 across projects, so the fix is worth generalizing.
 
-**Fix.** Delete `src/fluent/example.now.ts` and `src/server/script.ts`'s `showStateUpdate` if
-otherwise unused; rebuild; reinstall; then delete the two orphaned records in this app's scope on
-gpinst01 (app uninstall will not remove them if the source is merely deleted between installs —
-verify by re-querying both tables filtered to `sys_scope=13043037…`).
-**Acceptance:** `grep -rn "incident" src/fluent/` returns nothing outside comments; both live
-queries return zero rows for this scope. **Effort S. Grade impact +3 to +4.**
+**Fix.** Delete `src/fluent/example.now.ts` and `src/server/script.ts`; rebuild; reinstall.
+
+**RESOLVED AND LIVE-VERIFIED 2026-08-12** (issue #214, PR #221, at `2026.08.1204`). The deletion
+propagated on install and the acceptance criteria are met against gpinst01:
+
+| Check | Before | After install |
+|---|---|---|
+| `sys_script_client` where `sys_scope=13043037…` | 1 (`af760ca0…`, incident, active) | **0 records** |
+| `sys_script` where `sys_scope=13043037…` | 1 (`85b27e4c…`, incident, active) | **0 records** |
+| `sys_script_client` name=`my_client_script` (all scopes) | 4 | **3** — other apps untouched, `sys_id`s unchanged |
+| `sys_script` name=`LogStateChange` (all scopes) | 4 | **3** — other apps untouched, `sys_id`s unchanged |
+| App health after install | — | **18/18 Script Includes active; 10/10 ACLs present** incl. `troubleshooter` REST_Endpoint execute |
+
+**The mechanism is worth keeping.** Deleting the source is not the fix by itself — `now-sdk build`
+writes `deleted: true` markers into the tracked file `src/fluent/generated/keys.ts` (here: `br0`,
+`cs0`, and the `sys_module` for `script.ts`), and *those markers* are what remove already-installed
+records. Committing `keys.ts` is part of the change; without it the install leaves the live records
+in place. Rollback context: `bc0898272ba64b10f243fed2ce91bfe7`.
 
 ---
 
@@ -332,8 +344,8 @@ product is good, not merely well-built.
   "category_scores": { "product_coherence": 78, "architecture": 84, "correctness": 64,
     "security_privacy": 72, "reliability_concurrency": 74, "testing_ai_quality": 68,
     "maintainability": 72, "operations_observability": 68, "documentation_governance": 88 },
-  "release_blockers": ["F-01"],
-  "p0_count": 1, "p1_count": 3, "p2_count": 6, "p3_count": 3,
+  "release_blockers": [],
+  "p0_count": 0, "p1_count": 3, "p2_count": 6, "p3_count": 3,
   "fixed_since_previous_review": [], "remaining_existing_issues": ["#212","#214","#215","#216","#217","#218","#219","#220"],
   "new_findings": ["F-01","F-02","F-03","F-04","F-05","F-06","F-07","F-08","F-09","F-10","F-11","F-12","F-13"],
   "top_three_next_actions": [
