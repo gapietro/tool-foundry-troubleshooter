@@ -498,6 +498,32 @@ PaAgentLoop.prototype = {
 
         var result = this._tools().dispatch(toolName, args, { run_id: runId })
 
+        // #200 (§AT) — THE SECOND COUNTER, and the reason there are two.
+        //
+        // The floor in `_depthGate` needs the OPPOSITE failure direction from
+        // the counter above: `_auditContext` must overcount so a run that
+        // tried is never convicted, while the floor must UNDERCOUNT so only a
+        // call that could actually have gathered disarms it. One counter
+        // cannot serve both, and `_dispatchCount`'s attempt semantics are
+        // load-bearing for #191 part 1 — so this is an addition, not a change.
+        //
+        // The discriminator is NOT success. It is whether the registry got as
+        // far as its audit write: an empty trail is ambiguous only because a
+        // systematic write loss reads like a quiet run, and a call that never
+        // attempted a row cannot explain a missing one. `PaToolRegistry`
+        // returns on its unknown-tool and destructive gates BEFORE
+        // `logIntent` and marks exactly those two `dispatched:false`; its
+        // catch branch does not, because `logIntent` has already run.
+        //
+        // ABSENT MARKER COUNTS. A producer that never learned to mark its
+        // refusals behaves exactly as this code did before #200, so a stale
+        // collaborator can never manufacture a hold the model did not earn —
+        // the same fail-toward-today direction `_safeGaps` and `_trailTools`
+        // take.
+        if (!this._isPlainObject(result) || result.dispatched !== false) {
+            this._auditedDispatchCount += 1
+        }
+
         this._runs().appendTranscript(runId, {
             actor: 'tool',
             tool: toolName,
@@ -850,6 +876,13 @@ PaAgentLoop.prototype = {
         // for another's, and here it would answer the one question that
         // decides whether an empty trail may convict.
         this._dispatchCount = 0
+
+        // #200 (§AT) — the subset of the above that reached the registry's
+        // audit write, read by `_depthGate`'s floor. Per-run for the same
+        // reason `_dispatchCount` is: a carried count is one run's evidence
+        // answering for another's, and here it would decide whether a run
+        // that gathered nothing may file a terminal report.
+        this._auditedDispatchCount = 0
     },
 
     /**
@@ -1183,7 +1216,26 @@ PaAgentLoop.prototype = {
             // budget doing it. Part 1 of #191 established the rule; this is
             // the same rule, applied to the collaborator that was written
             // second.
-            if (release.length === 0 && this._dispatchCount === 0) {
+            //
+            // #200 (§AT): IT CORROBORATES AGAINST `_auditedDispatchCount`,
+            // NOT `_dispatchCount`. The conjunct was right and its counter was
+            // wrong. `_dispatchCount` counts ATTEMPTS by design, so one
+            // unknown or refused tool call — dispatched, never audited, no row
+            // to lose — moved it off zero permanently and bought the run a
+            // permanent exit from the exact hole §AQ was written to close.
+            // The corroborating fact is not "did this run try", which is what
+            // the do-not-convict rule one function up needs; it is "could this
+            // run have written a row the trail then lost", and only a dispatch
+            // that reached the registry's audit write can answer yes. See
+            // `_dispatchTool` for why both counters exist and which direction
+            // each one is allowed to be wrong in.
+            //
+            // §AT3: this reads MORE runs into the floor than the shipped
+            // conjunct did, and never more than §AQ2's registered
+            // `release.length === 0` alone — audited dispatches are a subset
+            // of attempts. §AQ5's revert triggers already bound that
+            // direction and carry forward unchanged.
+            if (release.length === 0 && this._auditedDispatchCount === 0) {
                 this._holdCount += 1
                 return { hold: true, gaps: [], kind: 'empty_trail', target: null, capped: false }
             }
@@ -1574,17 +1626,32 @@ PaAgentLoop.prototype = {
         // choice this text must not make.
         if (kind === 'empty_trail') {
             // #191 review finding 2: assert ONLY what this branch has
-            // established. It knows the run has invoked nothing — the trail
-            // and `_dispatchCount` agree on that, which is the floor's own
-            // entry condition. It does NOT know what the draft declared:
+            // established. It knows nothing this run did reached the RECORD —
+            // the trail and `_auditedDispatchCount` agree on that, which is
+            // the floor's own entry condition.
+            //
+            // #200 (§AT6) NARROWED WHAT THAT SENTENCE MAY SAY. The text used
+            // to read "This run has not called a single tool", which was true
+            // while the entry condition was `_dispatchCount === 0` — an
+            // attempt of any kind disarmed the floor, so reaching here meant
+            // no attempt had been made. Under `_auditedDispatchCount` the
+            // floor fires on a run that DID emit a tool_call the registry
+            // refused, and the old sentence would then contradict the
+            // transcript one entry above it, which shows the call and the
+            // registry's error. Claiming a run made no attempt, to a model
+            // that just made one, is the same defect this comment exists to
+            // prevent — so the claim is anchored on the RECORD, which is the
+            // fact the gate actually holds, and is true under both counters.
+            //
+            // It does NOT know what the draft declared:
             // `_safeGaps` returns `[]` both for a complete sweep and for a
             // degraded PaFixReport (its documented catch path), so any claim
             // about the draft's layer coverage may be false. A hold block
             // that misstates the run's own facts is the wrong instrument for
             // measuring evidential honesty.
             lines.push(
-                'This run has not called a single tool, so there is no evidence on record for any ' +
-                    'claim a report could make.'
+                'No tool call has put any evidence on record for this run, so there is nothing to ' +
+                    'support any claim a report could make.'
             )
             lines.push('')
             lines.push(

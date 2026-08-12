@@ -7390,3 +7390,146 @@ narrowed in the code comment and above so the claim is not carried further than 
 The instrument now differs from v12/v13/v14 by the floor **and** this clear. §AQ3's rule already
 forbids differencing a v15+ custom gate figure against those passes; this change does not widen
 that ban, and leaves the native series unaffected. Absolute reporting, both arms together (§AD7).
+
+---
+
+## AT. Amendment — the floor's disarm conjunct reads the wrong counter (`#200`)
+
+**Recorded BEFORE the code, which is the point.** §AR1a's rule was earned two PRs ago: *when a
+review changes the registered condition between pre-registration and build, the amendment belongs
+in the ledger at that moment — a code comment and a CHANGELOG bullet are not the ledger.* §AS3b
+then filed exactly such a change as #200 rather than smuggling it into a one-token PR. This section
+is that rule being paid rather than re-learned; `git log -p benchmark/DECISION.md` shows it landing
+ahead of the `src/` commit.
+
+### AT1. The defect, and why it is not "flip the conjunct"
+
+`PaAgentLoop._dispatchTool` increments `_dispatchCount` **before** dispatch and counts **attempts**,
+deliberately (#191 part 1): `_auditContext` uses it to decide whether an empty trail may **convict**
+a report, so every direction it can be wrong in must fall toward NOT convicting — an attempt that
+threw, or that a tool refused without auditing (#75), still means the run tried to gather.
+
+The floor reuses that counter for the opposite job — deciding whether to **hold** — where the same
+lenient direction is an escape hatch:
+
+1. The model emits `{"action":"tool_call","tool":"bogus"}`.
+2. `_dispatchCount` → 1. `PaToolRegistry.dispatch` returns on its unknown-tool gate; nothing is
+   audited; `release` stays empty.
+3. A zero-evidence `fix_report` follows. `release.length === 0` holds, `_dispatchCount === 0` does
+   not, the floor does not fire, and `_gateReleased` is set **permanently** for that run.
+
+One malformed or refused call buys a permanent exit from the exact hole §AQ was written to close.
+Flipping the conjunct is not available: the two consumers need opposite failure directions from one
+counter — `_auditContext` must **overcount**, the floor must **undercount**. So a second counter,
+with `_dispatchCount`'s semantics and #191 part 1's argument left verbatim.
+
+### AT2. The discriminator, stated sharply
+
+Not "successful" dispatches — **dispatches that reached the registry's audit write**. That is the
+set the floor's corroboration argument is actually about: an empty trail is ambiguous *only* because
+a systematic write loss reads identically to a quiet run, and a call that never attempted a row
+cannot explain a missing one.
+
+`PaToolRegistry.dispatch` returns on its two pre-execution gates — unknown tool, and the destructive
+fail-closed gate — **before** `_audit('logIntent', …)`. Its `catch` branch does not: `logIntent` has
+already run, so a tool whose core throws leaves trail rows and would not have floored regardless.
+The gap is exactly the pre-audit refusals, and nothing else.
+
+Shipped shape: the registry marks those two returns `dispatched: false`; the loop keeps a second
+per-run counter incremented only when that marker is absent-or-not-false, and the floor reads it.
+An absent marker therefore counts — a collaborator or fake that omits the field behaves exactly as
+today, so a stale producer can never manufacture spurious holds. `_dispatchCount` is untouched.
+
+### AT3. Ruling on pre-registration — an amendment, not a new instrument term
+
+**This is a correction of an unregistered narrowing, bounded above by the registered condition.**
+
+§AQ2 registered `if (release.length === 0)` bare. §AR1a recorded that the built floor ships the
+narrower `&& this._dispatchCount === 0`, and that the narrowing was never written into the ledger.
+Audited dispatches are a **subset** of attempts, so this change can only make the floor fire *more*
+often, and only up to — never past — what §AQ2 registered. The instrument moves back toward its
+pre-registered condition, which is the one direction that needs no new pre-registration.
+
+Consequences, stated rather than assumed:
+
+- **§AQ5's three revert triggers carry forward unchanged.** They already bound "the floor fires too
+  often" (a `partial` with a floor hold; >1 of 4 reps taking the `capped:true` exit), which is the
+  only direction this change moves. No trigger is re-litigated and none is added.
+- **No prediction is filed and no figure is claimed**, in either arm. Ruling 6 (§AI4, carried at
+  §AN, §AR4, §AS3) applies unchanged.
+- **§AQ3's differencing ban is not widened.** The v15+ custom gate figure was already
+  non-differenceable against v12/v13/v14; the native series is untouched (it does not run
+  `_depthGate`). §AD7 still requires both arms be quoted together.
+
+### AT4. Evidentiary standing — unit-tested, not measured
+
+**No rep is known to have taken this path.** The four §AQ reps recorded 4-of-4 successful tool calls
+(§AR1), so none could have exercised it. Reachability is a question about how often the model emits
+an unregistered or refused tool name, and **this repo has not measured that** — treat it as
+unmeasured, not unlikely, the caveat `_depthGate`'s own header already carries for the
+`no_layer_report` path. Same footing as §AS3 and #192's retry repair, and it should be quoted with
+the same caveat.
+
+Per §AS3a, the deliverable test is the one that pins the **distinction**, not the fix: a run that
+dispatched a refused tool, whose trail is empty, asserted to floor — which is red against the
+shipped conjunct and green after.
+
+### AT5. Residual, named rather than smoothed over — and it is NOT only a wording problem
+
+`_auditContext` keeps the lenient counter, so on a run whose only dispatch was refused it can still
+write *"audit trail LOST WRITES — this run dispatched 1 tool call(s)"* when no row was ever
+attempted.
+
+**Corrected after PR #201 review, finding 3.** The first draft of this section recorded that
+transcript string as the residual, which understates it by a layer. The operative consequence is
+that `trailAnsweredEmpty` is false, so `auditAvailable` is false, so `auditEnabled` is false — and
+**both audit-gated honesty checks are skipped for the whole report**: `_checkSweptClaims`
+(`PaFixReport.js:494`, the check written for exactly the draft §AQ was built against) and
+`_checkCitationSupported` (`:751`). End to end: one unregistered tool name, then a zero-evidence
+`fix_report` on the capped release, and the citation and sweep cross-checks never run. That is the
+#200 escape hatch still open one layer down, and this change ships the very discriminator
+(`dispatched:false`) that would close it.
+
+**Still not fixed here, and deliberately.** `_auditContext`'s direction is #191 part 1's registered
+behaviour and #78's fail-open rule — narrowing it can convict an honest report, which is a
+conviction-policy change needing its own ruling and its own pre-registration, not a rider on this
+one. §AT3's scope is the gate. Filed as a separate issue; what changes today is that the residual is
+recorded at its real weight instead of as a string.
+
+### AT6. The floor's hold text had to narrow with its counter (PR #201 review, finding 2)
+
+`_holdBlock`'s `empty_trail` branch read *"This run has not called a single tool"*. That was true
+while the entry condition was `_dispatchCount === 0`: any attempt disarmed the floor, so reaching
+the branch meant no attempt existed. Under `_auditedDispatchCount` the floor fires on runs that DID
+emit a `tool_call` the registry refused, and the sentence would then contradict the transcript entry
+directly above it — which carries the call and the registry's `Unknown tool` error.
+
+Telling a model that just made an attempt that it made none is the same defect #191 review finding 2
+named ("assert ONLY what this branch has established"), arriving through the counter change. The
+claim is re-anchored on the **record** — *"No tool call has put any evidence on record for this
+run"* — which is the fact the gate actually holds and is true under both counters. §AQ5 revert
+trigger 3 is unaffected: the wording names no tool, and the test that pins that is unchanged.
+
+**A moved condition can invalidate the prose that justified it.** The comment above that branch
+still cited `_dispatchCount` as "the floor's own entry condition" after the entry condition had
+moved; it was accurate when written and false on merge. Worth naming as a class — this ledger's
+own §AR1a is the same failure at the level of the ledger rather than the comment.
+
+### AT7. §AT3's trigger claim, stated more exactly (PR #201 review, finding 1)
+
+§AT3 says §AQ5's revert triggers "carry forward unchanged". That remains true — they bound the
+direction this change moves, and trigger 2 (>1 of 4 reps taking the `capped:true` exit) is the one
+that would fire. It should not be read as "nothing about capped exits changed", because a path
+exists that reaches it more readily than before:
+
+`_holdActive`'s dispatch-side clear (§AS2, `PaAgentLoop.js:426`) clears a record-nothing hold block
+on **any** dispatch, refused ones included. That was coherent while any dispatch also disarmed the
+floor — the block had nothing left to guard. It is no longer: a run can now emit a refused call, get
+the block stripped from its next prompt, re-file the same zero-evidence report, floor again, and
+spend both holds without ever being told its calls put nothing on record — ending on the cap.
+
+Before this change that run took an immediate permanent release with **zero** holds and no cap; it
+now caps. So this change can raise the capped-exit rate on that path specifically. §AS2's clear is
+its own registered decision and repairing it inside this PR is the §AO3 mistake §AT was written to
+avoid, so it is filed separately — but the interaction is recorded here rather than left for a pass
+to discover in its trigger counts.

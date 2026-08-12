@@ -256,6 +256,15 @@ PaToolRegistry.prototype = {
      *        reads run_id from whatever the caller already established.
      * @returns {Object} {success:true, data} | {success:false, error} — the
      *          core's own result (possibly thresholded), never a throw.
+     *          The two refusals this method returns ITSELF — unknown tool, and
+     *          the destructive gate — additionally carry `dispatched:false`,
+     *          because both return BEFORE `logIntent` and so leave no audit
+     *          row that could later be missed. #200 (§AT): keep that field on
+     *          exactly those two returns. `PaAgentLoop._dispatchTool` reads it
+     *          to tell "no row because nothing ran" from "no row because the
+     *          writes were lost", and its rule is ABSENT-MARKER-COUNTS — so
+     *          dropping the field degrades the depth gate SILENTLY rather than
+     *          failing anything, which is why the contract is stated here.
      */
     dispatch: function (name, args, runCtx) {
         var reg = this._registry()
@@ -266,6 +275,19 @@ PaToolRegistry.prototype = {
             return {
                 success: false,
                 error: 'Unknown tool "' + toolName + '". Available tools: ' + this.toolNames().join(', ') + '.',
+                // #200 (§AT) — THIS RETURN IS BEFORE `logIntent`, and saying so
+                // is the point. `dispatched:false` marks a call this registry
+                // refused without ever attempting an audit row, so a caller
+                // reasoning about an EMPTY audit trail can tell "nothing was
+                // written because nothing ran" from "nothing was written
+                // because the writes were lost". `PaAgentLoop._depthGate`'s
+                // §AQ floor is that caller; see `_dispatchTool` there.
+                //
+                // Marked on the two PRE-EXECUTION gates only. The catch branch
+                // below is deliberately NOT marked: `logIntent` has already
+                // run by then, so a core that throws did leave a row and its
+                // absence really would be a write loss.
+                dispatched: false,
             }
         }
 
@@ -280,6 +302,9 @@ PaToolRegistry.prototype = {
                     'Tool "' +
                     toolName +
                     '" is not registered as explicitly non-destructive (destructive:false). PaToolRegistry refuses to dispatch destructive or unmarked tools directly — the confirmation flow is Phase 3.',
+                // #200 (§AT) — the second pre-`logIntent` refusal. Same
+                // reasoning as the unknown-tool gate above.
+                dispatched: false,
             }
         }
 

@@ -414,6 +414,67 @@ describe('PaToolRegistry — destructive gate', () => {
 })
 
 // ---------------------------------------------------------------------------
+// dispatch — the `dispatched:false` marker (#200 / DECISION.md §AT)
+//
+// The two gates above return BEFORE `logIntent`, so they leave no audit row
+// and never could have. A caller reasoning about an EMPTY audit trail needs
+// to tell that from "the writes were lost" — PaAgentLoop's §AQ depth-gate
+// floor is that caller, and the marker is how it is told.
+//
+// The boundary is drawn at the audit write, NOT at success: the catch branch
+// runs after `logIntent`, so a core that throws DID leave a row and must not
+// be marked. The two tests that assert absence are the load-bearing ones.
+// ---------------------------------------------------------------------------
+
+describe('PaToolRegistry — dispatched marker (#200)', () => {
+    it('marks the unknown-tool refusal, which returns before any audit row', () => {
+        const audit = fakeAudit()
+        const registry = load({ cores: { agent_trace: fakeEntry() }, auditLogger: audit })
+
+        const out = registry.dispatch('nope', {}, { run_id: 'run1' })
+
+        expect(out.dispatched).toBe(false)
+        expect(audit.calls).toHaveLength(0)
+    })
+
+    it('marks the destructive refusal, which also returns before any audit row', () => {
+        const audit = fakeAudit()
+        const registry = load({
+            cores: { delete_record: fakeEntry({ destructive: true, readOnly: false }) },
+            auditLogger: audit,
+        })
+
+        const out = registry.dispatch('delete_record', {}, { run_id: 'run1' })
+
+        expect(out.dispatched).toBe(false)
+        expect(audit.calls).toHaveLength(0)
+    })
+
+    it('does NOT mark a dispatch that ran — the tool core owns that result shape', () => {
+        const registry = load({ cores: { agent_trace: fakeEntry() } })
+
+        const out = registry.dispatch('agent_trace', {}, { run_id: 'run1' })
+
+        expect(out.success).toBe(true)
+        expect(out.dispatched).not.toBe(false)
+    })
+
+    it('does NOT mark a core that THREW — logIntent already wrote, so a row could have been lost', () => {
+        const audit = fakeAudit()
+        const registry = load({
+            cores: { agent_trace: fakeEntry({ factory: () => fakeCore({ throws: new Error('boom') }) }) },
+            auditLogger: audit,
+        })
+
+        const out = registry.dispatch('agent_trace', {}, { run_id: 'run1' })
+
+        expect(out.success).toBe(false)
+        expect(out.dispatched).not.toBe(false)
+        expect(audit.calls.map((c) => c[0])).toEqual(['intent', 'error'])
+    })
+})
+
+// ---------------------------------------------------------------------------
 // dispatch — artifact threshold
 // ---------------------------------------------------------------------------
 
