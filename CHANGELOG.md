@@ -17,6 +17,32 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1118 — 2026-08-11
+
+**The `no_layer_report` stale HOLD, closed (#196).** One token in `src/`, plus a red-then-green
+test and a ledger entry (§AS).
+
+- **The defect, third path of three.** `_holdActive`'s dispatch-side clear read
+  `_holdActiveKind === 'empty_trail' || _anyOf(_heldTools, [tool])`. `no_layer_report` records
+  nothing — `_heldTools` is assigned on exactly ONE line, the `gaps` return at the foot of
+  `_depthGate` — so `_anyOf(null, …)` was false, the `empty_trail` clause did not cover it, and the
+  hold block survived a compliant tool call into the next prompt. I1's defect on a sibling path, and
+  the hold's own text asks for the very thing that failed to discharge it: *"…or call a tool."*
+- **Shipped as `!== 'gaps'`, an inversion rather than a second clause.** `gaps` is the only kind
+  that records a release set, so it is the only one whose clear should be tool-specific. The two
+  forms are identical today and differ in what a LATER hold kind inherits — I1's defect, or "any
+  dispatch clears the block". The inversion is right because this clear is prompt hygiene only:
+  `_depthGate` still re-derives from the trail on the next terminal action, so a wrongly-cleared
+  block costs one prompt while a wrongly-surviving one misinforms a model that just complied.
+- **Unit-tested, NOT measured — quote it with that caveat.** No rep exercised this path; #196's
+  non-reproduction during the §AQ reps is true **by construction** (#195 built the `empty_trail`
+  clear and no rep took the `no_layer_report` route). Same evidentiary footing as #192's retry
+  repair. How often runs reach this hold at all remains unmeasured — the path did not exist in the
+  build v4 ran against.
+- **No gate or pass figure is claimed** (ruling 6, §AI4/§AN/§AR4). §AQ3's differencing ban is
+  unchanged and not widened: a v15+ custom gate figure is reportable absolutely, never differenced
+  against v12/v13/v14, native series unaffected, both arms quoted together (§AD7).
+
 ## 2026.08.1117 — 2026-08-11
 
 **PR #197 review findings, all three (#191 follow-up).** Documentation only; no `src/` change.

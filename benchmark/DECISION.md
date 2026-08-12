@@ -7306,3 +7306,56 @@ the row timestamp. Probe content.** A pass that had skipped this probe would hav
 pre-floor harness, found the §AQ4 baseline reproducing exactly, and concluded the floor did not
 work — the most expensive kind of wrong answer this project can produce, and it was one skipped
 probe away.
+
+---
+
+## AS. The `no_layer_report` stale HOLD, closed on the same mechanism (`#196`)
+
+**One-token change, no pre-registration, and it is still an instrument change** — which is why it
+is recorded here rather than only in the code and CHANGELOG. That distinction is §AR1a's lesson
+applied on the first opportunity after it was learned: the ledger's job is to record what the
+harness DID, at the moment it changed, not to be reconstructable from a diff later.
+
+### AS1. The defect and the fix
+
+`_holdActive`'s dispatch-side clear read:
+
+```js
+if (this._holdActiveKind === 'empty_trail' || this._anyOf(this._heldTools, [this._str(action.tool)]))
+```
+
+`no_layer_report` records nothing — `_heldTools` is assigned on exactly ONE line, the `gaps` return
+at the foot of `_depthGate` — so `_anyOf(null, …)` is false, the `empty_trail` clause does not
+cover it, and the hold block survived a compliant tool call into the very next prompt. That is I1's
+defect (`PaAgentLoop.js:380-393`) on its third path, and the hold's own text asks for the thing that
+failed to discharge it: *"…or call a tool."*
+
+Shipped as `!== 'gaps'` — an inversion, not a second clause. `gaps` is the only kind that records a
+release set, so it is the only one whose clear should be tool-specific.
+
+### AS2. The direction of the default is the decision, not the token
+
+Listing the two record-nothing kinds and inverting on `gaps` are behaviourally identical **today**
+and differ in what a hold kind added LATER inherits: I1's defect, or "any dispatch clears the
+block". The inversion is correct because this clear is **prompt hygiene only** — `_depthGate`
+re-derives from the trail on the next terminal action, so a tool that ran and retrieved nothing is
+still caught at the gate. A wrongly-cleared block therefore costs one prompt; a wrongly-surviving
+block actively misinforms a model that just complied. Default toward the failure that self-corrects.
+
+### AS3. Evidentiary standing — unit-tested, not measured
+
+No rep ran this path. #196's non-reproduction during the §AQ reps is true **by construction** (#195
+built the `empty_trail` clear, and no rep took the `no_layer_report` route), so this fix stands on a
+red-then-green unit test and the single-assignment reading of `_heldTools` — the same footing as
+#192's retry repair, and it should be quoted with the same caveat. How often runs reach this hold at
+all remains **unmeasured**: the path did not exist in the build v4 ran against, and `_depthGate`'s
+own header says so.
+
+**No figure is claimed and no prediction is filed.** Ruling 6 (§AI4, carried at §AN, restated at
+§AR4) applies unchanged.
+
+### AS4. §AQ3's cost is not compounded
+
+The instrument now differs from v12/v13/v14 by the floor **and** this clear. §AQ3's rule already
+forbids differencing a v15+ custom gate figure against those passes; this change does not widen
+that ban, and leaves the native series unaffected. Absolute reporting, both arms together (§AD7).
