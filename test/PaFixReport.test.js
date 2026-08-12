@@ -2987,3 +2987,57 @@ describe('PaFixReport.unsweptGaps — flat status strings (#155 review)', () => 
         expect(pfr.unsweptGaps({ layers_swept: 'SWEPT' })).toEqual([])
     })
 })
+
+// ---------------------------------------------------------------------------
+// traceUnavailable — the public absence-diagnosis predicate (#204 / §AU)
+//
+// `PaAgentLoop._selectTarget` needs to know whether a draft is an ABSENCE
+// diagnosis (layer 1 UNAVAILABLE) so it can prefer the layer-5 gap in the
+// floor-class tie-break. The predicate already existed as the PRIVATE
+// `_isTraceUnavailable`, read through `_buildCheckContext` — i.e. only ever
+// after `validate` had canonicalised the draft.
+//
+// The gate reads the RAW draft (see `unsweptGaps`' own #155 note on why),
+// so a public entry point must canonicalise for ITSELF. This is the exact
+// trap §AD5 documents: seven sites read `.status`, the flat form is misread
+// by all of them at once, and `validate` covers six. Getting this wrong
+// makes the §AU tie-break silently inert on flat-form drafts — which is
+// the failure shape the gate can least afford, since inert means "old
+// behaviour" and nothing errors.
+// ---------------------------------------------------------------------------
+describe('PaFixReport.traceUnavailable — absence-diagnosis predicate (#204)', () => {
+    test('object form: layer 1 UNAVAILABLE is an absence diagnosis', () => {
+        expect(load().traceUnavailable({ layers_swept: { 1: { status: 'UNAVAILABLE' } } })).toBe(true)
+    })
+
+    test('object form: layer 1 SWEPT is not', () => {
+        expect(load().traceUnavailable({ layers_swept: { 1: { status: 'SWEPT' } } })).toBe(false)
+    })
+
+    test('FLAT form is canonicalised for itself (§AD5) — the gate never calls validate', () => {
+        // The whole reason this method is public. A bare status string must
+        // read identically to the object form; if it does not, the §AU
+        // tie-break goes inert on exactly the drafts #151 made reachable.
+        expect(load().traceUnavailable({ layers_swept: { 1: 'UNAVAILABLE' } })).toBe(true)
+        expect(load().traceUnavailable({ layers_swept: { 1: 'SWEPT' } })).toBe(false)
+    })
+
+    test('malformed input is false, never a throw (R-9)', () => {
+        const r = load()
+        expect(r.traceUnavailable(undefined)).toBe(false)
+        expect(r.traceUnavailable(null)).toBe(false)
+        expect(r.traceUnavailable({})).toBe(false)
+        expect(r.traceUnavailable({ layers_swept: 'nope' })).toBe(false)
+        expect(r.traceUnavailable({ layers_swept: { 1: null } })).toBe(false)
+    })
+
+    test('it agrees with the private predicate the evidence rule uses', () => {
+        // Single source: branch (B) of the evidence rule keys off
+        // `_isTraceUnavailable` via `_buildCheckContext`. §AU property 3
+        // claims the gate reads THE SAME operand — a second implementation
+        // that could drift would falsify that claim.
+        const r = load()
+        const report = { layers_swept: { 1: { status: 'UNAVAILABLE' } } }
+        expect(r.traceUnavailable(report)).toBe(r._isTraceUnavailable(report))
+    })
+})
