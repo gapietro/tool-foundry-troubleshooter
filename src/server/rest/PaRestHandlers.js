@@ -529,7 +529,11 @@ PaRestHandlers.prototype = {
         var reply =
             action.action === 'answer' && typeof action.text === 'string' ? action.text : this._str(reasoned.raw)
 
-        this._runs().appendTranscript(runId, { actor: 'llm', args_digest: 'message: ' + messageText })
+        // #74 — the CALLER authored this turn, not the model. Labelling it
+        // 'llm' put words in the model's mouth in the one artefact this tool
+        // exists to make trustworthy. The reply below is genuinely the
+        // model's, and keeps 'llm'.
+        this._runs().appendTranscript(runId, { actor: 'user', args_digest: 'message: ' + messageText })
         this._runs().appendTranscript(runId, { actor: 'llm', result_digest: reply })
 
         return { status: 200, body: { run_id: runId, reply: reply } }

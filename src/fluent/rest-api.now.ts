@@ -18,8 +18,30 @@
  * (`Now.include`d as a ScriptInclude in script-includes.now.ts) and is
  * unit-tested there with zero Glide (test/PaRestHandlers.test.js). Each
  * route script below does exactly three things: build `ctx` from
- * `request`/`gs.getUserID()`, call the matching PaRestHandlers method, write
- * `result.status`/`result.body` onto `response`. Nothing else belongs here.
+ * `request`/`gs.getUserID()`, call the matching PaRestHandlers method, and
+ * hand the result to `PaRestHandlers.emit`. Nothing else belongs here.
+ *
+ * WHY `emit` RATHER THAN setStatus + setBody (issue #170). Writing both
+ * directly works for 2xx and SILENTLY LOSES the message on every error: a
+ * ServiceNow REST error body is `{error:{message,detail},status:'failure'}`,
+ * ours is `{error:'<string>'}`, so a client reading `error.message` gets
+ * undefined and falls back to the bare HTTP reason phrase. Measured live:
+ * `POST /analyze {"mode":"diagnose"}` surfaced as `400 Bad Request` with no
+ * body while the handler had correctly named the missing input. `emit` picks
+ * `response.setError(ServiceError)` for >=400 and the plain status+body write
+ * otherwise. The branch lives in the Script Include because Build Rule #43
+ * makes a Fluent template a hostile place for conditionals.
+ *
+ * PROMPT-INJECTION SURFACE — KNOWN AND ACCEPTED FOR PHASE 1B (issue #74).
+ * `body.logs` and `body.description` on POST /analyze are interpolated
+ * VERBATIM into the reasoning prompt with no sanitisation, so a caller who
+ * can reach this API can steer the diagnostic model's instructions. Two
+ * things bound it and neither is a fix: every registered tool is read-only
+ * and `destructive:false` (PaToolRegistry's fail-closed gate refuses anything
+ * else), and reads go through GlideRecordSecure, so an injected instruction
+ * cannot reach data or a write the CALLER could not already reach. What it
+ * can do is corrupt the diagnosis the caller receives. Treat `/analyze` input
+ * as trusted-caller input, and see the authorization note below.
  *
  * REST-API GOTCHAS FROM THE GOLDEN EXAMPLE (.claude/context/sdk-examples/
  * rest-api.now.ts, re-verified against this exact pattern in

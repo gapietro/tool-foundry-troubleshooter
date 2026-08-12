@@ -846,3 +846,45 @@ describe('emit', () => {
         expect(se.built[0]._s).toBe(500)
     })
 })
+
+// ===========================================================================
+// message transcript attribution — issue #74
+//
+// The caller's own turn was labelled `actor:'llm'`, putting words in the
+// model's mouth in the one artefact this tool exists to make trustworthy.
+// 'user' also had to be added to PaRunManager.ACTORS — an unknown actor
+// normalises to 'system' rather than erroring, so fixing only the call site
+// would have swapped one wrong label for another, silently.
+// ===========================================================================
+
+describe('message transcript attribution (#74)', () => {
+    const completeRun = {
+        run_id: 'run1',
+        number: 'TR0001042',
+        user: 'u1',
+        status: 'complete',
+        mode: 'diagnose',
+        transcript: [],
+        context_summary: 'earlier context',
+        fix_report: '{"failure_summary":"x"}',
+        error: '',
+    }
+
+    test("the caller's turn is actor:'user' and the reply is actor:'llm'", () => {
+        const runs = fakeRunManager()
+        const { handlers } = load({
+            runManager: runs,
+            readRun: fakeReadRun(completeRun),
+            llmProxy: fakeLlm({ success: true, action: { action: 'answer', text: 'because layer 3' }, raw: 'raw' }),
+        })
+
+        const res = handlers.message({ body: { message: 'why?' }, pathParams: { run_id: 'run1' }, userId: 'u1' })
+
+        expect(res.status).toBe(200)
+        const actors = runs.calls.appendTranscript.map((c) => c.entry.actor)
+        expect(actors).toEqual(['user', 'llm'])
+
+        const userTurn = runs.calls.appendTranscript[0].entry
+        expect(userTurn.args_digest).toMatch(/why\?/)
+    })
+})

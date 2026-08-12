@@ -181,7 +181,13 @@ PaRunManager.prototype = {
     SUMMARIZE_THRESHOLD: 10,
     KEEP_RECENT: 5,
 
-    ACTORS: ['llm', 'tool', 'system'],
+    // #74 — 'user' added because `/runs/{id}/message` was labelling the
+    // CALLER's own turn `llm`, and an unknown actor normalises to 'system'
+    // rather than erroring, so the mislabel had to be fixed here as well as at
+    // the call site or it would have silently become 'system' instead.
+    // A diagnostic tool whose value is a trustworthy audit trail cannot have a
+    // transcript that misattributes who said what.
+    ACTORS: ['llm', 'tool', 'system', 'user'],
 
     /** close() legality — the ONLY transitions this class permits. */
     LEGAL_CLOSE_SOURCES: ['queued', 'running'],
