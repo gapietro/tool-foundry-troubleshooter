@@ -17,6 +17,45 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1203 — 2026-08-12
+
+### The next gate is persisted: correctness, not admissibility
+
+`/next` ran against a board at **0 open / 103 closed** with the benchmark instrument closed into
+`DESIGN.md` §5 the release before. There was no queue left to rank, so the output is a **gate**, not a
+ranking, and new `BACKLOG.md` persists it so no session re-derives it after a `/clear`.
+
+**The gate: PRD Success Criterion 1 — correct root cause in ≥ 8/10 — has never been measured.** Passes
+v1–v14 scored *admissibility* (well-formed, sourced, determinate), not *correctness*. §5.2's two results
+are the whole argument: **§AO2** scored a row **6/6 while proposing a fix at a column that does not
+exist**, and **§AU** passed every registered prediction with no revert trigger firing while correctness
+collapsed **4/4 → 0/4**. Filed as **#212** (`next` label) and commissioned as §5.6 reason 1 — a **new**
+instrument, explicitly not an amendment to the closed one (§AO3). Its load-bearing constraint comes from
+§5.0's own numbers — 103 issues in fourteen days with the board flat because inflow matched outflow — so
+**a pre-registered stopping condition must be written before the first pass**. Blockers to gate: **1**.
+
+**What the file pins down, so it stops being re-derived:** neither arm is a front door (native **5/10 ·
+50%** triage-only, custom **0/10 · 0%** below triage, quoted together per §AD7); **Phase 1b is closed on
+the board but its milestone is not met** — board state and acceptance criteria are different ledgers;
+and Phase 2 as written in the PRD assumes a front door exists, so it is **mis-scoped** rather than merely
+unstarted, which is why it ranks #2 with that reason attached instead of being discovered mid-build.
+
+**`README.md`'s "Current standing" corrected.** It quoted **v12: native 6/10 · 60%** while `DESIGN.md`
+§5.1 — same release, same day — recorded **v14** at **5/10 · 50.0%**: the front door was quoting the
+oldest *and* highest figure, in a repo whose §AD7 exists to stop exactly that. Now reads v14, with the
+v12 figures above it explicitly marked as retained only because they are what retired the cross-arm
+clauses. Found as a register entry during ranking, cleared in the same PR.
+
+**Review findings fixed before merge (PR #213).** Five, all citation-accuracy defects in a file whose
+only job is to be trusted by future sessions: the header contradicted its own ranked queue on the open
+count; the README register line cited line 50 where the figure is line 51 (so the "one-line fix" would
+have edited the wrong line); the §5.3 summary said #205's fix was unmeasured when §AU measured it and
+§AV reverted it — understating the single most load-bearing measured result in the PR; ranked item 2
+cited §5.6 reason 2, which requires *the custom harness* in front of real users and is therefore not
+satisfied by shipping the native arm; and one `§187` should have been `#187`.
+
+---
+
 ## 2026.08.1202 — 2026-08-12
 
 ### The backlog closes: 19 issues → 0, and the benchmark instrument stops

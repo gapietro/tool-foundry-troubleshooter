@@ -3,7 +3,7 @@
 Persisted by `/next` so no session re-derives priorities from scratch. Read this first when asked
 what is next. Ranked by gate-distance, not by issue age or severity label.
 
-**Last ranked:** 2026-08-12 · at version `2026.08.1202` · board 0 open / 103 closed
+**Last ranked:** 2026-08-12 · at version `2026.08.1203` · board 1 open / 103 closed
 
 ---
 
@@ -39,7 +39,7 @@ registered prediction with no trigger firing while correctness collapsed **4/4 �
 | # | Item | Why it ranks here |
 |---|---|---|
 | **1** | **#212 — commission the correctness axis** (`next`) | Removes the release blocker above. It is the only open item that touches the current gate, and §5.2 says no further sharpening of the existing instrument can substitute for it. **Design before build** — `/design-spar` first; output lands as a pre-registration in `benchmark/DECISION.md`. |
-| 2 | Phase 2, shrunk — native triage + Fix Report export | The cheapest alternative source of correctness signal: put it in front of real SCs and let production supply the evidence (§5.6 reason 2). Ranked below #1 because shipping a UI over an unmeasured diagnosis is the thing #1 exists to prevent. Considered and not chosen 2026-08-12. |
+| 2 | Phase 2, shrunk — native triage + Fix Report export | The cheapest alternative source of correctness signal: put it in front of real SCs and let production supply the evidence. **Note it does NOT satisfy §5.6 reason 2**, which requires *the custom harness* in front of real users — shipping the native arm reopens nothing, so this buys production evidence on its own merits, not a reopening condition. Ranked below #1 because shipping a UI over an unmeasured diagnosis is the thing #1 exists to prevent. Considered and not chosen 2026-08-12. |
 | 3 | Close out and package for handoff | `/senior-grade` + `handoff-readiness`. The fallback if #1's design gate concludes a correctness axis cannot be built affordably. Not scheduled. |
 
 **The load-bearing constraint on #1** — from §5.0, which measured the failure mode: 103 issues created
@@ -53,15 +53,18 @@ point unless one is declared up front, and that is precisely what the last one l
 
 Not ranked and not counted as debt. A finding landing here is the register working correctly.
 
-- **`README.md:50` quotes a superseded figure.** "Current standing" reads **v12: native 6/10 · 60%**
-  while `DESIGN.md` §5.1 — same release, same day — records **v14** as the last scored pass at
-  **5/10 · 50.0%**. Same band, so no prescription changes, but the front door quotes the oldest *and*
-  highest figure. One-line fix; fold into the next docs PR rather than picking it up alone.
+- ~~**`README.md` "Current standing" quotes a superseded figure.**~~ **Cleared 2026-08-12** in the same
+  PR that created this file: the line quoted v12's **native 6/10 · 60%** while `DESIGN.md` §5.1 — same
+  release, same day — records **v14** at **5/10 · 50.0%**. Now reads v14, with a note that the v12
+  figures above it are retained only because they are what retired the cross-arm clauses.
 - **`DESIGN.md` §5.3 — five documented-not-fixed instrument defects** (#202, #203, #204, #205, #207).
   Deliberately unscheduled with mechanism and measurement status recorded. #203's class is
-  **0 of 301 runs observed**; #207's harmful variant is **0 of 2, unmeasured**; #202 and #205's fix
-  are unmeasured. They reopen only under §5.6 — in particular §5.6 reason 3, a live observation.
+  **0 of 301 runs observed**; #207's harmful variant is **0 of 2, unmeasured**; **#202 is unmeasured**.
+  **#205 is the exception — it IS measured** (§AU: 4/4 reps queried `task` instead of
+  `x_snc_tsbench_ticket`), and a candidate fix was measured *and reverted* on the 4/4 → 0/4 correctness
+  collapse this file cites above as the reason for the gate. They reopen only under §5.6 — in
+  particular §5.6 reason 3, a live observation.
 - **`DESIGN.md` §5.4 — four corrections to the record** (#183, #187, #110, #107). Facts, not work.
-  §187 matters most in practice: **seed 07 must not be used to qualify an ACL behaviour** without
+  #187 matters most in practice: **seed 07 must not be used to qualify an ACL behaviour** without
   re-deriving its bar, because its qualification query hits a nonexistent column and a bad field name
   returns *Access denied*, mimicking the missing-ACL failure it claims to have ruled out.
