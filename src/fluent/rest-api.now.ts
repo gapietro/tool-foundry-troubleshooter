@@ -48,10 +48,19 @@
  * scope-readability.now.ts): `versions[].version` is a NUMBER; every
  * `versions[]` and `routes[]` entry needs its own `$id`; every route needs
  * `version: <n>` linking it to a versions[] entry.
+ *
+ * AUTHORIZATION — DECIDED, NOT LEFT OPEN (issue #74). Every route enforces
+ * `troubleshooterApiExecute` (acls.now.ts), a `rest_endpoint` ACL granting
+ * `x_snc_troubleshoot.admin` only. Before that, any authenticated user could
+ * create unlimited diagnostic runs, each spending LLM calls. Note
+ * `x_snc_troubleshoot.user` is deliberately excluded: that role READS
+ * diagnostic output, and letting it commission runs would collapse the
+ * distinction the two roles exist to draw.
  */
 
 import '@servicenow/sdk/global'
 import { RestApi } from '@servicenow/sdk/core'
+import { troubleshooterApiExecute } from './acls.now'
 
 export const troubleshooterApi = RestApi({
     $id: Now.ID['troubleshooter-api'],
@@ -83,6 +92,7 @@ export const troubleshooterApi = RestApi({
             active: true,
             authentication: true,
             authorization: true,
+            enforceAcl: [troubleshooterApiExecute],
             shortDescription:
                 'Validates the diagnostic target, creates a run, and either runs the Evidence Bundle synchronously (mode:collect) or queues the async diagnosis worker',
             requestExample: '{"execution": "<sys_id>", "mode": "collect"}',
@@ -104,6 +114,7 @@ export const troubleshooterApi = RestApi({
             active: true,
             authentication: true,
             authorization: true,
+            enforceAcl: [troubleshooterApiExecute],
             shortDescription:
                 'Owner-only run status, transcript and fix_report (when complete) — a non-owner and a nonexistent run get the same 404',
             parameters: [
@@ -132,6 +143,7 @@ export const troubleshooterApi = RestApi({
             active: true,
             authentication: true,
             authorization: true,
+            enforceAcl: [troubleshooterApiExecute],
             shortDescription:
                 'Synchronous single-turn follow-up on a complete run; 409 naming the status on any other run state',
             requestExample: '{"message": "Which layer found the root cause?"}',
@@ -162,6 +174,7 @@ export const troubleshooterApi = RestApi({
             active: true,
             authentication: true,
             authorization: true,
+            enforceAcl: [troubleshooterApiExecute],
             shortDescription:
                 'Deep readiness diagnostics: plugins, own skills (existence and activation), capability-provider mapping, a live micro-invocation, section-2 table readability, stuck-run count. ready is false when any check fails',
             script: script`(function process(request, response) {
@@ -180,6 +193,7 @@ export const troubleshooterApi = RestApi({
             active: true,
             authentication: true,
             authorization: true,
+            enforceAcl: [troubleshooterApiExecute],
             shortDescription: 'The diagnostic tool roster the custom harness reasons over — PaToolRegistry.list()',
             script: script`(function process(request, response) {
     var handlers = new PaRestHandlers();

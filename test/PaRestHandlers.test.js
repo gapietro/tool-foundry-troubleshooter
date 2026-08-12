@@ -684,7 +684,10 @@ describe('status', () => {
         expect(res.body.checks).toEqual([
             { check: 'plugins', status: 'ok', detail: null },
             { check: 'skills', status: 'ok', detail: null },
-            { check: 'micro_invocation', status: 'ok', detail: null },
+            // #74 — micro_invocation reflects the CALLER's privileges, so it
+            // is flagged and excluded from `ready`. See the caller-dependent
+            // describe block below.
+            { check: 'micro_invocation', status: 'ok', detail: null, caller_dependent: true },
         ])
     })
 
@@ -886,5 +889,71 @@ describe('message transcript attribution (#74)', () => {
 
         const userTurn = runs.calls.appendTranscript[0].entry
         expect(userTurn.args_digest).toMatch(/why\?/)
+    })
+})
+
+// ===========================================================================
+// /status — caller-dependent checks (issue #74, R-19b)
+//
+// `micro_invocation` makes a live PaLlmProxy.reason() call, which requires
+// privileges a non-admin caller does not have. It therefore fails FOR THE
+// CALLER on a perfectly healthy system, and it was flipping the top-level
+// `ready` to false — exactly the thing R-19b forbids: a caller-dependent
+// probe standing in for a system-wide health signal.
+//
+// The check still runs and is still reported (it is the only check that
+// proves a call completes end to end); it just no longer claims to speak for
+// the system.
+// ===========================================================================
+
+describe('/status caller-dependent checks (#74)', () => {
+    function check(name, status) {
+        return { name: name, run: () => ({ status: status, detail: null }) }
+    }
+
+    test('a failing micro_invocation is reported but does NOT set ready:false', () => {
+        const { handlers } = load({
+            checks: [check('plugins', 'ok'), check('micro_invocation', 'error'), check('stuck_runs', 'ok')],
+        })
+        const res = handlers.status()
+
+        expect(res.body.ready).toBe(true)
+        const micro = res.body.checks.filter((c) => c.check === 'micro_invocation')[0]
+        expect(micro.status).toBe('error')
+        expect(micro.caller_dependent).toBe(true)
+    })
+
+    test('any NON-caller-dependent failure still sets ready:false', () => {
+        const { handlers } = load({
+            checks: [check('plugins', 'error'), check('micro_invocation', 'ok')],
+        })
+        expect(handlers.status().body.ready).toBe(false)
+    })
+
+    test('an all-ok system is ready, and caller-dependent checks are still flagged', () => {
+        const { handlers } = load({
+            checks: [check('plugins', 'ok'), check('micro_invocation', 'ok')],
+        })
+        const res = handlers.status()
+        expect(res.body.ready).toBe(true)
+        expect(res.body.checks.filter((c) => c.check === 'micro_invocation')[0].caller_dependent).toBe(true)
+    })
+
+    test('the response explains why ready can be true alongside a failing check', () => {
+        const { handlers } = load({ checks: [check('micro_invocation', 'error')] })
+        const note = handlers.status().body.caller_dependent_note
+
+        expect(typeof note).toBe('string')
+        expect(note).toMatch(/privilege|caller/i)
+    })
+
+    test('the note is absent when no caller-dependent check failed', () => {
+        const { handlers } = load({ checks: [check('micro_invocation', 'ok'), check('plugins', 'ok')] })
+        expect(handlers.status().body.caller_dependent_note).toBeUndefined()
+    })
+
+    test('a system-wide check carries no caller_dependent flag at all', () => {
+        const { handlers } = load({ checks: [check('plugins', 'ok')] })
+        expect(handlers.status().body.checks[0].caller_dependent).toBeUndefined()
     })
 })

@@ -575,6 +575,7 @@ PaRestHandlers.prototype = {
         var checks = this._checks || this._statusChecks()
         var results = []
         var ready = true
+        var callerDependentFailure = false
 
         for (var i = 0; i < checks.length; i++) {
             var c = checks[i]
@@ -590,11 +591,49 @@ PaRestHandlers.prototype = {
             var st = result && this._nonEmptyString(result.status) ? result.status : 'error'
             var detail = result && result.detail !== undefined ? result.detail : null
 
-            results.push({ check: c.name, status: st, detail: detail })
-            if (st !== 'ok') ready = false
+            var row = { check: c.name, status: st, detail: detail }
+
+            // #74 / R-19b — a check whose outcome depends on WHO IS ASKING
+            // must not stand in for a system-wide health signal.
+            // `micro_invocation` makes a live PaLlmProxy.reason() call, which
+            // needs privileges a non-admin caller does not have, so a
+            // perfectly healthy system reported ready:false to them. The check
+            // still runs and is still reported — it is the only one that
+            // proves a call completes end to end — it just no longer speaks
+            // for the system.
+            if (this._isCallerDependent(c.name)) {
+                row.caller_dependent = true
+                if (st !== 'ok') callerDependentFailure = true
+            } else if (st !== 'ok') {
+                ready = false
+            }
+
+            results.push(row)
         }
 
-        return { status: 200, body: { ready: ready, checks: results } }
+        var body = { ready: ready, checks: results }
+        // Only when it actually explains something — an always-present note is
+        // noise a reader learns to skip, and this one has to be read on the
+        // one response where `ready:true` sits next to a failing check.
+        if (callerDependentFailure) {
+            body.caller_dependent_note =
+                'A check marked caller_dependent failed. Those checks reflect the CALLING ' +
+                'user privileges, not system health — a non-admin caller can see one fail on a ' +
+                'healthy instance — so they do not affect `ready`. Re-run as an admin to test them.'
+        }
+
+        return { status: 200, body: body }
+    },
+
+    /** Checks whose result reflects the CALLER rather than the system (#74). */
+    CALLER_DEPENDENT_CHECKS: ['micro_invocation'],
+
+    _isCallerDependent: function (name) {
+        var n = this._str(name)
+        for (var i = 0; i < this.CALLER_DEPENDENT_CHECKS.length; i++) {
+            if (this.CALLER_DEPENDENT_CHECKS[i] === n) return true
+        }
+        return false
     },
 
     /** The production check list — see the file header's "/status — R-19b"
