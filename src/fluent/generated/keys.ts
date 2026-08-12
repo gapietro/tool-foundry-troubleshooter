@@ -1279,6 +1279,17 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_choice'
+                        id: 'c8ed71b66031463fb89a3eefee827f74'
+                        key: {
+                            name: 'x_snc_troubleshoot_audit'
+                            element: 'action_type'
+                            value: 'refused'
+                            language: 'en'
+                            dependent_value: 'NULL'
+                        }
+                    },
+                    {
                         table: 'sys_gen_ai_feature_mapping'
                         id: 'ce70f923528c4844a643aa417cc7c7f3'
                         key: {

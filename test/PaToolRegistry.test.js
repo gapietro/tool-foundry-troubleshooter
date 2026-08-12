@@ -64,6 +64,8 @@ function fakeAudit(opts) {
         logIntent: record('intent'),
         logResult: record('result'),
         logError: record('error'),
+        // #75 — the two pre-logIntent refusal gates audit through this.
+        logRefusal: record('refusal'),
     }
 }
 
@@ -337,7 +339,7 @@ describe('PaToolRegistry — dispatch, unknown tool', () => {
         expect(out.error).toContain('schema_lookup')
     })
 
-    it('creates no audit row for a tool that was never dispatched', () => {
+    it('creates no EVIDENCE row for a tool that was never dispatched (a refusal row is written, #75)', () => {
         const audit = fakeAudit()
         const registry = load({
             cores: { agent_trace: fakeEntry() },
@@ -346,7 +348,11 @@ describe('PaToolRegistry — dispatch, unknown tool', () => {
 
         registry.dispatch('nope', {}, { run_id: 'run1' })
 
-        expect(audit.calls).toHaveLength(0)
+        // #75 — a refusal IS now recorded (the attempt is what a security
+        // review wants), but it is not an EVIDENCE row: no intent/result/error
+        // call is made, so nothing downstream can read the refused tool as
+        // having run. That is the invariant this assertion protects.
+        expect(audit.calls.filter((c) => c[0] !== 'refusal')).toHaveLength(0)
     })
 })
 
@@ -371,7 +377,11 @@ describe('PaToolRegistry — destructive gate', () => {
         expect(out.error).toContain('confirmation flow is Phase 3')
         // Refused before anything runs: no execution, no audit row either.
         expect(dangerousCore.calls).toEqual([])
-        expect(audit.calls).toHaveLength(0)
+        // #75 — a refusal IS now recorded (the attempt is what a security
+        // review wants), but it is not an EVIDENCE row: no intent/result/error
+        // call is made, so nothing downstream can read the refused tool as
+        // having run. That is the invariant this assertion protects.
+        expect(audit.calls.filter((c) => c[0] !== 'refusal')).toHaveLength(0)
     })
 
     it('fails CLOSED: a registration that OMITS destructive entirely is refused, not dispatched', () => {
@@ -398,7 +408,11 @@ describe('PaToolRegistry — destructive gate', () => {
         expect(out.success).toBe(false)
         expect(out.error).toContain('confirmation flow is Phase 3')
         expect(unmarkedCore.calls).toEqual([])
-        expect(audit.calls).toHaveLength(0)
+        // #75 — a refusal IS now recorded (the attempt is what a security
+        // review wants), but it is not an EVIDENCE row: no intent/result/error
+        // call is made, so nothing downstream can read the refused tool as
+        // having run. That is the invariant this assertion protects.
+        expect(audit.calls.filter((c) => c[0] !== 'refusal')).toHaveLength(0)
     })
 
     it('fails CLOSED: destructive:undefined explicitly is refused the same as omission', () => {
@@ -427,17 +441,21 @@ describe('PaToolRegistry — destructive gate', () => {
 // ---------------------------------------------------------------------------
 
 describe('PaToolRegistry — dispatched marker (#200)', () => {
-    it('marks the unknown-tool refusal, which returns before any audit row', () => {
+    it('marks the unknown-tool refusal, which returns before any evidence row', () => {
         const audit = fakeAudit()
         const registry = load({ cores: { agent_trace: fakeEntry() }, auditLogger: audit })
 
         const out = registry.dispatch('nope', {}, { run_id: 'run1' })
 
         expect(out.dispatched).toBe(false)
-        expect(audit.calls).toHaveLength(0)
+        // #75 — a refusal IS now recorded (the attempt is what a security
+        // review wants), but it is not an EVIDENCE row: no intent/result/error
+        // call is made, so nothing downstream can read the refused tool as
+        // having run. That is the invariant this assertion protects.
+        expect(audit.calls.filter((c) => c[0] !== 'refusal')).toHaveLength(0)
     })
 
-    it('marks the destructive refusal, which also returns before any audit row', () => {
+    it('marks the destructive refusal, which also returns before any evidence row', () => {
         const audit = fakeAudit()
         const registry = load({
             cores: { delete_record: fakeEntry({ destructive: true, readOnly: false }) },
@@ -447,7 +465,11 @@ describe('PaToolRegistry — dispatched marker (#200)', () => {
         const out = registry.dispatch('delete_record', {}, { run_id: 'run1' })
 
         expect(out.dispatched).toBe(false)
-        expect(audit.calls).toHaveLength(0)
+        // #75 — a refusal IS now recorded (the attempt is what a security
+        // review wants), but it is not an EVIDENCE row: no intent/result/error
+        // call is made, so nothing downstream can read the refused tool as
+        // having run. That is the invariant this assertion protects.
+        expect(audit.calls.filter((c) => c[0] !== 'refusal')).toHaveLength(0)
     })
 
     it('does NOT mark a dispatch that ran — the tool core owns that result shape', () => {
@@ -956,5 +978,90 @@ describe('retrieval verdict (#121 review finding 1) — real PaToolReadKit throu
         expect(out.success).toBe(true)
         const resultRow = audit.calls.filter((c) => c[0] === 'result')[0][1]
         expect(resultRow.retrieval).toBe('ok')
+    })
+})
+
+// ===========================================================================
+// refusal auditing — issue #75
+//
+// dispatch() refuses on two gates and BOTH return before `logIntent`, so an
+// attempt to invoke an unknown or destructive tool left zero trace. The
+// destructive gate's stated rationale is that Phase 3's confirmation flow can
+// stand on an honest record of every tool the model ATTEMPTED — an unaudited
+// refusal is the single attempt a security review would most want to see.
+//
+// The refusal row is deliberately NOT evidence (PaAuditLogger.logRefusal
+// explains the split), so `dispatched:false` and the §AQ depth-gate floor
+// keep exactly the meaning they had before.
+// ===========================================================================
+
+describe('refusal auditing (#75)', () => {
+    const RUN = 'run00000000000000000000000000000'
+
+    test('an unknown tool is recorded as a refusal, naming the attempted tool', () => {
+        const audit = fakeAudit()
+        const registry = load({ auditLogger: audit })
+
+        const res = registry.dispatch('not_a_tool', {}, { run_id: RUN })
+
+        expect(res.success).toBe(false)
+        const refusals = audit.calls.filter((c) => c[0] === 'refusal')
+        expect(refusals).toHaveLength(1)
+        expect(refusals[0][1].toolName).toBe('not_a_tool')
+        expect(refusals[0][1].runId).toBe(RUN)
+        expect(refusals[0][1].error).toMatch(/Unknown tool/)
+        // and nothing pretended the tool ran
+        expect(audit.calls.filter((c) => c[0] === 'intent')).toHaveLength(0)
+    })
+
+    test('a destructive/unmarked tool is recorded as a refusal', () => {
+        const audit = fakeAudit()
+        const registry = load({
+            auditLogger: audit,
+            cores: {
+                risky: { layer: 'layer 9', readOnly: false, factory: () => ({ execute: () => ({ success: true }) }) },
+            },
+        })
+
+        const res = registry.dispatch('risky', {}, { run_id: RUN })
+
+        expect(res.success).toBe(false)
+        const refusals = audit.calls.filter((c) => c[0] === 'refusal')
+        expect(refusals).toHaveLength(1)
+        expect(refusals[0][1].toolName).toBe('risky')
+        expect(refusals[0][1].error).toMatch(/non-destructive/)
+        expect(audit.calls.filter((c) => c[0] === 'intent')).toHaveLength(0)
+    })
+
+    test('the refusal marker survives — dispatched:false is still returned (§AT contract)', () => {
+        const audit = fakeAudit()
+        const registry = load({ auditLogger: audit })
+        expect(registry.dispatch('not_a_tool', {}, { run_id: RUN }).dispatched).toBe(false)
+    })
+
+    test('an audit logger that throws never breaks the refusal (R-1)', () => {
+        const registry = load({ auditLogger: fakeAudit({ throws: new Error('glide down') }) })
+        expect(() => registry.dispatch('not_a_tool', {}, { run_id: RUN })).not.toThrow()
+        expect(registry.dispatch('not_a_tool', {}, { run_id: RUN }).success).toBe(false)
+    })
+
+    test('a successful dispatch still audits intent, not a refusal', () => {
+        const audit = fakeAudit()
+        const registry = load({
+            auditLogger: audit,
+            cores: {
+                fine: {
+                    layer: 'layer 1',
+                    readOnly: true,
+                    destructive: false,
+                    factory: () => ({ execute: () => ({ success: true, data: {} }) }),
+                },
+            },
+        })
+
+        registry.dispatch('fine', {}, { run_id: RUN })
+
+        expect(audit.calls.filter((c) => c[0] === 'refusal')).toHaveLength(0)
+        expect(audit.calls.filter((c) => c[0] === 'intent')).toHaveLength(1)
     })
 })

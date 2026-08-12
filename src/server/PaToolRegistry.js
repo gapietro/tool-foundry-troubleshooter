@@ -258,23 +258,47 @@ PaToolRegistry.prototype = {
      *          core's own result (possibly thresholded), never a throw.
      *          The two refusals this method returns ITSELF — unknown tool, and
      *          the destructive gate — additionally carry `dispatched:false`,
-     *          because both return BEFORE `logIntent` and so leave no audit
-     *          row that could later be missed. #200 (§AT): keep that field on
-     *          exactly those two returns. `PaAgentLoop._dispatchTool` reads it
-     *          to tell "no row because nothing ran" from "no row because the
-     *          writes were lost", and its rule is ABSENT-MARKER-COUNTS — so
-     *          dropping the field degrades the depth gate SILENTLY rather than
-     *          failing anything, which is why the contract is stated here.
+     *          because both return BEFORE `logIntent` and so leave no
+     *          EVIDENCE row that could later be missed. #200 (§AT): keep that
+     *          field on exactly those two returns. `PaAgentLoop._dispatchTool`
+     *          reads it to tell "no row because nothing ran" from "no row
+     *          because the writes were lost", and its rule is
+     *          ABSENT-MARKER-COUNTS — so dropping the field degrades the depth
+     *          gate SILENTLY rather than failing anything, which is why the
+     *          contract is stated here.
+     *
+     *          #75 NARROWED THE WORD "AUDIT" HERE, AND THE NARROWING IS THE
+     *          POINT. Both refusals now call `logRefusal`, so they DO leave a
+     *          row — just not an evidence one: `PaAuditLogger.invokedTools`
+     *          and `toolCalls` skip `action_type:'refused'`. The §AT contract
+     *          above is therefore unchanged in substance, because every reader
+     *          it names still sees nothing. Saying "no audit row" flatly would
+     *          now be false, and this docblock is where a future reader would
+     *          check — §AT6's own ruling that a moved condition can invalidate
+     *          the prose that justified it, applied to itself.
      */
     dispatch: function (name, args, runCtx) {
         var reg = this._registry()
         var toolName = this._normName(name)
         var entry = reg[toolName]
 
+        var runId = runCtx && runCtx.run_id ? String(runCtx.run_id) : ''
+
         if (!entry || typeof entry.factory !== 'function') {
+            var unknownError =
+                'Unknown tool "' + toolName + '". Available tools: ' + this.toolNames().join(', ') + '.'
+            // #75 — record the ATTEMPT. This returns before `logIntent`, so
+            // without this line an unknown-tool call left no trace anywhere.
+            // `logRefusal` writes an `action_type:'refused'` row that BOTH
+            // evidence readers skip, so the audit trail gains the attempt
+            // while `_auditedDispatchCount`, the §AQ floor and
+            // `_checkCitationSupported` keep their existing meaning — see
+            // PaAuditLogger.logRefusal. `dispatched:false` below is therefore
+            // still correct: no *evidence* row was written.
+            this._audit('logRefusal', { runId: runId, toolName: toolName, error: unknownError })
             return {
                 success: false,
-                error: 'Unknown tool "' + toolName + '". Available tools: ' + this.toolNames().join(', ') + '.',
+                error: unknownError,
                 // #200 (§AT) — THIS RETURN IS BEFORE `logIntent`, and saying so
                 // is the point. `dispatched:false` marks a call this registry
                 // refused without ever attempting an audit row, so a caller
@@ -296,19 +320,28 @@ PaToolRegistry.prototype = {
         // simply omitted — is refused. See THE DESTRUCTIVE GATE above for why
         // this is `!== false` rather than `=== true`.
         if (entry.destructive !== false) {
+            var destructiveError =
+                'Tool "' +
+                toolName +
+                '" is not registered as explicitly non-destructive (destructive:false). PaToolRegistry refuses to dispatch destructive or unmarked tools directly — the confirmation flow is Phase 3.'
+            // #75 — the gate this matters most for. The destructive gate's
+            // whole rationale is that Phase 3's confirmation flow can stand on
+            // an honest record of every tool the model ATTEMPTED to invoke;
+            // an unaudited refusal is the one attempt a security review would
+            // most want to see.
+            this._audit('logRefusal', {
+                runId: runId,
+                toolName: toolName,
+                error: destructiveError,
+            })
             return {
                 success: false,
-                error:
-                    'Tool "' +
-                    toolName +
-                    '" is not registered as explicitly non-destructive (destructive:false). PaToolRegistry refuses to dispatch destructive or unmarked tools directly — the confirmation flow is Phase 3.',
+                error: destructiveError,
                 // #200 (§AT) — the second pre-`logIntent` refusal. Same
                 // reasoning as the unknown-tool gate above.
                 dispatched: false,
             }
         }
-
-        var runId = runCtx && runCtx.run_id ? String(runCtx.run_id) : ''
 
         this._audit('logIntent', { runId: runId, toolName: toolName, input: args })
 

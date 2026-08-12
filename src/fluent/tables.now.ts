@@ -300,6 +300,13 @@ export const x_snc_troubleshoot_audit = Table({
                 intent: 'Intent',
                 result: 'Result',
                 error: 'Error',
+                // #75 — a call PaToolRegistry refused BEFORE it ran (unknown
+                // tool, or the fail-closed destructive gate). Recorded so the
+                // trail is an honest record of every ATTEMPT, which is what
+                // Phase 3's confirmation flow is meant to stand on. NOT an
+                // evidence row: PaAuditLogger.invokedTools and toolCalls both
+                // skip it, so a refused call can never support a citation.
+                refused: 'Refused',
             },
         }),
 
