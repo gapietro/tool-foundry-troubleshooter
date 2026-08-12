@@ -389,16 +389,41 @@ PaAgentLoop.prototype = {
             // the real (trail-backed) release check the next time a
             // terminal action is attempted.
             //
-            // #191 §AQ property 5: the FLOOR needs its own clause. Its hold
-            // records nothing (property 2), so `_heldTools` is null and
-            // `_anyOf(null, …)` is false — without this the block survives a
-            // compliant tool call and rides into the very next prompt, which
-            // is I1's own defect on a new path, landing on the turn AQ-1 and
-            // AQ-2 measure. The floor asks for A tool call, not a PARTICULAR
-            // one, so any dispatch discharges it. The gate still re-derives
-            // from the trail on the next terminal action, so a tool that ran
-            // and retrieved nothing is caught there, not papered over here.
-            if (this._holdActiveKind === 'empty_trail' || this._anyOf(this._heldTools, [this._str(action.tool)])) {
+            // #191 §AQ property 5 / #196: the test is which holds RECORD a
+            // release set, and `gaps` is the only one — `_heldTools` is
+            // assigned a NON-NULL value on exactly one line, the `gaps` return
+            // at the bottom of `_depthGate` (the sticky `gaps` hold reuses it;
+            // `_resetGate` nulls it). `empty_trail` (property 2) and
+            // `no_layer_report` both record nothing, so `_heldTools` is null
+            // and `_anyOf(null, …)` is false: without this the block survives
+            // a compliant tool call and rides into the very next prompt, which
+            // is I1's own defect on a new path. Both ask for A tool call, not
+            // a PARTICULAR one — `no_layer_report` says so in its own text
+            // ("or call a tool") — so any dispatch discharges them.
+            //
+            // #196 states the condition as `!== 'gaps'` rather than listing
+            // the two record-nothing kinds, which fixes the DIRECTION OF THE
+            // DEFAULT: a hold kind added later inherits "any dispatch clears
+            // the prompt block" instead of inheriting I1's defect. That is the
+            // safe direction because clearing the BLOCK does not clear the
+            // GATE: `_depthGate` re-derives on the next terminal action, so a
+            // wrongly-cleared block costs one prompt while a wrongly-surviving
+            // one misinforms a model that just complied — the defect this repo
+            // has now paid to find three times.
+            //
+            // SCOPE OF THAT ARGUMENT (#196 review finding 2). "The gate
+            // re-derives, so nothing is papered over" holds for `gaps` and
+            // `no_layer_report`, whose conditions are recomputed from the
+            // CURRENT draft and trail every turn. It does NOT hold for
+            // `empty_trail`: `_dispatchCount` is incremented BEFORE dispatch
+            // and counts ATTEMPTS on purpose (see `_dispatchTool`), so a tool
+            // call that fails or is refused still moves the floor's
+            // `_dispatchCount === 0` conjunct off zero permanently and the
+            // floor can never fire again in that run. That is pre-existing
+            // (#195) and untouched here — this line does not reach the gate —
+            // but do not read the paragraph above as claiming the floor
+            // self-corrects. Filed as #200.
+            if (this._holdActiveKind !== 'gaps' || this._anyOf(this._heldTools, [this._str(action.tool)])) {
                 this._holdActive = null
                 this._holdActiveKind = ''
             }

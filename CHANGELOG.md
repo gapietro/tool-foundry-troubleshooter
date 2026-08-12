@@ -17,6 +17,45 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1118 — 2026-08-11
+
+**The `no_layer_report` stale HOLD, closed (#196).** One token in `src/`, plus a red-then-green
+test and a ledger entry (§AS).
+
+- **The defect, third path of three.** `_holdActive`'s dispatch-side clear read
+  `_holdActiveKind === 'empty_trail' || _anyOf(_heldTools, [tool])`. `no_layer_report` records
+  nothing — `_heldTools` is assigned a NON-NULL value on exactly ONE line (`_resetGate` also nulls
+  it), the `gaps` return at the foot of
+  `_depthGate` — so `_anyOf(null, …)` was false, the `empty_trail` clause did not cover it, and the
+  hold block survived a compliant tool call into the next prompt. I1's defect on a sibling path, and
+  the hold's own text asks for the very thing that failed to discharge it: *"…or call a tool."*
+- **Shipped as `!== 'gaps'`, an inversion rather than a second clause.** `gaps` is the only kind
+  that records a release set, so it is the only one whose clear should be tool-specific. The two
+  forms are identical today and differ in what a LATER hold kind inherits — I1's defect, or "any
+  dispatch clears the block". The inversion is right because this clear is prompt hygiene only:
+  `_depthGate` still re-derives from the trail on the next terminal action, so a wrongly-cleared
+  block costs one prompt while a wrongly-surviving one misinforms a model that just complied.
+- **Unit-tested, NOT measured — quote it with that caveat.** No rep exercised this path; #196's
+  non-reproduction during the §AQ reps is true **by construction** (#195 built the `empty_trail`
+  clear and no rep took the `no_layer_report` route). Same evidentiary footing as #192's retry
+  repair. How often runs reach this hold at all remains unmeasured — the path did not exist in the
+  build v4 ran against.
+- **PR #199 review, finding 1 — the decision was guarded by nothing.** Mutating the condition to a
+  bare `if (true)`, deleting the tool-specific `gaps` clear entirely, left **all 1718 tests
+  passing**: every test on this line asserted a block that should CLEAR, and none pinned the
+  distinction the change is argued on. Added the paired negative (a `gaps` hold, a dispatch outside
+  the recorded release set, the block asserted to survive) and re-mutated to confirm it now fails
+  alone. §AS3a.
+- **Finding 2 — §AS2's "the gate re-derives" argument does not reach the floor.** `_dispatchCount`
+  counts ATTEMPTS and is incremented before dispatch, so one failed or refused tool call moves
+  `empty_trail`'s `_dispatchCount === 0` conjunct off zero permanently and the §AQ floor can never
+  fire again in that run. **Pre-existing (#195), not introduced here, and deliberately not fixed
+  here** — that conjunct is a registered §AQ2 term (as amended at §AR1a) and repairing it inside an
+  unrelated one-token PR is the §AO3 mistake. Comment scope narrowed, filed as #200. §AS3b.
+- **No gate or pass figure is claimed** (ruling 6, §AI4/§AN/§AR4). §AQ3's differencing ban is
+  unchanged and not widened: a v15+ custom gate figure is reportable absolutely, never differenced
+  against v12/v13/v14, native series unaffected, both arms quoted together (§AD7).
+
 ## 2026.08.1117 — 2026-08-11
 
 **PR #197 review findings, all three (#191 follow-up).** Documentation only; no `src/` change.

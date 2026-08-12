@@ -3273,6 +3273,81 @@ describe('depth gate (#103) — wired into the loop', () => {
         expect(llm.calls[2]).not.toContain('## HOLD — a terminal action is not available yet')
     })
 
+    // #196 — the SAME defect on the third and last hold path. The
+    // `no_layer_report` hold records nothing either (`_heldTools` stays null,
+    // it never reaches the assignment on the fix_report route), so the
+    // `empty_trail`-specific clause added by §AQ property 5 does not cover it
+    // and `_anyOf(null, …)` is false. Its own text asks the model to "submit a
+    // fix_report whose layers_swept accounts for all seven layers, OR CALL A
+    // TOOL" — so a dispatch is compliance by the hold's own wording, and the
+    // next prompt must not still say a terminal action is unavailable.
+    test('#196: ANY dispatch clears an active no_layer_report hold block', () => {
+        const ANSWER = { action: 'answer', text: 'done' }
+        let invoked = []
+        const tools = fakeTools((name) => {
+            invoked.push(name)
+            return { success: true, data: {} }
+        })
+        const llm = fakeLlm([
+            // `answer` carries no layers_swept -> the no_layer_report hold.
+            { success: true, action: ANSWER, raw: 'r1' },
+            { success: true, action: { action: 'tool_call', tool: 'agent_config', args: {} }, raw: 'r2' },
+            { success: true, action: ANSWER, raw: 'r3' },
+        ])
+        const loop = load({
+            toolRegistry: tools,
+            runManager: fakeRunManager(),
+            llmProxy: llm,
+            fixReport: fixWith([], [GAP4]),
+            auditLogger: { invokedTools: () => ({ available: true, tools: invoked.slice() }) },
+            maxIterations: 3,
+        })
+
+        loop.run('RUN1')
+
+        expect(llm.calls[1]).toContain('## HOLD — a terminal action is not available yet')
+        expect(llm.calls[2]).not.toContain('## HOLD — a terminal action is not available yet')
+    })
+
+    // #196 review finding 1 — THE PAIRED NEGATIVE, and the one that guards the
+    // decision `!== 'gaps'` actually makes. Every other test here asserts a
+    // block that SHOULD clear; without this one the condition could be
+    // weakened to a bare `if (true)` — deleting the tool-specific clear
+    // entirely — and the whole suite still passed (verified by mutation).
+    // A `gaps` hold records a release set precisely so an UNRELATED tool does
+    // not discharge it: the model is being asked for a particular layer, not
+    // for activity. I1's clear must not become "any dispatch clears anything".
+    test('#196: a dispatch OUTSIDE the recorded release set leaves a gaps hold block standing', () => {
+        let invoked = ['agent_trace']
+        const tools = fakeTools((name) => {
+            invoked.push(name)
+            return { success: true, data: {} }
+        })
+        const llm = fakeLlm([
+            // GAP4 is unswept and its dedicated tool is `schema_lookup`.
+            { success: true, action: DRAFT, raw: 'r1' },
+            // The model calls something else entirely — activity, but not the
+            // layer the hold named.
+            { success: true, action: { action: 'tool_call', tool: 'agent_config', args: {} }, raw: 'r2' },
+            { success: true, action: DRAFT, raw: 'r3' },
+        ])
+        const loop = load({
+            toolRegistry: tools,
+            runManager: fakeRunManager(),
+            llmProxy: llm,
+            fixReport: fixWith([{ valid: true, normalized: { ok: true } }], [GAP4]),
+            auditLogger: { invokedTools: () => ({ available: true, tools: invoked.slice() }) },
+            maxIterations: 3,
+        })
+
+        loop.run('RUN1')
+
+        expect(llm.calls[1]).toContain('## HOLD — a terminal action is not available yet')
+        // THE ASSERTION THAT DISCRIMINATES: still held, because `agent_config`
+        // is not in `_heldTools`.
+        expect(llm.calls[2]).toContain('## HOLD — a terminal action is not available yet')
+    })
+
     // -----------------------------------------------------------------------
     // I2 (final whole-branch review): `[]` is truthy in JS. If the recorded
     // release set were ever empty, the old code's `if (this._heldTools)`
