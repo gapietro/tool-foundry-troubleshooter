@@ -17,6 +17,54 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1204 — 2026-08-12
+
+### First senior grade: C (72.9/100), and its one release blocker fixed
+
+`/senior-grade` ran its first sitting at `82a2d36` — `GRADE.md` is the new grade ledger
+(`AUDIT.md` stays reserved for the audit/fix modes). Not production-ready. Two grade caps triggered
+and **neither binds**, because the raw score already sits below both: no mandatory CI (→ B) and no
+integration coverage (→ B+).
+
+**The release blocker, fixed here (#214).** `src/fluent/example.now.ts` was unmodified `now-sdk init`
+scaffold that was never deleted, declaring two **active** records on the **`incident`** table: an
+`onLoad` ClientScript popping *"Table loaded successfully!!"*, and an after-update BusinessRule.
+Traced the whole chain rather than inferred — emitted into `dist/app/update/` as
+`sys_script_client_af760ca…` (`table incident`, `active true`) and `sys_script_85b27e4c…`
+(`collection incident`, `action_update true`, this app's `sys_scope`) — and **confirmed live on
+gpinst01**, installed `2026-07-31`, alongside three more copies from three other scoped apps built
+from the same scaffold. Beyond the visible defect on a core ITSM table, it contradicted the PRD's own
+*"Read-only Phases 1–2"* posture: an after-update BusinessRule on `incident` is a write-path hook.
+`src/server/script.ts` went with it (`showStateUpdate` had exactly one referrer, and it was the only
+`.ts` under `src/server/`). Post-rebuild: zero `sys_script*` records in `dist/`, 1,781 tests still
+green. **The two already-installed records remain on the instance** — deleting source does not remove
+what a previous install created.
+
+**Two findings the executed checks overturned**, both of which would have been wrong from reading:
+
+- **Coverage reports 0% on all 21 production files — and it is a measurement artifact.**
+  `test/_loadScriptInclude.js:93` runs sources through `vm.runInContext`, bypassing Jest's
+  instrumenting transform, so istanbul never sees code that 1,309 tests do exercise. Filed as #217
+  in its true form: no coverage gate is *possible*, which is a smaller claim than "untested" and a
+  real one.
+- **There is no working typecheck** (F-11, upgraded P3 → P2 mid-sitting, correcting evidence recorded
+  earlier in the same ledger). `src/tsconfig.json` is a solution config with `files: []` whose two
+  referenced projects both match zero files, so `tsc --noEmit -p src/tsconfig.json` **exits 0 having
+  checked nothing** — the obvious CI step would be a permanently green no-op. `tsc --build` shows
+  `TS18003` twice.
+
+**Scored 88 on documentation and 64 on correctness, and that gap is the grade:** a well-engineered
+system whose central claim is unproven, with nothing mechanical defending it.
+
+**Seven issues filed, not thirteen.** `CLAUDE.md`'s backlog discipline says grade skills are issue
+generators by design and every filed issue must name the gate it blocks, so only gate-blockers were
+filed — #214 (P0, install/demo), #215 (CI + lint, merge), #216 (retention, customer handoff), #217
+(coverage, merge confidence), #218 (`markRunning` race, real users), #219 (rate limiting, real
+users), #220 (integration tier, install confidence). F-08 (accepted prompt injection), F-10 (module
+size) and F-13 (dev-tree advisories) went to the register instead.
+
+---
+
 ## 2026.08.1203 — 2026-08-12
 
 ### The next gate is persisted: correctness, not admissibility
