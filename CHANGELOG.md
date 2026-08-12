@@ -17,6 +17,75 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1202 — 2026-08-12
+
+### The backlog closes: 19 issues → 0, and the benchmark instrument stops
+
+**This release ends Phase 1b.** Every open issue is closed, the product defects are fixed and
+verified on a live instance, and the benchmark's self-scrutiny loop is deliberately stopped.
+
+**Why the loop had to stop, stated with numbers.** Task 12 was a DECISION GATE — one fork, asking
+whether the native agent sufficed or the custom harness had to be built. It answered, Phase 1b was
+built, and the gate's job ended there. It kept running anyway: **103 issues created and 84 closed
+in fourteen days**, with the open board flat at ~19 because inflow matched outflow, and **nine of
+those nineteen descended from benchmark passes** in two chains (`#188 → #204 → #205` and
+`#201-review → #202, #203 → #207`). A self-scrutinising instrument has no fixed point. Closed into
+`DESIGN.md` §5 *Known limitations — the benchmark instrument*, which carries every defect's
+mechanism and measurement status so nothing is lost, and §5.6 states the only three things that
+reopen it.
+
+The finding that justifies stopping is in §5.2: the instrument got steadily better at judging
+whether a report is **admissible** while **correctness went unmeasured**. §AO2 scored a row 6/6
+proposing a fix at a column that does not exist; §AU passed every registered prediction with no
+trigger firing while correctness collapsed 4/4 → 0/4.
+
+### Product defects fixed (PR #209) — all root-caused live, two premises refuted
+
+- **#170 — `/analyze` returned a bare 400 with no body.** The handler and route were both correct;
+  the **envelope** was wrong. A ServiceNow error body is `{error:{message,detail}}`, ours was
+  `{error:'<string>'}`, so a client reading `error.message` fell back to the reason phrase. A
+  native-endpoint control proved the transport was innocent, refuting the issue's own hypothesis.
+  New `PaRestHandlers.emit()`; all five routes rewired. **Verified live:** the call now returns
+  *"one of execution, agent+timeframe, or logs is required"*.
+- **#73 — the stuck-run check was dead code.** It queries `status='running'`; `createRun` forces
+  `queued` and nothing moved it. Measured across 214 custom runs: complete 159, failed 54, queued
+  1, **running zero**. Adds `PaRunManager.markRunning()`, claimed by `PaAgentLoop.run()` before
+  reasoning, fail-open. **Verified live:** `TR1000325` went `queued → running → complete`.
+- **#75 — refused tool calls left no trace.** Both registry gates return before `logIntent`. Adds
+  `logRefusal`. **The split is the design:** the audit TABLE records every attempt; the EVIDENCE
+  READERS skip `refused` rows, so a refused call can never support a citation and no gate's
+  behaviour moves.
+- **#74 — REST surface decided.** All five routes now enforce a `rest_endpoint` ACL granting
+  `x_snc_troubleshoot.admin`; unrestricted run creation was a cost surface. `/status`'s
+  micro-invocation is flagged `caller_dependent` and excluded from `ready` (R-19b — a
+  caller-dependent probe must not stand in for system health). Message transcripts label the
+  caller's turn `user`, not `llm`. Prompt-injection surface documented as known-and-accepted.
+  **Two filed items were already fixed** and verified before touching anything.
+- **#26** — closed as a stated unknown in `DESIGN.md` R-7 rather than measured: the experiment
+  would mutate a Fluent-owned record, and the platform repopulates the field at install.
+
+### Backlog sweep (PR #210)
+
+- **#41** — `PaToolAgentTrace` migrated onto `PaToolReadKit`, the last exempt core. Truncation is
+  now measured rather than inferred (three sites called an exactly-full page truncated). **The
+  contract test then caught a defect the issue did not anticipate:** four of five return paths
+  exited without `evidence_basis`, so on precisely the adverse paths where a reader must tell a
+  permission gap from an absence, the field saying which was absent. Every exit now routes through
+  one `_answer()`.
+- **#27** — the guard-test comment strip is string-aware; a `//` inside a string could silently
+  blind it. A guard that reports green while disabled is worse than no guard. Shared-helper
+  semantics changed (widening, the safe direction) and documented.
+- **#28** — Build Rule #43 broadened from `script` to any backtick-template property.
+- **#34** — new Build Rule #44: `Now.ID['key']` in a `Record()` data field emits the key name.
+- **#29** — plan DONE markers backfilled; Task 10's tool count reconciled.
+
+### Verification
+
+`npm test` — 34 suites, **1781 tests**, all passing (from 1729). `now-sdk build` clean. Installed
+to gpinst01 and exercised: #170 and #73 confirmed against the live instance.
+
+---
+
 ## 2026.08.1201 — 2026-08-12
 
 ### #204 — the absence-diagnosis target: pre-registered, measured, reverted
