@@ -17,6 +17,48 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1119 — 2026-08-11
+
+**The §AQ floor's disarm conjunct read the wrong counter (#200).** One failed or refused tool call
+bought a run a permanent exit from the floor. Ledger ruling first (§AT), then the fix.
+
+- **The defect.** `_dispatchCount` is incremented BEFORE dispatch and counts ATTEMPTS, deliberately
+  — `_auditContext` uses it to decide whether an empty trail may CONVICT a report, so it must
+  overcount (#191 part 1). The floor reused that counter to decide whether to HOLD, where the same
+  leniency is an escape hatch: the model emits `{"tool":"bogus"}`, `PaToolRegistry` refuses on its
+  unknown-tool gate without auditing anything, and `_dispatchCount === 0` is false forever after.
+  The next zero-evidence `fix_report` then releases the gate permanently.
+- **Not a flipped conjunct — a second counter.** The two consumers need opposite failure directions
+  from one number, so `_dispatchCount` and #191 part 1's argument are left verbatim and
+  `_auditedDispatchCount` is added alongside.
+- **The discriminator is the audit write, not success.** An empty trail is ambiguous *only* because
+  a systematic write loss reads like a quiet run, and a call that never attempted a row cannot
+  explain a missing one. `PaToolRegistry.dispatch` returns on its unknown-tool and destructive gates
+  BEFORE `logIntent` and now marks exactly those two `dispatched:false`; its catch branch does not,
+  because `logIntent` has already run — a core that throws leaves a row and would not have floored
+  anyway. An ABSENT marker counts, so a producer that never learned to mark its refusals behaves
+  exactly as before and can never manufacture a hold the model did not earn.
+- **Ruled as an amendment, not a new instrument term (§AT3).** §AQ2 registered
+  `if (release.length === 0)` bare; §AR1a recorded that the built floor ships the narrower
+  `&& _dispatchCount === 0` and that the narrowing never reached the ledger. Audited dispatches are
+  a subset of attempts, so this moves the floor back TOWARD the registered condition and never past
+  it. §AQ5's three revert triggers carry forward unchanged — they already bound this direction.
+  §AQ3's differencing ban is not widened; the native series is untouched.
+- **Recorded BEFORE the code**, which is §AR1a's rule being paid rather than re-learned:
+  `git log -p benchmark/DECISION.md` shows §AT landing ahead of the `src/` commit.
+- **Unit-tested, NOT measured — quote it with that caveat (§AT4).** No rep is known to have taken
+  this path; the four §AQ reps recorded 4-of-4 successful tool calls, so none could have. How often
+  the model emits an unregistered or refused tool name is **unmeasured**, not unlikely. Same footing
+  as §AS3 and #192's retry repair. **No figure is claimed and no prediction is filed** (ruling 6).
+- **Per §AS3a, the deliverable is the test that pins the distinction.** Four mutations run: floor
+  reverted to `_dispatchCount`, `_dispatchTool` counting every attempt, and each registry marker
+  deleted in turn — each killed exactly the intended test, alone. 1728 tests pass; `now-sdk build`
+  clean.
+- **Residual named, not smoothed over (§AT5).** `_auditContext` keeps the lenient counter, so on a
+  run whose only dispatch was refused it can still write *"audit trail LOST WRITES"* when no row was
+  ever attempted. It fails toward NOT convicting, which is the registered direction; recorded rather
+  than fixed.
+
 ## 2026.08.1118 — 2026-08-11
 
 **The `no_layer_report` stale HOLD, closed (#196).** One token in `src/`, plus a red-then-green
