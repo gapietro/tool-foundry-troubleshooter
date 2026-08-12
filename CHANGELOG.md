@@ -17,6 +17,57 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1205 — 2026-08-12
+
+### CI exists, lint blocks, and the vacuous typecheck is deleted rather than repaired (#215)
+
+Closes the `/senior-grade` cap trigger **"No mandatory CI → max B"** and finding F-09.
+`.github/workflows/ci.yml` runs **lint → build → test** on every PR and every push to `main`, and
+the check is **required on `main`**, so it can refuse a merge rather than merely report.
+
+**`now-sdk build` is the typecheck, and F-11 was resolved by deletion.** The only TypeScript here is
+the nine `src/fluent/*.now.ts` files, which the Fluent plugin checks during the build.
+`src/tsconfig.json` was a solution config with `files: []` whose two referenced projects
+(`tsconfig.server.json`, `tsconfig.client.json`) matched **zero files** — their includes named
+`./**/*.server.js` and `./**/*.client.js`, conventions this repo never used. So
+`tsc --noEmit -p src/tsconfig.json` **exited 0 having checked nothing**, and putting it in CI would
+have produced a permanently green gate, which is worse than no gate because it reads as one. All
+three files are deleted, after verifying `now-sdk build` succeeds with them absent.
+`src/server/tsconfig.json` stays — `now.config.json` points `tsconfigPath` at it.
+
+**Lint blocks from day one because the discipline was measured first, not assumed.** `src/server/`
+contains zero `const`/`let`, zero `Set`/`Map`, zero `for..of`, and every `=>` and backtick sits
+inside JSDoc prose or a single-quoted string. `ecmaVersion: 5` turns each of those into a **parse
+error** — the earliest possible catch for the "builds clean, installs clean, fails at runtime" class
+that Build Rules #19/#33/#34/#40–43 all describe. A rule that lands with hundreds of violations
+teaches people to ignore lint; this one ratchets behaviour that already held.
+
+**The first run reported 151 problems, and 150 were the config meeting deliberate patterns.** The
+breakdown is the useful part:
+
+- **94 catch-bindings.** `DESIGN.md` R-1 *requires* not reading the exception in a scoped app —
+  touching a `ScopeAccessNotGrantedException` throws again and kills the request. `caughtErrors:
+  'none'`; flagging these would have pressured a correct idiom into an incorrect one.
+- **36** were Script Includes defining the class that other Script Includes reference as a global.
+- **8** were `while ((m = re.exec(s)))`, the idiomatic regex walk.
+- **7 `no-undef` were real platform globals left undeclared** — `sn_one_extend`,
+  `_agentic_context_`, `sn_ws_err`, `GlidePluginManager`. **Zero typos**, which is the finding.
+- **1 fatal** was `eslint.config.mjs` being linted as CommonJS.
+
+That left **4 genuine dead assignments across 18k lines**: two discarded `closeRes` in `PaAgentLoop`
+failure paths, a leftover `var self` in `PaToolLogAnalysis`, and an unused `world` destructure in
+`PaRunManager.test.js`. `no-new-func`/`no-eval`/`no-implied-eval` are enabled because
+`packetGeneratorParity.test.js` already carried an `eslint-disable-next-line no-new-func` written
+before any linter existed — the rule now means what its author intended.
+
+**Verified in a clean clone**, not just locally: `npm ci` from the lockfile, then lint, build and
+`jest --ci` all pass — which is what proves `@servicenow/sdk` resolves in CI without credentials.
+
+**What CI still cannot catch** is stated in the workflow header rather than left implied: no green
+tick here is evidence about instance behaviour. That gap is #220.
+
+---
+
 ## 2026.08.1204 — 2026-08-12
 
 ### First senior grade: C (72.9/100), and its one release blocker fixed
