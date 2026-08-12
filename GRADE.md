@@ -5,6 +5,28 @@ Newest sitting first.
 
 ---
 
+## Remediation log — changes since sitting 1
+
+Appended as findings close. **The sitting-1 score and cap analysis below are deliberately NOT
+rewritten**: a grade is a measurement at a commit, and editing it as fixes land would make sittings
+incomparable and quietly erase the baseline the next one is measured against. Sitting 2 re-measures
+and reports the movement; this log is what it will read.
+
+| Finding | Closed at | Evidence |
+|---|---|---|
+| **F-01** (P0, release blocker) | `2026.08.1204`, #214 / PR #221 | Scaffold deleted; live-verified on gpinst01 — both records gone from this scope, other three apps' copies untouched. Full before/after table under F-01 below. |
+| **F-02** (cap trigger: no mandatory CI) | `2026.08.1205`, #215 / PR #222 | `.github/workflows/ci.yml` runs lint → build → test; **required** on `main` with `strict: true` **and `enforce_admins: true`**. Proven, not assumed: throwaway PR #223 with a failing test went red, `mergeStateStatus` **BLOCKED**, `gh pr merge` refused (*"the base branch policy prohibits the merge"*); and a direct push to `main` was refused with **`GH006: Protected branch update failed`**. |
+| **F-09** (no linter) | `2026.08.1205`, #215 / PR #222 | ESLint flat config, `ecmaVersion: 5` over `src/server/**`, blocking. Guard proven by injecting `const PROBE = 1` → `Parsing error: The keyword 'const' is reserved`. First run: 151 problems, 150 of which were config-vs-deliberate-pattern; **4 genuine dead assignments across 18k lines**, all fixed. |
+| **F-11** (no working typecheck) | `2026.08.1205`, #215 / PR #222 | `src/tsconfig.json` + `tsconfig.server.json` + `tsconfig.client.json` **deleted rather than repaired** — verified `now-sdk build` succeeds with all three absent. `now-sdk build` is the typecheck; CI deliberately carries no `tsc` step that could pass vacuously. |
+
+**Caps that would no longer trigger at sitting 2:** *No mandatory CI → B* is fully lifted (required
+check + `enforce_admins`). *No realistic integration or browser coverage → B+* still stands — #220.
+
+**Still open from sitting 1:** F-03 (#218), F-04 (#216), F-05 (#219), F-06 (#217), F-07 (#220),
+F-12 (#212). F-08, F-10 and F-13 remain on the register by decision, not oversight.
+
+---
+
 ## Sitting 1 — 2026-08-12 @ `82a2d36` (first grade)
 
 **Score 72.9/100 → C** · Previous: none · Production-ready: **No** · Senior-quality: **Partly**
