@@ -182,7 +182,17 @@ If the instance's GenAI stack is itself broken (a common state when debugging Ge
 | **Access control** | All queries use `GlideRecordSecure` — the tool sees only what the logged-in user's ACLs allow. |
 | **Read-only by default** | All Phase 1–2 tools are read-only. Fix *application* (Phase 3) is confirmation-gated and audit-logged. |
 | **Audit trail** | Every diagnostic run and tool execution is logged to a scoped audit table: user, timestamp, tool, input, output. |
+| **Data retention** | Run **artifacts** — the attachment excerpts of tool output, which are where customer table data comes to rest — are purged on a daily schedule once they pass the `x_snc_troubleshoot.retention_days` window (**default 30 days**). See the note below for what the purge deliberately does not cover. |
 | **Clean footprint** | Delivered as a scoped application — install and full removal are one operation each. |
+
+> **Retention, stated precisely (issue #216).** "No customer data ever leaves the platform" is a claim about **egress**, and it is true. Retention is a **separate obligation**: the data sits inside the customer's own instance, in this app's attachments. Until #216 there was no lifecycle at all — nothing ever deleted an artifact, so a diagnostic tool accumulated customer data indefinitely.
+>
+> What the daily purge (`Troubleshooter Artifact Retention Purge` → `PaRetentionSweep`) does and does not do:
+>
+> - **Deletes:** `sys_attachment` rows on `x_snc_troubleshoot_run` records older than the window. These are the bulk excerpts of arbitrary customer tables returned by `query_table`, and they are the material exposure.
+> - **Keeps:** the run **records** themselves — status, transcript, `fix_report`, `context_summary`, and the verbatim `request` body. They are the evidence ledger the benchmark and grading work read from, and deleting rows is far harder to undo than deleting excerpts.
+> - **Therefore still retained indefinitely:** the 200-char tool-output digests held in each run's transcript, and the original request text. This closes the **bulk** data-at-rest exposure, not every trace of customer data. A customer whose policy requires the rest needs a second window over run rows — a separate decision, not something to assume.
+> - **Configurable, and fails safe:** clearing the property falls back to 30 days; a value that is not a positive whole number **disables the purge** and logs a warning rather than guessing, because deleting on a misconfiguration is the one direction that cannot be undone.
 
 ---
 
