@@ -1,6 +1,23 @@
 # Dispatch brief — the claim-veracity extractor (issue #212)
 
-**Read this file first and in full. It is the whole of your instructions.**
+> # ⚠ RETIRED AS A DISPATCH INSTRUMENT — DO NOT FOLLOW THIS PROCEDURE
+> **Superseded 2026-08-13 by `DECISION.md` §AX.** This file is retained as a **record** of the
+> blind-author procedure and of the four leaks that defeated it (§AW11c–f). It is no longer the
+> instruction set for anyone.
+>
+> **Why:** blinding protected the recall figure by requiring a property of the *author's context*, which
+> cannot be verified from outside. Three dispatches aborted before writing a line, two of them on defects
+> introduced by the operator's own repairs. §AX replaces it with two properties checkable on the
+> **artifact** — claim inventories committed before the extractor exists, and a mechanical vocabulary
+> check on the extractor's own prompt and source. §AX also corrects the measurement error underneath the
+> blinding requirement: recall is enumeration completeness, not false-claim detection, so no answer key
+> is involved and no blind author is needed.
+>
+> **If you were handed this file to author the extractor, stop and read `DECISION.md` §AX instead.**
+> Nothing below is wrong as history; all of it is wrong as instructions.
+
+**Read this file first and in full. It is the whole of your instructions.** *(Retained verbatim as the
+record; see the banner above — it is no longer true.)*
 
 You are being asked to author a *blinded* instrument. The reason this brief is long is that three
 previous attempts to blind this work failed, each in a way its designer had not imagined, and every

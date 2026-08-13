@@ -8470,3 +8470,235 @@ mechanism.
 **What it cost:** nothing measured. Three dispatches, three aborts, zero calibration burn — the set is
 intact. That is the tripwire and attestation working as designed, and it is the argument for keeping
 both even though each abort feels like a failure.
+
+---
+
+## AX. Enumeration recall and artifact-level clearing — pre-registration (issue #212, supersedes parts of §AW)
+
+Filed **2026-08-13**, before any extractor exists and before any claim has been extracted from any
+report. This section amends §AW. §AW forbids amendment *after the first measurement*; **no measurement
+has occurred** — three dispatches aborted before writing a line and the calibration set is unspent —
+so amendment is permitted, and it is registered here rather than edited into §AW so the change is
+legible.
+
+### AX0. Why §AW is being amended rather than attempted a fourth time
+
+§AW protects the recall figure by requiring a **blind author**. That is a property of a *person's
+context*, and it cannot be verified from outside — which is why §AW4 had to place the burden on the
+author to *demonstrate* blindness and why §9 of the brief asks a question only the author can answer.
+Three dispatches spent, three aborts, zero measurement. The failures were not carelessness: two of the
+three were caused by the operator's own repairs (§AW11e, §AW11f), which is what a procedure looks like
+when its complexity exceeds what care can hold.
+
+What did work today was §AW11f's remedy: a **test that reads the artifact**. That is the amendment.
+
+> **Registered principle:** *prefer a property you can check on the artifact over a property you must
+> certify about the author.* An unfalsifiable precondition can only be discharged by attestation, and
+> attestation is the thing that keeps failing.
+
+### AX1. The measurement error underneath the blinding requirement
+
+§AW4 measures recall as **detection of false claims** on three known-bad rows. That is why the answer
+key matters and why blinding is required: an author who knows which claim is false can tune for it.
+
+But the extractor's job is not to find false claims. **It finds claims; the adjudicator decides truth
+by probing the instance.** The property that needs measuring is therefore *enumeration completeness* —
+given a report, does the extractor list the factual assertions it contains — and that is measurable on
+**any** report, because which claims are false is irrelevant to whether they were listed.
+
+Consequences: recall no longer needs an answer key, is no longer one-shot, is repeatable, and needs no
+blind author.
+
+### AX2. Enumeration recall — the method, and what makes it honest
+
+1. **A claim inventory is authored by hand for each held-out report** (§AX4), listing every factual
+   assertion about instance state, per the operational definition in §AX3.
+2. **The inventories are committed BEFORE the extractor is run on those reports — before it exists.**
+   Commit order is the guarantee, and unlike author blindness it is *verifiable by anyone* with
+   `git log`. This is the artifact-property substitution in its concrete form.
+3. **Enumeration recall** = (inventory claims the extractor emitted) / (inventory claims), reported per
+   report and **per arm** — never pooled across arms (§AD7; see §AX7.1) — with misses listed verbatim.
+4. **Every inventory claim is adjudicated, whether or not the extractor emitted it.** Adjudication is
+   driven by the *inventory*, not by the extractor's output. Without this a missed claim never reaches
+   the probe, and AX-4 — the prediction that guards this whole substitution — has no denominator
+   (found in review of PR #246).
+5. **Spurious rate** = (emitted claims absent from the inventory, after excluding those an operator
+   review rules *correct additions* the inventory missed) / (emitted claims). Reported alongside
+   recall, per arm.
+
+**Why a spurious rate is registered and not optional (review of PR #246).** Recall alone is gameable by
+verbosity: an extractor that emits every sentence of a report as a "claim" scores recall 1.0 and clears
+AX-1 without doing anything. §AW4's detection framing was self-limiting — a tuned extractor still had to
+hit the *right* claim — and the substitution in §AX1 removes that self-limit, so the counterweight has to
+be put back explicitly. **A recall figure is not reportable without its spurious rate**, the same
+coupling §AW8 imposes between veracity and recall.
+
+The "correct additions" carve-out is deliberate and cuts against the operator: a claim the extractor
+found and the hand inventory missed is an inventory defect, and counting it as spurious would penalise
+the extractor for being better than its fixture. Every such ruling is listed individually in the pass
+record with its justification, so the carve-out cannot be used to absorb genuine noise.
+
+**The honest limitation, stated because it is real.** The inventory author and the extractor author are
+the same operator, so this measures *"does the implementation match the pre-committed specification of a
+claim"* — self-consistency across a time gap — not agreement with an independent oracle. R-27 is
+therefore mitigated, not eliminated: the mitigations are (a) the inventory precedes the extractor's
+existence, so it cannot be shaped by observed behaviour, and (b) §AX3's definition is operational
+enough for a third party to reproduce the inventory and check it. **This is a weaker guarantee than a
+genuinely blind author would have produced.** It is chosen because it is obtainable, and the weakness
+is named rather than discovered later.
+
+### AX3. What counts as a claim — the operational definition
+
+A **claim** is a statement in a report that is *true or false of instance state independent of
+diagnosis quality*, and whose truth could be settled by reading the instance. Concretely, and this list
+is a definition rather than examples to pattern-match:
+
+- an assertion that a table, column, record, or field exists or does not exist
+- an assertion of a field's value, a record's identity (sys_id), or a name
+- an assertion of a count (rows, bindings, calls, records)
+- an assertion that a named tool, agent, or configuration is present, absent, active, or inactive
+
+**Not claims:** judgements of severity or confidence, recommendations, proposed fixes, statements about
+what the model itself did or thought, restatements of the diagnostic method, and any assertion about
+the *run* rather than the instance. A quoted string attributed to a tool's output is a claim about the
+instance only if it asserts instance state; otherwise it is a claim about the run and out of scope
+(inherited from §AW5 E-2's temporal boundary).
+
+**Structurally claim-free reports.** Two of the 20 contain no report body — a single failure line
+instead. They carry zero claims by construction, count as zero-claim in the sweep, and are excluded
+from recall (a report with no claims cannot exhibit enumeration failure).
+
+### AX4. Set assignment — a rule fixed before content was read
+
+Stated as a rule rather than a list of chosen files, so easy reports cannot be selected into the
+measured set.
+
+- **Excluded from both sets:** the three former §AW4 sensitivity rows. They are still part of the
+  20-report veracity sweep; they are merely not used to measure recall, because the operator knows their
+  answers and a recall figure computed over them would be circular.
+
+  **Their secrecy no longer has a function, and pretending otherwise would be the incoherence review
+  found (PR #246).** §AX retires blinding; AX-3 — the one prediction that depended on knowing which rows
+  were flagged — is withdrawn (§AX6). Review also noted these rows are derivable by complement from the
+  lists below anyway, which is true and is now moot rather than a leak: nothing in §AX requires anyone
+  not to know them. **§AW11b's "the author is not told which rows form the sensitivity set" is retired
+  with the rest of the blinding apparatus** (§AX9), not quietly violated.
+- **Structurally claim-free:** the two bodiless reports, excluded from recall per §AX3.
+- **Remaining 15**, sorted ascending by filename, alternating from the first: **odd positions →
+  development set (8), even positions → held-out set (7).**
+  - Development: `row-01, row-03, row-05, row-10, row-14, row-16, row-18, row-20`
+  - Held-out: `row-02, row-04, row-07, row-12, row-15, row-17, row-19`
+
+**Operator exposure disclosed, per this project's habit of recording contamination rather than
+asserting its absence.** Before writing this section the operator had read `row-01` (development) and
+the two bodiless reports in full, and had seen filename-level output of a `grep -l` for one fixture
+identifier, which reveals *which* reports mention that identifier — including two held-out ones — but
+no claim, value, or count from them. No held-out report's body has been read. Recall figures carry this
+caveat.
+
+### AX5. Artifact-level clearing replaces author blinding
+
+The extractor is expected to be model-backed (brief §7). Its tunable surface is therefore its **prompt**,
+not its plumbing; parse, sort and serialise cannot encode an answer key.
+
+**Registered requirement:** the extractor's prompt and source must pass a mechanical vocabulary check —
+no fixture table identifier, no field-count or row-count literal, no seed identifier, no report
+locator, no adjudication verdict for any specific report. Same instrument as
+`test/extractorBriefBlindness.test.js`, pointed at the extractor, and it must be **mutation-verified**
+(fail against a deliberately tuned variant) rather than merely pass.
+
+**The locator pattern must match the HYPHENATED form, and as filed it did not** (review of PR #246). The
+existing check uses `/\brows?\s+0?\d+\b/i` — whitespace-separated — which does not match the
+`row-NN` filename form used throughout this corpus and in §AX4 itself. Pointed at an extractor that
+special-cases a named report file, the check would have passed while the locator sat in the source: a
+"mechanical, decidable" clearing that was unenforced in its single most likely form. The pattern is
+widened to cover `row-NN`, and the mutation verification must include **a variant that special-cases a
+report by hyphenated filename** as one of its deliberately-tuned cases. An extractor is expected to
+enumerate its corpus directory, never to name a member of it.
+
+This is what allows a contaminated operator to author the extractor: the question moves from *"what does
+the author know"* to *"what does the artifact encode"*, and the second is decidable.
+
+### AX6. Predictions — falsifiers are exact complements (§AV3a)
+
+| # | Prediction | Falsifier |
+|---|---|---|
+| **AX-1a** | Enumeration recall on the held-out **native** reports is **≥ 0.80** | **< 0.80** |
+| **AX-1b** | Enumeration recall on the held-out **custom** reports is **≥ 0.80** | **< 0.80** |
+| **AX-2** | **≥ 1 claim is `refuted`** across the 20 reports | **0 refuted** |
+| **AX-4** | Enumeration misses are **not** concentrated in refuted claims: among **inventory** claims adjudicated `refuted`, the miss rate is **≤** the per-arm miss rate | **miss rate among refuted inventory claims exceeds the per-arm rate** — enumeration recall then overstates detection recall and AX-1a/1b do not transfer |
+| **AX-5** | Spurious rate is **≤ 0.25** on each arm | **> 0.25** on either arm |
+
+**AX-1 was split per arm in review of PR #246.** As filed it stated a threshold on a *pooled* figure
+across 4 native and 3 custom held-out reports — a blended cross-arm number, which is the exact defect
+§AW7.2 was corrected for in review of PR #225. The ambiguity landed on the primary prediction, so it is
+resolved in the strict direction: two thresholds, no pooled figure.
+
+**AX-4 was unmeasurable as filed, and the repair is §AX2.4.** Its denominator was "adjudicated-`refuted`
+claims", but a *missed* claim is by definition one the extractor never emitted, so under output-driven
+adjudication it never reaches the probe and the miss rate among refuted claims could not be computed at
+all. Adjudication is now inventory-driven, which makes the denominator exist. **Honest limit on its
+power:** if the refuted count turns out to be small — AX-2 only guarantees ≥1 — the comparison carries
+little signal, so AX-4 is reported as **`not exercised`** rather than `passed` when the refuted
+population is **< 5**. Recording it as passed on n=1 would be the §AQ4 "not exercised, NOT passed"
+error repeated.
+
+**AX-3 is withdrawn, not weakened (review of PR #246).** It predicted that the extractor would emit the
+specific claim each reserved row was flagged for — a *detection* check, the answer-key-dependent
+property blinding existed to protect. With a contaminated operator authoring the extractor it measures
+nothing: the author already knows those answers, so a pass is circular and a failure is only evidence of
+carelessness. Keeping it would have left §AX retiring blinding while one prediction still depended on it.
+**What is lost by withdrawing it, stated plainly:** there is now no direct check that the extractor
+catches a *known* false claim. AX-4 is the indirect substitute and it is weaker. This is a real
+reduction in the instrument's power and it is the price of authoring without blinding.
+
+**AX-2 remains pre-satisfied and is labelled as such** (§AW6's reasoning unchanged: one row's false claim
+is already known, so its falsifier is impossible — that is the finding, not the test).
+
+### AX7. Stopping condition — mandatory, written before the first pass
+
+1. **The pass is one sweep.** 20 reports → **two veracity figures (native, custom)**, **two
+   enumeration-recall figures (native, custom)** with per-report detail, **two spurious rates**, and the
+   AX-4 check. **No pooled cross-arm figure is produced at all** — not for recall, not for veracity
+   (§AD7; corrected in review of PR #246, which found AX7.1 and §AX8 contradicting each other here).
+   Written into this section. Done.
+2. **Recall is repeatable, but the held-out set is not re-usable after the extractor has been changed
+   in response to its misses** — that reports training accuracy. **And this corpus has no clean pool to
+   redraw from** (review of PR #246: the original text said "a fresh held-out draw from the development
+   set", which is the eight reports the extractor was developed *against* — training data, the exact
+   failure the rule exists to prevent). The eligible 15 are exhausted by the two sets. So the registered
+   consequence is a hard one: **if the extractor is repaired in response to held-out misses, no valid
+   recall figure is available from v14 at all.** The options are then (a) report the post-repair figure
+   explicitly labelled *training accuracy, not recall*, which under §AX8 means no veracity figure may be
+   reported with it, or (b) draw a fresh held-out set from a **future** pass's reports. There is no third
+   option, and "redraw from development" is not one.
+3. **Findings about this instrument default to documented-not-fixed**, in an §AX-closing subsection.
+4. **Reopening needs a named condition**, written when the pass closes.
+
+### AX8. What this axis may and may not say
+
+- **No veracity figure without its enumeration-recall figure.** §AW8's rule survives the change of what
+  recall means; only its source changes.
+- **Both arms reported separately** (§AD7). Unlike §AW5 E-3, recall here is measurable on both arms, so
+  the native-only caveat is retired.
+- **This axis does not gate.** `passes_gate` keeps its two-term shape. The veracity figure is reported
+  alongside, and disagreement between them is the finding.
+- **§AQ3 stands** — untouched, as this commissions no gate term.
+
+### AX9. What is retired from §AW, and what survives
+
+**Retired:** §AW4's blind-author procedure, its deny-list and allowlist as *blinding* mechanisms, its
+one-shot calibration framing as the primary recall source, §AW5's E-3 native-only caveat, and §AW8's
+dependence on detection recall. `EXTRACTOR-BRIEF.md` is retired as a dispatch instrument and retained as
+a record; `test/extractorBriefBlindness.test.js` is retained, because the brief remains a document that
+must not accumulate corpus vocabulary while it sits in the repository.
+
+**Survives unchanged:** §AW2's three-valued verdict and its registered principle (*an instrument's
+inability to observe must never be recorded as an observation*); §AW3's disambiguation rule; §AW5's
+E-1 and E-2 with their falsifiers; §AW8's both-arms and no-figure-without-instrument rules; every
+§AW11a–f finding as a record. §AW11f's principle is the parent of §AX0's.
+
+**What the three aborts bought, recorded so the cost is not read as waste:** §AW11e and §AW11f are real
+defects found before any burn, the calibration set is intact, and the design error in §AW1 was only
+visible after the procedure had failed three times in the same place. The aborts are what made this
+amendment legible rather than a shortcut.

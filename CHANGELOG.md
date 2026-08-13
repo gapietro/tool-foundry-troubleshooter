@@ -17,6 +17,86 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1302 — 2026-08-13
+
+### Added — §AX: enumeration recall and artifact-level clearing, superseding §AW's blind-author procedure (#212)
+
+Pre-registered **before any extractor exists and before any claim has been extracted.** §AW forbids
+amendment after the first measurement; none has occurred — three dispatches aborted before writing a
+line, and the calibration set is unspent — so amendment is permitted. Registered as a new section rather
+than edited into §AW, so the change is legible.
+
+**The design error.** §AW protected the recall figure by requiring a **blind author** — a property of a
+person's context, unverifiable from outside, which is why §AW4 had to place the burden on the author to
+*demonstrate* blindness. Three dispatches, three aborts, zero measurement; two of the three aborts were
+caused by the operator's own repairs (§AW11e, §AW11f). What worked instead was §AW11f's remedy, a test
+that reads the artifact. Hence:
+
+> **Prefer a property you can check on the artifact over a property you must certify about the author.**
+> An unfalsifiable precondition can only be discharged by attestation, and attestation is what kept
+> failing.
+
+**The measurement error underneath it.** §AW measured recall as *detection of false claims* on three
+known-bad rows, which is why an answer key mattered. But the extractor does not find false claims — it
+finds claims, and the adjudicator decides truth by probing. The property to measure is **enumeration
+completeness**, which is measurable on *any* report because which claims are false is irrelevant to
+whether they were listed. Recall therefore needs no answer key, is no longer one-shot, is repeatable,
+and needs no blind author.
+
+**What replaces blinding.** Two artifact properties, both verifiable by third parties: hand-authored
+claim inventories **committed before the extractor exists** (commit order is the guarantee, checkable
+with `git log`), and a **mechanical vocabulary check on the extractor's own prompt and source** —
+mutation-verified, not merely passing. That is what lets a contaminated operator author the extractor:
+the question moves from what the author knows to what the artifact encodes, and the second is decidable.
+
+**The weakness, named rather than discovered later.** Inventory author and extractor author are the same
+operator, so enumeration recall measures agreement with a pre-committed specification of "a claim" —
+self-consistency across a time gap — not agreement with an independent oracle. R-27 is mitigated, not
+eliminated. Prediction **AX-4** turns the residual into a bet: if enumeration misses concentrate among
+`refuted` claims, recall overstates detection and the substitution fails.
+
+Also registered: the operational definition of a claim; a set-assignment rule fixed before content was
+read (alternating positions over the 15 eligible reports, 8 development / 7 held-out, the three
+sensitivity rows reserved and the two bodiless reports excluded); disclosed operator exposure; four
+predictions with exact-complement falsifiers; a stopping condition including the rule that a held-out set
+is not re-usable after the extractor changes in response to its misses; and §AX9's itemised list of what
+§AW terms are retired versus retained.
+
+`EXTRACTOR-BRIEF.md` is retired as a dispatch instrument and retained as a record.
+`test/extractorBriefBlindness.test.js` is retained — the brief must not accumulate corpus vocabulary
+while it sits in the repo.
+
+**Seven review findings fixed before merge, three of which would have invalidated the instrument.**
+
+1. **Recall had no counterweight.** Recall alone is gameable by verbosity — emit every sentence as a
+   "claim" and score 1.0. §AW4's detection framing was self-limiting; the substitution removed that
+   self-limit without replacing it. A **spurious rate** is now registered, coupled to recall the way
+   §AW8 couples veracity to recall, with a "correct additions" carve-out that cuts against the operator.
+2. **AX-4 was unmeasurable.** Its denominator was adjudicated-`refuted` claims, but a *missed* claim
+   never reaches the probe under output-driven adjudication, so the one prediction guarding the whole
+   substitution could not fire. Adjudication is now **inventory-driven** (§AX2.4). It also reports
+   `not exercised` rather than `passed` when the refuted population is < 5 — the §AQ4 error otherwise.
+3. **AX-1 was a pooled cross-arm threshold**, the exact defect §AW7.2 was corrected for in review of
+   PR #225, landing on the primary prediction. Split into per-arm AX-1a/AX-1b; **no pooled figure is
+   produced at all**, resolving a straight contradiction between §AX7.1 and §AX8.
+4. **The repair path drew from the development set** — training data, the failure the rule exists to
+   prevent. The eligible 15 are exhausted, so the registered consequence is now hard: repair the
+   extractor in response to held-out misses and **no valid v14 recall figure exists**, leaving only a
+   labelled training-accuracy figure (which under §AX8 blocks the veracity figure) or a future pass.
+5. **AX-3 is withdrawn.** It measured *detection* on the three known rows — the answer-key-dependent
+   property blinding protected — so with a contaminated author a pass is circular. §AX had been
+   retiring blinding while one prediction still depended on it. **What it cost is stated:** there is now
+   no direct check that the extractor catches a known false claim, and AX-4 is a weaker substitute.
+6. **The named clearing instrument did not enforce what §AX5 registered.** Its locator pattern was
+   whitespace-separated and matched none of this corpus's `row-NN` filenames — so an extractor
+   special-casing a report by name would have passed. Widened and proven: it now catches `row-01`,
+   `row-07.md` and `report === 'row-09'` while still ignoring `borrow-01`. Mutation verification must
+   include a hyphenated-filename variant.
+7. **`BACKLOG.md` and `EXTRACTOR-BRIEF.md` still instructed the retired procedure.** `/next` reads the
+   backlog, so the next prioritisation session would have dispatched under §AW's superseded rules. Both
+   now carry retirement banners; the brief's says plainly that nothing in it is wrong as history and all
+   of it is wrong as instructions.
+
 ## 2026.08.1301 — 2026-08-13
 
 ### Fixed — the §AW11e repair leaked the answer into the brief (§AW11f, #212)

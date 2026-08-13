@@ -75,7 +75,12 @@ const FORBIDDEN = [
     { label: 'field-count assertion', re: /\b\d+\s+fields?\b/i },
     { label: 'row-count assertion', re: /\b\d+\s+rows?\b/i },
     { label: 'seed identifier', re: /\bseed[-\s]?0?\d\b/i },
-    { label: 'calibration row locator', re: /\brows?\s+0?\d+\b/i },
+    // `[-\s]` and not `\s` alone: the corpus names its members `row-NN`, and a
+    // whitespace-only pattern matched none of them. Pointed at an extractor that
+    // special-cased a report by filename, the check passed while the locator sat
+    // in the source — a mechanical clearing unenforced in its most likely form
+    // (review of PR #246, registered in §AX5).
+    { label: 'calibration row locator', re: /\brows?[-\s]0?\d+\b/i },
 ]
 
 describe('the extractor brief does not leak corpus vocabulary (§AW11f)', () => {

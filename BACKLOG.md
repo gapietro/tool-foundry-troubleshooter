@@ -16,7 +16,7 @@ board 6 open / 104 closed · **0 open PRs**
 >
 > **What moved on this re-check (PR #227):** `benchmark/EXTRACTOR-BRIEF.md` landed, and the deny-list
 > was retired for a closed allowlist (§AW11b). **#212's next action is now a session handoff, not a
-> build step** — see *The blinding constraint* below, which decides **who** may do it. #212 stays #1
+> build step** — see *The blinding constraint, retired* below (it no longer restricts **who** may do it). #212 stays #1
 > and stays `next`; nothing was filed and nothing was reordered, so the rubric is not re-run below.
 >
 > **This ranking session is contaminated and cannot author the extractor.** Reading this file is what
@@ -58,7 +58,7 @@ registered prediction with no trigger firing while correctness collapsed **4/4 �
 
 | # | Item | Why it ranks here |
 |---|---|---|
-| **1** | **#212 — commission the correctness axis** (`next`) · **Stage 2, in flight** | Removes the release blocker above. It is the only open item that touches the current gate, and §5.2 says no further sharpening of the existing instrument can substitute for it. ~~**Design before build** — `/design-spar` first~~ **Design gate discharged 2026-08-12** (§AW, PR #225). Next action: author the extractor **blind**, freeze it, then burn the calibration set once. See *The blinding constraint* below before starting work — it changes **who** may do it. |
+| **1** | **#212 — commission the correctness axis** (`next`) · **Stage 2, in flight** | Removes the release blocker above. It is the only open item that touches the current gate, and §5.2 says no further sharpening of the existing instrument can substitute for it. ~~**Design before build** — `/design-spar` first~~ **Design gate discharged 2026-08-12** (§AW, PR #225). **Design gate re-registered 2026-08-13** (§AX, PR #246) after §AW's blind-author procedure was retired — three dispatches, three aborts, zero measurement, two aborts caused by the operator's own repairs. Next action: **commit hand-authored claim inventories for the 7 held-out reports, then build the extractor + adjudicator** (TDD, vocabulary check mutation-verified), then one sweep → per-arm recall, spurious rate and veracity figures. **No blinding constraint applies any more** — §AX substitutes artifact properties for author properties, so a contaminated session (including one that has run `/next`) may do this work. See *The blinding constraint, retired* below. |
 | 2 | **#216 — no retention or purge for captured customer data** (F-04) | Named one of grade sitting 1's *three largest risks*, and the only open finding that is a **privacy** problem rather than a rigor problem. Blocks the **next** gate (installable on a customer instance / handoff), not this one — so it ranks below #1 but above everything else on the board. |
 | 3 | **#220 — no automated integration tier** (F-07) · **deploy half shipped, PR #229** | The one grade cap still standing after PR #222 lifted *No mandatory CI → B*. **Does not bind today** — raw 72.9 already sits below B+ — so it only starts costing once the score rises. Ranks as the gating item for grade sitting 2, not for now. **Worked out of order 2026-08-12** because #1 is un-workable from a session that has run `/next` (see the blinding constraint) and this was the ranked item a contaminated session could touch. `npm run smoke` now covers **deploy**: build → install → compare all 160 `dist/app/update/*.xml` records against the instance. **The runtime half is NOT done** — creating a run needs an authenticated write and the `now-sdk` CLI has none, so it stays a live-MCP exercise. Keep #220 open for it. |
 | — | Phase 2, shrunk — native triage + Fix Report export | The cheapest alternative source of correctness signal: put it in front of real SCs and let production supply the evidence. **Note it does NOT satisfy §5.6 reason 2**, which requires *the custom harness* in front of real users — shipping the native arm reopens nothing, so this buys production evidence on its own merits, not a reopening condition. Ranked below #1 because shipping a UI over an unmeasured diagnosis is the thing #1 exists to prevent. Considered and not chosen 2026-08-12. |
@@ -70,10 +70,19 @@ stopping condition must be written before the first pass.** A self-scrutinising 
 point unless one is declared up front, and that is precisely what the last one lacked. §AW7 now carries
 that condition.
 
-### The blinding constraint on #1 — it decides *who* writes the extractor
+### The blinding constraint, RETIRED 2026-08-13 — kept as history, do not follow
 
-§AW4 makes the calibration set a **one-shot consumable** and names a deny-list the extractor's author
-may not read. Two consequences that are easy to lose across a `/clear`:
+> **Superseded by `DECISION.md` §AX (PR #246).** Everything in this section described §AW's
+> blind-author procedure. That procedure is retired: it protected the recall figure with a
+> property of the *author's context*, which cannot be verified from outside, and it produced
+> three aborts and zero measurement. §AX measures recall as **enumeration completeness** — no
+> answer key, no one-shot burn, no blind author — and enforces two properties on the
+> **artifact** instead. **A session that has run `/next` may now author the extractor.**
+>
+> Read the rest of this section as a record of why, not as a constraint on who.
+
+§AW4 made the calibration set a **one-shot consumable** and named a deny-list the extractor's
+author may not read. Two consequences, *as they stood before the retirement*:
 
 1. **The extractor must be authored by a fresh-context agent, not by the session that ranks the board.**
    Ranking requires reading *this file*, and this file restates the answer for one calibration row two
