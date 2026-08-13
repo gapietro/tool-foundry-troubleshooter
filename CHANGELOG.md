@@ -17,6 +17,81 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1306 — 2026-08-13
+
+### Fixed — the smoke tier's REFUSED_TABLES rested on a misdiagnosis (#242)
+
+`REFUSED_TABLES` is now `PRESENCE_ONLY_TABLES`, and the four records it used to skip wholesale are
+**probed and verified present on gpinst01**. Live coverage moves from `161 of 165 records present and
+matching` to `165 of 165 records present — 161 field-matched, 4 presence-only`.
+
+**The correction.** The constant documented these tables as ones the instance "refuses to serve over
+the Table API even to an admin". The 403 was real and correctly measured; the conclusion drawn from it
+was wrong. It is not the TABLE that is refused — it is any request carrying a `sysparm_query`. Measured
+on gpinst01 (Zurich P10, admin): a bare read returns **200 with rows**, `sysparm_fields=sys_id` returns
+**200 with sys_ids**, and either `sysparm_query=sys_idIN<real ids>` or `sysparm_query=sys_class_name=…`
+returns **403**. The 403 detail says so literally — *"Field(s) present in the query do not have
+permission to be read"*.
+
+**The issue believed the CLI could not express this; it can.** `now-sdk query` marks `-q` as
+`[required]`, and the filed fix therefore proposed the MCP read path or a direct Table API call. An
+**empty** `-q ''` satisfies the arg parser while producing a request with no `sysparm_query`. So the
+read stays on the single authenticated CLI channel, **no new credential surface is introduced**, and
+`scripts/smoke.js:146`'s claim about the only authenticated read channel remains true as written.
+
+**Cost measured, not assumed.** At `--limit 2000` each table's full sys_id list returns in ONE page
+(`sys_gen_ai_feature_mapping` 648, `sys_gen_ai_strategy_mapping` 554, both `hasMore:false`) — one
+request per table, not a scan. Pagination is implemented anyway, because "fits in one page" is a
+property of the instance rather than of the code, and a `hasMore` that fails to advance is now an error
+rather than an infinite loop or a confident partial set.
+
+**What this recovers and what it cannot.** Presence and count only. Business columns are field-read-
+denied even without a query, and — measured the same pass — a denied column asked for by name comes
+back **silently omitted rather than errored**, so "absent column" and "denied column" are
+indistinguishable and field comparison is genuinely impossible. Presence and count are exactly what
+Build Rule #34's silent install-skip and Build Rule #33's per-redeploy duplication move, which is the
+half worth having. New `presence_only` note kind; the summary line names the two grades of verification
+separately rather than folding them into one figure that would state something false.
+
+**The contract got STRONGER, not weaker.** Because the read is known to work, a failed sweep is now a
+real `unreadable` finding that reddens the run, and an absent record is a real `missing` finding. There
+is no longer any table this tier is permitted to skip.
+
+Live-verified on gpinst01: all four dist-declared sys_ids independently confirmed present in the sweep;
+`NOT PROBED` section gone; zero new findings introduced (the run's 47 MISMATCHes are all the pre-existing
+module-path version drift from an instance sitting at `2026.08.1216` while dist is newer).
+
+Guard extended: `presenceArgs` joins the #239/#240 auth-parity and source-scan checks, plus a new
+assertion that every `execFileSync` site routes through a helper.
+
+**Six review findings on PR #250, all fixed here.** Four were real defects in the new code, and three
+of those failed in the CONFIDENT direction — the shape this whole issue is about:
+
+1. **A page of rows with no readable `sys_id` succeeded with an empty set**, so every dist record
+   would be reported `MISSING` citing Build Rule #34 — a red run with a precisely wrong cause. Not
+   hypothetical: a DENIED column is omitted silently rather than errored on these very tables, and
+   `sys_id` is a column. Now fails the sweep as `unreadable`.
+2. **No full-page truncation guard**, unlike every other read path here. `hasMore` derives server-side
+   from the `Link: rel="next"` header alone, so a stripped header reads as "that was everything" and
+   the unswept rows report `MISSING`. Now mirrors `probeByNaturalKey`'s existing refusal to guess.
+3. **The `PRESENCE ONLY` count could not detect the duplication it claimed to detect.** The printed
+   number counted records *dist declares* — bounded at 4 and constant across redeploys. The number
+   that moves is the sweep's own row count, which the code computed and threw away. Both numbers are
+   now printed (`2 of ours found, 648 rows on the instance`).
+4. **The grade line counted missing records as present.** With one presence record absent it printed
+   `165 of 165 records present — 162 field-matched` while printing that record's `MISSING` underneath.
+   `missing` findings now come off the probed count, same as `unreadable` already did.
+5. **The recorded mechanism for `-q ''` was wrong.** It does NOT produce a request without a
+   `sysparm_query`: `buildQueryParams` in the SDK connector sets that parameter unconditionally, so the
+   request carries `sysparm_query=` with an empty value. The 403-avoidance is real but comes from an
+   empty query naming **no field operands**. Corrected in the comment, because as written it would have
+   sent a future maintainer chasing a property the CLI never had.
+6. **`report` had no test** — the one piece of logic here whose whole purpose is not stating something
+   false. Now exported and covered by 8 tests; all four code fixes above are mutation-verified.
+
+**Not fixed here — #242's second finding**, 6 records whose `short_description` the platform truncates
+(`sys_ws_definition` ×1, `sys_ws_operation` ×5). It passes the gate and is disclosed; split out.
+
 ## 2026.08.1305 — 2026-08-13
 
 ### Fixed — the six /status health checks are no longer unexecuted by any test (#235)

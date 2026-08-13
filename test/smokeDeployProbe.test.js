@@ -685,12 +685,31 @@ describe('install and probe resolve the same instance (issue #239)', () => {
             expect(outside).not.toContain("'query'")
         })
 
-        test('both helpers are actually called', () => {
+        test('all three helpers are actually called', () => {
             // A helper nothing calls is decoration, and the tests above would
-            // still pass on it.
+            // still pass on it. `presenceArgs` joined this list with issue
+            // #242, which added a SECOND read shape — and a second read shape
+            // is a second chance to reintroduce the #239 defect by inlining
+            // argv at the call site.
             const code = stripComments(fs.readFileSync(SHELL, 'utf8'))
             expect(code).toContain('installArgs(args.alias)')
             expect(code).toContain('queryArgs(table, encodedQuery, limit, alias)')
+            expect(code).toContain('presenceArgs(table, PRESENCE_LIMIT, offset, alias)')
+        })
+
+        test('every spawn routes through one of the helpers', () => {
+            // The binding that keeps the two tests above honest as the file
+            // grows: a fourth read shape added without a helper would spawn
+            // now-sdk from somewhere this block does not check.
+            const code = stripComments(fs.readFileSync(SHELL, 'utf8'))
+            const spawnSites = code.split('execFileSync(').length - 1
+
+            // Exactly two: `run()` for build/install, and `runQuery()` — which
+            // BOTH read shapes share, which is why adding the presence sweep
+            // did not add a spawn site. Raising this number is not forbidden,
+            // but it must be a deliberate edit here rather than a silent one
+            // in the shell.
+            expect(spawnSites).toBe(2)
         })
 
         test('`--alias` survives only as the operator-facing input flag', () => {
