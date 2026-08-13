@@ -17,6 +17,41 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1304 — 2026-08-13
+
+### Fixed — the two scheduled-job bodies are no longer unexecuted by any test (#234)
+
+`test/asyncJobBodies.test.js` (19 tests). `src/server/async/**` went from **0% statements, branches,
+functions and lines** — #217's measurement, with a grep confirming no test file referenced either
+body — to **100% on all four**, pinned by a per-path `coverageThreshold` entry.
+
+**Why the glue and not the policy.** `PaRetentionSweep` (94.66%) and `PaRunManager.sweepStaleNative`
+were already well covered. What nothing executed was the ten-odd lines that *call* them: the `new`,
+the branch on the result, and the log string. `purge-artifacts.js` is the body that decides DELETION
+of customer-data attachments (#216) — a typo in its `result.swept !== true` branch is a retention job
+that silently never purges while logging as though it did, which is the failure #216 exists to
+prevent, one layer up. These are `Now.include`d ScheduledScript bodies: Build Rule #43's shape is
+builds clean, installs clean, fails only when invoked, and nothing here is invoked until 03:00 on a
+customer instance.
+
+**Acceptance criterion met literally:** a test proves `purge-artifacts.js` logs the `did NOT run` line
+rather than a success line when `sweep()` returns `swept:false`.
+
+**The tests were mutation-checked rather than assumed.** Four seeded defects, each caught: loosening
+`swept !== true` to `!swept`; dropping the early `return` so both lines log; swapping
+`attachments_deleted` for `runs_affected` in the log; and reporting `result.closed` instead of
+`.length`. The per-path threshold was likewise proven non-vacuous by hiding the new test file and
+confirming it fails at 0% — a glob matching nothing would otherwise pass silently.
+
+**Stub fidelity is stated, not assumed.** Per DESIGN.md R-8 nothing here is evidence about platform
+behaviour; the stubs are pinned to the return shapes the real classes document
+(`PaRetentionSweep.js:139-141`, `PaRunManager.js:815`), so contract drift fails here rather than
+passing as fiction. Two deliberate pins worth naming: a truthy-but-not-`true` `swept` must still read
+as "did not run" (fail-safe direction), and a throwing collaborator propagates to the scheduler rather
+than being swallowed into a false zero.
+
+Global thresholds raised to statements 90 / branches 83 / functions 93 / lines 92.
+
 ## 2026.08.1303 — 2026-08-13
 
 ### Added — the seven held-out claim inventories, committed before any extractor exists (#212)
