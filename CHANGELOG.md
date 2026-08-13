@@ -17,6 +17,60 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1217 — 2026-08-12
+
+### Fixed — ten instruction sites told agents to deploy with a flag that does not exist (#241, skills half)
+
+`now-sdk install --alias` → `--auth` in the three **agent-followed** skill files and the LLD's deploy
+target:
+
+| file | sites |
+|---|---|
+| `.claude/skills/bootstrap-nowsdk/SKILL.md` | 4 |
+| `.claude/skills/agent-doctor/SKILL.md` | 5 |
+| `.claude/skills/sdk-dist-to-update-set/SKILL.md` | 1 |
+| `docs/LOW_LEVEL_DESIGN.md` | 1 |
+
+**Why these were the urgent subset.** `install` has no `--alias` and now-sdk **ignores unknown flags
+silently** (#236), so the misspelling deploys to whatever the default credential is. In a skill file
+the instruction is executed by an agent, so nobody reads the `Attempting to log into instance …` line
+that CLAUDE.md tells operators to check before believing a deploy. #239 needed a human to type the
+wrong flag; this needed nobody.
+
+`docs/LOW_LEVEL_DESIGN.md:465` also carried a stale factual claim — that keynexus01 has "**no
+`now-sdk auth` entry**". `now-sdk auth --list` contradicts it: both instances have entries and
+gpinst01 is the default. Fixed together, and it now points at the command instead of restating the
+answer, because this claim has now been wrong three times.
+
+### Added — a source-scan guard, because this is the third occurrence of one mistake (#241)
+
+`test/instructionFlagGuard.test.js` asserts no instruction file carries `install --alias`. #236 hit
+CLAUDE.md, #239 hit `scripts/smoke.js` (install and probe targeting different instances), #241 hit ten
+doc sites. Three occurrences is the definition of something a human reviewer is the wrong guard for.
+
+Written test-first and **RED before green: it flagged all ten sites, plus one I had missed** —
+`CLAUDE.md:32`, which quotes the wrong command *in order to record the incident it caused*
+("deployed the app to keynexus01 while reporting success"). That is evidence, not an instruction, so
+it earned an explicit exemption rather than a rewrite. The exemption is keyed on a **distinctive
+phrase, not a line number** (which drifts), and a companion test asserts it still matches exactly one
+line still containing the flag — a stale exemption is worse than none, because it reads as "reviewed
+and allowed" while covering nothing and hands the next real offender a pass.
+
+The roster follows `blindRule.test.js`'s idiom: it tracks the principle rather than defining it. Two
+categories are deliberately outside it. **Records, permanently** — `raw-evidence-*.md`, `scoring-v*`,
+`DECISION.md`, this file, and the dated plans/specs record commands that were actually run, wrong flag
+and all; rewriting a record to match present-day correctness destroys the evidence that the command
+was once wrong. **Pending, tracked in #241** — `benchmark/scripts/build-packets.js` emits this command
+into scorer packets and `test/packetGeneratorParity.test.js` pins the string, so the eight seed specs
+and the generator are an instrument change that waits for #212's in-flight pass rather than repeating
+§AO3's mid-pass scorer edit.
+
+Aside worth keeping: the guard's own first run died in the Babel parser, because
+`benchmark/scoring-v*/` inside its header comment contains `*/` and closed the block early — the same
+shape as Build Rule #43's backtick-inside-a-template, in a different language.
+
+---
+
 ## 2026.08.1216 — 2026-08-12
 
 ### Fixed — the deploy smoke installed to one instance and verified another (#239)
