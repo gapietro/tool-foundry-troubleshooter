@@ -383,7 +383,7 @@ function summarize(allFindings, kind, heading) {
  */
 function report(allFindings, total) {
     let probed = total
-    const NOTE_KINDS = ['uncomparable', 'unasserted', 'truncated']
+    const NOTE_KINDS = ['uncomparable', 'unasserted', 'truncated', 'nondeterministic']
     const isExpectedRefusal = function (f) { return f.kind === 'unreadable' && REFUSED_TABLES.has(f.table) }
     const findings = allFindings.filter(function (f) {
         return NOTE_KINDS.indexOf(f.kind) === -1 && !isExpectedRefusal(f)
@@ -392,6 +392,7 @@ function report(allFindings, total) {
     summarize(allFindings, 'uncomparable', 'not comparable — dist declares these, the table has no such column')
     summarize(allFindings, 'unasserted', 'not asserted — dist set no value, so the instance value is unchecked')
     summarize(allFindings, 'truncated', 'TRUNCATED BY THE PLATFORM — the column is shorter than the value we built')
+    summarize(allFindings, 'nondeterministic', 'regenerated per build — equal once the per-build value is erased')
 
     // Records the instance refused to show us. They are subtracted from the
     // probed count rather than reported as failures: `sys_gen_ai_feature_mapping`

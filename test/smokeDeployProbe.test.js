@@ -480,3 +480,80 @@ describe('hasNaturalKey is a property of the TABLE (review #229, finding 3)', ()
         expect(hasNaturalKey('sys_script_include')).toBe(false)
     })
 })
+
+describe('build-nondeterministic values (found by running the probe on main)', () => {
+    // `bom.json` is a generated CycloneDX SBOM whose `serialNumber` is a fresh
+    // urn:uuid on EVERY build. Compared literally it can never match, so the
+    // probe was permanently red by exactly one finding — the "cries wolf, gets
+    // ignored, then gets deleted" death this file warns about in three places.
+    //
+    // The excuse is deliberately narrow: it applies only when erasing the UUIDs
+    // makes the two sides EQUAL. Any other difference in the SBOM still reports,
+    // so this cannot become a hiding place for a real content change.
+
+    const sbom = (uuid, dep) =>
+        '{"bomFormat":"CycloneDX","serialNumber":"urn:uuid:' + uuid + '","components":[{"name":"' + dep + '"}]}'
+
+    const record = (content) => ({
+        table: 'sys_module',
+        sysId: 'a',
+        fields: { path: 'x_snc_troubleshoot/x-snc-troubleshoot/2026.08.1211/bom.json', content: content },
+    })
+
+    test('a differing serialNumber alone is not a mismatch', () => {
+        const findings = compareRecord(
+            record(sbom('b59fb687-a622-4959-9d2b-88043224b09a', 'jest')),
+            { path: 'x_snc_troubleshoot/x-snc-troubleshoot/2026.08.1211/bom.json', content: sbom('7225f488-bd24-4f40-bf8e-56cfc64b9178', 'jest') },
+        )
+        expect(findings.filter((f) => f.kind === 'mismatch')).toEqual([])
+    })
+
+    test('it is disclosed as nondeterministic, not silently equal', () => {
+        const findings = compareRecord(
+            record(sbom('b59fb687-a622-4959-9d2b-88043224b09a', 'jest')),
+            { path: 'x_snc_troubleshoot/x-snc-troubleshoot/2026.08.1211/bom.json', content: sbom('7225f488-bd24-4f40-bf8e-56cfc64b9178', 'jest') },
+        )
+        expect(findings.map((f) => f.kind)).toContain('nondeterministic')
+    })
+
+    test('a REAL change alongside the UUID is still a mismatch', () => {
+        // The property that keeps the excuse honest.
+        const findings = compareRecord(
+            record(sbom('b59fb687-a622-4959-9d2b-88043224b09a', 'jest')),
+            { path: 'x_snc_troubleshoot/x-snc-troubleshoot/2026.08.1211/bom.json', content: sbom('7225f488-bd24-4f40-bf8e-56cfc64b9178', 'eslint') },
+        )
+        expect(findings.filter((f) => f.kind === 'mismatch')).toHaveLength(1)
+    })
+
+    test('a differing uuid in a NON-bom field is still a mismatch', () => {
+        // Scoped to the generated artifact, not to "any value containing a uuid".
+        const e = { table: 'sys_script_include', sysId: 'a', fields: { script: 'urn:uuid:b59fb687-a622-4959-9d2b-88043224b09a' } }
+        expect(compareRecord(e, { script: 'urn:uuid:7225f488-bd24-4f40-bf8e-56cfc64b9178' })[0].kind).toBe('mismatch')
+    })
+})
+
+describe('the SBOM carries TWO per-build stamps, not one', () => {
+    // Stripping only the uuid still left the probe red: `metadata.timestamp`
+    // moves on every build as well. Found by running against the instance —
+    // the unit tests could not have shown it, because the fixture only had
+    // the value I already knew about.
+    const bom = (uuid, ts) =>
+        '{"serialNumber":"urn:uuid:' + uuid + '","metadata":{"timestamp":"' + ts + '"},"components":[]}'
+    const rec = (content) => ({
+        table: 'sys_module', sysId: 'a',
+        fields: { path: 'app/1.0/bom.json', content: content },
+    })
+
+    test('a differing timestamp alone is not a mismatch', () => {
+        const findings = compareRecord(
+            rec(bom('b59fb687-a622-4959-9d2b-88043224b09a', '2026-08-12T23:56:51.909Z')),
+            { path: 'app/1.0/bom.json', content: bom('b59fb687-a622-4959-9d2b-88043224b09a', '2026-08-12T23:41:10.920Z') },
+        )
+        expect(findings.filter((f) => f.kind === 'mismatch')).toEqual([])
+    })
+
+    test('an ISO timestamp OUTSIDE the SBOM is still compared literally', () => {
+        const e = { table: 'sys_script_include', sysId: 'a', fields: { script: 'var t = "2026-08-12T23:56:51.909Z"' } }
+        expect(compareRecord(e, { script: 'var t = "2026-08-12T23:41:10.920Z"' })[0].kind).toBe('mismatch')
+    })
+})

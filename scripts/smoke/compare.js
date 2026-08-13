@@ -129,6 +129,25 @@ function compareRecord(expected, actual, options) {
         const act = normalize(actual[field])
         if (exp === act) return
 
+        // The generated SBOM carries a fresh `urn:uuid` serialNumber on EVERY
+        // build, so compared literally it can never match and left the probe
+        // permanently red by exactly one finding — the "cries wolf, gets
+        // ignored, then gets deleted" death this module warns about elsewhere.
+        //
+        // Narrow on purpose: excused ONLY when erasing the UUIDs makes the two
+        // sides equal, so any other change to the SBOM still reports. An
+        // excuse that swallowed the whole field would be a hiding place.
+        if (isGeneratedBom(expected, field) && withoutBuildStamps(exp) === withoutBuildStamps(act)) {
+            findings.push({
+                kind: 'nondeterministic',
+                table: expected.table,
+                sysId: expected.sysId,
+                field: field,
+                reason: 'SBOM serialNumber and timestamp are regenerated per build',
+            })
+            return
+        }
+
         // An empty value in dist is an ABSENCE OF ASSERTION, not an assertion
         // of emptiness. MEASURED: the SDK emits `<virtual/>`, `<dynamic_creation/>`
         // and `<reference_floats/>` for fields it holds no value for, and the
@@ -188,6 +207,25 @@ function compareRecord(expected, actual, options) {
     })
 
     return findings
+}
+
+/** The build's generated CycloneDX SBOM, and only that. */
+function isGeneratedBom(expected, field) {
+    return field === 'content' && /\/bom\.json$/.test(String(expected.fields.path || ''))
+}
+
+/**
+ * Erase the SBOM's two per-build stamps: the `urn:uuid` serialNumber and the
+ * generation `timestamp`. MEASURED — stripping only the UUID still left the
+ * probe red, because the timestamp moves too.
+ *
+ * Applied ONLY to bom.json content, so an ISO timestamp or a uuid anywhere
+ * else in the payload is still compared literally.
+ */
+function withoutBuildStamps(text) {
+    return text
+        .replace(/urn:uuid:[0-9a-f-]{36}/gi, 'urn:uuid:*')
+        .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/g, '*')
 }
 
 /**
