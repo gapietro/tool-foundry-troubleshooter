@@ -17,6 +17,126 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1308 — 2026-08-13
+
+### Added — §AX11 closes the reportability term §AX10 left open, before any extractor exists
+
+§AX10 ended by leaving one question open and saying explicitly that it *"must be made **before** the
+extractor runs, not after the figure is seen"*: whether **AX-1b** — custom-arm enumeration recall,
+whose committed denominator is **2 claims** — should carry a verdict at all. §AX11 makes the call.
+
+**Registered:** a per-arm enumeration-recall verdict (AX-1a, AX-1b) is reported as **`not exercised`**
+— never `passed`, never `failed` — when that arm's held-out inventory denominator is **< 5 claims**. The
+fraction is still computed and recorded; the floor governs the **verdict**, and the fraction may not be
+quoted without `not exercised (n=<d> < 5)` attached, `<d>` derived rather than baked in.
+
+**Applied now:** the custom arm is n=2, so **AX-1b is `not exercised` before the extractor is
+written** — a verdict fixed by the fixture rather than by output. Native is n=60 and unaffected;
+**AX-1a stays live and decidable.**
+
+**K=5 is not a fresh judgement** — it is the threshold AX-4 already carries for its refuted population,
+adopted unchanged so the instrument has one small-denominator rule rather than two.
+
+**Why a floor and not a caveat.** AX-1b's falsifier fires on a single miss out of two claims, so both
+outcomes are quotable and neither is evidence. The registered principle: *a number whose meaning
+depends on a caveat being re-attached by whoever quotes it will eventually be quoted without it — put
+the status in the verdict, where it travels.* Not hypothetical here: §AD7 exists because a pooled
+figure was quoted without its arms, and v4's 3/10 shipped once as a v12 baseline.
+
+**Cost, stated rather than discovered later:** the custom arm produces **no recall verdict at all**
+from this pass, and §AX7.2 already ruled the repair unavailable within v14 — the eligible 15 reports
+are exhausted and redrawing from the development set is forbidden. It is paid to a future pass.
+
+### Fixed — the floor's AX-5 half was a defect, caught in review before any measurement (§AX11.2a)
+
+As first drafted the floor **also** covered AX-5, the spurious rate, keyed to that arm's count of
+**emitted** claims. Removed, and the reasoning recorded rather than the term quietly deleted.
+
+**The two denominators are not the same kind of thing.** Recall's is the **pre-committed inventory** —
+fixed by a fixture the extractor cannot influence. AX-5's is the count of claims the extractor **chose
+to emit**. Flooring a verdict on a denominator the system under test controls hands it an escape:
+**emit fewer claims, fall under K, and the falsifier never fires.** §AX2.5 registers AX-5 precisely as
+the counterweight to recall being *"gameable by verbosity"*; an emission-keyed floor re-opened the same
+gap in the terseness direction. It compounds — with AX-1b already `not exercised` at n=2, an extractor
+emitting ≤ 4 custom claims would have left **the custom arm with zero live falsifiers** while §AX11.3
+kept its veracity figure reportable. An arm that can fail nothing is not being measured.
+
+**The obvious bound was checked and rejected:** flooring AX-5 only when the *inventory* denominator is
+also < K changes nothing here — custom inventory is 2, so AX-5 stays floored and the zero-falsifier
+state survives. It looks like a repair and is not one.
+
+**What replaces it, since dropping the floor is not free.** A spurious rate on few emitted claims is
+weak evidence — but **asymmetrically**, which is why no floor is needed. A *failure* at any n is a
+concrete inspectable defect: a named claim was emitted that the inventory does not contain and review
+did not rule a correct addition. A *pass* at small n proves little. **Registered as a reporting
+obligation, not a verdict rule:** an AX-5 pass below 5 emitted claims carries its emitted count and no
+evidential weight; an AX-5 failure counts at any n. The verdict stays live in both directions.
+
+> **Registered principle:** *never floor, cap, or excuse a verdict on a denominator the system under
+> test controls. The subject of the measurement must not be able to choose the conditions under which
+> it is exempt.*
+
+### Added — the §AX8 interaction, resolved by decision rather than by implementation (§AX11.3)
+
+Does a `not exercised` recall verdict black out its arm's **veracity** figure? **Registered: no** — the
+custom veracity figure remains reportable and must carry `enumeration recall not exercised (n=<d> < 5)`
+wherever it appears. The stricter reading was considered and rejected on procedural grounds: the floor
+was registered as a bound on a *prediction verdict*, and §AT3's test for amendment-vs-fresh-
+registration is that a change be a **strict subset** of the registered form. Suppressing a different
+figure is a superset.
+
+Recorded because resolving it silently is exactly the error §AX10 caught in **R-C**, where a registered
+term *"acquired [its meaning] by implementation rather than by decision"*.
+
+**The mandated label is registered derived, not literal.** An earlier draft required the string
+`(n=2 < 5)` verbatim; a later edit moving the custom denominator to 3 or 4 would have left the arm
+correctly floored while every mandated label in the section became false. A registered term that
+hardcodes a number it does not own is a stale claim waiting for its edit.
+
+**§AX11.4 now enumerates what the section adds** rather than closing with "and nothing else", which
+contradicted §AX11.3: two of the three additions attach to a **figure**, not to a prediction, and an
+§AQ3 audit reading that subsection alone would have missed the veracity-label term.
+
+### Changed — the floor is pinned in the fixture and asserted, not left in prose
+
+`benchmark/v14-claim-inventory-heldout.json` gains `recall_reportability_floor`; six tests in
+`test/claimInventoryShape.test.js` enforce it. Follows the precedent §AX10 set for
+`zero_claim_reporting_rule` — a rule only a reader enforces is not enforced.
+
+The arm-binding test is **derived from `denominator_summary`, never hardcoded** — including the arm
+names themselves: if a future edit moved a claim across the threshold, or renamed an arm, a hardcoded
+expectation would stay green (or throw) while §AX11.1's registered consequence quietly became false.
+A further test binds the *prose* denominators in `applied_to_this_pass` to the same summary, so the
+literals cannot drift out of a section that mandates a label carrying one of them.
+
+**All twelve mutations verified to fail the guard** (§AX10: *a guard that has never been shown to fail
+has not been shown to guard*): K changed 5→3; floor deleted; `never passed`/`never failed` softened; a
+named report carved out; the fraction suppressed instead of labelled; the ordering flag flipped to
+`false`; the AX-5 exemption rationale deleted; **AX-5 silently re-floored on emitted claims**; the
+anti-gaming principle deleted; a denominator drifted with the prose left stale; a prose literal drifted
+with the summary correct; an arm renamed.
+
+**Three of those twelve exist because review found the guards blind to them** — the first six passed a
+mutation set that could not see half the registered rule being deleted, which is the same *"asserted far
+less than its name promised"* shape §AX10 recorded for the extractor-absence check one artifact earlier.
+
+One test was **written and then removed** rather than kept: a scan for verdict words inside the floor
+object false-positived on the `why` text citing AX-4's *"refuted population"* — a reference to a
+denominator, not a truth value. Verdict-shaped **keys** anywhere in the fixture are already caught by
+the existing recursive walk, so the replacement checks the property that walk cannot see: the floor
+names **no individual report**, because a rule that names one has become a carve-out for a known case.
+
+### Note — this ships alone, ahead of the extractor, because PRs squash-merge here
+
+§AX11's guarantee is commit **order** — the floor registered before the extractor existed, with
+`git log` as proof. This repository squash-merges, so intra-PR commit order is erased on `main` and a
+floor sharing a PR with the extractor would have an unprovable ordering claim. Same sequencing #247
+used for the inventories themselves. **No extractor code is in this change**, and
+`claimInventoryShape.test.js`'s repo-wide extractor-absence check still passes.
+
+**§AQ3 stands.** This commissions no gate term, changes no §AX6 threshold, and touches no v12–v14
+figure.
+
 ## 2026.08.1307 — 2026-08-13
 
 ### Changed — #241's deferred benchmark half is now recorded in the guard, not only in an issue comment
