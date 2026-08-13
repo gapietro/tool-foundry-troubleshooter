@@ -1,0 +1,1576 @@
+{
+  "instrument": "Hand-authored claim inventories for the seven held-out v14 reports",
+  "registered_under": "benchmark/DECISION.md §AX2, §AX3, §AX4",
+  "issue": "#212",
+  "authored": "2026-08-13",
+  "authored_before_extractor_existed": true,
+  "purpose": "Fixture the enumeration-recall figure is computed against. Recall = (inventory claims the extractor emitted) / (inventory claims), per report and per arm. The spurious rate is computed against emitted claims absent from this inventory; `rejected_candidates` pre-commits the ruling for the candidates most likely to be emitted, so the §AX2.5 'correct additions' carve-out cannot be stretched after output is seen.",
+  "contains_no_truth_values": "By construction. No claim carries a verdict, an expected verdict, or any hint of one. Adjudication (§AW2's three-valued verdict) happens elsewhere and must not be able to read its answer out of this file.",
+  "reading_rules": [
+    {
+      "id": "R-A",
+      "rule": "Asserted, not presupposed. Inventory a proposition only where the report asserts it, including as the complement of a factive or reporting verb ('confirmed that X', 'reads X', 'reports X', 'matched X'). A bare referring mention of an entity does not create an existence claim.",
+      "why": "Without this, every entity named anywhere becomes an existence claim, the denominator is unbounded, and recall degrades into a test of entity extraction. §AX3's own examples are propositions ('an assertion that a table ... exists'), not mentions."
+    },
+    {
+      "id": "R-B",
+      "rule": "Identity pairing. A claim of record identity is inventoried where the report binds a NAME to a sys_id, or otherwise asserts a record's identity beyond what an inventoried field claim already carries (§AX3 bullet 2). A sys_id used only to locate a diagnostic artifact produced by the run is not a claim (see R-C).",
+      "why": "Distinguishes 'the trigger called X is record bfb7...' (an instance fact, checkable) from 'query plan 3f24...' (a handle into the run)."
+    },
+    {
+      "id": "R-C",
+      "rule": "Run boundary. 'The run' covers BOTH the diagnosed agent execution and the diagnostic execution. Assertions about what happened during either — tool calls made and their outputs, execution-plan state or state_reason, wall-clock, latency, token counts, counts of execution or trace rows, the diagnostic model's own reads and thoughts — are out of scope. Assertions about durable configuration and about business data records are in scope even when discovered through the run.",
+      "why": "§AX3 excludes 'any assertion about the run rather than the instance' and 'statements about what the model itself did'. Both readings of 'the run' — diagnosed execution, diagnostic execution — converge on this line. Operator-confirmed 2026-08-13 before authoring; the excluded material is recorded in `rejected_candidates` rather than dropped, so the cost is visible.",
+      "cost": "Real and named: execution-plan rows and tool-execution rows are readable on gpinst01 today and are therefore adjudicable content this boundary discards. Reports row-17 and row-19 lose roughly two thirds of their factual surface to it."
+    },
+    {
+      "id": "R-D",
+      "rule": "Atomicity. One entry per (subject, asserted property). A statement naming several subjects with the same property yields one entry per subject. Several field readings presented as evidence for ONE asserted property yield one entry.",
+      "why": "Makes decomposition reproducible rather than a matter of taste, and keeps the denominator stable against paraphrase."
+    },
+    {
+      "id": "R-E",
+      "rule": "Entailment floor. Do not inventory a proposition strictly entailed by another inventoried proposition about the same record — a record's existence is entailed by any claim about one of its field values. R-E outranks R-B. An existence claim the report asserts EXPLICITLY is inventoried even when other claims about the same subject exist.",
+      "why": "Prevents mechanical denominator inflation (every field claim would otherwise drag an existence claim behind it) while still crediting an existence assertion the report actually makes."
+    },
+    {
+      "id": "R-F",
+      "rule": "Dedup. One entry per distinct proposition, with every textual occurrence listed. Restatements in FIXES ('Current:'), DATA MARKERS and closing notes are occurrences, not new claims. A 'Proposed:' value is never an occurrence — it asserts a desired state, not a present one.",
+      "why": "Recall credits the proposition, not the repetition. An extractor that emits it once has enumerated it."
+    },
+    {
+      "id": "R-G",
+      "rule": "Not claims, per §AX3: severity and confidence judgements, recommendations, proposed fixes, restatements of the diagnostic method, general statements of platform mechanism ('an inactive trigger is never evaluated'), and normative analysis ('a cap of 10 is too low').",
+      "why": "Stated verbatim from §AX3 plus the two families §AX3 implies but does not name — platform mechanism and normative analysis — both of which appear in this corpus."
+    }
+  ],
+  "denominator_summary": {
+    "native": {
+      "reports": 4,
+      "claims": 54
+    },
+    "custom": {
+      "reports": 3,
+      "claims": 2
+    },
+    "note": "Reported per arm only. §AX7.1 forbids a pooled cross-arm figure. See the §AX10 finding on the custom arm's denominator — n=2 is recorded here as a fact about the fixture, before any extractor exists, and it bears directly on what AX-1b can say."
+  },
+  "reports": [
+    {
+      "report": "row-02",
+      "path": "benchmark/v14-reports/row-02.md",
+      "arm": "custom",
+      "seed": "02",
+      "claim_count": 0,
+      "claims": [],
+      "rejected_candidates": [
+        {
+          "id": "row-02/X01",
+          "line": 2,
+          "text": "The agent processed the input text using the measure_request tool, which returned valid response metrics.",
+          "rejected_by": "R-C, R-A",
+          "reason": "An assertion about what happened during the diagnosed execution. The tool's existence is presupposed by the referring expression, not asserted."
+        },
+        {
+          "id": "row-02/X02",
+          "line": 2,
+          "text": "the execution reached completion without failures",
+          "rejected_by": "R-C",
+          "reason": "State of the diagnosed run."
+        },
+        {
+          "id": "row-02/X03",
+          "line": 14,
+          "text": "agent_config validated tool definitions",
+          "rejected_by": "R-C, R-G",
+          "reason": "What the diagnostic model did. The complement asserts no determinate proposition about any named tool."
+        },
+        {
+          "id": "row-02/X04",
+          "line": 18,
+          "text": "schema_lookup confirmed table structures",
+          "rejected_by": "R-C, R-G",
+          "reason": "Factive frame, but the complement names no table and no structure — nothing an instance read could settle."
+        },
+        {
+          "id": "row-02/X05",
+          "line": 35,
+          "text": "Re-run the agent execution to confirm consistent success",
+          "rejected_by": "R-G",
+          "reason": "Recommendation."
+        }
+      ],
+      "note": "Zero claims with a non-empty body. §AX3 excludes only the two BODILESS reports from recall; this report has a body that asserts nothing about instance state. It contributes 0 to both numerator and denominator."
+    },
+    {
+      "report": "row-04",
+      "path": "benchmark/v14-reports/row-04.md",
+      "arm": "custom",
+      "seed": "02",
+      "claim_count": 0,
+      "claims": [],
+      "rejected_candidates": [
+        {
+          "id": "row-04/X01",
+          "line": 2,
+          "text": "The agent routed the request via the 'measure_request' tool, which returned valid character and word counts.",
+          "rejected_by": "R-C, R-A",
+          "reason": "Diagnosed-run event; tool existence presupposed, not asserted."
+        },
+        {
+          "id": "row-04/X02",
+          "line": 2,
+          "text": "completed successfully with no errors in the execution trace",
+          "rejected_by": "R-C",
+          "reason": "State of the diagnosed run."
+        },
+        {
+          "id": "row-04/X03",
+          "line": 18,
+          "text": "schema_lookup validated sn_aia_tool table structure",
+          "rejected_by": "R-C, R-A",
+          "reason": "What the diagnostic model did. The `sn_aia_tool` table is referred to, not asserted to exist, and no property of its structure is stated."
+        },
+        {
+          "id": "row-04/X04",
+          "line": 2,
+          "text": "I need a second monitor for my desk on the fourth floor",
+          "rejected_by": "R-C",
+          "reason": "The request text of the diagnosed run, not a record field value asserted of any table."
+        }
+      ],
+      "note": "Zero claims with a non-empty body, for the same reason as row-02: the report diagnoses a run that succeeded and asserts nothing about durable configuration or data."
+    },
+    {
+      "report": "row-07",
+      "path": "benchmark/v14-reports/row-07.md",
+      "arm": "native",
+      "seed": "05",
+      "claim_count": 18,
+      "claims": [
+        {
+          "id": "row-07/C01",
+          "proposition": "Ticket record `25e32b4b2b228310f243fed2ce91bf22` on `x_snc_tsbench_ticket` has short_description 'Sprinkler inspection tag in the server room expired and needs recertification before audit'.",
+          "kind": "field_value",
+          "subject": {
+            "table": "x_snc_tsbench_ticket",
+            "record": "25e32b4b2b228310f243fed2ce91bf22",
+            "field": "short_description"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 7,
+              "quote": "Sprinkler inspection tag in the server room expired and needs recertification before audit"
+            },
+            {
+              "line": 90,
+              "quote": "x_snc_tsbench_ticket.25e32b4b2b228310f243fed2ce91bf22.short_description"
+            }
+          ]
+        },
+        {
+          "id": "row-07/C02",
+          "proposition": "Ticket record `25e32b4b2b228310f243fed2ce91bf22` has sys_created_on 2026-08-11 20:06:44.",
+          "kind": "field_value",
+          "subject": {
+            "table": "x_snc_tsbench_ticket",
+            "record": "25e32b4b2b228310f243fed2ce91bf22",
+            "field": "sys_created_on"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 7,
+              "quote": "created 2026-08-11 20:06:44"
+            },
+            {
+              "line": 91,
+              "quote": "sys_created_on` — *2026-08-11 20:06:44*"
+            }
+          ]
+        },
+        {
+          "id": "row-07/C03",
+          "proposition": "Ticket record `25e32b4b2b228310f243fed2ce91bf22` exists on `x_snc_tsbench_ticket`.",
+          "kind": "existence",
+          "subject": {
+            "table": "x_snc_tsbench_ticket",
+            "record": "25e32b4b2b228310f243fed2ce91bf22"
+          },
+          "admitted_by": "R-A, R-E carve-out (existence explicitly asserted)",
+          "occurrences": [
+            {
+              "line": 19,
+              "quote": "Ticket `25e32b4b2b228310f243fed2ce91bf22` exists with a non-empty `short_description`"
+            }
+          ]
+        },
+        {
+          "id": "row-07/C04",
+          "proposition": "The trigger `Seed 05 Bench Ticket Created` has condition `short_descriptionISNOTEMPTY`.",
+          "kind": "field_value",
+          "subject": {
+            "table": "sn_aia_trigger_configuration",
+            "record": "bfb77d6c64884500a80203ee029436ee",
+            "field": "condition"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 7,
+              "quote": "The ticket satisfied the trigger condition (`short_descriptionISNOTEMPTY`)"
+            },
+            {
+              "line": 35,
+              "quote": "`trigger.condition = \"short_descriptionISNOTEMPTY\"`"
+            },
+            {
+              "line": 60,
+              "quote": "the condition `short_descriptionISNOTEMPTY`"
+            }
+          ]
+        },
+        {
+          "id": "row-07/C05",
+          "proposition": "The trigger `Seed 05 Bench Ticket Created` has active = 0.",
+          "kind": "field_value",
+          "subject": {
+            "table": "sn_aia_trigger_configuration",
+            "record": "bfb77d6c64884500a80203ee029436ee",
+            "field": "active"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 7,
+              "quote": "the trigger `Seed 05 Bench Ticket Created` is **inactive** (`active = 0`)"
+            },
+            {
+              "line": 21,
+              "quote": "but `active = 0`"
+            },
+            {
+              "line": 34,
+              "quote": "The trigger `Seed 05 Bench Ticket Created` has `active = 0`"
+            },
+            {
+              "line": 35,
+              "quote": "`trigger.active = \"0\"`"
+            },
+            {
+              "line": 58,
+              "quote": "| **Current** | `0` (false) |"
+            }
+          ]
+        },
+        {
+          "id": "row-07/C06",
+          "proposition": "The trigger `Seed 05 Bench Ticket Created` has target_table `x_snc_tsbench_ticket`.",
+          "kind": "field_value",
+          "subject": {
+            "table": "sn_aia_trigger_configuration",
+            "record": "bfb77d6c64884500a80203ee029436ee",
+            "field": "target_table"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 35,
+              "quote": "`trigger.target_table = \"x_snc_tsbench_ticket\"`"
+            },
+            {
+              "line": 60,
+              "quote": "on table `x_snc_tsbench_ticket`"
+            }
+          ]
+        },
+        {
+          "id": "row-07/C07",
+          "proposition": "The trigger named `Seed 05 Bench Ticket Created` is the `sn_aia_trigger_configuration` record with sys_id `bfb77d6c64884500a80203ee029436ee`.",
+          "kind": "identity",
+          "subject": {
+            "table": "sn_aia_trigger_configuration",
+            "record": "bfb77d6c64884500a80203ee029436ee"
+          },
+          "admitted_by": "R-B",
+          "occurrences": [
+            {
+              "line": 33,
+              "quote": "`sn_aia_trigger_configuration` · `bfb77d6c64884500a80203ee029436ee` · field `active`"
+            },
+            {
+              "line": 57,
+              "quote": "`sn_aia_trigger_configuration` · sys_id `bfb77d6c64884500a80203ee029436ee` · field `active`"
+            }
+          ],
+          "note": "The name-to-sys_id binding is asserted by RC-1 as a whole: the Component row names the record, the Finding row names the trigger. Not floored by R-E because no inventoried field claim carries the binding on its own."
+        },
+        {
+          "id": "row-07/C08",
+          "proposition": "An `sn_aia_trigger_agent_usecase_m2m` row links the trigger `Seed 05 Bench Ticket Created` to use case `Seed 05 Ticket Acknowledgement`.",
+          "kind": "existence",
+          "subject": {
+            "table": "sn_aia_trigger_agent_usecase_m2m"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 21,
+              "quote": "wired correctly to use case `Seed 05 Ticket Acknowledgement` via `sn_aia_trigger_agent_usecase_m2m`"
+            }
+          ]
+        },
+        {
+          "id": "row-07/C09",
+          "proposition": "The trigger `bfb77d6c64884500a80203ee029436ee` has no run-as identity configured: run_as_field, run_as_user and run_as_script are all empty.",
+          "kind": "field_value",
+          "subject": {
+            "table": "sn_aia_trigger_configuration",
+            "record": "bfb77d6c64884500a80203ee029436ee",
+            "field": "run_as_field, run_as_user, run_as_script"
+          },
+          "admitted_by": "R-A, R-D (three field readings evidencing one asserted property)",
+          "occurrences": [
+            {
+              "line": 44,
+              "quote": "The trigger names no run-as identity at all (`identity_resolution = none`)"
+            },
+            {
+              "line": 45,
+              "quote": "`run_as_field = null`, `run_as_user = \"\"`, `run_as_script_present = false`"
+            },
+            {
+              "line": 70,
+              "quote": "Both empty"
+            }
+          ]
+        },
+        {
+          "id": "row-07/C10",
+          "proposition": "No `sys_agent_access_role_configuration` rows exist for this agent.",
+          "kind": "count",
+          "subject": {
+            "table": "sys_agent_access_role_configuration"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 45,
+              "quote": "no access roles are configured for this agent"
+            },
+            {
+              "line": 70,
+              "quote": "no `sys_agent_access_role_configuration` rows exist for this agent"
+            }
+          ]
+        },
+        {
+          "id": "row-07/C11",
+          "proposition": "The agent `Seed 05 Ticket Acknowledger` has a non-empty instructions body of 118 characters.",
+          "kind": "field_value",
+          "subject": {
+            "table": "sn_aia_agent",
+            "field": "instructions"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 16,
+              "quote": "Agent instruction body present (118 chars)"
+            }
+          ]
+        },
+        {
+          "id": "row-07/C12",
+          "proposition": "Use case `Seed 05 Ticket Acknowledgement` has a base_plan.",
+          "kind": "field_value",
+          "subject": {
+            "table": "sn_aia_usecase",
+            "field": "base_plan"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 16,
+              "quote": "Use case `Seed 05 Ticket Acknowledgement` has a base_plan"
+            }
+          ]
+        },
+        {
+          "id": "row-07/C13",
+          "proposition": "Zero `sn_aia_agent_tool_m2m` rows are attached to the agent `Seed 05 Ticket Acknowledger`.",
+          "kind": "count",
+          "subject": {
+            "table": "sn_aia_agent_tool_m2m"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 17,
+              "quote": "Zero tools attached (`sn_aia_agent_tool_m2m` read status `empty`)"
+            }
+          ]
+        },
+        {
+          "id": "row-07/C14",
+          "proposition": "Table `x_snc_tsbench_ticket` exists.",
+          "kind": "existence",
+          "subject": {
+            "table": "x_snc_tsbench_ticket"
+          },
+          "admitted_by": "R-A, R-E carve-out (existence explicitly asserted)",
+          "occurrences": [
+            {
+              "line": 18,
+              "quote": "Table `x_snc_tsbench_ticket` exists."
+            }
+          ]
+        },
+        {
+          "id": "row-07/C15",
+          "proposition": "Field `state` does not exist on `x_snc_tsbench_ticket`.",
+          "kind": "existence",
+          "subject": {
+            "table": "x_snc_tsbench_ticket",
+            "field": "state"
+          },
+          "admitted_by": "R-A, R-D (two subjects, one property)",
+          "occurrences": [
+            {
+              "line": 18,
+              "quote": "Fields `state` and `active` do not exist on this table"
+            }
+          ]
+        },
+        {
+          "id": "row-07/C16",
+          "proposition": "Field `active` does not exist on `x_snc_tsbench_ticket`.",
+          "kind": "existence",
+          "subject": {
+            "table": "x_snc_tsbench_ticket",
+            "field": "active"
+          },
+          "admitted_by": "R-A, R-D (two subjects, one property)",
+          "occurrences": [
+            {
+              "line": 18,
+              "quote": "Fields `state` and `active` do not exist on this table"
+            }
+          ]
+        },
+        {
+          "id": "row-07/C17",
+          "proposition": "No GenAI capability definitions match the filter 'Seed 05'.",
+          "kind": "count",
+          "subject": {
+            "table": "sys_one_extend_capability_definition",
+            "filter": "Seed 05"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 20,
+              "quote": "with filter `Seed 05` matched zero capability definitions"
+            }
+          ]
+        },
+        {
+          "id": "row-07/C18",
+          "proposition": "The `syslog` table has caller_access = 'Caller Restriction'.",
+          "kind": "field_value",
+          "subject": {
+            "table": "syslog",
+            "field": "caller_access"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 22,
+              "quote": "`syslog` table enforces `caller_access = Caller Restriction`"
+            }
+          ]
+        }
+      ],
+      "rejected_candidates": [
+        {
+          "id": "row-07/X01",
+          "line": 7,
+          "text": "The agent `Seed 05 Ticket Acknowledger` produced no execution plan when bench ticket `25e32b4b...` was created",
+          "rejected_by": "R-C",
+          "reason": "Absence of an execution plan for the diagnosed run. Readable on the instance today, and discarded by the run boundary — the clearest instance of R-C's stated cost."
+        },
+        {
+          "id": "row-07/X02",
+          "line": 7,
+          "text": "The ticket satisfied the trigger condition",
+          "rejected_by": "R-E",
+          "reason": "Strictly entailed by row-07/C01: a non-empty short_description satisfies `short_descriptionISNOTEMPTY`."
+        },
+        {
+          "id": "row-07/X03",
+          "line": 7,
+          "text": "An inactive trigger is never evaluated by the platform; it does not fire, no business rule is raised, and no execution plan is ever queued.",
+          "rejected_by": "R-G",
+          "reason": "General statement of platform mechanism, true or false of the product, not of this instance."
+        },
+        {
+          "id": "row-07/X04",
+          "line": 15,
+          "text": "`sn_aia_execution_plan` read status `empty` — no plan was ever created.",
+          "rejected_by": "R-C",
+          "reason": "Diagnosed-run state."
+        },
+        {
+          "id": "row-07/X05",
+          "line": 35,
+          "text": "`agent_config` artifact `34056bc72b62431017a6ffbeee91bfc4`",
+          "rejected_by": "R-B, R-C",
+          "reason": "sys_id of an artifact produced by the diagnostic run, used as a handle. Not an instance claim."
+        },
+        {
+          "id": "row-07/X06",
+          "line": 80,
+          "text": "filtered to agent `a4b7ef5d793346ea861730c6d28b8f58`",
+          "rejected_by": "R-A, R-G",
+          "reason": "Referential use of a sys_id inside a verification instruction. No name-to-sys_id binding is asserted and no inventoried claim is keyed to it, so R-B does not admit it. Borderline: an operator ruling that an extractor emitting the agent's sys_id made a 'correct addition' (§AX2.5) would be defensible, and is pre-recorded here rather than decided after output is seen."
+        },
+        {
+          "id": "row-07/X07",
+          "line": 19,
+          "text": "The triggering record is valid.",
+          "rejected_by": "R-G",
+          "reason": "Judgement."
+        },
+        {
+          "id": "row-07/X08",
+          "line": 22,
+          "text": "An instance administrator must relax `caller_access` on `syslog` or export the logs directly.",
+          "rejected_by": "R-G",
+          "reason": "Recommendation."
+        }
+      ]
+    },
+    {
+      "report": "row-12",
+      "path": "benchmark/v14-reports/row-12.md",
+      "arm": "custom",
+      "seed": "06",
+      "claim_count": 2,
+      "claims": [
+        {
+          "id": "row-12/C01",
+          "proposition": "The `incident` table exists.",
+          "kind": "existence",
+          "subject": {
+            "table": "incident"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 7,
+              "quote": "schema_lookup confirmed incident table exists"
+            }
+          ]
+        },
+        {
+          "id": "row-12/C02",
+          "proposition": "No `incident` records exist with category 'hardware' and subcategory 'bench'.",
+          "kind": "count",
+          "subject": {
+            "table": "incident",
+            "filter": "category=hardware^subcategory=bench"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 2,
+              "quote": "the root cause lies in the absence of matching records in the system"
+            },
+            {
+              "line": 29,
+              "quote": "no matching records exist"
+            }
+          ],
+          "note": "The table binding is not stated in the asserting sentences; it is fixed by the report's own FIXES target (line 26, `incident records`) and proposed action (line 28, `Create at least one incident record with category 'hardware' and subcategory 'bench'`). Recorded here so the binding is not mistaken for the adjudicator's inference."
+        }
+      ],
+      "rejected_candidates": [
+        {
+          "id": "row-12/X01",
+          "line": 2,
+          "text": "The agent execution completed with a count of 0 hardware category bench tickets",
+          "rejected_by": "R-C",
+          "reason": "The count is the diagnosed run's tool output. The instance-state proposition it is offered as evidence for is inventoried separately as row-12/C02."
+        },
+        {
+          "id": "row-12/X02",
+          "line": 7,
+          "text": "has valid fields",
+          "rejected_by": "R-G",
+          "reason": "Names no field and no property — nothing an instance read could settle."
+        },
+        {
+          "id": "row-12/X03",
+          "line": 8,
+          "text": "tool_call response showed count: 0",
+          "rejected_by": "R-C",
+          "reason": "Diagnosed-run tool output."
+        },
+        {
+          "id": "row-12/X04",
+          "line": 28,
+          "text": "Create at least one incident record with category 'hardware' and subcategory 'bench'",
+          "rejected_by": "R-G, R-F",
+          "reason": "Proposed fix. A 'Proposed' value is never an occurrence."
+        },
+        {
+          "id": "row-12/X05",
+          "line": 38,
+          "text": "fix_report failed validation and could not be repaired",
+          "rejected_by": "R-C",
+          "reason": "The validator's verdict on the diagnostic run's output — the diagnostic run, not the instance."
+        }
+      ]
+    },
+    {
+      "report": "row-15",
+      "path": "benchmark/v14-reports/row-15.md",
+      "arm": "native",
+      "seed": "07",
+      "claim_count": 16,
+      "claims": [
+        {
+          "id": "row-15/C01",
+          "proposition": "The tool's `ticket` input is declared mandatory: false.",
+          "kind": "field_value",
+          "subject": {
+            "table": "sn_aia_agent_tool_m2m",
+            "record": "b1b830fa038a444f9a7a890d6fd19948",
+            "field": "input_schema[ticket].mandatory"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 8,
+              "quote": "the tool's `ticket` input is declared non-mandatory"
+            },
+            {
+              "line": 32,
+              "quote": "The `ticket` input is declared `mandatory: false`"
+            },
+            {
+              "line": 33,
+              "quote": "{\"name\":\"ticket\",\"mandatory\":false}"
+            },
+            {
+              "line": 70,
+              "quote": "\"mandatory\":false}"
+            }
+          ]
+        },
+        {
+          "id": "row-15/C02",
+          "proposition": "The `ticket` input's description is 'The sys_id of the bench ticket to read.'",
+          "kind": "field_value",
+          "subject": {
+            "table": "sn_aia_tool",
+            "record": "2465188619a2417682e91483d560c084",
+            "field": "input_schema[ticket].description"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 70,
+              "quote": "\"description\":\"The sys_id of the bench ticket to read.\""
+            }
+          ]
+        },
+        {
+          "id": "row-15/C03",
+          "proposition": "The tool script contains an early-return guard at lines 3-6 returning {ok: false, error: \"ticket sys_id missing or not found\"} when the ticket sys_id is absent.",
+          "kind": "field_value",
+          "subject": {
+            "table": "sn_aia_tool",
+            "record": "2465188619a2417682e91483d560c084",
+            "field": "script"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 32,
+              "quote": "the script's early-return path executes, returning `{ok: false, error: \"ticket sys_id missing or not found\"}`"
+            },
+            {
+              "line": 33,
+              "quote": "Corroborated by tool script lines 3–6 (id guard)"
+            }
+          ]
+        },
+        {
+          "id": "row-15/C04",
+          "proposition": "Ticket record `36dc13472bea031017a6ffbeee91bf75` has priority = '' (blank).",
+          "kind": "field_value",
+          "subject": {
+            "table": "x_snc_tsbench_ticket",
+            "record": "36dc13472bea031017a6ffbeee91bf75",
+            "field": "priority"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 8,
+              "quote": "the ticket's `priority` field is blank"
+            },
+            {
+              "line": 41,
+              "quote": "The `priority` field is blank (empty string)"
+            },
+            {
+              "line": 42,
+              "quote": "row `36dc13472bea031017a6ffbeee91bf75`: `priority=\"\"`"
+            },
+            {
+              "line": 77,
+              "quote": "**Current:** `\"\"` (blank)"
+            }
+          ]
+        },
+        {
+          "id": "row-15/C05",
+          "proposition": "Table `x_snc_tsbench_ticket` has no `category` column.",
+          "kind": "existence",
+          "subject": {
+            "table": "x_snc_tsbench_ticket",
+            "field": "category"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 8,
+              "quote": "the table has no `category` column"
+            },
+            {
+              "line": 49,
+              "quote": "`x_snc_tsbench_ticket` — missing column `category`"
+            },
+            {
+              "line": 50,
+              "quote": "`category` is absent"
+            },
+            {
+              "line": 51,
+              "quote": "no `category` element"
+            },
+            {
+              "line": 84,
+              "quote": "**Current:** Column does not exist"
+            }
+          ]
+        },
+        {
+          "id": "row-15/C06",
+          "proposition": "Table `x_snc_tsbench_ticket` has 8 fields.",
+          "kind": "count",
+          "subject": {
+            "table": "x_snc_tsbench_ticket"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 50,
+              "quote": "schema_lookup reports 8 fields"
+            },
+            {
+              "line": 51,
+              "quote": "`field_count=8`"
+            }
+          ]
+        },
+        {
+          "id": "row-15/C07",
+          "proposition": "The tool script unconditionally builds 260 lines of synthetic `operational_feed` events carrying the literal string `no-classification-relevant-content-in-this-record` and returns them as `raw_context_feed`.",
+          "kind": "field_value",
+          "subject": {
+            "table": "sn_aia_tool",
+            "record": "2465188619a2417682e91483d560c084",
+            "field": "script"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 8,
+              "quote": "the tool unconditionally emits 260 lines of synthetic noise"
+            },
+            {
+              "line": 59,
+              "quote": "The script unconditionally builds 260 lines of synthetic \"operational_feed\" events carrying the literal string `no-classification-relevant-content-in-this-record`"
+            },
+            {
+              "line": 60,
+              "quote": "`raw_context_feed` loop `for (var i = 0; i < 260; i++)`"
+            },
+            {
+              "line": 91,
+              "quote": "Script builds 260-line loop and returns `raw_context_feed`"
+            }
+          ]
+        },
+        {
+          "id": "row-15/C08",
+          "proposition": "The agent's description field reads 'Benchmark seed - deliberately broken'.",
+          "kind": "field_value",
+          "subject": {
+            "table": "sn_aia_agent",
+            "field": "description"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 8,
+              "quote": "The agent description explicitly reads *\"Benchmark seed - deliberately broken\"*"
+            }
+          ]
+        },
+        {
+          "id": "row-15/C09",
+          "proposition": "The agent instructions contain the phrase 'assign one category'.",
+          "kind": "field_value",
+          "subject": {
+            "table": "sn_aia_agent",
+            "field": "instructions"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 50,
+              "quote": "The agent instructions say \"assign one category\""
+            }
+          ]
+        },
+        {
+          "id": "row-15/C10",
+          "proposition": "The agent defines six categories: ACCESS, HARDWARE, APPLICATION, NETWORK, MESSAGING, GENERAL.",
+          "kind": "field_value",
+          "subject": {
+            "table": "sn_aia_agent",
+            "field": "instructions"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 85,
+              "quote": "the agent's six categories: ACCESS, HARDWARE, APPLICATION, NETWORK, MESSAGING, GENERAL"
+            }
+          ],
+          "note": "Sits inside a FIX 'Proposed' block, but the phrase asserts a present property of the agent rather than proposing one, so R-F's proposed-value exclusion does not reach it."
+        },
+        {
+          "id": "row-15/C11",
+          "proposition": "No GenAI capability definition is named exactly 'AIA ReAct Engine'.",
+          "kind": "count",
+          "subject": {
+            "table": "sys_one_extend_capability_definition",
+            "filter": "AIA ReAct Engine"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 21,
+              "quote": "`check_config` filter \"AIA ReAct Engine\" matched 0 definitions"
+            }
+          ]
+        },
+        {
+          "id": "row-15/C12",
+          "proposition": "A GenAI capability definition named 'AIA ReAct Engine_Amazon Bedrock' exists.",
+          "kind": "existence",
+          "subject": {
+            "table": "sys_one_extend_capability_definition"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 21,
+              "quote": "actual definition name is \"AIA ReAct Engine_Amazon Bedrock\""
+            }
+          ]
+        },
+        {
+          "id": "row-15/C13",
+          "proposition": "The agent has 0 trigger links.",
+          "kind": "count",
+          "subject": {
+            "table": "sn_aia_trigger_agent_usecase_m2m"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 22,
+              "quote": "0 trigger links"
+            }
+          ]
+        },
+        {
+          "id": "row-15/C14",
+          "proposition": "The `syslog` table has caller_access = 'Caller Restriction'.",
+          "kind": "field_value",
+          "subject": {
+            "table": "syslog",
+            "field": "caller_access"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 23,
+              "quote": "`syslog.caller_access = Caller Restriction`"
+            }
+          ]
+        },
+        {
+          "id": "row-15/C15",
+          "proposition": "Ticket record `36dc13472bea031017a6ffbeee91bf75` has short_description 'Loading dock scanner misreads pallet barcodes whenever the overhead door is open'.",
+          "kind": "field_value",
+          "subject": {
+            "table": "x_snc_tsbench_ticket",
+            "record": "36dc13472bea031017a6ffbeee91bf75",
+            "field": "short_description"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 110,
+              "quote": "Loading dock scanner misreads pallet barcodes whenever the overhead door is open"
+            }
+          ]
+        },
+        {
+          "id": "row-15/C16",
+          "proposition": "User record `6816f79cc0a8016401c5a33be04be441` has email admin@example.com and name 'System Administrator'.",
+          "kind": "field_value",
+          "subject": {
+            "table": "sys_user",
+            "record": "6816f79cc0a8016401c5a33be04be441",
+            "field": "email, name"
+          },
+          "admitted_by": "R-A, R-D (attributes of one record presented as one bundle)",
+          "occurrences": [
+            {
+              "line": 111,
+              "quote": "email `admin@example.com`, name \"System Administrator\", sys_id `6816f79cc0a8016401c5a33be04be441`"
+            }
+          ]
+        }
+      ],
+      "rejected_candidates": [
+        {
+          "id": "row-15/X01",
+          "line": 8,
+          "text": "The plan state shows **Completed** and the agent returned \"HARDWARE\"",
+          "rejected_by": "R-C",
+          "reason": "Diagnosed-run state and output."
+        },
+        {
+          "id": "row-15/X02",
+          "line": 8,
+          "text": "58,462 chars",
+          "rejected_by": "R-C",
+          "reason": "Size of a response produced during the diagnosed run. The durable cause — the 260-line generator in the script — is inventoried as row-15/C07."
+        },
+        {
+          "id": "row-15/X03",
+          "line": 21,
+          "text": "genai_log `for_execution` — 2 LLM calls, both success",
+          "rejected_by": "R-C",
+          "reason": "Diagnosed-run event counts."
+        },
+        {
+          "id": "row-15/X04",
+          "line": 31,
+          "text": "`sn_aia_agent_tool_m2m[b1b830fa038a444f9a7a890d6fd19948]` → `sn_aia_tool[2465188619a2417682e91483d560c084]`",
+          "rejected_by": "R-E",
+          "reason": "Existence of both records is entailed by the inventoried field claims keyed to those sys_ids (C01, C02, C03, C07). No name-to-sys_id binding is asserted, so R-B adds nothing."
+        },
+        {
+          "id": "row-15/X05",
+          "line": 19,
+          "text": "schema_lookup, artifact `d8dc27832b66431017a6ffbeee91bf6f`",
+          "rejected_by": "R-B, R-C",
+          "reason": "Diagnostic-artifact handle."
+        },
+        {
+          "id": "row-15/X06",
+          "line": 23,
+          "text": "export the log window 2026-08-11 19:37:35 – 19:41:53",
+          "rejected_by": "R-C, R-G",
+          "reason": "Run timing inside a recommendation."
+        },
+        {
+          "id": "row-15/X07",
+          "line": 59,
+          "text": "On this run `llm_p95_latency=2754 ms`, `llm_token_avg=120`",
+          "rejected_by": "R-C",
+          "reason": "Run telemetry."
+        },
+        {
+          "id": "row-15/X08",
+          "line": 8,
+          "text": "four confirmed defects are embedded in this run, any one of which can cause incorrect or incomplete operation",
+          "rejected_by": "R-G",
+          "reason": "Judgement of severity."
+        }
+      ]
+    },
+    {
+      "report": "row-17",
+      "path": "benchmark/v14-reports/row-17.md",
+      "arm": "native",
+      "seed": "08",
+      "claim_count": 9,
+      "claims": [
+        {
+          "id": "row-17/C01",
+          "proposition": "The tool script unconditionally returns {ok: true, batch: ref, status: 'in_progress', percent_complete: 50, note: 'work continues'} and contains no code path that can return 'complete' or 'failed'.",
+          "kind": "field_value",
+          "subject": {
+            "table": "sn_aia_tool",
+            "record": "96d2f732dda847868688307d4c5cd375",
+            "field": "script"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 7,
+              "quote": "the tool script is a **hardcoded constant** — it is physically incapable of returning any status other than `in_progress`"
+            },
+            {
+              "line": 32,
+              "quote": "unconditionally returns `{status: \"in_progress\", percent_complete: 50}` regardless of input. There is no code path that can ever return `complete` or `failed`"
+            },
+            {
+              "line": 34,
+              "quote": "return JSON.stringify({ ok: true, batch: ref, status: 'in_progress', percent_complete: 50, note: 'work continues' });"
+            },
+            {
+              "line": 77,
+              "quote": "status: 'in_progress', percent_complete: 50,"
+            }
+          ]
+        },
+        {
+          "id": "row-17/C02",
+          "proposition": "The tool script body contains the comment '// No terminal branch exists...this function is a constant'.",
+          "kind": "field_value",
+          "subject": {
+            "table": "sn_aia_tool",
+            "record": "96d2f732dda847868688307d4c5cd375",
+            "field": "script"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 32,
+              "quote": "The script body contains an explicit comment (`// No terminal branch exists"
+            },
+            {
+              "line": 74,
+              "quote": "// No terminal branch exists"
+            }
+          ]
+        },
+        {
+          "id": "row-17/C03",
+          "proposition": "The tool script reads no table and consults no record.",
+          "kind": "field_value",
+          "subject": {
+            "table": "sn_aia_tool",
+            "record": "96d2f732dda847868688307d4c5cd375",
+            "field": "script"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 18,
+              "quote": "The tool script reads no table (pure constant)"
+            },
+            {
+              "line": 19,
+              "quote": "No records are consulted by the tool"
+            }
+          ]
+        },
+        {
+          "id": "row-17/C04",
+          "proposition": "The agent instructions contain no polling cap, retry limit, wall-clock timeout, fallback message, or escape condition.",
+          "kind": "field_value",
+          "subject": {
+            "table": "sn_aia_agent",
+            "record": "fad5a34c531446f6989b071636f5491e",
+            "field": "instructions"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 7,
+              "quote": "the agent instructions contain no polling cap, retry limit, or timeout escape"
+            },
+            {
+              "line": 44,
+              "quote": "There is no maximum retry count, no wall-clock timeout, no fallback message, and no condition under which the agent is permitted to stop without a terminal status"
+            },
+            {
+              "line": 113,
+              "quote": "(no limit)"
+            }
+          ]
+        },
+        {
+          "id": "row-17/C05",
+          "proposition": "The agent instructions contain the sentence 'If the status is not terminal, call check_processing_status again.'",
+          "kind": "field_value",
+          "subject": {
+            "table": "sn_aia_agent",
+            "record": "fad5a34c531446f6989b071636f5491e",
+            "field": "instructions"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 44,
+              "quote": "The instruction text reads: *\"If the status is not terminal, call check_processing_status again.\"*"
+            },
+            {
+              "line": 113,
+              "quote": "If the status is not terminal, call check_processing_status again."
+            }
+          ]
+        },
+        {
+          "id": "row-17/C06",
+          "proposition": "The agent's instructions field is 417 characters long.",
+          "kind": "count",
+          "subject": {
+            "table": "sn_aia_agent",
+            "record": "fad5a34c531446f6989b071636f5491e",
+            "field": "instructions"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 46,
+              "quote": "`instructions.agent.instructions` (417 chars)"
+            }
+          ]
+        },
+        {
+          "id": "row-17/C07",
+          "proposition": "The tool binding `9a1926554cb945b8a5fc6762a928058f` declares max_auto_executions = 10.",
+          "kind": "field_value",
+          "subject": {
+            "table": "sn_aia_agent_tool_m2m",
+            "record": "9a1926554cb945b8a5fc6762a928058f",
+            "field": "max_auto_executions"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 56,
+              "quote": "The binding declares `max_auto_executions: 10`"
+            },
+            {
+              "line": 58,
+              "quote": "binding field `max_auto_executions: \"10\"`"
+            },
+            {
+              "line": 124,
+              "quote": "**Current value:** `10`"
+            }
+          ]
+        },
+        {
+          "id": "row-17/C08",
+          "proposition": "The `syslog` table declares caller_access = 'Caller Restriction'.",
+          "kind": "field_value",
+          "subject": {
+            "table": "syslog",
+            "field": "caller_access"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 22,
+              "quote": "syslog declares `caller_access = Caller Restriction`"
+            },
+            {
+              "line": 150,
+              "quote": "syslog is caller-restricted"
+            }
+          ]
+        },
+        {
+          "id": "row-17/C09",
+          "proposition": "The GenAI provider configured for this agent is Amazon Bedrock with model claude-sonnet-4-6.",
+          "kind": "state",
+          "subject": {
+            "table": "sys_one_extend_capability_definition"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 7,
+              "quote": "The GenAI provider (Amazon Bedrock / claude-sonnet-4-6)"
+            }
+          ],
+          "note": "Borderline against R-C: the provider is named in a sentence about how the run behaved. Admitted because the provider identity is durable configuration, not a run event — §AX3 bullet 4, 'a named ... configuration is present'. The 'functioned correctly throughout' half is rejected as row-17/X04."
+        }
+      ],
+      "rejected_candidates": [
+        {
+          "id": "row-17/X01",
+          "line": 7,
+          "text": "The execution ran for 18 minutes 44 seconds (1,124 s), made 75 calls to `check_processing_status`, received {status: \"in_progress\", percent_complete: 50} on every single call, and was eventually cancelled by the platform with state_reason: execution_failed",
+          "rejected_by": "R-C",
+          "reason": "Entirely diagnosed-run events: duration, call count, per-call outputs, terminal state. The single largest block R-C discards in this corpus."
+        },
+        {
+          "id": "row-17/X02",
+          "line": 56,
+          "text": "75 tool-call rows (`sn_aia_tools_execution`) are recorded",
+          "rejected_by": "R-C",
+          "reason": "A count of rows recording the diagnosed run. Readable on the instance today; excluded by the run boundary, not by adjudicability."
+        },
+        {
+          "id": "row-17/X03",
+          "line": 47,
+          "text": "Trace orders 300, 600, 900, 1200 … all show Gen AI step thought",
+          "rejected_by": "R-C",
+          "reason": "Run trace content, including the model's reasoning."
+        },
+        {
+          "id": "row-17/X04",
+          "line": 7,
+          "text": "functioned correctly throughout",
+          "rejected_by": "R-C, R-G",
+          "reason": "Run behaviour plus judgement."
+        },
+        {
+          "id": "row-17/X05",
+          "line": 20,
+          "text": "genai_log check_config, definition `31fee654ff116e10b9c9fffffffffffd`",
+          "rejected_by": "R-A, R-E",
+          "reason": "Referential use of a sys_id in a method note; no name binding asserted and no inventoried claim keyed to it. Borderline — an extractor emitting it as a capability-definition identity claim would be a defensible §AX2.5 correct addition, pre-recorded here."
+        },
+        {
+          "id": "row-17/X06",
+          "line": 145,
+          "text": "Batch reference value: **BR-7731**",
+          "rejected_by": "R-C",
+          "reason": "A value that appears in the run's tool inputs and outputs, not a field of any record asserted to exist."
+        },
+        {
+          "id": "row-17/X07",
+          "line": 56,
+          "text": "The gap may be explained by the RETRY actions resetting or bypassing the counter",
+          "rejected_by": "R-G",
+          "reason": "Hypothesis, explicitly hedged."
+        }
+      ]
+    },
+    {
+      "report": "row-19",
+      "path": "benchmark/v14-reports/row-19.md",
+      "arm": "native",
+      "seed": "08",
+      "claim_count": 11,
+      "claims": [
+        {
+          "id": "row-19/C01",
+          "proposition": "The tool script is a hardcoded constant that always returns status='in_progress' and percent_complete=50, with no terminal branch capable of returning 'complete' or 'failed'.",
+          "kind": "field_value",
+          "subject": {
+            "table": "sn_aia_tool",
+            "field": "script"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 7,
+              "quote": "The tool script is a **hardcoded stub with no terminal branch**"
+            },
+            {
+              "line": 19,
+              "quote": "The tool is a pure constant"
+            },
+            {
+              "line": 33,
+              "quote": "It always returns `status=\"in_progress\"`, `percent_complete=50`, regardless of the batch reference or call count"
+            },
+            {
+              "line": 73,
+              "quote": "Hardcoded stub — always returns `in_progress/50%` regardless of input"
+            }
+          ]
+        },
+        {
+          "id": "row-19/C02",
+          "proposition": "The tool script contains the comment 'No terminal branch exists. There is no clock, no counter and no record consulted — this function is a constant. Whatever the agent does, and however many times it asks, the answer is the same one.'",
+          "kind": "field_value",
+          "subject": {
+            "table": "sn_aia_tool",
+            "field": "script"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 33,
+              "quote": "The comment inside the script explicitly states: *\"No terminal branch exists. There is no clock, no counter and no record consulted"
+            }
+          ]
+        },
+        {
+          "id": "row-19/C03",
+          "proposition": "The tool script performs no database read — no GlideRecord call exists in it.",
+          "kind": "field_value",
+          "subject": {
+            "table": "sn_aia_tool",
+            "field": "script"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 18,
+              "quote": "The tool script never touches the database"
+            },
+            {
+              "line": 19,
+              "quote": "no GlideRecord call exists to produce a wrong result"
+            },
+            {
+              "line": 33,
+              "quote": "no record lookup, no counter, and no clock"
+            }
+          ]
+        },
+        {
+          "id": "row-19/C04",
+          "proposition": "The agent instructions contain no upper-bound guard on polling iterations — no 'stop after N attempts' and no 'give up after T minutes' safeguard.",
+          "kind": "field_value",
+          "subject": {
+            "table": "sn_aia_agent",
+            "field": "instructions"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 42,
+              "quote": "The instruction text contains no upper-bound guard on polling iterations"
+            },
+            {
+              "line": 42,
+              "quote": "No \"stop after N attempts\" or \"give up after T minutes\" safeguard exists"
+            },
+            {
+              "line": 100,
+              "quote": "*(no poll cap)*"
+            }
+          ]
+        },
+        {
+          "id": "row-19/C05",
+          "proposition": "The agent instructions contain 'If the status is not terminal, call check_processing_status again. Report only the final status once you have it.'",
+          "kind": "field_value",
+          "subject": {
+            "table": "sn_aia_agent",
+            "field": "instructions"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 42,
+              "quote": "It reads: *\"If the status is not terminal, call check_processing_status again.\"*"
+            },
+            {
+              "line": 100,
+              "quote": "If the status is not terminal, call check_processing_status again. Report only the final status once you have it."
+            }
+          ]
+        },
+        {
+          "id": "row-19/C06",
+          "proposition": "The agent's instructions field is 417 characters long.",
+          "kind": "count",
+          "subject": {
+            "table": "sn_aia_agent",
+            "field": "instructions"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 43,
+              "quote": "full 417-char instruction body"
+            }
+          ]
+        },
+        {
+          "id": "row-19/C07",
+          "proposition": "The tool binding sets max_auto_executions = 10.",
+          "kind": "field_value",
+          "subject": {
+            "table": "sn_aia_agent_tool_m2m",
+            "field": "max_auto_executions"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 51,
+              "quote": "The tool binding sets `max_auto_executions=10`"
+            },
+            {
+              "line": 52,
+              "quote": "`tools[0].binding.max_auto_executions=\"10\"`"
+            },
+            {
+              "line": 112,
+              "quote": "| **Current** | `10` |"
+            }
+          ]
+        },
+        {
+          "id": "row-19/C08",
+          "proposition": "No use case is attached to the agent.",
+          "kind": "count",
+          "subject": {
+            "table": "sn_aia_usecase"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 60,
+              "quote": "No use case is attached to the agent (`sn_aia_usecase: empty`)"
+            },
+            {
+              "line": 61,
+              "quote": "`usecases=[]`"
+            },
+            {
+              "line": 124,
+              "quote": "No use case"
+            }
+          ]
+        },
+        {
+          "id": "row-19/C09",
+          "proposition": "No trigger links exist for the agent (trigger_links = 0).",
+          "kind": "count",
+          "subject": {
+            "table": "sn_aia_trigger_agent_usecase_m2m"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 60,
+              "quote": "No trigger links exist (`trigger_links=0`)"
+            },
+            {
+              "line": 61,
+              "quote": "`trigger_links=0`"
+            },
+            {
+              "line": 124,
+              "quote": "no trigger links"
+            }
+          ]
+        },
+        {
+          "id": "row-19/C10",
+          "proposition": "No teams are attached to the agent.",
+          "kind": "count",
+          "subject": {
+            "table": "sn_aia_team"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 61,
+              "quote": "`teams=[]`"
+            }
+          ]
+        },
+        {
+          "id": "row-19/C11",
+          "proposition": "The `syslog` table has caller_access = 'Caller Restriction'.",
+          "kind": "field_value",
+          "subject": {
+            "table": "syslog",
+            "field": "caller_access"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 22,
+              "quote": "`syslog` has `caller_access = Caller Restriction`"
+            }
+          ]
+        }
+      ],
+      "rejected_candidates": [
+        {
+          "id": "row-19/X01",
+          "line": 7,
+          "text": "The execution plan terminated with state **Terminated / execution_failed** after **1,116 seconds (~18.6 minutes)**",
+          "rejected_by": "R-C",
+          "reason": "Diagnosed-run terminal state and duration."
+        },
+        {
+          "id": "row-19/X02",
+          "line": 7,
+          "text": "The agent made **75 calls** to `check_processing_status` across 200 execution tasks",
+          "rejected_by": "R-C",
+          "reason": "Diagnosed-run call and task counts."
+        },
+        {
+          "id": "row-19/X03",
+          "line": 1,
+          "text": "Execution Plan `3f247f0b2b6a431017a6ffbeee91bf55`",
+          "rejected_by": "R-C, R-B",
+          "reason": "Identifier of the diagnosed run itself."
+        },
+        {
+          "id": "row-19/X04",
+          "line": 61,
+          "text": "execution plan header: `usecase.sys_id=\"\"`, `team.sys_id=\"\"`",
+          "rejected_by": "R-C",
+          "reason": "Fields of the diagnosed run's execution-plan record. The durable propositions they evidence are inventoried as C08 and C10."
+        },
+        {
+          "id": "row-19/X05",
+          "line": 60,
+          "text": "The agent runs only in Interactive / ad-hoc mode.",
+          "rejected_by": "R-E, R-G",
+          "reason": "Presented as the consequence of C08 and C09 rather than as an independently readable configuration value."
+        },
+        {
+          "id": "row-19/X06",
+          "line": 51,
+          "text": "10 autonomous executions is inadequate for any batch job requiring more than ~10 polling intervals",
+          "rejected_by": "R-G",
+          "reason": "Normative analysis."
+        },
+        {
+          "id": "row-19/X07",
+          "line": 7,
+          "text": "The agent correctly followed its instructions (poll until terminal status, then report)",
+          "rejected_by": "R-C, R-G",
+          "reason": "Run behaviour plus judgement. The parenthetical paraphrases instruction content but asserts no quotable text; the quoted text is inventoried as C05."
+        },
+        {
+          "id": "row-19/X08",
+          "line": 151,
+          "text": "User sender sys_id from conversation message (user profile field)",
+          "rejected_by": "R-C",
+          "reason": "Names no value and no record — a redaction instruction about the run's conversation."
+        }
+      ]
+    }
+  ]
+}
