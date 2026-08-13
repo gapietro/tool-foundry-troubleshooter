@@ -17,6 +17,46 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1213 — 2026-08-12
+
+### Fixed — a lost run claim no longer buys a second reasoning pass (#218)
+
+`PaRunManager.markRunning` was a read-then-write: read `status`, compare it to `queued` in JS, then
+update. Two workers handed the same run — reachable on event redelivery, since
+`x_snc_troubleshoot.run.start` is the only entry to `PaAgentLoop.run` — both read `queued`, both
+passed the guard, and both wrote `running`. `PaAgentLoop` then **ignored the claim result entirely**
+(#73's deliberate fail-open), so the price of a lost claim was a full second diagnosis: double LLM
+spend, a transcript interleaved between two workers, and last-write-wins on `fix_report`.
+
+Two changes, and the second is the one that stops the duplicate work:
+
+1. The queued test moved **into the query** (`addQuery('sys_id')` + `addQuery('status','queued')`),
+   so the row is only ever positioned while it is still claimable, and the refusal now carries a
+   machine-readable `reason` — `claim_lost` / `not_found` / `update_failed` / `no_run_id`.
+2. `PaAgentLoop.run` refuses to re-enter reasoning on `claim_lost` **only**, returning a new
+   `outcome: 'not_claimed'`. Every other refusal keeps #73's fail-open path verbatim, including a
+   `PaRunManager` too old to send a `reason` at all — a monitoring gap is still not a reason to
+   refuse to diagnose, and this must not start silently dropping runs.
+
+The refusing worker writes **nothing** to the run row, which is load-bearing rather than tidiness:
+`appendTranscript` is a read-modify-write of a JSON column, so a "just leaving a note" append from
+the loser would race the winner's entries and could drop them — reintroducing the corruption this
+guard exists to prevent, through the door marked observability. The duplicate goes to syslog, which
+is append-only.
+
+**What this does NOT close, and it is held by a named CHARACTERIZATION test rather than left to be
+rediscovered:** a true interleave between the query and the update — worker B claiming in the gap
+between A positioning its record and A's write landing. ServiceNow exposes no compare-and-swap, and
+a claim token with read-back does not help either (if both workers re-read before the other's write
+lands, both see their own token); only a DB-level unique constraint would settle it. The window goes
+from *the whole reasoning pass* to *between two adjacent Glide calls*, which is the reduction
+actually available. `PaAgentLoop`'s refusal is therefore defence in depth, not the only guard.
+
+19 new tests, including the issue's acceptance criterion at both levels (two claims → exactly one
+succeeds; two deliveries → exactly one reasoning pass). Unit-verified only — no instance run.
+
+---
+
 ## 2026.08.1212 — 2026-08-12
 
 ### Fixed — the deploy probe was permanently red by one finding (#220)

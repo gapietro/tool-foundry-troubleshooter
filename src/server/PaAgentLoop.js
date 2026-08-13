@@ -292,10 +292,13 @@ PaAgentLoop.prototype = {
      *        `{execution?, agent?, timeframe?, logs?, mode?}`, or a JSON
      *        string of the same (Task 7's `gs.eventQueue` parm2), or a
      *        free-form string. All optional (R-9).
-     * @returns {Object} {success, outcome:'answer'|'fix_report'|'partial'|'failed', ...}
+     * @returns {Object} {success, outcome:'answer'|'fix_report'|'partial'|'failed'|'not_claimed', ...}
      *          — the shape carries outcome-specific extra fields (`text`,
      *          `report`, `error`, `problems`, `draft`, `reason`) on top of
-     *          the common `success`/`outcome`/`run_id`.
+     *          the common `success`/`outcome`/`run_id`. `not_claimed` (#218)
+     *          is the one outcome that leaves the run row completely
+     *          untouched: another worker owns it, so this call closes nothing
+     *          and writes nothing.
      */
     run: function (runId, request) {
         var rid = this._str(runId)
@@ -321,12 +324,44 @@ PaAgentLoop.prototype = {
         // reached that state and the check could not match by construction
         // (measured: 214 custom runs, zero ever 'running').
         //
-        // FAIL-OPEN, deliberately. A refused or failed transition means the
-        // row is missing or someone else claimed it — neither is a reason to
-        // refuse to diagnose, and converting a monitoring gap into a run
-        // failure would be a strictly worse trade. The return is ignored on
-        // purpose; the transcript note is what a reader needs.
+        // FAIL-OPEN FOR EVERY REASON BUT ONE (#218 narrowed #73).
+        //
+        // #73 ignored the claim result entirely, on the rationale that a
+        // refusal means "the row is missing or someone else claimed it —
+        // neither is a reason to refuse to diagnose". The monitoring half of
+        // that is still right and is still the default below. The other half
+        // was not: "someone else claimed it" is precisely the case where a
+        // second reasoning pass costs a second LLM bill, interleaves this
+        // worker's transcript with the winner's, and lets whichever finishes
+        // last overwrite `fix_report`. Event redelivery makes it reachable —
+        // `x_snc_troubleshoot.run.start` is the only entry to this method.
+        //
+        // So: refuse ONLY on the named `claim_lost` reason, which
+        // `PaRunManager.markRunning` sets when its query-scoped claim found
+        // the row in some state other than `queued`. `not_found`,
+        // `update_failed`, an unrecognised reason, and a null return all keep
+        // the old fail-open path — including a PaRunManager too old to send a
+        // reason at all, so this cannot start silently dropping diagnoses.
         var claimed = this._runs().markRunning(rid)
+
+        if (claimed && claimed.success !== true && claimed.reason === 'claim_lost') {
+            // NOTHING is written to the run row here. `appendTranscript` is a
+            // read-modify-write of a JSON column, so a note from the losing
+            // worker would race the winner's entries and could drop them —
+            // which is the corruption this guard exists to prevent, arriving
+            // through the door marked observability. Syslog is append-only and
+            // is the correct channel for "a duplicate delivery happened".
+            this._warnDuplicate(rid, claimed.status)
+            return {
+                success: false,
+                outcome: 'not_claimed',
+                run_id: rid,
+                reason: 'claim_lost',
+                status: claimed.status || '',
+                error: 'run is already held by another worker — not re-entering reasoning',
+            }
+        }
+
         if (!claimed || claimed.success !== true) {
             this._runs().appendTranscript(rid, {
                 actor: 'system',
@@ -2399,6 +2434,29 @@ PaAgentLoop.prototype = {
 
     _runs: function () {
         return this._runManager || new PaRunManager()
+    },
+
+    /**
+     * The one record a worker that LOST a claim is allowed to leave (#218).
+     *
+     * Syslog, not the transcript: see the note at the refusal site for why a
+     * loser writing to the run row would reintroduce exactly the interleaving
+     * this guard prevents. Total, like every other observability call in this
+     * file — a runtime without `gs` must not turn a clean refusal into a throw.
+     */
+    _warnDuplicate: function (runId, status) {
+        try {
+            if (typeof gs === 'undefined' || !gs || typeof gs.warn !== 'function') return
+            gs.warn(
+                'x_snc_troubleshoot: duplicate delivery for run ' +
+                    runId +
+                    ' (held at status: ' +
+                    (status || '(unknown)') +
+                    ') — refusing to re-enter reasoning'
+            )
+        } catch (e) {
+            // R-1: `e` untouched.
+        }
     },
 
     _reports: function () {

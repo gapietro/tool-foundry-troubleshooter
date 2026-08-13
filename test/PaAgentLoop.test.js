@@ -3962,3 +3962,120 @@ describe('run claim (#73)', () => {
         expect(runs.markRunningCalls).toEqual([])
     })
 })
+
+// ===========================================================================
+// a LOST claim stops the run — issue #218
+//
+// #73's fail-open was right about the monitoring half and wrong about the
+// cost. `reason:'claim_lost'` means another worker demonstrably holds this
+// run (or already finished it), and re-entering reasoning there buys a second
+// LLM bill, a transcript interleaved with the winner's, and last-write-wins on
+// `fix_report`. Every OTHER refusal — the row is missing, the write was
+// rejected — stays fail-open exactly as before: those are monitoring gaps,
+// and turning one into a run failure would still be the worse trade.
+//
+// The refusing worker writes NOTHING to the run row, and that is load-bearing
+// rather than tidiness: `appendTranscript` is a read-modify-write of a JSON
+// column, so a "just leaving a note" append from the loser would race the
+// winner's entries and could drop them — reintroducing the corruption this
+// issue is about, through the door marked observability. The duplicate goes
+// to syslog instead, which is append-only.
+// ===========================================================================
+
+describe('lost claim (#218)', () => {
+    function claimLost(status) {
+        return { success: false, reason: 'claim_lost', status: status, error: 'illegal transition: ' + status + ' -> running' }
+    }
+
+    test('a run claimed by another worker is not reasoned about at all', () => {
+        const llm = fakeLlm([{ success: true, action: { action: 'answer', text: 'done' }, raw: 'r1' }])
+        const runs = fakeRunManager({ markRunning: claimLost('running') })
+        const loop = load({ llmProxy: llm, toolRegistry: fakeTools([]), runManager: runs, playbook: 'P', now: () => 0 })
+
+        const res = loop.run('run1', { execution: 'e1' })
+
+        expect(res.success).toBe(false)
+        expect(res.outcome).toBe('not_claimed')
+        expect(llm.calls).toHaveLength(0)
+    })
+
+    test('the refusing worker touches neither the transcript nor the run status', () => {
+        const runs = fakeRunManager({ markRunning: claimLost('running') })
+        const loop = load({ llmProxy: fakeLlm([]), toolRegistry: fakeTools([]), runManager: runs, playbook: 'P', now: () => 0 })
+
+        loop.run('run1', { execution: 'e1' })
+
+        expect(runs.transcript).toHaveLength(0)
+        expect(runs.closeCalls).toHaveLength(0)
+    })
+
+    const alreadyWorked = ['complete', 'failed', 'awaiting_confirmation']
+    test.each(alreadyWorked)('a run already %s is not re-diagnosed on redelivery', (status) => {
+        const llm = fakeLlm([{ success: true, action: { action: 'answer', text: 'done' }, raw: 'r1' }])
+        const runs = fakeRunManager({ markRunning: claimLost(status) })
+        const loop = load({ llmProxy: llm, toolRegistry: fakeTools([]), runManager: runs, playbook: 'P', now: () => 0 })
+
+        expect(loop.run('run1', {}).outcome).toBe('not_claimed')
+        expect(llm.calls).toHaveLength(0)
+    })
+
+    test('not_found stays FAIL-OPEN — a missing row is a monitoring gap, not a duplicate', () => {
+        const llm = fakeLlm([{ success: true, action: { action: 'answer', text: 'done' }, raw: 'r1' }])
+        const runs = fakeRunManager({ markRunning: { success: false, reason: 'not_found', error: 'run not found: run1' } })
+        const loop = load({ llmProxy: llm, toolRegistry: fakeTools([]), runManager: runs, playbook: 'P', now: () => 0 })
+
+        const res = loop.run('run1', { execution: 'e1' })
+
+        expect(res.success).toBe(true)
+        expect(res.outcome).toBe('answer')
+        expect(runs.transcript.filter((e) => /not claimed as running/.test(e.result_digest || ''))).toHaveLength(1)
+    })
+
+    test('update_failed stays FAIL-OPEN too', () => {
+        const llm = fakeLlm([{ success: true, action: { action: 'answer', text: 'done' }, raw: 'r1' }])
+        const runs = fakeRunManager({ markRunning: { success: false, reason: 'update_failed', error: 'update failed' } })
+        const loop = load({ llmProxy: llm, toolRegistry: fakeTools([]), runManager: runs, playbook: 'P', now: () => 0 })
+
+        expect(loop.run('run1', {}).success).toBe(true)
+        expect(llm.calls.length).toBeGreaterThan(0)
+    })
+
+    test('a refusal with no reason at all stays FAIL-OPEN — only a NAMED lost claim stops a run', () => {
+        // The conservative direction: an older or third-party PaRunManager
+        // that predates the `reason` field must not start silently dropping
+        // diagnoses.
+        const llm = fakeLlm([{ success: true, action: { action: 'answer', text: 'done' }, raw: 'r1' }])
+        const runs = fakeRunManager({ markRunning: { success: false, error: 'illegal transition: running -> running' } })
+        const loop = load({ llmProxy: llm, toolRegistry: fakeTools([]), runManager: runs, playbook: 'P', now: () => 0 })
+
+        expect(loop.run('run1', {}).success).toBe(true)
+        expect(llm.calls.length).toBeGreaterThan(0)
+    })
+
+    test('ACCEPTANCE: two workers, one run — exactly one reasoning pass', () => {
+        // The second delivery sees the status the first one wrote. One shared
+        // fake run manager stands in for the row both workers read.
+        let status = 'queued'
+        const runs = fakeRunManager()
+        runs.markRunning = function (runId) {
+            runs.markRunningCalls.push(runId)
+            if (status !== 'queued') {
+                return { success: false, reason: 'claim_lost', status: status, error: 'illegal transition' }
+            }
+            status = 'running'
+            return { success: true, run_id: runId, status: 'running' }
+        }
+
+        const llmA = fakeLlm([{ success: true, action: { action: 'answer', text: 'done' }, raw: 'r1' }])
+        const llmB = fakeLlm([{ success: true, action: { action: 'answer', text: 'done' }, raw: 'r1' }])
+        const optsFor = (llm) => ({ llmProxy: llm, toolRegistry: fakeTools([]), runManager: runs, playbook: 'P', now: () => 0 })
+
+        const a = load(optsFor(llmA)).run('run1', { execution: 'e1' })
+        const b = load(optsFor(llmB)).run('run1', { execution: 'e1' })
+
+        expect([a.outcome, b.outcome]).toEqual(['answer', 'not_claimed'])
+        expect(llmA.calls.length + llmB.calls.length).toBe(llmA.calls.length)
+        expect(llmB.calls).toHaveLength(0)
+        expect(runs.closeCalls).toHaveLength(1)
+    })
+})
