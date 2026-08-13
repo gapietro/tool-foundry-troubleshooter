@@ -107,9 +107,15 @@ describe('async/purge-artifacts.js', () => {
         const { sweepCalls } = runPurge(sweptResult())
 
         expect(sweepCalls).toHaveLength(1)
-        // Passed as `{}` rather than omitted: PaRetentionSweep reads its window
-        // off the options object, so handing it `undefined` would change which
-        // defaults apply.
+        // Pins the CALL SHAPE, and nothing stronger. Be clear about what this
+        // does NOT guard: `PaRetentionSweep.sweep(options)` ignores its
+        // argument entirely today — the window comes from `retentionDays()`,
+        // whose override is read in `initialize` (PaRetentionSweep.js:94), not
+        // from this call — so `{}` and omitted are behaviourally identical
+        // right now. The assertion is here so the body keeps matching the
+        // documented signature: if `sweep` ever does read its options, it will
+        // receive an object rather than `undefined`, and that change will not
+        // depend on someone noticing this call site.
         expect(sweepCalls[0]).toEqual({})
     })
 
@@ -246,8 +252,10 @@ describe('async/sweep-stale-runs.js', () => {
         const { sweepCalls } = runStaleSweep({ closed: [] })
 
         expect(sweepCalls).toHaveLength(1)
-        // `{}` rather than omitted, so PaRunManager applies DEFAULT_MAX_AGE_HOURS
-        // rather than reading a property off undefined.
+        // Same narrow claim as the purge body above: `sweepStaleNative` opens
+        // with `var o = options || {}` (PaRunManager.js:818), so omitting the
+        // argument is behaviourally identical and DEFAULT_MAX_AGE_HOURS applies
+        // either way. This pins the call shape, not a defaulting guard.
         expect(sweepCalls[0]).toEqual({})
     })
 
