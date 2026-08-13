@@ -78,6 +78,17 @@ const SCAN_FILES = [
 const RECORD_PREFIXES = [
     'docs/superpowers/plans',
     'docs/superpowers/specs',
+    // `benchmark/seeds/history` holds prior-pass records, not specs — each file
+    // opens "Not for scorer packets. This file records what earlier diagnostic
+    // runs did and what they scored." It is listed here because the DEFERRED
+    // scan below walks `benchmark/seeds` RECURSIVELY: without this entry, the
+    // moment a deferred seed is fixed and its prior spec archived into
+    // `history/` per this repo's convention, that archived copy would carry
+    // `--alias` and the scan would demand a RECORD be rewritten into
+    // present-day correctness — exactly what this file's header declares
+    // permanently out of scope. It passes today only because none of the four
+    // history files happens to contain the flag. (Review of PR #252.)
+    'benchmark/seeds/history',
 ]
 
 /**
@@ -219,5 +230,184 @@ describe('no instruction file tells anyone to run `now-sdk install --alias` (#24
         expect(offends('      --alias gpinst01   # wrapped onto its own line')).toBe(true)
         expect(offends('now-sdk auth --add keynexus01 --alias keynexus01')).toBe(false)
         expect(offends('now-sdk install --auth gpinst01')).toBe(false)
+    })
+})
+
+// ===========================================================================
+// The DEFERRED half of #241 — recorded here rather than left invisible
+// ===========================================================================
+
+/**
+ * The benchmark-instrument sites that still carry `--alias`, deliberately NOT
+ * fixed, pending #212's claim-veracity pass.
+ *
+ * WHY THESE ARE NOT IN `SCAN_DIRS` AND WHY THAT IS NOT AN OVERSIGHT
+ * `benchmark/scripts/build-packets.js` does not merely mention the command — it
+ * carries it on BOTH SIDES of a `REDACTIONS` entry, so the flag reaches every
+ * scorer packet verbatim in the redacted output. Editing it therefore changes
+ * text that reaches the scorer, and it cannot be edited alone: the seeds supply
+ * the left-hand side the redaction must match exactly, and
+ * `packetGeneratorParity.test.js` pins the resulting string. All twelve move
+ * together or not at all.
+ *
+ * §AO3 is what makes that a reason to wait rather than a reason to hurry: the
+ * operator changed the scorer instruction mid-pass once already and it VOIDED
+ * the v13→v14 determinacy comparison. §AT3's rule is that an amendment to a
+ * registered instrument term belongs in `DECISION.md` at the moment it is made.
+ * So this half waits for #212 to reach a verdict, or for an explicit §AX
+ * amendment recorded then.
+ *
+ * WHY A TEST AND NOT A COMMENT ON THE ISSUE
+ * Because the failure mode of a deliberate gap is that it stops being
+ * deliberate. #241's own history is the argument: it was filed listing ten
+ * sites from a hand grep and MISSED five, which were found only once the guard
+ * was rebuilt to discover files rather than check a list. An exemption that
+ * lives only in an issue comment decays the same way. Pinning the exact counts
+ * makes both directions of drift loud:
+ *
+ *   - the gap WIDENS (a new seed, a new instruction site) -> count rises -> red
+ *   - the gap CLOSES (someone lands the fix) -> count falls -> red, with the
+ *     message telling them to delete this block and close #241
+ *
+ * Records are excluded on purpose and are NOT listed here — `raw-evidence-*`,
+ * the `scoring-v<n>` directories and the dated plan/spec files record what was
+ * actually run, and rewriting a record to match present-day correctness
+ * destroys the evidence that the command was once wrong.
+ *
+ * (Written as `scoring-v<n>` deliberately: the natural glob spelling ends in
+ * `*` followed by `/`, which CLOSES this block comment and turns the rest of it
+ * into code. Build Rule #43's corollary, one punctuation mark over — a backtick
+ * inside a Fluent template comment terminates the template the same way.)
+ */
+const DEFERRED = [
+    { file: 'benchmark/scripts/build-packets.js', lines: 2, why: 'both sides of a REDACTIONS entry — the flag reaches scorer packets' },
+    { file: 'test/packetGeneratorParity.test.js', lines: 2, why: 'pins the exact redacted string, so it moves with build-packets.js' },
+    { file: 'benchmark/seeds/seed-01-schema-mismatch.md', lines: 1, why: 'seed setup step; packet input' },
+    { file: 'benchmark/seeds/seed-02-ambiguous-instruction.md', lines: 1, why: 'seed setup step; packet input' },
+    { file: 'benchmark/seeds/seed-03-missing-data.md', lines: 1, why: 'seed setup step; packet input' },
+    { file: 'benchmark/seeds/seed-04-genai-unmapped.md', lines: 1, why: 'seed setup step; packet input' },
+    { file: 'benchmark/seeds/seed-05-inactive-usecase.md', lines: 1, why: 'seed setup step; packet input' },
+    { file: 'benchmark/seeds/seed-06-schema-field-missing.md', lines: 1, why: 'seed setup step; packet input' },
+    { file: 'benchmark/seeds/seed-07-tool-output-bloat.md', lines: 1, why: 'seed setup step; packet input' },
+    { file: 'benchmark/seeds/seed-08-nonterminating-tool.md', lines: 1, why: 'seed setup step; packet input' },
+]
+
+/** Where a NEW live instruction site could appear without any test noticing. */
+const DEFERRED_SCAN = ['benchmark/seeds', 'benchmark/scripts']
+
+/**
+ * How many times `--alias` appears on OFFENDING lines of a file.
+ *
+ * Occurrences, not lines, and the distinction is not pedantry: the two sites in
+ * `build-packets.js` are ~90-character string literals, so a prettier or eslint
+ * reflow that rewraps one changes a LINE count without changing a single
+ * instruction. The total below carries the meaning "the benchmark half has
+ * landed — delete this block and close #241", so a formatting-induced drop
+ * would be a false signal in the more dangerous direction. (Review of PR #252.)
+ *
+ * Throws rather than returning null on a missing file: `n + null === n`, so a
+ * deleted or renamed deferred file would contribute silently, and a rename
+ * paired with a new occurrence elsewhere would leave the total reading 12.
+ */
+function offendingOccurrences(relative) {
+    const abs = path.join(REPO, relative)
+    if (!fs.existsSync(abs)) {
+        throw new Error('deferred file is missing: ' + relative + ' — was it renamed or fixed? Update DEFERRED.')
+    }
+    return fs
+        .readFileSync(abs, 'utf8')
+        .split('\n')
+        .filter(offends)
+        .reduce((n, line) => n + line.split('--alias').length - 1, 0)
+}
+
+describe('the deferred #241 sites are recorded, not forgotten (#212 in flight)', () => {
+    test.each(DEFERRED)('$file still carries exactly $lines — deferred, not fixed', (entry) => {
+        const actual = offendingOccurrences(entry.file)
+
+        expect(actual).not.toBeNull()
+        expect({ file: entry.file, lines: actual }).toEqual({ file: entry.file, lines: entry.lines })
+    })
+
+    test('the deferred total is twelve occurrences across ten files', () => {
+        // The headline number #241 carries. The instruction rides IN the
+        // asserted value rather than in a comment, because what jest prints on
+        // failure is the diff — a bare `Expected: 12 / Received: 11` does not
+        // tell the reader that the correct response is to delete this block
+        // rather than to restore the flag. (Review of PR #252.)
+        const total = DEFERRED.reduce((n, e) => n + offendingOccurrences(e.file), 0)
+
+        expect({
+            total: total,
+            files: DEFERRED.length,
+            ifThisFell: 'the benchmark half landed — DELETE the DEFERRED block and close #241',
+            ifThisRose: 'a new instruction site joined the frozen set — fix it or add it to DEFERRED',
+        }).toEqual({
+            total: 12,
+            files: 10,
+            ifThisFell: 'the benchmark half landed — DELETE the DEFERRED block and close #241',
+            ifThisRose: 'a new instruction site joined the frozen set — fix it or add it to DEFERRED',
+        })
+    })
+
+    test('no UNLISTED file in the deferred trees carries the flag', () => {
+        // The half that keeps the list from decaying the way #241's original
+        // hand grep did: discovery, not a roster. A ninth seed added with the
+        // old command fails here rather than joining the gap unnoticed.
+        //
+        // SCOPE, STATED HONESTLY (review of PR #252): this covers the BENCHMARK
+        // trees only. `test/packetGeneratorParity.test.js` is on the roster but
+        // outside the scan, so a SECOND test pinning another redacted `--alias`
+        // string would not be caught here. That is a deliberate trade, not an
+        // oversight: `test/` legitimately quotes the flag in quantity —
+        // `smokeDeployProbe.test.js` has 10 such lines and this file has more —
+        // so scanning it needs a citation filter whose own staleness would then
+        // need guarding. The benchmark trees are where a NEW instruction site
+        // actually appears, and those are covered.
+        const listed = DEFERRED.map((e) => e.file)
+        const surprises = []
+
+        DEFERRED_SCAN.forEach((dir) => {
+            const root = path.join(REPO, dir)
+            if (!fs.existsSync(root)) return
+            fs.readdirSync(root, { recursive: true }).forEach((entry) => {
+                const relative = dir + '/' + String(entry).split(path.sep).join('/')
+                if (listed.indexOf(relative) !== -1) return
+                // Records are excluded here for the same reason they are
+                // excluded from the main scan — see RECORD_PREFIXES.
+                if (isRecord(relative)) return
+                if (!fs.statSync(path.join(REPO, relative)).isFile()) return
+                if (offendingOccurrences(relative) > 0) surprises.push(relative)
+            })
+        })
+
+        expect(surprises).toEqual([])
+    })
+
+    test('the seeds history archive is treated as records, not as instruction', () => {
+        // Pins the RECORD_PREFIXES entry that keeps the recursive seeds walk off
+        // `benchmark/seeds/history`. Without it, archiving a fixed seed's prior
+        // spec — this repo's own convention — would make this suite demand that
+        // a record be rewritten into present-day correctness.
+        expect(isRecord('benchmark/seeds/history/seed-02-ambiguous-instruction.history.md')).toBe(true)
+        expect(isRecord('benchmark/seeds/seed-02-ambiguous-instruction.md')).toBe(false)
+        expect(fs.existsSync(path.join(REPO, 'benchmark/seeds/history'))).toBe(true)
+    })
+
+    test('deferred discovery is not vacuous', () => {
+        // The trap the coverage-threshold work hit the same day: a glob that
+        // matches nothing passes everything while reading nothing.
+        const scanned = DEFERRED_SCAN.filter((d) => fs.existsSync(path.join(REPO, d)))
+        expect(scanned).toEqual(DEFERRED_SCAN)
+        expect(DEFERRED.every((e) => fs.existsSync(path.join(REPO, e.file)))).toBe(true)
+    })
+
+    test('every deferred file is genuinely instrument, never a record', () => {
+        // Records must stay wrong on purpose and must never be listed as
+        // "deferred", which would imply someone intends to rewrite them.
+        DEFERRED.forEach((e) => {
+            expect(e.file).not.toMatch(/raw-evidence|scoring-v\d/)
+            expect(e.why).toBeTruthy()
+        })
     })
 })
