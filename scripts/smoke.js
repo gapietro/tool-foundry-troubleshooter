@@ -87,23 +87,76 @@ const NATURAL_LIMIT = 2000
 const CHUNK = 40
 
 /**
- * Tables the instance refuses to serve over the Table API even to an admin —
- * MEASURED on gpinst01, both returning 403 "Insufficient rights to query
- * records". Records in these tables cannot be probed, and that is a standing
- * property of the platform rather than a fault in this run.
+ * Tables the instance refuses to serve **with a `sysparm_query`** — but which
+ * read perfectly well WITHOUT one. Probed for PRESENCE only; see
+ * `probeByPresence`.
  *
- * EVERY OTHER read failure is a FAILURE, and the distinction is the whole point.
- * Treating all unreadable results as a note meant an expired credential, a
- * wrong alias or an unreachable instance made every query fail, produced zero
+ * ⚠ THIS CONSTANT USED TO ENCODE A MISDIAGNOSIS, AND THE CORRECTION MATTERS
+ * MORE THAN THE FOUR RECORDS. It was previously named `REFUSED_TABLES` and
+ * documented as tables "the instance refuses to serve over the Table API even
+ * to an admin". The 403 was real and correctly measured; the conclusion drawn
+ * from it was wrong. It is not the TABLE that is refused — it is any request
+ * carrying a `sysparm_query`. Re-measured on gpinst01 (Zurich P10, admin),
+ * issue #242:
+ *
+ *   GET <table>?sysparm_limit=2                          -> 200, rows
+ *   GET <table>?sysparm_fields=sys_id                    -> 200, sys_ids
+ *   GET <table>?sysparm_query=sys_idIN<two real sys_ids> -> 403
+ *   GET <table>?sysparm_query=sys_class_name=<table>     -> 403
+ *
+ * The 403 detail says so literally: "Field(s) present in the query do not have
+ * permission to be read". It is about fields IN THE QUERY, and it fires on any
+ * field including `sys_id`. Reproduced through two independent channels (the
+ * foundry MCP broker and `now-sdk query`), so it is a platform ACL property,
+ * not a defect in either tool.
+ *
+ * WHY THE OLD BEHAVIOUR WAS WORSE THAN THE MISSING COVERAGE. Under the old
+ * reading these records were skipped wholesale and subtracted from the count,
+ * and Build Rule #33 makes them **precisely the tables whose composite identity
+ * keys churn and duplicate on every redeploy** — so the probe was blind exactly
+ * where drift is most likely, with the blindness written into the code as a
+ * permanent platform fact. A standing exemption stops being re-examined; that
+ * is the mechanism that kept a real coverage hole looking like weather.
+ *
+ * WHAT IS RECOVERABLE, AND WHAT IS NOT. Presence and count only. The business
+ * columns are field-read-denied even without a query — and, measured the same
+ * pass, a denied column asked for by name comes back **silently omitted rather
+ * than errored** (`-f sys_id,sys_name,name` returns only `sys_id`), so there is
+ * no way to tell "absent column" from "denied column" and field-by-field
+ * comparison is genuinely impossible here. Presence and COUNT are still exactly
+ * what Build Rule #34's silent install-skip and #33's duplication move, which
+ * is why the half that IS recoverable is the half worth having.
+ *
+ * EVERY OTHER read failure remains a FAILURE, and the distinction is the whole
+ * point. Treating all unreadable results as a note meant an expired credential,
+ * a wrong alias or an unreachable instance made every query fail, produced zero
  * non-note findings, and printed "deploy smoke passed - 0 of 160 records" with
  * exit 0. A probe that verified nothing exited green: the exact "claiming
  * coverage we do not have" error this file's header cites §AQ for.
  * (Found in review of PR #229.)
+ *
+ * Note this is now a much STRONGER contract than the old one: because the read
+ * is known to work, a presence sweep that fails is a real finding rather than
+ * an expected refusal. There is no longer any table this tier is allowed to
+ * skip.
  */
-const REFUSED_TABLES = new Set([
+const PRESENCE_ONLY_TABLES = new Set([
     'sys_gen_ai_feature_mapping',
     'sys_gen_ai_strategy_mapping',
 ])
+
+/**
+ * Page size for a presence sweep. Measured on gpinst01 (#242): at 2000 the
+ * whole sys_id list for both tables came back in a SINGLE page —
+ * `sys_gen_ai_feature_mapping` 648 rows, `sys_gen_ai_strategy_mapping` 554,
+ * both `hasMore:false` — so this is one request per table, not a scan.
+ * Pagination below is still real, because "fits in one page today" is a
+ * property of the instance, not of the code.
+ */
+const PRESENCE_LIMIT = 2000
+
+/** Refuses to loop forever if the instance keeps claiming `hasMore`. */
+const PRESENCE_MAX_PAGES = 50
 
 function parseArgs(argv) {
     const args = { alias: null, build: true, install: true }
@@ -187,10 +240,42 @@ function queryArgs(table, encodedQuery, limit, alias) {
     ].concat(authArgs(alias))
 }
 
-/** `now-sdk query` is the only authenticated read channel the CLI offers. */
-function query(table, encodedQuery, limit, alias) {
-    const commandArgs = queryArgs(table, encodedQuery, limit, alias)
+/**
+ * argv for a PRESENCE sweep — the same subcommand, deliberately without a
+ * `sysparm_query` (issue #242).
+ *
+ * `-q ''` rather than no `-q` at all: the flag is `[required]` by the CLI's own
+ * arg parser, and an empty value satisfies it while producing a request that
+ * carries no `sysparm_query` — which is the whole trick, and is why this needs
+ * no MCP path and no direct Table API call. The issue was filed believing
+ * `now-sdk query` could not express this; measured, it can, so the read stays
+ * on the single authenticated channel and no new credential surface is
+ * introduced.
+ *
+ * `-f sys_id` IS safe here, and the no-`-f` rule on `queryArgs` still stands
+ * for the reason stated there: that rule exists because a NONEXISTENT field
+ * name comes back as "Access denied" and sends the reader hunting a missing
+ * ACL. `sys_id` exists on every table by definition, so it cannot trigger that
+ * confusion — and asking for it alone is what keeps a 648-row sweep at ~41KB.
+ */
+function presenceArgs(table, limit, offset, alias) {
+    return [
+        'query', table,
+        '-q', '',
+        '--limit', String(limit),
+        '--offset', String(offset),
+        '-f', 'sys_id',
+        '-o', 'json',
+    ].concat(authArgs(alias))
+}
 
+/**
+ * Spawns `now-sdk` and parses its envelope. Extracted so the two read shapes
+ * share one spawn/parse path and neither has to carry a subcommand literal.
+ *
+ * @returns {Object} {ok, records, hasMore, nextOffset} or {ok:false, error}
+ */
+function runQuery(commandArgs) {
     let raw
     try {
         raw = execFileSync('now-sdk', commandArgs, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
@@ -216,7 +301,48 @@ function query(table, encodedQuery, limit, alias) {
     if (parsed.ok === false) {
         return { ok: false, error: (parsed.error && parsed.error.message) || 'query refused' }
     }
-    return { ok: true, records: parsed.records || [] }
+    return {
+        ok: true,
+        records: parsed.records || [],
+        hasMore: parsed.hasMore === true,
+        nextOffset: typeof parsed.nextOffset === 'number' ? parsed.nextOffset : null,
+    }
+}
+
+/** `now-sdk query` is the only authenticated read channel the CLI offers. */
+function query(table, encodedQuery, limit, alias) {
+    return runQuery(queryArgs(table, encodedQuery, limit, alias))
+}
+
+/**
+ * Every sys_id in `table`, read without a `sysparm_query` (issue #242).
+ *
+ * @returns {Object} {ok:true, sysIds:Set, pages} or {ok:false, error}
+ */
+function presenceSweep(table, alias) {
+    const sysIds = new Set()
+    let offset = 0
+
+    for (let page = 1; page <= PRESENCE_MAX_PAGES; page++) {
+        const result = runQuery(presenceArgs(table, PRESENCE_LIMIT, offset, alias))
+        if (!result.ok) return { ok: false, error: result.error }
+
+        result.records.forEach(function (record) {
+            if (record && record.sys_id) sysIds.add(record.sys_id)
+        })
+
+        if (!result.hasMore) return { ok: true, sysIds: sysIds, pages: page }
+
+        // A `hasMore` with no usable `nextOffset` would otherwise re-read page
+        // one forever and report a confident partial set.
+        const next = result.nextOffset !== null ? result.nextOffset : offset + result.records.length
+        if (next <= offset) {
+            return { ok: false, error: 'pagination did not advance past offset ' + offset }
+        }
+        offset = next
+    }
+
+    return { ok: false, error: 'presence sweep exceeded ' + PRESENCE_MAX_PAGES + ' pages' }
 }
 
 function loadBuiltRecords() {
@@ -301,6 +427,12 @@ function knownFieldsFrom(actualRecords) {
 }
 
 function probeTable(table, tableRecords, alias, findings) {
+    // Checked FIRST: these tables 403 on any sysparm_query, so both the sys_id
+    // path and the natural-key path below would fail on them by construction.
+    if (PRESENCE_ONLY_TABLES.has(table)) {
+        return probeByPresence(table, tableRecords, alias, findings)
+    }
+
     // Table metadata is identified by natural key, not sys_id — see
     // scripts/smoke/naturalKey.js for the measurement that forced this. The
     // decision is made from the TABLE, never from whichever record was read
@@ -328,6 +460,45 @@ function probeTable(table, tableRecords, alias, findings) {
             compareRecord(expected, actualBySysId.get(expected.sysId) || null, { knownFields: knownFields })
                 .forEach(function (finding) { findings.push(finding) })
         })
+    })
+}
+
+/**
+ * Presence-only probe for the tables that 403 on any `sysparm_query` (#242).
+ *
+ * Sweeps every sys_id in the table with no query, then intersects locally. A
+ * record that is absent from that set is a REAL `missing` finding — the same
+ * kind and the same exit-code weight as anywhere else, because Build Rule #34's
+ * silent install-skip is exactly a record that fails to appear. A record that
+ * IS present gets a `presence_only` note, which is a disclosure rather than a
+ * failure: it is verified to exist and its field values are verified by
+ * nothing, and that limitation is recorded per record instead of being implied
+ * by a table-level exemption nobody re-reads.
+ *
+ * A failed sweep is `unreadable`, and it now reddens the run. Under the old
+ * code that was an "expected refusal" and passed; the read is measured to work,
+ * so a failure here means something changed and the probe cannot speak for
+ * these records.
+ */
+function probeByPresence(table, tableRecords, alias, findings) {
+    const sweep = presenceSweep(table, alias)
+
+    if (!sweep.ok) {
+        findings.push({
+            kind: 'unreadable',
+            table: table,
+            count: tableRecords.length,
+            error: 'presence sweep failed — ' + sweep.error,
+        })
+        return
+    }
+
+    tableRecords.forEach(function (expected) {
+        if (sweep.sysIds.has(expected.sysId)) {
+            findings.push({ kind: 'presence_only', table: table, sysId: expected.sysId })
+        } else {
+            findings.push({ kind: 'missing', table: table, sysId: expected.sysId })
+        }
     })
 }
 
@@ -399,10 +570,10 @@ function probeByNaturalKey(table, tableRecords, keyFields, alias, findings) {
  * with an unactionable line, which is how a check gets ignored and deleted.
  * (Review of PR #230.)
  */
-const SHELL_KINDS = ['unparseable', 'malformed', 'unkeyed', 'unreadable']
+const SHELL_KINDS = ['unparseable', 'malformed', 'unkeyed', 'unreadable', 'presence_only']
 
 /** Kinds that disclose a blind spot without reddening the exit code. */
-const NOTE_KINDS = ['uncomparable', 'unasserted', 'truncated', 'nondeterministic']
+const NOTE_KINDS = ['uncomparable', 'unasserted', 'truncated', 'nondeterministic', 'presence_only']
 
 /**
  * One printer per failure kind, as data rather than an if/else chain, so the
@@ -470,9 +641,8 @@ function summarize(allFindings, kind, heading) {
  */
 function report(allFindings, total) {
     let probed = total
-    const isExpectedRefusal = function (f) { return f.kind === 'unreadable' && REFUSED_TABLES.has(f.table) }
     const findings = allFindings.filter(function (f) {
-        return NOTE_KINDS.indexOf(f.kind) === -1 && !isExpectedRefusal(f)
+        return NOTE_KINDS.indexOf(f.kind) === -1
     })
 
     summarize(allFindings, 'uncomparable', 'not comparable — dist declares these, the table has no such column')
@@ -480,33 +650,49 @@ function report(allFindings, total) {
     summarize(allFindings, 'truncated', 'TRUNCATED BY THE PLATFORM — the column is shorter than the value we built')
     summarize(allFindings, 'nondeterministic', 'regenerated per build — equal once the per-build value is erased')
 
-    // Records the instance refused to show us. They are subtracted from the
-    // probed count rather than reported as failures: `sys_gen_ai_feature_mapping`
-    // returns 403 "Insufficient rights to query records" even to an admin, so
-    // failing on it would leave the probe permanently red. But they must never
-    // be counted as passing either — claiming coverage we do not have is the
-    // exact error the §AQ near-miss was made of.
-    const expectedRefusals = allFindings.filter(isExpectedRefusal)
-    if (expectedRefusals.length > 0) {
-        process.stdout.write('\nNOT PROBED — the instance refused to read these:\n')
-        expectedRefusals.forEach(function (f) {
-            process.stdout.write('  ' + f.table + ' (' + f.count + ' records) — ' + f.error + '\n')
+    // Verified PRESENT, with field comparison impossible rather than skipped
+    // (#242). Reported per table with its count, because the count is half of
+    // what this recovers: Build Rule #33 duplicates these records on every
+    // redeploy, so a number that grows between runs is the signal.
+    const presenceOnly = allFindings.filter(function (f) { return f.kind === 'presence_only' })
+    if (presenceOnly.length > 0) {
+        const byTable = new Map()
+        presenceOnly.forEach(function (f) {
+            byTable.set(f.table, (byTable.get(f.table) || 0) + 1)
+        })
+        process.stdout.write(
+            '\nPRESENCE ONLY — verified present; field values NOT compared\n' +
+            '  (these tables 403 on any sysparm_query and deny field reads, so\n' +
+            '   presence and count are all that is recoverable — see issue #242)\n'
+        )
+        byTable.forEach(function (count, table) {
+            process.stdout.write('  ' + table + ' (' + count + ' record' + (count === 1 ? '' : 's') + ')\n')
         })
     }
 
-    // EVERY unread record comes off the count, not just the expected refusals.
-    // Otherwise a run that read nothing at all still reported "156 of 160",
-    // which is the same overclaim in a smaller font.
+    // EVERY unread record comes off the count. Otherwise a run that read
+    // nothing at all still reported "156 of 160", which is the same overclaim
+    // in a smaller font.
     allFindings.forEach(function (f) {
         if (f.kind === 'unreadable') probed -= f.count
     })
 
+    // The pass line names the two grades of verification separately. Folding
+    // them into one "present and matching" figure would state something false
+    // about the presence-only records, which is the failure this whole issue
+    // is about — one number cannot carry two different claims.
+    const matched = probed - presenceOnly.length
+    const grade = presenceOnly.length === 0
+        ? probed + ' of ' + total + ' records present and matching'
+        : probed + ' of ' + total + ' records present — ' + matched +
+          ' field-matched, ' + presenceOnly.length + ' presence-only'
+
     if (findings.length === 0) {
-        process.stdout.write('\n✓ deploy smoke passed — ' + probed + ' of ' + total + ' records present and matching\n')
+        process.stdout.write('\n✓ deploy smoke passed — ' + grade + '\n')
         return
     }
 
-    process.stdout.write('\n✗ deploy smoke FAILED — ' + findings.length + ' finding(s) over ' + probed + ' of ' + total + ' records\n\n')
+    process.stdout.write('\n✗ deploy smoke FAILED — ' + findings.length + ' finding(s) over ' + grade + '\n\n')
 
     findings.forEach(function (f) {
         // No `else` fallback on purpose — see PRINTERS.
@@ -536,8 +722,12 @@ module.exports = {
     NOTE_KINDS: NOTE_KINDS,
     PRINTERS: PRINTERS,
     SHELL_KINDS: SHELL_KINDS,
-    REFUSED_TABLES: REFUSED_TABLES,
+    PRESENCE_ONLY_TABLES: PRESENCE_ONLY_TABLES,
+    PRESENCE_LIMIT: PRESENCE_LIMIT,
     AUTH_FLAG: AUTH_FLAG,
     installArgs: installArgs,
     queryArgs: queryArgs,
+    presenceArgs: presenceArgs,
+    presenceSweep: presenceSweep,
+    probeByPresence: probeByPresence,
 }
