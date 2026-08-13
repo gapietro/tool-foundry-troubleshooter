@@ -129,6 +129,25 @@ function compareRecord(expected, actual, options) {
         const act = normalize(actual[field])
         if (exp === act) return
 
+        // The generated SBOM carries a fresh `urn:uuid` serialNumber on EVERY
+        // build, so compared literally it can never match and left the probe
+        // permanently red by exactly one finding — the "cries wolf, gets
+        // ignored, then gets deleted" death this module warns about elsewhere.
+        //
+        // Narrow on purpose: excused ONLY when erasing the UUIDs makes the two
+        // sides equal, so any other change to the SBOM still reports. An
+        // excuse that swallowed the whole field would be a hiding place.
+        if (isGeneratedBom(expected, field) && withoutBuildStamps(exp) === withoutBuildStamps(act)) {
+            findings.push({
+                kind: 'nondeterministic',
+                table: expected.table,
+                sysId: expected.sysId,
+                field: field,
+                reason: 'SBOM serialNumber and timestamp are regenerated per build',
+            })
+            return
+        }
+
         // An empty value in dist is an ABSENCE OF ASSERTION, not an assertion
         // of emptiness. MEASURED: the SDK emits `<virtual/>`, `<dynamic_creation/>`
         // and `<reference_floats/>` for fields it holds no value for, and the
@@ -190,6 +209,36 @@ function compareRecord(expected, actual, options) {
     return findings
 }
 
+/** The build's generated CycloneDX SBOM, and only that. */
+function isGeneratedBom(expected, field) {
+    if (field !== 'content') return false
+    // `(^|/)` so a bare `bom.json` path is covered too — the directory shape is
+    // the SDK's to choose, not ours. And the content must actually BE the
+    // generated SBOM: keying the excuse on a filename alone would extend it to
+    // any CycloneDX fixture this app ever ships at such a path.
+    if (!/(^|\/)bom\.json$/.test(String(expected.fields.path || ''))) return false
+    return /"bomFormat"\s*:\s*"CycloneDX"/.test(String(expected.fields.content || ''))
+}
+
+/**
+ * Erase the SBOM's two per-build stamps: the `urn:uuid` serialNumber and the
+ * generation `timestamp`. MEASURED — stripping only the UUID still left the
+ * probe red, because the timestamp moves too.
+ *
+ * Applied ONLY to bom.json content, so an ISO timestamp or a uuid anywhere
+ * else in the payload is still compared literally.
+ */
+function withoutBuildStamps(text) {
+    return text
+        .replace(/urn:uuid:[0-9a-f-]{36}/gi, 'urn:uuid:*')
+        // Fractional seconds optional, and an offset accepted as well as `Z`:
+        // the exact format is chosen by the SDK's bom generator, not by this
+        // repo, so pinning it to `.\d{3}Z` meant an SDK upgrade would silently
+        // make this a no-op and send the probe permanently red again — the very
+        // regression this excuse exists to remove. (Review of PR #230.)
+        .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})/g, '*')
+}
+
 /**
  * Index of the first differing character, or -1 when equal.
  *
@@ -206,8 +255,16 @@ function firstDifference(a, b) {
     return a.length === b.length ? -1 : shorter
 }
 
+/**
+ * Every finding kind this module can emit. Exported so a test can pin it
+ * against the shell's NOTE_KINDS + PRINTERS — the two files must agree, and
+ * before this nothing bound them together. (Review of PR #230.)
+ */
+const EMITTED_KINDS = ['missing', 'mismatch', 'uncomparable', 'unasserted', 'truncated', 'nondeterministic']
+
 module.exports = {
     CAPPED_COLUMNS: CAPPED_COLUMNS,
+    EMITTED_KINDS: EMITTED_KINDS,
     compareRecord: compareRecord,
     firstDifference: firstDifference,
     normalize: normalize,

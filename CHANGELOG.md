@@ -17,6 +17,25 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1212 — 2026-08-12
+
+### Fixed — the deploy probe was permanently red by one finding (#220)
+
+Running `npm run smoke` from `main` after #229 merged left exactly one MISMATCH: the generated
+CycloneDX SBOM (`bom.json`) carries **two per-build stamps** — a fresh `urn:uuid` serialNumber and a
+`metadata.timestamp` — so compared literally it can never match. One permanent false positive is how
+a check gets ignored and then deleted, which is the death this tier's own comments warn about in
+three places.
+
+The excuse is deliberately narrow: it applies only to `bom.json` `content`, and only when erasing
+those two stamps makes both sides **equal**. Any other change to the SBOM still reports, and a uuid
+or ISO timestamp anywhere else in the payload is still compared literally. Reported as a
+`nondeterministic` note so the blind spot stays visible.
+
+Worth recording how it was found: stripping only the UUID still left the probe red — the timestamp
+moves too. The unit tests could not have shown that, because the fixture only contained the value
+already known about. It took running against the instance.
+
 ## 2026.08.1211 — 2026-08-12
 
 ### Added — the deploy smoke tier (#220)

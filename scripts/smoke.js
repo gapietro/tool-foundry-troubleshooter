@@ -356,6 +356,58 @@ function probeByNaturalKey(table, tableRecords, keyFields, alias, findings) {
 }
 
 /**
+ * Kinds this shell can emit itself, on top of the ones `compare.js` produces.
+ * Both sets are pinned against NOTE_KINDS + PRINTERS by a test, because the
+ * two files otherwise have to agree with nothing binding them: a kind added in
+ * `compare.js` and forgotten here used to fall through to a generic `else` and
+ * print "UNPARSEABLE undefined" while still reddening the run — a red probe
+ * with an unactionable line, which is how a check gets ignored and deleted.
+ * (Review of PR #230.)
+ */
+const SHELL_KINDS = ['unparseable', 'malformed', 'unkeyed', 'unreadable']
+
+/** Kinds that disclose a blind spot without reddening the exit code. */
+const NOTE_KINDS = ['uncomparable', 'unasserted', 'truncated', 'nondeterministic']
+
+/**
+ * One printer per failure kind, as data rather than an if/else chain, so the
+ * test above can assert the set is complete. A missing kind now throws loudly
+ * instead of printing a confident, meaningless line.
+ */
+const PRINTERS = {
+    // Name the most likely cause: this is the one failure mode that produces
+    // no error anywhere else in the toolchain.
+    missing: function (f) {
+        return '  MISSING     ' + f.table + ' ' + f.sysId +
+            '\n              built but not on the instance — see Build Rule #34 (Data Policy skips a record silently at install)\n'
+    },
+    // Window the previews on the first differing character: on a 133KB script
+    // body, a head-anchored preview shows two identical strings.
+    mismatch: function (f) {
+        const at = typeof f.at === 'number' && f.at >= 0 ? f.at : 0
+        return '  MISMATCH    ' + f.table + ' ' + f.sysId + ' · ' + f.field +
+            ' (first differs at char ' + at + ' of ' + f.expected.length + ')' +
+            '\n              expected ' + windowed(f.expected, at) +
+            '\n              actual   ' + windowed(f.actual, at) + '\n'
+    },
+    unreadable: function (f) {
+        return '  UNREADABLE  ' + f.table + ' (' + f.count + ' records) — ' + f.error +
+            '\n              nothing is known about these records; they are NOT passing\n'
+    },
+    malformed: function (f) {
+        return '  MALFORMED   ' + f.file + ' — ' + f.detail +
+            '\n              the probe would compare only a PARTIAL field set for this record\n'
+    },
+    unkeyed: function (f) {
+        return '  UNKEYED     ' + f.table + ' ' + f.sysId +
+            '\n              natural-keyed table, but this record lacks its key fields — not probed\n'
+    },
+    unparseable: function (f) {
+        return '  UNPARSEABLE ' + f.file + '\n'
+    },
+}
+
+/**
  * Blind spots are printed grouped, so the disclosure stays one readable block
  * instead of hundreds of lines nobody reads.
  */
@@ -383,7 +435,6 @@ function summarize(allFindings, kind, heading) {
  */
 function report(allFindings, total) {
     let probed = total
-    const NOTE_KINDS = ['uncomparable', 'unasserted', 'truncated']
     const isExpectedRefusal = function (f) { return f.kind === 'unreadable' && REFUSED_TABLES.has(f.table) }
     const findings = allFindings.filter(function (f) {
         return NOTE_KINDS.indexOf(f.kind) === -1 && !isExpectedRefusal(f)
@@ -392,6 +443,7 @@ function report(allFindings, total) {
     summarize(allFindings, 'uncomparable', 'not comparable — dist declares these, the table has no such column')
     summarize(allFindings, 'unasserted', 'not asserted — dist set no value, so the instance value is unchecked')
     summarize(allFindings, 'truncated', 'TRUNCATED BY THE PLATFORM — the column is shorter than the value we built')
+    summarize(allFindings, 'nondeterministic', 'regenerated per build — equal once the per-build value is erased')
 
     // Records the instance refused to show us. They are subtracted from the
     // probed count rather than reported as failures: `sys_gen_ai_feature_mapping`
@@ -422,31 +474,8 @@ function report(allFindings, total) {
     process.stdout.write('\n✗ deploy smoke FAILED — ' + findings.length + ' finding(s) over ' + probed + ' of ' + total + ' records\n\n')
 
     findings.forEach(function (f) {
-        if (f.kind === 'missing') {
-            // Name the most likely cause: this is the one failure mode that
-            // produces no error anywhere else in the toolchain.
-            process.stdout.write('  MISSING     ' + f.table + ' ' + f.sysId +
-                '\n              built but not on the instance — see Build Rule #34 (Data Policy skips a record silently at install)\n')
-        } else if (f.kind === 'mismatch') {
-            // Window the previews on the first differing character: on a 133KB
-            // script body, a head-anchored preview shows two identical strings.
-            const at = typeof f.at === 'number' && f.at >= 0 ? f.at : 0
-            process.stdout.write('  MISMATCH    ' + f.table + ' ' + f.sysId + ' · ' + f.field +
-                ' (first differs at char ' + at + ' of ' + f.expected.length + ')' +
-                '\n              expected ' + windowed(f.expected, at) +
-                '\n              actual   ' + windowed(f.actual, at) + '\n')
-        } else if (f.kind === 'unreadable') {
-            process.stdout.write('  UNREADABLE  ' + f.table + ' (' + f.count + ' records) — ' + f.error +
-                '\n              nothing is known about these records; they are NOT passing\n')
-        } else if (f.kind === 'malformed') {
-            process.stdout.write('  MALFORMED   ' + f.file + ' — ' + f.detail +
-                '\n              the probe would compare only a PARTIAL field set for this record\n')
-        } else if (f.kind === 'unkeyed') {
-            process.stdout.write('  UNKEYED     ' + f.table + ' ' + f.sysId +
-                '\n              natural-keyed table, but this record lacks its key fields — not probed\n')
-        } else {
-            process.stdout.write('  UNPARSEABLE ' + f.file + '\n')
-        }
+        // No `else` fallback on purpose — see PRINTERS.
+        process.stdout.write(PRINTERS[f.kind](f))
     })
 
     process.stdout.write('\n')
@@ -465,4 +494,12 @@ function windowed(value, at) {
     return (from > 0 ? '…' : '') + JSON.stringify(slice) + (to < text.length ? '…' : '')
 }
 
-main()
+/* istanbul ignore next -- entry point */
+if (require.main === module) main()
+
+module.exports = {
+    NOTE_KINDS: NOTE_KINDS,
+    PRINTERS: PRINTERS,
+    SHELL_KINDS: SHELL_KINDS,
+    REFUSED_TABLES: REFUSED_TABLES,
+}
