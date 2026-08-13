@@ -53,5 +53,12 @@ jobs:
       - name: Build
         run: npx now-sdk build
 
-      - name: Test
-        run: npx jest --ci
+      # `--coverage` is not decoration here. Until #217 the vm loader in
+      # `test/_loadScriptInclude.js` ran sources through `vm.runInContext` on
+      # raw file text, which bypassed Jest's instrumenting transform, so every
+      # production file reported 0% while 1,800+ tests exercised them. The
+      # sources are now instrumented explicitly and `coverageThreshold` in
+      # package.json fails the run on a regression — which is the gate this
+      # step exists for, not the printed table.
+      - name: Test (with coverage gate)
+        run: npx jest --ci --coverage

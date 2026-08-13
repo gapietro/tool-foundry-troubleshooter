@@ -28,7 +28,55 @@
  * happened to get the stale one.
  */
 
+const fs = require('fs')
+const path = require('path')
 const { loadScriptInclude } = require('./_loadScriptInclude')
+
+/**
+ * The text of one `name: function (...) {...}` member, read from the FILE.
+ *
+ * WHY THE FILE AND NOT `fn.toString()` (issue #217)
+ * The drift check below used to compare the loaded functions' `toString()`.
+ * That reads the engine's re-print of whatever was actually executed — and
+ * once `_loadScriptInclude` instruments sources for coverage, what executes
+ * carries per-file istanbul counters (`cov_29allc198g().s[182]++`), so five
+ * verbatim-identical copies print five different strings and the check fails
+ * for a reason that has nothing to do with drift.
+ *
+ * Reading the source is also the truer test of what this file claims. The
+ * assertion is that the DUPLICATED SOURCE has not diverged; comparing bytes on
+ * disk states that directly, instead of inferring it from a runtime artifact.
+ *
+ * @param {String} relPath path under `src/server/`
+ * @param {String} propName e.g. `clipUtf16` or `_clipUtf16`
+ * @returns {String} from `function` through the body's closing brace
+ */
+function memberSource(relPath, propName) {
+    const src = fs.readFileSync(path.resolve(__dirname, '..', 'src', 'server', relPath), 'utf8')
+    const needle = propName + ': function ('
+
+    let at = src.indexOf(needle)
+    // `clipUtf16` also occurs INSIDE `_clipUtf16` — keep looking until the
+    // match is the whole property name, not a suffix of a longer one.
+    while (at > 0 && /[A-Za-z0-9_$]/.test(src.charAt(at - 1))) {
+        at = src.indexOf(needle, at + 1)
+    }
+    if (at === -1) throw new Error('member not found: ' + propName + ' in ' + relPath)
+
+    const open = src.indexOf('{', at)
+    let depth = 0
+    for (let i = open; i < src.length; i++) {
+        const ch = src.charAt(i)
+        if (ch === '{') depth++
+        else if (ch === '}') {
+            depth--
+            if (depth === 0) {
+                return src.slice(at + propName.length + 2, i + 1)
+            }
+        }
+    }
+    throw new Error('unbalanced body for ' + propName + ' in ' + relPath)
+}
 
 // ---------------------------------------------------------------------------
 // Surrogate helpers
@@ -117,17 +165,31 @@ describe('the duplicated helper is identical in every carrier', () => {
     })
 
     test('every copy is byte-identical to the canonical one on PaToolReadKit', () => {
-        // The property name differs by an underscore between the kit and the
-        // rest, but these are anonymous function expressions in an object
-        // literal, so `toString()` covers signature and body only — exactly the
-        // part that must not drift.
-        const all = copies()
-        const canonicalHead = all.PaToolReadKit[0].toString()
-        const canonicalTail = all.PaToolReadKit[1].toString()
+        // Compared as SOURCE, read from the files — see `memberSource` for why
+        // the loaded functions' `toString()` cannot answer this once coverage
+        // instrumentation is in the loader. The property name differs by an
+        // underscore between the kit and the rest, so the slice starts at
+        // `function` and covers signature and body only — exactly the part
+        // that must not drift.
+        const SOURCES = [
+            ['PaToolReadKit.js', 'clipUtf16', 'clipTailUtf16'],
+            ['PaRunManager.js', '_clipUtf16', '_clipTailUtf16'],
+            ['tools/PaToolAgentTrace.js', '_clipUtf16', '_clipTailUtf16'],
+            ['PaArtifactStore.js', '_clipUtf16', '_clipTailUtf16'],
+            ['PaAuditLogger.js', '_clipUtf16', '_clipTailUtf16'],
+        ]
 
-        Object.keys(all).forEach((name) => {
-            expect(all[name][0].toString()).toBe(canonicalHead)
-            expect(all[name][1].toString()).toBe(canonicalTail)
+        const canonicalHead = memberSource(SOURCES[0][0], SOURCES[0][1])
+        const canonicalTail = memberSource(SOURCES[0][0], SOURCES[0][2])
+
+        // A broken extractor comparing two empty strings would pass every
+        // assertion below while checking nothing.
+        expect(canonicalHead.length).toBeGreaterThan(100)
+        expect(canonicalTail.length).toBeGreaterThan(100)
+
+        SOURCES.forEach(([relPath, headName, tailName]) => {
+            expect(memberSource(relPath, headName)).toBe(canonicalHead)
+            expect(memberSource(relPath, tailName)).toBe(canonicalTail)
         })
     })
 })
