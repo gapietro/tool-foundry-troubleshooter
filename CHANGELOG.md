@@ -22,7 +22,7 @@ two-digit daily counter. Incremented on every merge to `main`.
 ### Changed — #241's deferred benchmark half is now recorded in the guard, not only in an issue comment
 
 `test/instructionFlagGuard.test.js` gains a `DEFERRED` block pinning the **12 remaining `--alias`
-lines across 10 files** (`benchmark/scripts/build-packets.js` ×2, `test/packetGeneratorParity.test.js`
+occurrences across 10 files** (`benchmark/scripts/build-packets.js` ×2, `test/packetGeneratorParity.test.js`
 ×2, the eight `benchmark/seeds/seed-0*.md` ×1 each). **No instrument text is changed.** #241 stays
 open.
 
@@ -43,6 +43,23 @@ The block makes both directions of drift loud, and both were mutation-verified:
 |---|---|
 | gap CLOSES (a site gets fixed) | 2 tests red, telling the reader to delete the block and close #241 |
 | gap WIDENS (a ninth seed carries the flag) | the unlisted-file scan names the new file |
+
+**Five review findings on PR #252, all fixed here.** The consequential one: the recursive
+`benchmark/seeds` walk did not apply the record exclusion, and `benchmark/seeds/history/` holds four
+prior-pass records whose own header reads *"Not for scorer packets. This file records what earlier
+diagnostic runs did."* It passed only because none of them happens to contain the flag — but the
+moment a deferred seed IS fixed and its prior spec archived there per this repo's convention, the
+archived copy would carry `--alias` and this suite would demand that a **record** be rewritten into
+present-day correctness, which the guard's own header declares permanently out of scope. Added to
+`RECORD_PREFIXES` and pinned by its own test.
+
+The other four: the total now counts **occurrences rather than lines**, so a prettier reflow of the
+two ~90-character literals in `build-packets.js` cannot masquerade as "the fix landed"; a missing
+deferred file now **throws** instead of coercing to `0` through `n + null === n`; the closing
+instruction rides **in the asserted value** so jest prints it on failure rather than leaving it in a
+comment the reader never sees; and the discovery half's scope is now stated honestly — it covers the
+benchmark trees, not `test/`, because that tree legitimately quotes the flag in quantity and filtering
+it would need a citation list whose own staleness would then need guarding.
 
 Records are excluded on purpose and deliberately NOT listed as deferred — `raw-evidence-*`, the
 `scoring-v<n>` directories and the dated plan/spec files record what was actually run, and listing
