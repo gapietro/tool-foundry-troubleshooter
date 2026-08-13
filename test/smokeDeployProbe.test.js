@@ -590,6 +590,122 @@ describe('every finding kind is classified (review #230, finding 2)', () => {
     })
 })
 
+describe('install and probe resolve the same instance (issue #239)', () => {
+    // The two halves of this script authenticate through separate argv lists,
+    // and they drifted: install emitted `--alias`, the probe emitted `-a`.
+    // `now-sdk install` has no `--alias` (the flag is `-a, --auth`), and per
+    // #236 now-sdk IGNORES UNKNOWN FLAGS SILENTLY and falls back to the
+    // DEFAULT credential. So `--alias keynexus01` installed to gpinst01 and
+    // then verified keynexus01 — and if the named instance happened to hold a
+    // matching older copy, the tier reported a CLEAN PASS for an instance it
+    // never deployed to. That is the #236 failure mode inside the tier built
+    // to catch it.
+    //
+    // Same binding shape as the review-#230 block above: when two places must
+    // agree, a test holds them together. A two-character flag fix alone leaves
+    // both call sites free to diverge again.
+    const { installArgs, queryArgs, AUTH_FLAG } = require('../scripts/smoke')
+
+    function authPortion(argv) {
+        const i = argv.indexOf(AUTH_FLAG)
+        return i === -1 ? [] : argv.slice(i, i + 2)
+    }
+
+    test('a named alias reaches the install command and the probe command identically', () => {
+        expect(authPortion(installArgs('keynexus01'))).toEqual(authPortion(
+            queryArgs('sys_app', 'sys_id=abc', 1, 'keynexus01'),
+        ))
+        expect(authPortion(installArgs('keynexus01'))).toEqual([AUTH_FLAG, 'keynexus01'])
+    })
+
+    test('no alias leaves BOTH commands on the default credential', () => {
+        // Consistency matters more than which credential wins: the pass is
+        // only meaningful if the instance installed to is the instance probed.
+        expect(authPortion(installArgs(null))).toEqual([])
+        expect(authPortion(queryArgs('sys_app', 'sys_id=abc', 1, null))).toEqual([])
+    })
+
+    test('neither command emits `--alias`, which now-sdk would silently ignore', () => {
+        // The regression itself. `--alias` is valid only on `auth --add`.
+        expect(installArgs('keynexus01')).not.toContain('--alias')
+        expect(queryArgs('sys_app', 'sys_id=abc', 1, 'keynexus01')).not.toContain('--alias')
+    })
+
+    test('the shared auth flag is the one both subcommands document', () => {
+        // `now-sdk install --help` and `now-sdk query --help` (SDK 4.9.2) both
+        // list `-a, --auth`. Asserted as a constant so a future edit to either
+        // call site has to come through here.
+        expect(AUTH_FLAG).toBe('-a')
+    })
+
+    test('the install command still names the install subcommand first', () => {
+        // Guards the refactor: a helper that forgot the subcommand would make
+        // every install a no-op while the probe read a stale instance clean.
+        expect(installArgs(null)[0]).toBe('install')
+        expect(installArgs('keynexus01')[0]).toBe('install')
+    })
+
+    // -----------------------------------------------------------------------
+    // The five tests above bind the HELPERS. They do not bind the CALL SITES,
+    // and the gap is the original bug's exact shape: an edit that inlines argv
+    // at `main()` or `query()` leaves all five green while the spawned command
+    // goes back to `--alias`. Found in review of PR #240 — the first version of
+    // this block claimed the two targets "cannot drift apart again", which
+    // overstated a guard sitting one layer above the spawn.
+    //
+    // A source scan is the cheap instrument that reaches the right layer, and
+    // it is this repo's established idiom for exactly this (`blindRule.test.js`
+    // scans 16 sources through the same `stripComments` helper). Verified by
+    // mutation, not by assumption: re-inlining `['install', '--alias', alias]`
+    // at smoke.js:263 turns the first test below RED.
+    // -----------------------------------------------------------------------
+    describe('the spawn seam still routes through the helpers', () => {
+        const { stripComments } = require('./_stripComments')
+        const fs = require('fs')
+        const path = require('path')
+
+        const SHELL = path.join(__dirname, '..', 'scripts', 'smoke.js')
+
+        /** Source with comments AND the two helper bodies removed. */
+        function callSiteSource() {
+            const code = stripComments(fs.readFileSync(SHELL, 'utf8'))
+            // Everything from the first helper's declaration to the start of
+            // `query()` is helper territory — the only place an argv literal
+            // legitimately lives.
+            const start = code.indexOf('function authArgs')
+            const end = code.indexOf('function query(')
+            expect(start).toBeGreaterThan(-1)
+            expect(end).toBeGreaterThan(start)
+            return code.slice(0, start) + code.slice(end)
+        }
+
+        test('no argv literal names a subcommand outside the helpers', () => {
+            const outside = callSiteSource()
+            expect(outside).not.toContain("'install'")
+            expect(outside).not.toContain("'query'")
+        })
+
+        test('both helpers are actually called', () => {
+            // A helper nothing calls is decoration, and the tests above would
+            // still pass on it.
+            const code = stripComments(fs.readFileSync(SHELL, 'utf8'))
+            expect(code).toContain('installArgs(args.alias)')
+            expect(code).toContain('queryArgs(table, encodedQuery, limit, alias)')
+        })
+
+        test('`--alias` survives only as the operator-facing input flag', () => {
+            // parseArgs still ACCEPTS `--alias` as the npm-script argument —
+            // that is the documented user interface and is not the defect. The
+            // defect was passing it onward to now-sdk. So it may appear in
+            // parseArgs and nowhere else in code.
+            const code = stripComments(fs.readFileSync(SHELL, 'utf8'))
+            const occurrences = code.split("'--alias'").length - 1
+            expect(occurrences).toBe(1) // the argv comparison in parseArgs, nothing else
+            expect(callSiteSource()).toContain("'--alias'") // and it is inside parseArgs
+        })
+    })
+})
+
 describe('the SBOM excuse is tied to the artifact, not to a filename (review #230)', () => {
     const bom = (uuid) => '{"bomFormat":"CycloneDX","serialNumber":"urn:uuid:' + uuid + '"}'
     const A = 'b59fb687-a622-4959-9d2b-88043224b09a'

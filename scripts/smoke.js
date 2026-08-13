@@ -143,18 +143,53 @@ function run(command, commandArgs, label) {
     }
 }
 
-/** `now-sdk query` is the only authenticated read channel the CLI offers. */
-function query(table, encodedQuery, limit, alias) {
-    const commandArgs = [
+/**
+ * The one flag both subcommands take, and the reason it is a constant.
+ *
+ * `now-sdk install` and `now-sdk query` (SDK 4.9.2) both document
+ * `-a, --auth <alias>`. There is no `--alias` on either — that spelling is
+ * valid only on `auth --add`. This matters more than a naming nit because
+ * **now-sdk ignores unknown flags silently** and falls through to the DEFAULT
+ * credential (#236): install once emitted `--alias` here while the probe
+ * emitted `-a`, so a named alias installed to the default instance and then
+ * verified the named one. If the named instance held a matching older copy,
+ * this tier reported a clean pass for an instance it never deployed to
+ * (#239).
+ *
+ * Both argv builders below route through `authArgs`, and
+ * `test/smokeDeployProbe.test.js` guards that at two layers: the helpers must
+ * agree on the auth portion, AND a source scan keeps subcommand argv literals
+ * out of the call sites. The second layer exists because the first one alone
+ * left the original bug reachable — inlining argv at `main()` kept every
+ * helper test green (review of PR #240).
+ */
+const AUTH_FLAG = '-a'
+
+function authArgs(alias) {
+    return alias ? [AUTH_FLAG, alias] : []
+}
+
+/** argv for the deploy half. */
+function installArgs(alias) {
+    return ['install'].concat(authArgs(alias))
+}
+
+/** argv for the read half. */
+function queryArgs(table, encodedQuery, limit, alias) {
+    return [
         'query', table,
         '-q', encodedQuery,
         '--limit', String(limit),
         '-o', 'json',
-    ]
-    // No `-f` filter on purpose: a nonexistent field name comes back as
-    // "Access denied", which mimics a missing-ACL failure and would send the
-    // reader hunting the wrong defect entirely.
-    if (alias) commandArgs.push('-a', alias)
+        // No `-f` filter on purpose: a nonexistent field name comes back as
+        // "Access denied", which mimics a missing-ACL failure and would send
+        // the reader hunting the wrong defect entirely.
+    ].concat(authArgs(alias))
+}
+
+/** `now-sdk query` is the only authenticated read channel the CLI offers. */
+function query(table, encodedQuery, limit, alias) {
+    const commandArgs = queryArgs(table, encodedQuery, limit, alias)
 
     let raw
     try {
@@ -228,7 +263,7 @@ function main() {
 
     if (args.build) run('now-sdk', ['build'], 'now-sdk build')
     if (args.install) {
-        run('now-sdk', args.alias ? ['install', '--alias', args.alias] : ['install'], 'now-sdk install')
+        run('now-sdk', installArgs(args.alias), 'now-sdk install')
     }
 
     const built = loadBuiltRecords()
@@ -502,4 +537,7 @@ module.exports = {
     PRINTERS: PRINTERS,
     SHELL_KINDS: SHELL_KINDS,
     REFUSED_TABLES: REFUSED_TABLES,
+    AUTH_FLAG: AUTH_FLAG,
+    installArgs: installArgs,
+    queryArgs: queryArgs,
 }

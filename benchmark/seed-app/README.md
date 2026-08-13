@@ -17,7 +17,7 @@ A second scope is what satisfies both. See `../DECISION-seed-location.md`.
 
     npm install
     now-sdk build
-    now-sdk install --alias gpinst01
+    now-sdk install --auth gpinst01
 
 Install is **Task 12's** step, not Task 11's. Task 11 stops at a passing build.
 
