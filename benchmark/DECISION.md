@@ -8723,19 +8723,36 @@ distrusts everywhere else. Pre-recording the borderline cases — with the two g
 (`row-07/X06`, `row-17/X05`) flagged as arguable *in the fixture* — converts most of that later
 discretion into a lookup. It cannot eliminate it, and does not claim to.
 
-**R-C is the consequential rule and its cost is stated, not buried.** "The run" is read to cover both
-the diagnosed execution and the diagnostic one, so execution-plan state, tool-call counts, per-call
-outputs and run telemetry are out of scope. They are *readable on gpinst01 today* — this boundary
-discards adjudicable content, and it discards roughly two thirds of the factual surface of `row-17`
-and `row-19`. It is chosen because §AX3's exclusion list says so under either reading of "the run",
-and because a boundary drawn after seeing which side was convenient would be the §AU6 error again.
+**R-C is the consequential rule, and §AX3 contradicts itself inside it.** "The run" is read to cover
+both the diagnosed execution and the diagnostic one, so execution-plan state, per-call outputs and run
+telemetry are out of scope. They are *readable on gpinst01 today* — this boundary discards adjudicable
+content. It is chosen because §AX3's exclusion list says so under either reading of "the run", and
+because a boundary drawn after seeing which side was convenient would be the §AU6 error again.
+
+> **The conflict, and the ruling (found in review of PR #247, resolved before any extractor exists).**
+> §AX3's *positive* list names **"an assertion of a count (rows, bindings, `calls`, records)"** as a
+> claim. Its *exclusion* list rules out "any assertion about the run". On a count of tool calls these
+> two clauses give opposite answers, and **R-C as first authored resolved that silently in the
+> discarding direction** — a registered term acquired by implementation rather than by decision.
+>
+> **Ruled 2026-08-13:** take §AX3 literally on *both* clauses. A **count** of run events (calls, rows,
+> tasks, records) IS a claim; everything else about the run — per-call outputs, plan state, duration,
+> latency, token and character sizes — stays excluded. This is the only reading under which §AX3 is
+> self-consistent, and it is the reading that gives the count bullet a job. Recorded as an amendment at
+> the moment it was made, per §AT3, and registered before the extractor exists, so §AX7.2 is untouched.
+>
+> **What it moved:** the native denominator, 54 → 60. The custom arm is unchanged at 2 — `row-02` and
+> `row-04` assert no counts either, so the finding below survives the ruling intact.
+
+The rule that the boundary must be fixed before the data still holds; what changed is that the *fixed*
+boundary now matches the specification on both of its clauses rather than one.
 
 **The finding, documented and not fixed (§AX7.3).**
 
 > **The custom arm's enumeration-recall denominator is 2 claims, across 3 reports.** `row-02` and
 > `row-04` contain **zero** claims each — non-empty bodies that assert nothing about instance state,
 > because both diagnose runs that succeeded and report only what the diagnostic tools did. `row-12`
-> carries 2. The native arm carries 54 across 4 reports.
+> carries 2. The native arm carries 60 across 4 reports.
 
 Three consequences, none of them repaired here:
 
@@ -8743,13 +8760,19 @@ Three consequences, none of them repaired here:
    stands exactly as registered — no term is changed by this entry — but a pass or a failure on two
    claims is close to no evidence either way, and quoting AX-1b without "n=2" attached would be the
    §AQ4 error (*"not exercised" recorded as "passed"*) in a new dress.
-2. **§AX3's zero-claim carve-out is narrower than the corpus.** It excludes the two **bodiless**
+2. **Per-report recall on a zero-claim report is 0/0, and the rule for it is registered now, not
+   later** (review of PR #247). §AX2.3 requires a figure **per report**; `row-02` and `row-04` have
+   none to give. Leaving that for whoever writes the scoring to resolve *after* seeing output is the
+   §AU6 hazard this whole fixture exists to avoid. **Registered: reported as `not applicable` — never
+   as 1.0, never as 0.0, and never folded into a per-arm figure as either.** The rule is pinned in the
+   fixture (`zero_claim_reporting_rule`) and asserted by its test, not left in prose.
+3. **§AX3's zero-claim carve-out is narrower than the corpus.** It excludes the two **bodiless**
    reports on the reasoning that *a report with no claims cannot exhibit enumeration failure*. That
    reasoning applies verbatim to `row-02` and `row-04`, which have bodies. They contribute 0/0 and
    are harmless to recall arithmetic; the point is that the registered carve-out was keyed to a
    structural property (no body) when the operative property is a semantic one (no claims), and only
    authoring the inventories exposed the gap.
-3. **The obvious repair is not available.** §AX7.2 forbids redrawing a held-out set from the
+4. **The obvious repair is not available.** §AX7.2 forbids redrawing a held-out set from the
    development set, and the eligible 15 are exhausted. A custom arm with real weight has to come from
    a **future** pass, which is the same conclusion §AX7.2 already reached by a different route.
 
@@ -8758,6 +8781,19 @@ Three consequences, none of them repaired here:
 would be a new registered term, and this entry is a finding, not an amendment. It can still be
 registered, because no measurement has occurred; that is the operator's call and it must be made
 **before** the extractor runs, not after the figure is seen.
+
+**What review caught that authoring did not, recorded because the pattern repeats.** PR #247's review
+found twelve defects in this fixture and its guard. Three mattered: the §AX3 count-bullet conflict
+above; the 0/0 reporting gap above; and an **extractor-absence check that asserted far less than its
+name promised** — it scanned two directories, non-recursively, for a filename containing both "claim"
+and "extract", so an extractor at `benchmark/scripts/extractor/index.js` would have passed silently
+while appearing to corroborate §AX2.2's load-bearing ordering guarantee. It now walks the repository
+and matches on the *path*. **Both the widened check and the rejected-text verbatim check were
+mutation-verified** — planted variants fail them — because the first repair of the extractor check
+still missed the `extractor/index.js` case, and only a planted file exposed that. §AX5 already requires
+mutation verification of the clearing check; this is the same lesson one artifact earlier, and the
+generalisation is worth stating: **a guard that has never been shown to fail has not been shown to
+guard.**
 
 **Reopening condition for §AX10:** a pass whose custom arm yields ≥ 10 held-out inventory claims makes
 this finding obsolete; nothing else does.

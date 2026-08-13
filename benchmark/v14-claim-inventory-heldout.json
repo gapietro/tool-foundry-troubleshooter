@@ -6,6 +6,7 @@
   "authored_before_extractor_existed": true,
   "purpose": "Fixture the enumeration-recall figure is computed against. Recall = (inventory claims the extractor emitted) / (inventory claims), per report and per arm. The spurious rate is computed against emitted claims absent from this inventory; `rejected_candidates` pre-commits the ruling for the candidates most likely to be emitted, so the §AX2.5 'correct additions' carve-out cannot be stretched after output is seen.",
   "contains_no_truth_values": "By construction. No claim carries a verdict, an expected verdict, or any hint of one. Adjudication (§AW2's three-valued verdict) happens elsewhere and must not be able to read its answer out of this file.",
+  "zero_claim_reporting_rule": "Per-report enumeration recall for a report with zero inventory claims (row-02, row-04) is reported as `not applicable` — never as 1.0, never as 0.0, and never folded into a per-arm figure as either. §AX2.3 requires a per-report figure and 0/0 has none; leaving that to be resolved after output is seen is the §AU6 hazard this fixture exists to avoid. Registered 2026-08-13, before any extractor exists (§AX10).",
   "reading_rules": [
     {
       "id": "R-A",
@@ -19,9 +20,9 @@
     },
     {
       "id": "R-C",
-      "rule": "Run boundary. 'The run' covers BOTH the diagnosed agent execution and the diagnostic execution. Assertions about what happened during either — tool calls made and their outputs, execution-plan state or state_reason, wall-clock, latency, token counts, counts of execution or trace rows, the diagnostic model's own reads and thoughts — are out of scope. Assertions about durable configuration and about business data records are in scope even when discovered through the run.",
-      "why": "§AX3 excludes 'any assertion about the run rather than the instance' and 'statements about what the model itself did'. Both readings of 'the run' — diagnosed execution, diagnostic execution — converge on this line. Operator-confirmed 2026-08-13 before authoring; the excluded material is recorded in `rejected_candidates` rather than dropped, so the cost is visible.",
-      "cost": "Real and named: execution-plan rows and tool-execution rows are readable on gpinst01 today and are therefore adjudicable content this boundary discards. Reports row-17 and row-19 lose roughly two thirds of their factual surface to it."
+      "rule": "Run boundary, with §AX3's count bullet honoured. 'The run' covers BOTH the diagnosed agent execution and the diagnostic execution. Assertions about what happened during either are out of scope: per-call tool outputs, execution-plan state and state_reason, wall-clock, latency, token and character sizes, and the diagnostic model's own reads and thoughts. REGISTERED EXCEPTION: a COUNT of run events (calls, rows, tasks, records) IS a claim. Assertions about durable configuration and about business data records are in scope even when discovered through the run.",
+      "why": "§AX3 contradicts itself on exactly this case: DECISION.md:8558 names 'an assertion of a count (rows, bindings, calls, records)' as a claim, while :8562 excludes 'any assertion about the run'. R-C as first authored resolved that silently in the discarding direction — found in review of PR #247. Operator-ruled 2026-08-13, before any extractor exists: take §AX3 literally on BOTH clauses, so the count bullet is given its job and everything else about the run stays excluded. This is the only reading under which §AX3 is self-consistent.",
+      "cost": "Still real, and narrower than before: per-call outputs, execution-plan state and run telemetry are readable on gpinst01 today and are discarded. The ruling recovers the counts and nothing else."
     },
     {
       "id": "R-D",
@@ -30,7 +31,7 @@
     },
     {
       "id": "R-E",
-      "rule": "Entailment floor. Do not inventory a proposition strictly entailed by another inventoried proposition about the same record — a record's existence is entailed by any claim about one of its field values. R-E outranks R-B. An existence claim the report asserts EXPLICITLY is inventoried even when other claims about the same subject exist.",
+      "rule": "Entailment floor. Do not inventory a proposition strictly entailed by ONE OR MORE other inventoried propositions about the same subject — a record's existence is entailed by any claim about one of its field values. R-E outranks R-B. An existence claim the report asserts EXPLICITLY is inventoried even when other claims about the same subject exist.",
       "why": "Prevents mechanical denominator inflation (every field claim would otherwise drag an existence claim behind it) while still crediting an existence assertion the report actually makes."
     },
     {
@@ -47,7 +48,7 @@
   "denominator_summary": {
     "native": {
       "reports": 4,
-      "claims": 54
+      "claims": 60
     },
     "custom": {
       "reports": 3,
@@ -146,7 +147,7 @@
       "path": "benchmark/v14-reports/row-07.md",
       "arm": "native",
       "seed": "05",
-      "claim_count": 18,
+      "claim_count": 19,
       "claims": [
         {
           "id": "row-07/C01",
@@ -367,8 +368,8 @@
         },
         {
           "id": "row-07/C11",
-          "proposition": "The agent `Seed 05 Ticket Acknowledger` has a non-empty instructions body of 118 characters.",
-          "kind": "field_value",
+          "proposition": "The agent `Seed 05 Ticket Acknowledger` has an instructions body of 118 characters.",
+          "kind": "count",
           "subject": {
             "table": "sn_aia_agent",
             "field": "instructions"
@@ -490,16 +491,32 @@
               "quote": "`syslog` table enforces `caller_access = Caller Restriction`"
             }
           ]
+        },
+        {
+          "id": "row-07/C19",
+          "proposition": "No `sn_aia_execution_plan` rows exist for the invocation triggered by ticket `25e32b4b2b228310f243fed2ce91bf22`.",
+          "kind": "count",
+          "subject": {
+            "table": "sn_aia_execution_plan"
+          },
+          "admitted_by": "R-C registered exception (§AX3 count bullet)",
+          "occurrences": [
+            {
+              "line": 7,
+              "quote": "produced no execution plan when bench ticket"
+            },
+            {
+              "line": 15,
+              "quote": "`sn_aia_execution_plan` read status `empty`"
+            },
+            {
+              "line": 35,
+              "quote": "zero candidates"
+            }
+          ]
         }
       ],
       "rejected_candidates": [
-        {
-          "id": "row-07/X01",
-          "line": 7,
-          "text": "The agent `Seed 05 Ticket Acknowledger` produced no execution plan when bench ticket `25e32b4b...` was created",
-          "rejected_by": "R-C",
-          "reason": "Absence of an execution plan for the diagnosed run. Readable on the instance today, and discarded by the run boundary — the clearest instance of R-C's stated cost."
-        },
         {
           "id": "row-07/X02",
           "line": 7,
@@ -515,13 +532,6 @@
           "reason": "General statement of platform mechanism, true or false of the product, not of this instance."
         },
         {
-          "id": "row-07/X04",
-          "line": 15,
-          "text": "`sn_aia_execution_plan` read status `empty` — no plan was ever created.",
-          "rejected_by": "R-C",
-          "reason": "Diagnosed-run state."
-        },
-        {
           "id": "row-07/X05",
           "line": 35,
           "text": "`agent_config` artifact `34056bc72b62431017a6ffbeee91bfc4`",
@@ -533,7 +543,8 @@
           "line": 80,
           "text": "filtered to agent `a4b7ef5d793346ea861730c6d28b8f58`",
           "rejected_by": "R-A, R-G",
-          "reason": "Referential use of a sys_id inside a verification instruction. No name-to-sys_id binding is asserted and no inventoried claim is keyed to it, so R-B does not admit it. Borderline: an operator ruling that an extractor emitting the agent's sys_id made a 'correct addition' (§AX2.5) would be defensible, and is pre-recorded here rather than decided after output is seen."
+          "reason": "Referential use of a sys_id inside a verification instruction. No name-to-sys_id binding is asserted and no inventoried claim is keyed to it, so R-B does not admit it. Borderline: an operator ruling that an extractor emitting the agent's sys_id made a 'correct addition' (§AX2.5) would be defensible, and is pre-recorded here rather than decided after output is seen.",
+          "arguable": true
         },
         {
           "id": "row-07/X07",
@@ -585,7 +596,15 @@
           "occurrences": [
             {
               "line": 2,
+              "quote": "a count of 0 hardware category bench tickets"
+            },
+            {
+              "line": 2,
               "quote": "the root cause lies in the absence of matching records in the system"
+            },
+            {
+              "line": 8,
+              "quote": "tool_call response showed count: 0"
             },
             {
               "line": 29,
@@ -597,25 +616,11 @@
       ],
       "rejected_candidates": [
         {
-          "id": "row-12/X01",
-          "line": 2,
-          "text": "The agent execution completed with a count of 0 hardware category bench tickets",
-          "rejected_by": "R-C",
-          "reason": "The count is the diagnosed run's tool output. The instance-state proposition it is offered as evidence for is inventoried separately as row-12/C02."
-        },
-        {
           "id": "row-12/X02",
           "line": 7,
           "text": "has valid fields",
           "rejected_by": "R-G",
           "reason": "Names no field and no property — nothing an instance read could settle."
-        },
-        {
-          "id": "row-12/X03",
-          "line": 8,
-          "text": "tool_call response showed count: 0",
-          "rejected_by": "R-C",
-          "reason": "Diagnosed-run tool output."
         },
         {
           "id": "row-12/X04",
@@ -638,7 +643,7 @@
       "path": "benchmark/v14-reports/row-15.md",
       "arm": "native",
       "seed": "07",
-      "claim_count": 16,
+      "claim_count": 18,
       "claims": [
         {
           "id": "row-15/C01",
@@ -946,18 +951,50 @@
         },
         {
           "id": "row-15/C16",
-          "proposition": "User record `6816f79cc0a8016401c5a33be04be441` has email admin@example.com and name 'System Administrator'.",
+          "proposition": "User record `6816f79cc0a8016401c5a33be04be441` has email admin@example.com.",
           "kind": "field_value",
           "subject": {
             "table": "sys_user",
             "record": "6816f79cc0a8016401c5a33be04be441",
-            "field": "email, name"
+            "field": "email"
           },
-          "admitted_by": "R-A, R-D (attributes of one record presented as one bundle)",
+          "admitted_by": "R-A",
           "occurrences": [
             {
               "line": 111,
-              "quote": "email `admin@example.com`, name \"System Administrator\", sys_id `6816f79cc0a8016401c5a33be04be441`"
+              "quote": "email `admin@example.com`"
+            }
+          ]
+        },
+        {
+          "id": "row-15/C17",
+          "proposition": "User record `6816f79cc0a8016401c5a33be04be441` has name 'System Administrator'.",
+          "kind": "field_value",
+          "subject": {
+            "table": "sys_user",
+            "record": "6816f79cc0a8016401c5a33be04be441",
+            "field": "name"
+          },
+          "admitted_by": "R-A",
+          "occurrences": [
+            {
+              "line": 111,
+              "quote": "name \"System Administrator\""
+            }
+          ]
+        },
+        {
+          "id": "row-15/C18",
+          "proposition": "The diagnosed execution made 2 LLM calls.",
+          "kind": "count",
+          "subject": {
+            "table": "sys_generative_ai_log"
+          },
+          "admitted_by": "R-C registered exception (§AX3 count bullet)",
+          "occurrences": [
+            {
+              "line": 21,
+              "quote": "2 LLM calls"
             }
           ]
         }
@@ -976,13 +1013,6 @@
           "text": "58,462 chars",
           "rejected_by": "R-C",
           "reason": "Size of a response produced during the diagnosed run. The durable cause — the 260-line generator in the script — is inventoried as row-15/C07."
-        },
-        {
-          "id": "row-15/X03",
-          "line": 21,
-          "text": "genai_log `for_execution` — 2 LLM calls, both success",
-          "rejected_by": "R-C",
-          "reason": "Diagnosed-run event counts."
         },
         {
           "id": "row-15/X04",
@@ -1026,7 +1056,7 @@
       "path": "benchmark/v14-reports/row-17.md",
       "arm": "native",
       "seed": "08",
-      "claim_count": 9,
+      "claim_count": 10,
       "claims": [
         {
           "id": "row-17/C01",
@@ -1222,22 +1252,42 @@
             }
           ],
           "note": "Borderline against R-C: the provider is named in a sentence about how the run behaved. Admitted because the provider identity is durable configuration, not a run event — §AX3 bullet 4, 'a named ... configuration is present'. The 'functioned correctly throughout' half is rejected as row-17/X04."
+        },
+        {
+          "id": "row-17/C10",
+          "proposition": "The diagnosed execution made 75 calls to `check_processing_status`, recorded as 75 `sn_aia_tools_execution` rows.",
+          "kind": "count",
+          "subject": {
+            "table": "sn_aia_tools_execution"
+          },
+          "admitted_by": "R-C registered exception (§AX3 count bullet)",
+          "occurrences": [
+            {
+              "line": 7,
+              "quote": "made **75 calls** to `check_processing_status`"
+            },
+            {
+              "line": 35,
+              "quote": "Every one of the 75 tool-call output digests"
+            },
+            {
+              "line": 56,
+              "quote": "75 tool-call rows (`sn_aia_tools_execution`) are recorded"
+            },
+            {
+              "line": 59,
+              "quote": "`tool_call_rows: 75`"
+            }
+          ]
         }
       ],
       "rejected_candidates": [
         {
           "id": "row-17/X01",
           "line": 7,
-          "text": "The execution ran for 18 minutes 44 seconds (1,124 s), made 75 calls to `check_processing_status`, received {status: \"in_progress\", percent_complete: 50} on every single call, and was eventually cancelled by the platform with state_reason: execution_failed",
+          "text": "The execution ran for **18 minutes 44 seconds** (1,124 s)",
           "rejected_by": "R-C",
-          "reason": "Entirely diagnosed-run events: duration, call count, per-call outputs, terminal state. The single largest block R-C discards in this corpus."
-        },
-        {
-          "id": "row-17/X02",
-          "line": 56,
-          "text": "75 tool-call rows (`sn_aia_tools_execution`) are recorded",
-          "rejected_by": "R-C",
-          "reason": "A count of rows recording the diagnosed run. Readable on the instance today; excluded by the run boundary, not by adjudicability."
+          "reason": "Duration and, in the same sentence, the terminal state and per-call outputs of the diagnosed run. The call COUNT from this sentence is no longer rejected — it is claim row-17/C10 under R-C's registered exception."
         },
         {
           "id": "row-17/X03",
@@ -1257,8 +1307,9 @@
           "id": "row-17/X05",
           "line": 20,
           "text": "genai_log check_config, definition `31fee654ff116e10b9c9fffffffffffd`",
-          "rejected_by": "R-A, R-E",
-          "reason": "Referential use of a sys_id in a method note; no name binding asserted and no inventoried claim keyed to it. Borderline — an extractor emitting it as a capability-definition identity claim would be a defensible §AX2.5 correct addition, pre-recorded here."
+          "rejected_by": "R-A, R-G",
+          "reason": "Referential use of a sys_id in a method note; no name binding asserted and no inventoried claim keyed to it. Borderline — an extractor emitting it as a capability-definition identity claim would be a defensible §AX2.5 correct addition, pre-recorded here.",
+          "arguable": true
         },
         {
           "id": "row-17/X06",
@@ -1281,7 +1332,7 @@
       "path": "benchmark/v14-reports/row-19.md",
       "arm": "native",
       "seed": "08",
-      "claim_count": 11,
+      "claim_count": 13,
       "claims": [
         {
           "id": "row-19/C01",
@@ -1511,6 +1562,48 @@
               "quote": "`syslog` has `caller_access = Caller Restriction`"
             }
           ]
+        },
+        {
+          "id": "row-19/C12",
+          "proposition": "The diagnosed execution made 75 calls to `check_processing_status`.",
+          "kind": "count",
+          "subject": {
+            "table": "sn_aia_tools_execution"
+          },
+          "admitted_by": "R-C registered exception (§AX3 count bullet)",
+          "occurrences": [
+            {
+              "line": 7,
+              "quote": "made **75 calls** to `check_processing_status`"
+            },
+            {
+              "line": 34,
+              "quote": "All 75 `sn_aia_tools_execution` output digests"
+            },
+            {
+              "line": 51,
+              "quote": "In practice 75 tool calls were recorded"
+            },
+            {
+              "line": 52,
+              "quote": "`evidence_basis.tool_call_rows=75`"
+            }
+          ]
+        },
+        {
+          "id": "row-19/C13",
+          "proposition": "The diagnosed execution spanned 200 execution tasks.",
+          "kind": "count",
+          "subject": {
+            "table": "sn_aia_execution_task"
+          },
+          "admitted_by": "R-C registered exception (§AX3 count bullet)",
+          "occurrences": [
+            {
+              "line": 7,
+              "quote": "across 200 execution tasks"
+            }
+          ]
         }
       ],
       "rejected_candidates": [
@@ -1520,13 +1613,6 @@
           "text": "The execution plan terminated with state **Terminated / execution_failed** after **1,116 seconds (~18.6 minutes)**",
           "rejected_by": "R-C",
           "reason": "Diagnosed-run terminal state and duration."
-        },
-        {
-          "id": "row-19/X02",
-          "line": 7,
-          "text": "The agent made **75 calls** to `check_processing_status` across 200 execution tasks",
-          "rejected_by": "R-C",
-          "reason": "Diagnosed-run call and task counts."
         },
         {
           "id": "row-19/X03",

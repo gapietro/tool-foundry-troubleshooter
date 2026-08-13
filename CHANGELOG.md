@@ -44,13 +44,17 @@ readable on gpinst01 today, about two thirds of the factual surface of `row-17` 
 
 **The finding it produced, documented and not fixed (§AX7.3, new `§AX10`).** The **custom arm's recall
 denominator is 2 claims across 3 reports** — `row-02` and `row-04` have non-empty bodies that assert
-nothing about instance state, because both diagnose runs that succeeded. The native arm carries 54
-across 4. Consequences recorded, no registered term changed: **AX-1b is a threshold on n=2** and its
-falsifier fires on one miss; §AX3's zero-claim carve-out was keyed to a structural property (no body)
-when the operative one is semantic (no claims); and §AX7.2 already forecloses the obvious repair, since
-the eligible 15 reports are exhausted and redrawing from development is forbidden. Whether AX-1b should
-be reportable at all on n=2 is left open **deliberately** — that would be a new registered term, and it
-must be decided before the extractor runs, not after the figure is seen.
+nothing about instance state, because both diagnose runs that succeeded. The native arm carries 60
+across 4. **AX-1b is therefore a threshold on n=2** whose falsifier fires on a single miss; no
+registered threshold is changed, and whether AX-1b is reportable at all at that size is left open
+**deliberately** — that would be a new term, and it must be decided before the extractor runs, not
+after the figure is seen. §AX7.2 already forecloses the obvious repair: the eligible 15 reports are
+exhausted and redrawing from development is forbidden.
+
+One adjacent gap **is** closed rather than documented, because leaving it open was itself the §AU6
+hazard: per-report recall on a zero-claim report is 0/0, and §AX2.3 demands a per-report figure.
+**Registered: `not applicable` — never 1.0, never 0.0, never folded into a per-arm figure as either.**
+Pinned in the fixture and asserted by its test rather than left in prose.
 
 **The fixture test is not the extractor and must not become it.** It checks artifact properties, which
 is §AX0's substitution applied to the fixture: every occurrence quote appears verbatim at the line it
