@@ -8926,3 +8926,67 @@ PR #254 found the earlier "and nothing else" wording contradicting §AX11.3):
 
 Items 2 and 3 attach to a figure rather than to a prediction, which is why "a reportability condition on
 predictions and nothing else" was the wrong description of this section.
+
+---
+
+## AX12. Where the extractor's context comes from, and what its prompt may be derived from
+
+Registered **2026-08-13**, with the extractor being authored and before it is run over any corpus
+report. Two rulings, both about keeping the recall figure meaningful rather than merely obtainable.
+
+### AX12.1 §6 of the brief does not survive a model-backed extractor
+
+`EXTRACTOR-BRIEF.md` §6 splits contamination at execution:
+
+> *"Once the extractor and adjudicator are frozen, executing them is deterministic, so who runs them
+> cannot influence the result. A contaminated session may safely execute a blind instrument."*
+
+**That argument is sound only for a deterministic extractor, and §AX5 registers a model-backed one.** A
+model's output is a function of its context, so "frozen" does not make execution independent of what the
+executing context knows. If the operator's own session performs the extraction, every claim it emits is
+emitted by something that has read parts of the answer, and no artifact-level check can see that —
+§AX5 clears the *prompt and source*, which is the whole of a deterministic extractor but not the whole
+of a model-backed one. The brief's split silently assumed the case §AX5 had already ruled out.
+
+> **Registered:** the extraction of each report is performed in a **fresh context containing only the
+> frozen prompt and that one report** — never the inventory fixture, never `DECISION.md`, never another
+> report. The operator dispatches; the operator does not extract.
+
+This restores §6's conclusion by construction instead of by attestation, which is §AX0's substitution
+applied one level down: *prefer a property you can check on the artifact over one you must certify about
+the author* — here, over one you must certify about the **reader**.
+
+**Operator exposure disclosed, continuing §AX4's habit of recording contamination rather than asserting
+its absence.** While inspecting the fixture's structure the operator session read one held-out claim's
+proposition verbatim, together with the per-arm denominators and the reading-rule texts. That session is
+therefore disqualified from performing extraction, which is what §AX12.1 requires anyway. It remains
+qualified to author the prompt, because §AX5 clears prompts mechanically.
+
+### AX12.2 The prompt is derived from the registered specification, never from the fixture
+
+The inventory records seven reading rules (**R-A**..**R-G**) that the operator needed in order to apply
+§AX3 to actual prose. They are line-drawing decisions §AX3 does not itself supply, and they live in the
+fixture.
+
+**Copying them into the extractor's prompt would void the recall figure.** Recall would then compare two
+implementations of one operationalisation and score its own consistency — R-27's *"a fixture that agrees
+with the code by construction is a second copy of the bug"*, arriving through the door §AX2's honest
+limitation left ajar. §AX2 concedes the inventory author and extractor author are one operator; it does
+not concede that both artifacts may be built from the same private rules.
+
+> **Registered:** the prompt is derived from **§AX3 and §AX10's count ruling — the registered
+> specification — and from nothing in the fixture.** Whether an independent operationalisation of §AX3
+> reaches R-A, R-E and R-G on its own is part of what enumeration recall measures, and copying them in
+> would answer the question by assumption.
+>
+> **One carve-out, and it is about output shape rather than about what counts as a claim.** The prompt
+> may state granularity conventions — one entry per (subject, asserted property); one entry per distinct
+> proposition with repetitions treated as occurrences — because recall is matched per proposition, and a
+> granularity mismatch would move the figure without indicating any enumeration failure. These are
+> stated in the prompt in its own terms; the fixture's rule identifiers and rule texts appear nowhere in
+> it, and that is **mechanically enforced** by the clearing check rather than left to care.
+
+**What this costs, stated up front:** recall will be depressed by honest disagreement about scope — the
+extractor may inventory things R-A or R-G excluded, which lands in the **spurious rate** rather than in
+recall, and may omit things they admitted, which lands in recall. That is not noise to be engineered
+away. It is the measurement.

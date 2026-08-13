@@ -17,6 +17,115 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1309 — 2026-08-13
+
+### Added — the claim extractor and its §AX5 clearing check (issue #212)
+
+The first extractor code in the repository. **No sweep was run, no report was extracted, and no figure
+exists.** Measurement is a separate change.
+
+Three artifacts:
+
+| file | what it is |
+|---|---|
+| `benchmark/extraction/claim-extraction-prompt.md` | **the extractor** — the frozen prompt, and the artifact §AX5 clears |
+| `benchmark/scripts/claim-extraction.js` | the deterministic half: validation, dedup, ordering, serialisation |
+| `test/extractorClearing.test.js` | the §AX5 clearing check, mutation-verified |
+
+**The split follows brief §7 exactly.** A model-backed extractor is expected and *"is not required to be
+reproducible; what must be deterministic is the ordering and formatting of whatever the extractor
+emits."* So the module contains **no claim-detection logic** and must not acquire any — a heuristic there
+would be a second extractor nobody cleared. It has **no instance client to inject**, because extraction
+needs no instance at all; that is the strongest available form of brief §7's no-network-at-import rule.
+
+**Rejections are recorded, never dropped.** A structurally invalid claim is kept with its reason. Silently
+dropping it would depress enumeration recall in a way indistinguishable from the model having missed the
+claim — blaming inference for a plumbing failure.
+
+**The load-bearing validation is that a quote is verbatim at the line it cites**, not merely present
+somewhere in the report. The likeliest model error is an off-by-one line number, and a
+"does-this-string-appear-anywhere" check waves it straight through. Tested in both directions.
+
+### Added — §AX12.1: brief §6's contamination split does not survive a model-backed extractor
+
+Brief §6 holds that *"once the extractor and adjudicator are frozen, executing them is deterministic, so
+who runs them cannot influence the result."* **That is sound only for a deterministic extractor, and
+§AX5 registers a model-backed one.** A model's output is a function of its context, so "frozen" does not
+make execution independent of what the executing context knows — and §AX5 clears the prompt and source,
+which is the whole of a deterministic extractor but not the whole of a model-backed one.
+
+**Registered:** each report is extracted in a **fresh context containing only the frozen prompt and that
+one report** — never the inventory, never `DECISION.md`, never another report. The operator dispatches;
+the operator does not extract. This restores §6's conclusion by construction rather than by attestation,
+which is §AX0's substitution applied to the *reader* rather than the author.
+
+**Operator exposure disclosed** (§AX4's habit of recording contamination rather than asserting its
+absence): while inspecting the fixture's structure this session read one held-out claim's proposition
+verbatim, plus the per-arm denominators and the reading-rule texts. It is therefore disqualified from
+performing extraction — which §AX12.1 requires anyway — and remains qualified to author the prompt,
+because §AX5 clears prompts mechanically.
+
+### Added — §AX12.2: the prompt is derived from the specification, never from the fixture
+
+The inventory records seven reading rules (**R-A**..**R-G**) that the operator needed to apply §AX3 to
+real prose. **Copying them into the prompt would have voided the recall figure** — recall would compare
+two implementations of one operationalisation and score its own consistency. That is R-27's *"a fixture
+that agrees with the code by construction is a second copy of the bug"*, arriving through the door §AX2's
+honest limitation left ajar: §AX2 concedes both artifacts share an author, not that both may be built
+from the same private rules.
+
+**Registered:** the prompt is derived from **§AX3 and §AX10's count ruling** and from nothing in the
+fixture. Whether an independent operationalisation of §AX3 reaches R-A, R-E and R-G on its own is part of
+what recall measures. One carve-out, about output shape rather than about what counts as a claim: the
+prompt may state granularity conventions, **in its own terms**, because recall is matched per proposition
+and a granularity mismatch would move the figure without indicating any enumeration failure.
+
+**The check caught the first draft violating this.** The prompt's granularity item was written as *"one
+entry per (subject, asserted property)"* — R-D's text verbatim. Reworded. Worth recording because the
+author had written §AX12.2 an hour earlier and reproduced the exact defect it forbids, which is the
+§AW11d/§AW11f pattern again: the remedy was in the file and the defect recurred anyway. The guard is why
+it surfaced in seconds rather than after the burn.
+
+**What it costs, stated up front:** recall will be depressed by honest disagreement about scope. Claims
+the extractor inventories that R-A or R-G excluded land in the **spurious rate**; claims it omits that
+they admitted land in recall. That is not noise to be engineered away — it is the measurement.
+
+### Changed — the corpus-vocabulary instrument is now shared, not copied
+
+`test/_corpusVocabulary.js` holds the patterns; `extractorBriefBlindness.test.js` and the new clearing
+check both require it. §AX5 registers the clearing check as *"the same instrument as
+`test/extractorBriefBlindness.test.js`, pointed at the extractor"* — a copied list satisfies that
+sentence on the day it is copied and stops satisfying it at the first widening, and this list has already
+been widened once under fire (review of PR #246, which found the locator pattern blind to `row-NN`).
+
+**Twelve mutations verified to fail the clearing check**, including both forms §AX5 names by hand — a
+prompt that special-cases a report by hyphenated filename, and a source file that does. Also: fixture
+table identifier, field-count literal, seed identifier, corpus vocabulary drifting into the *unit-test
+fixtures*, a reading rule lifted verbatim, a reading-rule id cited, the do-not-filter instruction
+dropped, §AX10's count ruling inverted, the source reading the inventory, and an uncleared file appearing
+in the extraction directory.
+
+### Changed — the extractor-absence guard is retired and replaced by a content freeze
+
+`claimInventoryShape.test.js`'s *"no extractor implementation exists in the repository at this commit"*
+is removed. Its guarantee is now discharged **permanently by merged history** — the inventories landed in
+#247, the §AX11 floor in `c1f5969`, and no extractor existed in either. `git log` is the proof §AX2.2
+always said it was, and unlike a test it cannot be edited by the commit it constrains.
+
+> Keeping it would have meant deleting it in the same commit that introduced the extractor. **A guard
+> that gets removed by the change it guards against was never guarding anything.**
+
+**What replaces it is not nothing.** The absence check pointed at a risk that expires; the freeze points
+at the risk that begins exactly where the old one ended — that the inventory gets edited to agree with
+extractor output once that output exists (§AX7.2: a fixture repaired in response to its misses reports
+training accuracy, not recall). A SHA-256 over every claim and every rejected candidate, taken while no
+extraction had been run.
+
+**Scoped to the denominator only** — not the reading rules, not the prose, not the reportability floor,
+which are commentary and registered terms that may legitimately be amended before the burn (§AX11 is
+exactly such an amendment). Mutation-verified in both directions: editing a proposition, deleting a
+claim, or promoting a rejected candidate each fail it; editing commentary does not.
+
 ## 2026.08.1308 — 2026-08-13
 
 ### Added — §AX11 closes the reportability term §AX10 left open, before any extractor exists

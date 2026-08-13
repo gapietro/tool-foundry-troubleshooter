@@ -66,33 +66,19 @@ const PERMITTED_TEST_FILES = [
 /**
  * Categories of corpus vocabulary the brief must never contain.
  *
- * Kept as regexes with neutral labels. A hit is not necessarily a leak, but it
- * is always a thing to justify — and the justification belongs in DECISION.md,
- * on the exclusion list, not here.
+ * MOVED to test/_corpusVocabulary.js so the extractor's §AX5 clearing check —
+ * registered as "the same instrument as this file, pointed at the extractor" —
+ * shares the patterns rather than copying them. A copy satisfies "same
+ * instrument" only until the first widening, and this list has already been
+ * widened once under fire (review of PR #246).
  */
-const FORBIDDEN = [
-    { label: 'fixture table identifier', re: /x_snc_tsbench\w*/i },
-    { label: 'field-count assertion', re: /\b\d+\s+fields?\b/i },
-    { label: 'row-count assertion', re: /\b\d+\s+rows?\b/i },
-    { label: 'seed identifier', re: /\bseed[-\s]?0?\d\b/i },
-    // `[-\s]` and not `\s` alone: the corpus names its members `row-NN`, and a
-    // whitespace-only pattern matched none of them. Pointed at an extractor that
-    // special-cased a report by filename, the check passed while the locator sat
-    // in the source — a mechanical clearing unenforced in its most likely form
-    // (review of PR #246, registered in §AX5).
-    { label: 'calibration row locator', re: /\brows?[-\s]0?\d+\b/i },
-]
+const { FORBIDDEN, scan } = require('./_corpusVocabulary')
 
 describe('the extractor brief does not leak corpus vocabulary (§AW11f)', () => {
     const raw = fs.readFileSync(BRIEF, 'utf8')
-    const lines = raw.split('\n')
 
     test.each(FORBIDDEN)('contains no $label', (pattern) => {
-        const hits = []
-        for (let i = 0; i < lines.length; i++) {
-            if (pattern.re.test(lines[i])) hits.push(BRIEF_REL + ':' + (i + 1) + ' — ' + lines[i].trim())
-        }
-        expect(hits).toEqual([])
+        expect(scan(raw, BRIEF_REL, pattern)).toEqual([])
     })
 
     test('the brief names no `./test/` file outside its own allowlist', () => {
