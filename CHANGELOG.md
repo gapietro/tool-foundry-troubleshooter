@@ -17,6 +17,62 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1214 — 2026-08-12
+
+### Fixed — coverage was unmeasurable by construction; it now measures, and it gates (#217)
+
+`npx jest --coverage` reported **0% statements, branches, functions and lines across all 21
+production files** while 1,850+ tests genuinely exercised them. `test/_loadScriptInclude.js` runs
+sources through `vm.runInContext` on raw file text, which bypasses Jest's instrumenting transform
+entirely, so istanbul never saw a line of `src/server/**`.
+
+The loader's rationale is sound and is **not** reverted — R-14 stands, test code cannot live under
+`src/` or `now-sdk build` rejects it with TS213/TS307. What was missing is that no alternative
+measurement was substituted. Sources are now instrumented explicitly through
+`babel-plugin-istanbul` before `runInContext`.
+
+**Measured, first time in this repo's life:**
+
+| | statements | branches | functions | lines |
+|---|---|---|---|---|
+| **All files** | **90.21** | **83.2** | **93.62** | **92.4** |
+
+`coverageThreshold` in `package.json` is set just under those (88/80/90/90) and CI's test step now
+runs `--coverage`, so the gate is real — verified by temporarily raising the bar to 99% and
+confirming the run fails.
+
+Two details in the loader are load-bearing and are commented as such:
+
+- **The coverage object is shared, not copied.** The sandbox is seeded with the same
+  `global.__coverage__` object Jest collects from, so counters accumulate in place. These suites
+  re-load the same source once per test; a fresh object per load would keep only the last one.
+- **It is off unless coverage was asked for.** `test/_coverageSetup.js` (jest `globalSetup`) reads
+  `globalConfig.collectCoverage` and sets the env var before any worker is forked — workers inherit
+  it, which an argv sniff cannot rely on. A normal `npx jest` pays no Babel cost.
+
+`test/coverageInstrumentation.test.js` asserts the **mechanism**, not just the number: counters land
+against the real path, they accumulate across loads, instrumented sources still behave identically,
+and instrumentation stays off by default. A threshold alone cannot catch a regression here — if
+instrumentation breaks, coverage returns to 0% and the threshold fails, but so would a genuine
+coverage regression, and the CI log could not tell them apart.
+
+**One existing test had to change,** and the change strengthens it.
+`utf16ClipContract.test.js`'s drift check compared the loaded functions' `toString()` — the engine's
+re-print of what actually executed, which instrumentation necessarily rewrites with per-file
+counters. It now reads the member text from the FILES, which is what the test's own comment says it
+wants ("byte-identical") and is the more direct statement of the property. Sabotage-verified: a
+one-line edit to one copy still fails it.
+
+### Newly visible, and deliberately NOT fixed here
+
+The measurement immediately surfaced two thin spots. Both are scoped out of this PR — it is about
+making the number exist, and bundling coverage-raising work would make the diff unreviewable:
+
+- `src/server/rest/PaRestHandlers.js` — **54.44%** statements, the outlier by a wide margin.
+- `src/server/async/sweep-stale-runs.js` — **0%**, never loaded by any test.
+
+---
+
 ## 2026.08.1213 — 2026-08-12
 
 ### Fixed — a lost run claim no longer buys a second reasoning pass (#218)

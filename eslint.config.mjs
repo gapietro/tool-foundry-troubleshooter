@@ -157,6 +157,9 @@ export default [
             '.claude/context/sdk-examples/**',
             // Seed apps are deliberately broken fixtures for the benchmark.
             'benchmark/seed-app/**',
+            // Istanbul's generated HTML report (#217) — vendored assets, not
+            // ours, and regenerated on every `--coverage` run.
+            'coverage/**',
             // This file: ESM, and linting a lint config adds no signal.
             'eslint.config.mjs',
         ],

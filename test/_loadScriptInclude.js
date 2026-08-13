@@ -28,6 +28,78 @@ const fs = require('fs')
 const path = require('path')
 const vm = require('vm')
 
+// ---------------------------------------------------------------------------
+// COVERAGE INSTRUMENTATION — issue #217
+//
+// `vm.runInContext` on raw file text bypasses Jest's instrumenting transform
+// entirely, so istanbul never saw a single line of `src/server/**` and
+// `--coverage` reported 0% statements/branches/functions/lines across all 21
+// production files while 1,800+ tests genuinely exercised them. The number was
+// wrong in the safe direction, which is exactly why it went unnoticed: nobody
+// could identify an untested branch, and no threshold could gate CI.
+//
+// The loader's rationale is not the problem and is NOT reverted — R-14 stands,
+// test code cannot live under `src/` or `now-sdk build` rejects it with
+// TS213/TS307. What was missing is that no alternative measurement was
+// substituted. So: instrument the source explicitly through
+// `babel-plugin-istanbul` before handing it to `runInContext`.
+//
+// TWO THINGS MAKE THIS WORK, and both are easy to get subtly wrong:
+//
+//   1. THE COVERAGE OBJECT MUST BE SHARED, NOT COPIED. The instrumented
+//      preamble does `var coverage = <scope>.__coverage__ || (<scope>.__coverage__ = {})`
+//      and mutates it in place. `coverageGlobalScope: 'globalThis'` makes that
+//      scope the vm context's own global, so the sandbox is seeded with the
+//      SAME object Jest collects from (`global.__coverage__`) and the counters
+//      accumulate straight into it. Copying after the fact would lose every
+//      count written by a later `loadScriptInclude` call — and these suites
+//      re-load the same source once per test.
+//
+//   2. IT IS OFF UNLESS COVERAGE WAS ASKED FOR. Instrumenting on every run
+//      would put a Babel parse in front of every one of the ~1,900 loads for
+//      no benefit. `test/_coverageSetup.js` (jest `globalSetup`) reads
+//      `globalConfig.collectCoverage` and sets the env var below BEFORE any
+//      worker is forked, so workers inherit it — which is why this is a
+//      globalSetup and not an argv sniff, since `--coverage` does not
+//      reliably reach a forked worker's `process.argv`.
+//
+// Cost when it IS on: one Babel transform per distinct file, cached below, so
+// the ~1,900 loads pay it 21 times.
+// ---------------------------------------------------------------------------
+const INSTRUMENT = process.env.PA_INSTRUMENT_COVERAGE === '1'
+const instrumentedCache = new Map()
+
+function instrument(src, abs) {
+    if (instrumentedCache.has(abs)) return instrumentedCache.get(abs)
+
+    // Required lazily: on a normal `npx jest` run these are never loaded.
+    const babel = require('@babel/core')
+    const istanbul = require('babel-plugin-istanbul')
+
+    const out = babel.transformSync(src, {
+        filename: abs,
+        cwd: path.resolve(__dirname, '..'),
+        configFile: false,
+        babelrc: false,
+        // Sources are ES5 Rhino bodies with no module wrapper — nothing to
+        // compile, only to instrument. Any preset here would risk rewriting
+        // the very code under test.
+        plugins: [
+            [
+                istanbul.default || istanbul,
+                {
+                    coverageGlobalScope: 'globalThis',
+                    coverageGlobalScopeFunc: false,
+                },
+            ],
+        ],
+    })
+
+    const code = out && out.code ? out.code : src
+    instrumentedCache.set(abs, code)
+    return code
+}
+
 /**
  * Mirrors the platform's `Class.create()`: returns a constructor that calls
  * `initialize` if the prototype defines one.
@@ -80,9 +152,19 @@ function gsStub() {
  */
 function loadScriptInclude(relPath, extraGlobals) {
     const abs = path.resolve(__dirname, '..', 'src', 'server', relPath)
-    const src = fs.readFileSync(abs, 'utf8')
+    const raw = fs.readFileSync(abs, 'utf8')
+    const src = INSTRUMENT ? instrument(raw, abs) : raw
 
     const sandbox = { Class: classStub(), gs: gsStub() }
+
+    // Seeded BEFORE createContext, and seeded with the very object Jest reads
+    // rather than a fresh one — see the instrumentation note above on why a
+    // copy would silently lose every count after the first load.
+    if (INSTRUMENT) {
+        if (!global.__coverage__) global.__coverage__ = {}
+        sandbox.__coverage__ = global.__coverage__
+    }
+
     if (extraGlobals) {
         Object.keys(extraGlobals).forEach(function (k) {
             sandbox[k] = extraGlobals[k]

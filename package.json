@@ -1,6 +1,6 @@
 {
   "name": "x-snc-troubleshoot",
-  "version": "2026.08.1213",
+  "version": "2026.08.1214",
   "description": "",
   "license": "UNLICENSED",
   "imports": {
@@ -19,9 +19,23 @@
     "testEnvironment": "node",
     "testMatch": [
       "<rootDir>/test/**/*.test.js"
-    ]
+    ],
+    "globalSetup": "<rootDir>/test/_coverageSetup.js",
+    "collectCoverageFrom": [
+      "src/server/**/*.js"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "statements": 88,
+        "branches": 80,
+        "functions": 90,
+        "lines": 90
+      }
+    }
   },
   "devDependencies": {
+    "@babel/core": "^7.29.7",
+    "babel-plugin-istanbul": "^6.1.1",
     "@servicenow/glide": "27.0.5",
     "@servicenow/sdk": "4.9.2",
     "eslint": "^9.39.5",
