@@ -46,6 +46,59 @@ claim — blaming inference for a plumbing failure.
 somewhere in the report. The likeliest model error is an off-by-one line number, and a
 "does-this-string-appear-anywhere" check waves it straight through. Tested in both directions.
 
+### Fixed — the module's central guarantee did not hold, in three independent ways (review of PR #255)
+
+**"Arrival order cannot reach the output" — brief §7's determinism-on-serialisation requirement — was
+false as first shipped, and the test asserting it could not see any of the three violations.** All three
+were reproduced directly against the module before being fixed, and again after.
+
+| # | defect | fix |
+|---|---|---|
+| 1 | `rejected` was appended in **arrival order**, never sorted, and is part of the frozen artifact — any report with ≥2 rejections had an order-dependent record | sorted by a content key: first cited line, then proposition, then reason |
+| 2 | dedup kept the **first** claim's `kind`/`subject` and silently discarded later ones — both an order dependency and a silent drop, contradicting the module's own stated rule | survivor chosen by a **content order** over variants; discarded variants **recorded** in a new `conflicts` list |
+| 3 | `orderClaimKeys` passed the model's parsed `subject` through **by reference**, so `{table, field}` and `{field, table}` serialised to different bytes — under a comment claiming fixed key order | `subject` rebuilt with a fixed key order, unrecognised keys kept and sorted after the known ones |
+
+**On defect 2's fix.** Rejecting the whole claim over a `kind` disagreement would convert a reporting
+problem into a *missing claim* — the one failure mode enumeration recall cannot distinguish from a
+genuine miss. So the claim survives intact and the contradiction is recorded beside it. A model
+contradicting itself is a finding about the extraction, not noise to tidy away.
+
+**The guard was the real defect.** The determinism test's fixture had three distinct propositions, no
+duplicate proposition carrying a different kind, and **no rejections at all** — so the dedup path and the
+`rejected` array were entirely unexercised in its reversed run. It asserted the module's most important
+property and touched none of the paths that could violate it. A second fixture now drives every path
+that reaches the artifact at once, and asserts it genuinely exercises them.
+
+> **The lesson, since it is the third instance of this shape in this instrument:** a guard is only as
+> good as the paths its fixture touches. §AX10 recorded it for the extractor-absence check, §AX11 for a
+> mutation set that could not see half a rule being deleted, and now here.
+
+Also fixed from the same review: `normalise()` **throws on a missing report id** rather than emitting
+ids like `undefined/E01` and a record whose `report` key `JSON.stringify` drops — a silently malformed
+frozen artifact instead of a stopped sweep.
+
+### Fixed — the clearing check's own coverage gaps (review of PR #255)
+
+**The "covers every file the extractor is made of" test walked `benchmark/extraction/` only**, while two
+of its three cleared entries live outside it. A helper at `benchmark/scripts/claim-extraction-*.js` or a
+second extractor test file would have joined the extractor and escaped clearing silently — *the exact
+"asserted far less than its name promised" failure the test's own comment cites as its reason to exist,*
+reproduced inside the test written to cite it. It now walks `benchmark/scripts/` and `test/` too, and
+both new escape routes are mutation-verified.
+
+**The reading-rule check overclaimed and is now both stronger and honestly described.** Its docstring
+said it caught "the shortest units that would survive light paraphrase"; it matched exact substrings
+only. Matching is now insensitive to case, whitespace and punctuation — a reworded-casing variant is
+caught, and was not before — and the docstring states plainly what remains uncaught: genuine paraphrase,
+which no mechanical check at this cost will find. The residual risk is named rather than papered over.
+
+**§AX3's own text is subtracted before matching**, and that is not an exemption of convenience. Several
+reading rules quote the specification — R-G's stated justification is that it is *"stated verbatim from
+§AX3"* — and §AX12.2 registers the prompt as derived **from** §AX3, so a phrase the prompt shares with
+the specification is evidence of nothing. Without the subtraction the strengthened check fired on the
+prompt's use of §AX3's own words: it would have flagged the derivation it exists to permit. The
+subtraction reads `DECISION.md` rather than restating the text, so it tracks the registered wording.
+
 ### Added — §AX12.1: brief §6's contamination split does not survive a model-backed extractor
 
 Brief §6 holds that *"once the extractor and adjudicator are frozen, executing them is deterministic, so
@@ -98,12 +151,14 @@ check both require it. §AX5 registers the clearing check as *"the same instrume
 sentence on the day it is copied and stops satisfying it at the first widening, and this list has already
 been widened once under fire (review of PR #246, which found the locator pattern blind to `row-NN`).
 
-**Twelve mutations verified to fail the clearing check**, including both forms §AX5 names by hand — a
-prompt that special-cases a report by hyphenated filename, and a source file that does. Also: fixture
-table identifier, field-count literal, seed identifier, corpus vocabulary drifting into the *unit-test
-fixtures*, a reading rule lifted verbatim, a reading-rule id cited, the do-not-filter instruction
-dropped, §AX10's count ruling inverted, the source reading the inventory, and an uncleared file appearing
-in the extraction directory.
+**Mutations verified to fail the clearing check**, including both forms §AX5 names by hand — a prompt
+that special-cases a report by hyphenated filename, and a source file that does. Also: fixture table
+identifier, field-count literal, seed identifier, corpus vocabulary drifting into the *unit-test
+fixtures*, a reading rule lifted verbatim, a reading rule **reworded in case and punctuation only** (not
+caught before this review), a reading-rule id cited, the do-not-filter instruction dropped, §AX10's count
+ruling inverted, the source reading the inventory, an uncleared file in the extraction directory, an
+uncleared **helper in `benchmark/scripts/`**, and an uncleared **second test file** — the last two being
+the escape routes review found open.
 
 ### Changed — the extractor-absence guard is retired and replaced by a content freeze
 

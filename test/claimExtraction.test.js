@@ -192,6 +192,71 @@ describe('claim extraction — deterministic ordering and identity', () => {
         expect(forward).toBe(reversed);
     });
 
+    test('arrival order cannot reach the output THROUGH ANY PATH', () => {
+        /**
+         * The test above was the guard for the module's central guarantee and it
+         * could not see three real violations of it (review of PR #255): its
+         * fixture had three DISTINCT propositions, no duplicate proposition
+         * carrying a different kind/subject, and NO rejections — so the dedup
+         * path and the `rejected` array were both unexercised in the reversed
+         * run. All three were arrival-order dependent and shipped green.
+         *
+         * This fixture drives every path that reaches the artifact at once.
+         * Recorded rather than folded into the test above, because the lesson is
+         * that a determinism test is only as good as the paths its fixture
+         * touches.
+         */
+        const mixed = [
+            claim({ proposition: 'Shared.', kind: 'existence', subject: { table: 'zz_demo_widget' } }),
+            claim({ proposition: 'Shared.', kind: 'count', subject: { field: 'calibration_state', table: 'zz_demo_widget' } }),
+            claim({ proposition: 'Later.', occurrences: [{ line: 4, quote: 'pending state' }] }),
+            claim({ proposition: 'Bad one.', occurrences: [{ line: 2, quote: 'not present here' }] }),
+            claim({ proposition: 'Bad two.', occurrences: [{ line: 99, quote: 'The widget registry' }] }),
+        ];
+        const forward = extraction.serialise(run(mixed));
+        const reversed = extraction.serialise(run(mixed.slice().reverse()));
+        expect(forward).toBe(reversed);
+
+        // And the fixture genuinely exercises what it claims to.
+        const out = run(mixed);
+        expect(out.rejected).toHaveLength(2);
+        expect(out.conflicts).toHaveLength(1);
+    });
+
+    test('a subject key order emitted by the model cannot reach the artifact', () => {
+        // `{table, field}` and `{field, table}` are the same subject. Passing the
+        // parsed object through by reference made them different bytes.
+        const a = claim({ subject: { table: 'zz_demo_widget', field: 'calibration_state' } });
+        const b = claim({ subject: { field: 'calibration_state', table: 'zz_demo_widget' } });
+        expect(extraction.serialise(run([a]))).toBe(extraction.serialise(run([b])));
+        expect(Object.keys(run([b]).claims[0].subject)).toEqual(['table', 'field']);
+    });
+
+    test('a subject key the module does not recognise is kept, not discarded', () => {
+        // An unrecognised key is data this module has no standing to drop; it is
+        // ordered deterministically after the known ones instead.
+        const out = run([claim({ subject: { field: 'calibration_state', zzz: 'x', table: 'zz_demo_widget' } })]);
+        expect(Object.keys(out.claims[0].subject)).toEqual(['table', 'field', 'zzz']);
+    });
+
+    test('rejections are ordered by content, not by arrival', () => {
+        const first = claim({ proposition: 'Aaa.', occurrences: [{ line: 4, quote: 'wrong' }] });
+        const second = claim({ proposition: 'Bbb.', occurrences: [{ line: 2, quote: 'wrong' }] });
+        for (const order of [[first, second], [second, first]]) {
+            expect(run(order).rejected.map((r) => r.claim.proposition)).toEqual(['Bbb.', 'Aaa.']);
+        }
+    });
+
+    test('a rejection citing no line at all still orders deterministically', () => {
+        // Rejections often cite nothing usable — that is frequently why they were
+        // rejected — so the ordering key must not assume a valid occurrence.
+        const noOcc = claim({ proposition: 'No occurrences.', occurrences: [] });
+        const badLine = claim({ proposition: 'Bad line.', occurrences: [{ line: 99, quote: 'The widget registry' }] });
+        for (const order of [[noOcc, badLine], [badLine, noOcc]]) {
+            expect(run(order).rejected.map((r) => r.claim.proposition)).toEqual(['Bad line.', 'No occurrences.']);
+        }
+    });
+
     test('propositions on the same line tie-break deterministically', () => {
         const a = claim({ proposition: 'B second.', occurrences: [{ line: 2, quote: 'zz_demo_widget' }] });
         const b = claim({ proposition: 'A first.', occurrences: [{ line: 2, quote: 'zz_demo_widget' }] });
@@ -217,6 +282,38 @@ describe('claim extraction — deterministic ordering and identity', () => {
     });
 });
 
+describe('claim extraction — a model contradicting itself is recorded, not tidied away', () => {
+    const variantA = claim({ proposition: 'Shared.', kind: 'existence', subject: { table: 'zz_demo_widget' } });
+    const variantB = claim({ proposition: 'Shared.', kind: 'count', subject: { table: 'zz_demo_widget' } });
+
+    test('the surviving variant is chosen by content order, not arrival order', () => {
+        // 'count' sorts before 'existence', so it wins from either direction.
+        expect(run([variantA, variantB]).claims[0].kind).toBe('count');
+        expect(run([variantB, variantA]).claims[0].kind).toBe('count');
+    });
+
+    test('the discarded variant is recorded with what replaced it', () => {
+        const out = run([variantA, variantB]);
+        expect(out.conflicts).toHaveLength(1);
+        expect(out.conflicts[0].proposition).toBe('Shared.');
+        expect(out.conflicts[0].kept.kind).toBe('count');
+        expect(out.conflicts[0].discarded.map((d) => d.kind)).toEqual(['existence']);
+    });
+
+    test('the claim itself survives, so a model inconsistency cannot depress recall', () => {
+        // Rejecting the whole claim over a kind disagreement would turn a
+        // reporting problem into a missing claim, which is the one failure the
+        // recall figure cannot distinguish from an enumeration miss.
+        const out = run([variantA, variantB]);
+        expect(out.claim_count).toBe(1);
+        expect(out.claims[0].proposition).toBe('Shared.');
+    });
+
+    test('agreeing duplicates produce no conflict record', () => {
+        expect(run([variantA, claim({ proposition: 'Shared.', kind: 'existence', subject: { table: 'zz_demo_widget' } })]).conflicts).toEqual([]);
+    });
+});
+
 describe('claim extraction — the zero-claim result is legitimate', () => {
     test('an empty claim list normalises to a zero-claim record, not an error', () => {
         // §AX10 found reports with bodies that assert nothing about instance
@@ -231,6 +328,23 @@ describe('claim extraction — the zero-claim result is legitimate', () => {
     test('claim_count reflects accepted claims only', () => {
         const out = run([claim(), claim({ proposition: 'Bad.', occurrences: [{ line: 2, quote: 'nope' }] })]);
         expect(out.claim_count).toBe(1);
+    });
+});
+
+describe('claim extraction — a record must know which report it came from', () => {
+    test('a missing report id throws rather than producing a malformed artifact', () => {
+        /**
+         * Without this, a driver wiring mistake yields ids like `undefined/E01`
+         * and a record whose `report` key JSON.stringify drops entirely — a
+         * frozen artifact that is silently wrong rather than a failure that
+         * stops the sweep (review of PR #255).
+         */
+        for (const bad of [undefined, '', '   ']) {
+            expect(() => extraction.normalise({ claims: [] }, { report: bad, arm: 'native', lines: REPORT })).toThrow(
+                /report/i
+            );
+        }
+        expect(() => extraction.normalise({ claims: [] }, undefined)).toThrow(/report/i);
     });
 });
 

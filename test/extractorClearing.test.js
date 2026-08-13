@@ -81,9 +81,19 @@ describe('§AX5 — the extractor encodes no corpus vocabulary', () => {
     });
 
     test('the cleared set covers every file the extractor is made of', () => {
-        // Discovered, not rostered. #241's history is the argument: a guard
-        // written from a hand list missed five of its own sites, and only a
-        // guard that walks the tree found them.
+        /**
+         * Discovered, not rostered. #241's history is the argument: a guard
+         * written from a hand list missed five of its own sites, and only a
+         * guard that walks the tree found them.
+         *
+         * The first version walked `benchmark/extraction/` ONLY, while two of the
+         * three cleared entries live outside it — so a helper at
+         * `benchmark/scripts/claim-extraction-*.js`, or a second extractor test
+         * file, would have joined the extractor and silently escaped clearing
+         * (review of PR #255). That is the exact "asserted far less than its name
+         * promised" failure this test's own comment cites as its reason to exist,
+         * reproduced inside the test written to cite it.
+         */
         const found = [];
         (function walk(dir) {
             for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -93,8 +103,17 @@ describe('§AX5 — the extractor encodes no corpus vocabulary', () => {
             }
         })(path.join(REPO, 'benchmark', 'extraction'));
 
-        const uncleared = found.filter((f) => CLEARED.indexOf(f) === -1);
-        expect(uncleared).toEqual([]);
+        // Every place an extractor file could plausibly live, not just the one
+        // directory that happens to hold the prompt.
+        for (const dir of ['benchmark/scripts', 'test']) {
+            for (const name of fs.readdirSync(path.join(REPO, dir))) {
+                const rel = dir + '/' + name;
+                if (/claim-extraction|claimExtraction|extractorClearing/i.test(name)) found.push(rel);
+            }
+        }
+
+        const uncleared = found.filter((f) => CLEARED.indexOf(f) === -1 && f !== 'test/extractorClearing.test.js');
+        expect(uncleared.sort()).toEqual([]);
     });
 });
 
@@ -118,18 +137,58 @@ describe('§AX12.2 — the prompt is derived from the specification, not from th
         expect(hits).toEqual([]);
     });
 
-    test('the prompt lifts no sentence from a reading rule', () => {
+    test('the prompt lifts no clause from a reading rule', () => {
         /**
-         * Substring containment would only catch a wholesale copy. This checks
-         * distinctive phrases — the shortest units that would survive light
-         * paraphrase — so a rule cannot be smuggled in one clause at a time.
+         * WHAT THIS CATCHES, STATED HONESTLY. Clause-level copying, insensitive
+         * to case, whitespace and punctuation — so reindentation, a capitalised
+         * first word or a swapped comma will not defeat it. That is strictly
+         * more than the verbatim-only check this started as, which is what
+         * caught the R-D draft.
+         *
+         * WHAT IT DOES NOT CATCH: genuine paraphrase. A rule reworded in
+         * different words passes, and no mechanical check at this cost will say
+         * otherwise. An earlier version of this comment claimed the phrases were
+         * "the shortest units that would survive light paraphrase", which
+         * overstated it (review of PR #255) — and §AX12.2 leans on this being
+         * mechanical rather than a promise, so the comment must not promise more
+         * than the code delivers.
+         *
+         * The residual risk is accepted and named: paraphrasing a reading rule
+         * into the prompt is possible and undetected here. What makes that less
+         * likely than the copy it does catch is that paraphrase requires
+         * intending to smuggle the rule in, whereas copying is what happens by
+         * accident when both documents sit open — which is precisely how the R-D
+         * violation occurred.
          */
+        const flatten = (s) => s.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+        const flatPrompt = flatten(prompt);
+
+        /**
+         * §AX3's own text is subtracted before matching, and this is not an
+         * exemption of convenience.
+         *
+         * Several reading rules QUOTE §AX3 — R-G's stated justification is that
+         * it is "stated verbatim from §AX3". §AX12.2 registers the prompt as
+         * derived FROM §AX3, so a phrase the prompt shares with the
+         * specification is evidence of nothing, and flagging it would make the
+         * check fire on exactly the derivation it exists to permit. Only wording
+         * a rule adds BEYOND the specification can indicate fixture-derivation.
+         *
+         * Read from DECISION.md rather than restated here, so the subtraction
+         * tracks the registered text instead of a copy that drifts from it.
+         */
+        const decision = read('benchmark/DECISION.md');
+        const ax3 = decision.slice(decision.indexOf('### AX3.'), decision.indexOf('### AX4.'));
+        expect(ax3.length).toBeGreaterThan(500); // the slice found the section, not an empty range
+        const flatAx3 = flatten(ax3);
+
         const offenders = [];
         for (const rule of fixture.reading_rules) {
-            for (const phrase of rule.rule.split(/[.;]\s+/)) {
-                const trimmed = phrase.trim();
-                if (trimmed.length < 25) continue;
-                if (prompt.indexOf(trimmed) !== -1) offenders.push(rule.id + ': ' + trimmed);
+            for (const phrase of rule.rule.split(/[.;,]\s+/)) {
+                const flat = flatten(phrase);
+                if (flat.length < 25) continue;
+                if (flatAx3.indexOf(flat) !== -1) continue; // shared with the specification
+                if (flatPrompt.indexOf(flat) !== -1) offenders.push(rule.id + ': ' + phrase.trim());
             }
         }
         expect(offenders).toEqual([]);
