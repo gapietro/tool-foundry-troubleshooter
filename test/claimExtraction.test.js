@@ -50,6 +50,7 @@ function claim(over) {
         {
             proposition: 'Table zz_demo_widget exists.',
             kind: 'existence',
+            polarity: 'asserts',
             subject: { table: 'zz_demo_widget' },
             occurrences: [{ line: 2, quote: 'Table zz_demo_widget exists' }],
         },
@@ -132,6 +133,139 @@ describe('claim extraction — structural validation', () => {
         expect(out.claims).toHaveLength(1);
         expect(out.rejected).toHaveLength(1);
         expect(out.rejected[0].claim.proposition).toBe('Bad one.');
+    });
+});
+
+describe('claim extraction — polarity (§AX13), and why a missing one does NOT reject the claim', () => {
+    test('a valid polarity is carried through verbatim', () => {
+        for (const p of ['asserts', 'denies']) {
+            const out = run([claim({ polarity: p })]);
+            expect(out.rejected).toEqual([]);
+            expect(out.claims[0].polarity).toBe(p);
+        }
+    });
+
+    test('a missing polarity keeps the claim and records the defect', () => {
+        /**
+         * The distinction this test exists to protect. Recall measures
+         * ENUMERATION — whether the extractor found the claim — and a claim
+         * found without its polarity was still found. Rejecting it would move
+         * it out of `claims` and depress recall for a reason that has nothing
+         * to do with enumeration, blaming the model's detection for a defect in
+         * its formatting.
+         *
+         * Polarity governs ADJUDICABILITY instead, and the instrument already
+         * has a verdict for a claim it cannot adjudicate. So the claim survives
+         * with no polarity, the defect is recorded in the frozen artifact, and
+         * the adjudicator returns `unresolvable` on it (§AX13.3).
+         */
+        const out = run([claim({ polarity: undefined })]);
+        expect(out.rejected).toEqual([]);
+        expect(out.claims).toHaveLength(1);
+        expect(out.claims[0].polarity).toBeUndefined();
+        expect(out.defects).toEqual([
+            { proposition: 'Table zz_demo_widget exists.', field: 'polarity', reason: 'polarity is missing' },
+        ]);
+    });
+
+    test('an unrecognised polarity is not coerced to one of the two', () => {
+        /**
+         * Coercing `probably` to `asserts` would manufacture the very
+         * distinction §AX13.1 says the instrument cannot draw, and it would do
+         * it silently. The value is dropped, the defect is recorded with what
+         * was emitted, and the claim becomes unadjudicable rather than wrongly
+         * adjudicated.
+         */
+        const out = run([claim({ polarity: 'probably' })]);
+        expect(out.claims[0].polarity).toBeUndefined();
+        expect(out.defects[0].reason).toMatch(/probably/);
+    });
+
+    test('defects are ordered by content, not by arrival', () => {
+        const a = claim({ proposition: 'Bravo claim.', polarity: undefined, occurrences: [{ line: 4, quote: 'Four records' }] });
+        const b = claim({ proposition: 'Alpha claim.', polarity: 'sideways', occurrences: [{ line: 5, quote: 'three calls' }] });
+        const forward = run([a, b]).defects.map((d) => d.proposition);
+        const backward = run([b, a]).defects.map((d) => d.proposition);
+        expect(forward).toEqual(backward);
+        expect(forward).toEqual(['Alpha claim.', 'Bravo claim.']);
+    });
+
+    test('polarity disagreement across variants leaves the claim with NO polarity', () => {
+        /**
+         * Review of PR #256 found the first version resolving this by the
+         * variant sort, under which `asserts` always wins because it sorts
+         * first. A model that contradicted itself was therefore read as
+         * AFFIRMATIVE — the adjudicator would then return a confident verdict
+         * off a coin flip, which is the affirmative-polarity assumption §AX13.1
+         * says the instrument may not make, arriving through the tie-break.
+         *
+         * Contradiction is the same evidential state as an unrecognised
+         * polarity: the extractor did not tell us which way the claim cuts. So
+         * the claim survives with none, the disagreement is recorded, and the
+         * adjudicator returns `unresolvable`.
+         */
+        const out = run([claim({ polarity: 'asserts' }), claim({ polarity: 'denies' })]);
+        expect(out.claims).toHaveLength(1);
+        expect(out.claims[0].polarity).toBeUndefined();
+        expect(out.conflicts).toHaveLength(1);
+        expect(out.defects).toEqual([
+            {
+                proposition: 'Table zz_demo_widget exists.',
+                field: 'polarity',
+                reason: 'variants disagree: asserts, denies',
+            },
+        ]);
+    });
+
+    test('a defect on a LOSING variant is not reported against the emitted claim', () => {
+        /**
+         * Review of PR #256: defects were collected from every accepted
+         * variant, so one proposition emitted twice — once well-formed, once
+         * without polarity — produced a claim carrying a valid polarity AND a
+         * defect saying its polarity was missing. Anyone reading `defects` as
+         * "claims lacking polarity" would overcount.
+         *
+         * `defects` describes the EMITTED claim. What the discarded variants
+         * said is `conflicts`.
+         */
+        const out = run([claim({ polarity: 'asserts' }), claim({ polarity: undefined })]);
+        expect(out.claims[0].polarity).toBe('asserts');
+        expect(out.defects).toEqual([]);
+    });
+
+    test('the module is a text file — separators must not make it binary to git', () => {
+        /**
+         * Review of PR #256. The internal dedup keys joined on NUL, which puts
+         * the file over git's binary heuristic: `git diff` reported
+         * `Bin 13357 -> 16953 bytes` and the whole change was INVISIBLE in the
+         * pull request. §AX5 clears this file precisely because nobody diffs a
+         * file no check covers; making it undiffable defeats the review that
+         * clearing exists to enable.
+         */
+        const fs = require('fs');
+        const path = require('path');
+        const raw = fs.readFileSync(path.join(__dirname, '..', 'benchmark', 'scripts', 'claim-extraction.js'));
+        expect(raw.indexOf(0)).toBe(-1);
+    });
+});
+
+describe('claim extraction — asserted_value is recorded and never interpreted (§AX13.2)', () => {
+    test('an asserted value is carried through byte-for-byte', () => {
+        const out = run([claim({ kind: 'field_value', asserted_value: '  pending  ' })]);
+        expect(out.claims[0].asserted_value).toBe('  pending  ');
+    });
+
+    test('a claim asserting no particular value carries no key at all', () => {
+        // Absent, not empty-string: an empty value is itself an assertion about
+        // a field, and the two must stay distinguishable in the artifact.
+        const out = run([claim()]);
+        expect(Object.prototype.hasOwnProperty.call(out.claims[0], 'asserted_value')).toBe(false);
+    });
+
+    test('a non-string asserted value is recorded as a defect rather than stringified', () => {
+        const out = run([claim({ asserted_value: 4 })]);
+        expect(Object.prototype.hasOwnProperty.call(out.claims[0], 'asserted_value')).toBe(false);
+        expect(out.defects[0].field).toBe('asserted_value');
     });
 });
 

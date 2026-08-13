@@ -3,27 +3,28 @@
 Persisted by `/next` so no session re-derives priorities from scratch. Read this first when asked
 what is next. Ranked by gate-distance, not by issue age or severity label.
 
-**Last ranked:** 2026-08-12 (re-checked after PR #227 merged) · shipped at version `2026.08.1209` ·
-board 6 open / 104 closed · **0 open PRs**
+**Last ranked:** 2026-08-13 · shipped at version `2026.08.1309` · board **4 open** / 115 closed ·
+**0 open PRs** · **blockers to gate: 1**
 
-> The board went 1 → 6 open because `/senior-grade` sitting 1 ran and filed F-03…F-07 as
-> #216–#220. **That is the audit working as designed, not the backlog rotting** — audits are issue
-> generators and run at milestones. Distance-to-gate did not move: it is still 1.
+> **What moved since the 2026-08-12 ranking — #212 stopped being procedure and became code.**
+> §AX landed (`0e895e0`), retiring §AW's blind-author regime for artifact-level clearing; the seven
+> held-out claim inventories were committed **before any extractor existed** (`77ef851`), which is the
+> guarantee §AX2.2 rests on and is verifiable by anyone with `git log`; §AX11 closed the
+> small-denominator reportability term (`c1f5969`); and the **extractor itself merged**
+> (`29e3266`, §AX12) — frozen prompt, deterministic plumbing, mutation-verified clearing check.
+> Three dispatch attempts had produced three aborts and zero code; that arc is closed.
 >
-> **What moved on the 2026-08-12 re-check (PR #225):** `benchmark/DECISION.md` §AW landed — the
-> claim-veracity axis pre-registration. **#212's design gate is discharged.** Its next action stopped
-> being "design it".
+> Also closed since: #216, #217, #218, #220, #234, #235, #236, #239, #241, #242. **The board shrank
+> while the register grew — that is the shape a good week has here.**
 >
-> **What moved on this re-check (PR #227):** `benchmark/EXTRACTOR-BRIEF.md` landed, and the deny-list
-> was retired for a closed allowlist (§AW11b). **#212's next action is now a session handoff, not a
-> build step** — see *The blinding constraint, retired* below (it no longer restricts **who** may do it). #212 stays #1
-> and stays `next`; nothing was filed and nothing was reordered, so the rubric is not re-run below.
+> **Still zero figures.** No sweep has run, and there is no adjudicator anywhere in the tree. The gate
+> has not moved because nothing yet produces a number.
 >
-> **This ranking session is contaminated and cannot author the extractor.** Reading this file is what
-> contaminates — the *Current gate* section two paragraphs down restates answer-key content for a
-> calibration row. That is deliberate (the gate is unreadable without it) and it is why §AW11a's rule
-> binds the **dispatching session**, not the author's working directory: no agent spawned from a
-> session that has run `/next` is eligible.
+> **This session (the one that ranked) may build and dispatch, but may NOT extract.** §AX retired the
+> blinding-by-author rule, so a `/next` session can author. §AX12.1 replaced it with a narrower and
+> checkable one: extraction of each report happens in a **fresh context holding only the frozen prompt
+> and that one report**. This session has read a held-out proposition and the denominators, so it
+> dispatches extraction rather than performing it.
 
 ---
 
@@ -58,9 +59,8 @@ registered prediction with no trigger firing while correctness collapsed **4/4 �
 
 | # | Item | Why it ranks here |
 |---|---|---|
-| **1** | **#212 — commission the correctness axis** (`next`) · **Stage 2, in flight** | Removes the release blocker above. It is the only open item that touches the current gate, and §5.2 says no further sharpening of the existing instrument can substitute for it. ~~**Design before build** — `/design-spar` first~~ **Design gate discharged 2026-08-12** (§AW, PR #225). **Design gate re-registered 2026-08-13** (§AX, PR #246) after §AW's blind-author procedure was retired — three dispatches, three aborts, zero measurement, two aborts caused by the operator's own repairs. Next action: **commit hand-authored claim inventories for the 7 held-out reports, then build the extractor + adjudicator** (TDD, vocabulary check mutation-verified), then one sweep → per-arm recall, spurious rate and veracity figures. **No blinding constraint applies any more** — §AX substitutes artifact properties for author properties, so a contaminated session (including one that has run `/next`) may do this work. See *The blinding constraint, retired* below. |
-| 2 | **#216 — no retention or purge for captured customer data** (F-04) | Named one of grade sitting 1's *three largest risks*, and the only open finding that is a **privacy** problem rather than a rigor problem. Blocks the **next** gate (installable on a customer instance / handoff), not this one — so it ranks below #1 but above everything else on the board. |
-| 3 | **#220 — no automated integration tier** (F-07) · **deploy half shipped, PR #229** | The one grade cap still standing after PR #222 lifted *No mandatory CI → B*. **Does not bind today** — raw 72.9 already sits below B+ — so it only starts costing once the score rises. Ranks as the gating item for grade sitting 2, not for now. **Worked out of order 2026-08-12** because #1 is un-workable from a session that has run `/next` (see the blinding constraint) and this was the ranked item a contaminated session could touch. `npm run smoke` now covers **deploy**: build → install → compare all 160 `dist/app/update/*.xml` records against the instance. **The runtime half is NOT done** — creating a run needs an authenticated write and the `now-sdk` CLI has none, so it stays a live-MCP exercise. Keep #220 open for it. |
+| **1** | **#212 — commission the correctness axis** (`next`) · **build stage, in flight** | Removes the release blocker above. Still the only open item touching the current gate, and §5.2 says no further sharpening of the existing instrument can substitute for it. **Design gate discharged twice** — §AW (PR #225), then re-registered as §AX (PR #246) when the blind-author procedure was retired. **Done:** inventories committed pre-extractor (§AX2.2), extractor authored and cleared (§AX5/§AX12), **adjudicator built and unit-green (§AX13, v`2026.08.1310`)** — three-valued, injected probe, control-paired, mutation-verified clearing. **Next action: (b) dispatch the sweep** in fresh per-report contexts (§AX12.1), which requires the real metadata probe wired to the foundry MCP tools; **(c) then adjudicate inventory-driven (§AX2.4) → per-arm recall, spurious rate, veracity, AX-4.** Adjudicator went first because **the sweep effectively freezes the extractor**: §AX7.2 rules that repairing it in response to held-out misses leaves *no valid recall figure from v14 at all*, and the eligible 15 reports are exhausted by the two sets — so a plumbing bug discovered after the sweep is indistinguishable from a real miss and cannot be re-earned. |
+| 2 | **#253 — CLAUDE.md states there is no CI and no branch protection; both exist** | Premise verified at ranking time: `.github/workflows/ci.yml` is present and `main` requires the `build · test · lint` status check. A false statement in the **always-loaded** instruction file, so every session is told nothing enforces the checks and nothing blocks a merge. Blocks the **handoff** gate (a runbook that misdescribes the merge path), not this one — and it is a docs edit, so it ranks second on leverage, not on weight. |
 | — | Phase 2, shrunk — native triage + Fix Report export | The cheapest alternative source of correctness signal: put it in front of real SCs and let production supply the evidence. **Note it does NOT satisfy §5.6 reason 2**, which requires *the custom harness* in front of real users — shipping the native arm reopens nothing, so this buys production evidence on its own merits, not a reopening condition. Ranked below #1 because shipping a UI over an unmeasured diagnosis is the thing #1 exists to prevent. Considered and not chosen 2026-08-12. |
 | — | Close out and package for handoff | `/senior-grade` + `handoff-readiness`. The fallback if #1's design gate concludes a correctness axis cannot be built affordably. Not scheduled. |
 
@@ -70,61 +70,31 @@ stopping condition must be written before the first pass.** A self-scrutinising 
 point unless one is declared up front, and that is precisely what the last one lacked. §AW7 now carries
 that condition.
 
-### The blinding constraint, RETIRED 2026-08-13 — kept as history, do not follow
+### Who may do what — the constraint that replaced blinding
 
-> **Superseded by `DECISION.md` §AX (PR #246).** Everything in this section described §AW's
-> blind-author procedure. That procedure is retired: it protected the recall figure with a
-> property of the *author's context*, which cannot be verified from outside, and it produced
-> three aborts and zero measurement. §AX measures recall as **enumeration completeness** — no
-> answer key, no one-shot burn, no blind author — and enforces two properties on the
-> **artifact** instead. **A session that has run `/next` may now author the extractor.**
->
-> Read the rest of this section as a record of why, not as a constraint on who.
+**§AW's blind-author regime is retired** (`DECISION.md` §AX0/§AX9, PR #246). It protected the recall
+figure with a property of the *author's context* — unverifiable from outside — and it cost three
+dispatches, three aborts and zero measurement, two of the aborts caused by the operator's own repairs.
+§AX substitutes properties of the **artifact**: the inventories were committed before the extractor
+existed (checkable with `git log`), and the prompt is cleared mechanically. **A session that has run
+`/next` may author this work.**
 
-§AW4 made the calibration set a **one-shot consumable** and named a deny-list the extractor's
-author may not read. Two consequences, *as they stood before the retirement*:
+**What replaced it is narrower and still binding — §AX12.1.** The extractor is model-backed, so
+"frozen" does not make its execution independent of what the executing context knows. Registered:
+**each report is extracted in a fresh context holding only the frozen prompt and that one report** —
+never the inventory fixture, never `DECISION.md`, never another report. *The operator dispatches; the
+operator does not extract.* The brief's §6 ("contamination applies to authoring, not execution") is
+superseded on exactly this point.
 
-1. **The extractor must be authored by a fresh-context agent, not by the session that ranks the board.**
-   Ranking requires reading *this file*, and this file restates the answer for one calibration row two
-   sections up. A session that has run `/next` is contaminated by construction and cannot be the author.
-   Dispatch with an explicit deny-list and require a written blinding attestation; §AW4 puts the burden
-   of demonstrating blindness on the **author**, not on a reviewer to prove contamination.
-2. **Review the returned extractor for shape, lint and tests only.** Steering its claim-detection
-   heuristics from a contaminated position is tuning against the answer key at one remove, and §AW4
-   voids the recall figure on exactly that — which per §AW8 voids the veracity figure with it.
+**And §AX12.2:** the prompt derives from §AX3 + §AX10's count ruling — the registered specification —
+and from **nothing in the fixture**. Copying the inventory's seven reading rules into it would make
+recall score two implementations of one operationalisation against each other, which is R-27 arriving
+through the back door.
 
-3. **Blinding is a property of the DISPATCHING SESSION, not of the author — demonstrated twice, and
-   the obvious fix was refuted.** Two authors were dispatched; both aborted on a contamination
-   tripwire before writing a line. Neither opened a deny-listed file. The project **auto-memory** —
-   which restated a calibration row's answer — is injected into every agent spawned from a session
-   scoped to this project. The second dispatch tested the fix: author placed *outside the repo*,
-   memory already redacted on disk. **It was contaminated anyway, quoting the pre-redaction text** —
-   so the injection rides in the dispatching session's context, not the agent's working directory,
-   and **redacting the memory does not clear a session that already loaded it.**
-
-   **Therefore: no agent spawned from a session that has run `/next` can author this.** It must be
-   authored from a **session started fresh after the redaction**, whose context never carried the
-   answer. See §AW11a for the full finding and for defect 10 (`scorecard-template.md` §A2 discloses
-   a seed's decoy — ruled acceptable, seed 04 is not in the corpus).
-
-**Status 2026-08-12 (updated):** two dispatches, two aborts, nothing authored. Project auto-memory
-**redacted** (backup outside the repo). **Nothing reviewed, nothing merged, and the calibration burn
-has not fired — the instrument is intact and the cost so far is two dispatches.**
-
-**The dispatch brief now exists: `benchmark/EXTRACTOR-BRIEF.md`.** It is answer-free by construction
-and safe to hand to a clean session. Three things changed with it, all in `DECISION.md` §AW11b:
-
-1. **Defect 11** — two more leak sources §AW4 never named (`benchmark/scorecard-v14.md` §5, which
-   discloses all three calibration answers in prose, and `benchmark/v14-ambiguity-flags.json`
-   `_caution`). Found by grep, not by review. **The deny-list is retired for a closed allowlist**;
-   a guard that has failed three times the same way is not short two entries.
-2. **The author is not told which rows are the sensitivity set.** Naming them would license an
-   extractor that fires on exactly those three and scores perfect recall while measuring nothing.
-3. **The blind author freezes; a contaminated operator fires the sweep.** Contamination bounds
-   *authoring*, not *execution* — once frozen, adjudication is deterministic.
-
-**Next action: start a fresh session in a scope that never carried the answer, and give it
-`benchmark/EXTRACTOR-BRIEF.md`.** Not a subagent of a session that has run `/next`.
+*History of the retired procedure, kept because it cost the most:* blinding rode in the **dispatching
+session's context**, not the agent's working directory — an author placed outside the repo, with the
+project memory already redacted on disk, still quoted the pre-redaction text. Redacting a memory does
+not clear a session that already loaded it. Full record in §AW11a–f.
 
 ---
 
@@ -143,21 +113,25 @@ Not ranked and not counted as debt. A finding landing here is the register worki
   `x_snc_tsbench_ticket`), and a candidate fix was measured *and reverted* on the 4/4 → 0/4 correctness
   collapse this file cites above as the reason for the gate. They reopen only under §5.6 — in
   particular §5.6 reason 3, a live observation.
-- **Grade sitting 1 findings that block no gate** — **#217** (coverage unmeasurable: the `vm` loader
-  bypasses istanbul, so all 21 production files report 0%), **#219** (no rate limit on the endpoints
-  that spend LLM calls), **#218** (`markRunning` TOCTOU). #218 is here on the grade's own reasoning,
-  not by dismissal: it is **deliberate and documented with a stated trade-off**, which is why sitting 1
-  reported it P2 *and declined to use it as a cap* — an accidental race would have capped at B.
-- **Six route descriptions exceed the 80-char `short_description` column and are truncated at
+- **Grade sitting 1 findings that block no gate** — **#219** (no rate limit on the endpoints that
+  spend LLM calls) is the one still open. **#217** (coverage unmeasurable through the `vm` loader) and
+  **#218** (`markRunning` TOCTOU) were both fixed and closed 2026-08-13, so the register shrank here
+  without anything being re-ranked.
+- **#251 — six route descriptions exceed the 80-char `short_description` column and are truncated at
   install.** Measured by the #220 deploy probe on gpinst01, which reports them as `truncated`:
-  `sys_ws_definition` ×1, `sys_ws_operation` ×5. The platform stores the first 80 characters and
-  drops the tail silently. Blocks no gate — the routes work — and the fix is a source edit in
-  `src/fluent/rest-api.now.ts`. Deliberately not filed as an issue and not fixed in PR #229.
-- **Four records cannot be probed at all: `sys_gen_ai_feature_mapping` and
-  `sys_gen_ai_strategy_mapping` return 403 "Insufficient rights to query records" to an admin.**
-  The deploy probe subtracts them from its count rather than passing or failing them, so its
-  headline reads "156 of 160". A standing, disclosed blind spot in the tier — worth knowing before
-  anyone quotes the probe as full coverage.
+  `sys_ws_definition` ×1, `sys_ws_operation` ×5. The platform stores the first 80 characters and drops
+  the tail silently. Blocks no gate — the routes work — and the fix is a source edit in
+  `src/fluent/rest-api.now.ts`. Filed 2026-08-13 with the `register` label, deliberately not scheduled.
+- ~~**Four records cannot be probed at all** — `sys_gen_ai_feature_mapping` /
+  `sys_gen_ai_strategy_mapping` return 403 to an admin.~~ **Retracted 2026-08-13 (#242, PR #250): the
+  premise was a misdiagnosis.** The instance does not refuse those *tables*; it refuses any request
+  carrying a `sysparm_query` — a bare read returns 200 with rows, `sysparm_fields=sys_id` returns 200,
+  and only `sysparm_query=` draws *"Field(s) present in the query do not have permission to be read"*.
+  Probe coverage went 161 → **165 of 165 records present** (161 field-matched, 4 presence-only).
+  **Keep this one in view while building #212's adjudicator:** it is a third instance-side way for a
+  read to come back looking like absence — alongside #187's nonexistent-field *Access denied* and
+  Build Rule #42's no-ACL denial — and a denied column is **silently omitted rather than errored**.
+  That is precisely the confusion §AX's `unresolvable` verdict exists to refuse to launder.
 - **`DESIGN.md` §5.4 — four corrections to the record** (#183, #187, #110, #107). Facts, not work.
   #187 matters most in practice: **seed 07 must not be used to qualify an ACL behaviour** without
   re-deriving its bar, because its qualification query hits a nonexistent column and a bad field name
