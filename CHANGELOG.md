@@ -80,9 +80,29 @@ The **snapshot is not cleared and cannot be** — it must name whatever tables t
 including the fixture table the vocabulary check forbids. It is evidence, constrained by provenance
 rather than by vocabulary, and §AX14.5 states what carries the burden in its place.
 
+### Fixed — five findings from review of PR #257, two of them load-bearing (§AX14.7)
+
+**A missing `super_class` key was silently read as "no parent"** — this module's own defect, in the
+species it exists to prevent. `exists` and `own_fields` were asserted explicitly; `super_class` was
+type-checked only *when present*, so a collector that dropped the key for one row terminated the walk at
+the leaf: union truncated, per-link control passing, truthful report scored a control-approved
+`refuted`. No test could see it — the fixture always set the key. **A root now declares `null`.**
+
+**The control table was the one place uncollected was reported as absent** — the lookup bypassed the
+entry check, so a control table nobody read produced `control_failed`, which asserts the instrument
+looked. That is §AX14.3's rule broken by the code registering it. Now caught at construction, because a
+snapshot-level hole reported once per claim reads as claim-level.
+
+Three narrower: prototype keys leaking into the cycle set and the field union (a column named
+`__proto__` vanished and read `field_absent` with the control passing — the fabricating direction); no
+table-name normalisation, so a case variant returned `probe_failed`, reporting an evidence gap for a
+key-formatting gap; and the discovery widening capturing the snapshot's own natural filename. The
+snapshot path is **pinned at `benchmark/v14-metadata-snapshot.json`** and excluded by data-file
+extension, with a test asserting no cleared file can take that exit.
+
 ### Verified
 
-- `npm test` — 2224 passed, 47 suites, including 20 new probe tests.
+- `npm test` — 2235 passed, 47 suites, including 30 probe tests.
 - `npx eslint` clean on every changed file.
 - **Live-exercised on gpinst01's real metadata** (§AX14.6): an inherited column returns `supported`
   where a declaration-only read returns `refuted`; a genuinely absent column refutes an assertion and

@@ -172,6 +172,43 @@ describe('metadata probe — the per-ancestor control, and why the old one could
         expect(() => probeModule.makeProbe(snap)('zz_child')).toThrow();
     });
 
+    test('a link with NO super_class key throws — a missing key is not a declared root', () => {
+        /**
+         * Review of PR #257, and the most serious finding in it: this module's
+         * own defect, of the species it exists to prevent.
+         *
+         * `exists` and `own_fields` were both asserted explicitly while
+         * `super_class` was type-checked only WHEN PRESENT — so a collector that
+         * dropped or renamed the key for one row terminated the walk at the
+         * leaf. Union truncated, per-link control passing (the leaf declares its
+         * own `sys_id`), truthful report scored a control-approved `refuted`.
+         *
+         * A root declares `super_class: null`. Saying nothing is not saying
+         * "root"; it is saying nothing, and nothing is not an observation.
+         */
+        const snap = snapshot();
+        delete snap.tables.zz_child.super_class;
+
+        expect(() => probeModule.makeProbe(snap)('zz_child')).toThrow(/super_class/);
+    });
+
+    test('and the truncation it would have caused never reaches a verdict', () => {
+        const snap = snapshot();
+        delete snap.tables.zz_child.super_class;
+
+        const verdict = adjudication.adjudicate(
+            { id: 'zz-6', kind: 'existence', polarity: 'asserts', subject: { table: 'zz_child', field: 'zz_shared' } },
+            probeModule.makeProbe(snap)
+        );
+
+        expect(verdict.verdict).toBe('unresolvable');
+        expect(verdict.reason).toBe('probe_failed');
+    });
+
+    test('an explicit null super_class is a declared root and walks cleanly', () => {
+        expect(probeModule.makeProbe(snapshot())('zz_parent').fields).toContain('zz_shared');
+    });
+
     test('a cycle in the chain throws instead of hanging', () => {
         const snap = snapshot();
         snap.tables.zz_parent.super_class = 'zz_child';
@@ -203,7 +240,7 @@ describe('metadata probe — a table the snapshot says is not there', () => {
         expect(verdict.verdict).toBe('refuted');
     });
 
-    test('a failed control table makes an absence unresolvable rather than refuted', () => {
+    test('a control table looked for and NOT found makes an absence unresolvable, not refuted', () => {
         const snap = snapshot();
         snap.tables.zz_control_table = { exists: false };
 
@@ -214,6 +251,28 @@ describe('metadata probe — a table the snapshot says is not there', () => {
 
         expect(verdict.verdict).toBe('unresolvable');
         expect(verdict.reason).toBe('control_failed');
+    });
+
+    test('a control table nobody collected is rejected at construction, not reported as absent', () => {
+        /**
+         * Review of PR #257. The control lookup bypassed `entryFor`, so an
+         * UNCOLLECTED control table was reported `exists: false` and rendered
+         * `control_failed` — an assertion that the instrument looked and the
+         * control was not there. §AX14.3, registered in this same change, says
+         * those two states are never collapsed; the code collapsed them.
+         *
+         * The verdict was unaffected (both routes end at `unresolvable`) but the
+         * REASON was wrong, and the reasons are what the evidence table reports.
+         *
+         * It is caught at construction because it is a defect of the snapshot,
+         * not of any claim — every verdict drawn from it would be equally
+         * unqualified, so failing per-claim would report a snapshot-level hole
+         * once per claim as though it were claim-level.
+         */
+        const snap = snapshot();
+        delete snap.tables.zz_control_table;
+
+        expect(() => probeModule.makeProbe(snap)).toThrow(/control_table/);
     });
 });
 
@@ -260,6 +319,61 @@ describe('metadata probe — the snapshot contract, enforced at construction', (
         delete snap.provenance.collected_at;
 
         expect(() => probeModule.makeProbe(snap)).toThrow(/collected_at/);
+    });
+});
+
+describe('metadata probe — inherited object keys are not instance metadata', () => {
+    /**
+     * Review of PR #257. Bare objects backed the cycle set and the field union,
+     * so prototype keys leaked into both. Neither name is plausible on this
+     * platform; the fix is free, and the second failure mode below is the
+     * fabricating one rather than the fail-safe one.
+     */
+    test('a table named after a prototype member does not read as a cycle', () => {
+        const snap = snapshot();
+        snap.tables.constructor = { exists: true, super_class: null, own_fields: ['sys_id', 'zz_shared'] };
+
+        expect(() => probeModule.makeProbe(snap)('constructor')).not.toThrow();
+    });
+
+    test('a column named after the prototype accessor survives into the union', () => {
+        const snap = snapshot();
+        snap.tables.zz_parent.own_fields = ['sys_id', '__proto__'];
+
+        expect(probeModule.makeProbe(snap)('zz_child').fields).toContain('__proto__');
+    });
+});
+
+describe('metadata probe — a key-formatting gap is not an evidence gap', () => {
+    /**
+     * Review of PR #257. The lookup was an exact key match on whatever string
+     * the model emitted from report prose, so a case or whitespace variant threw
+     * "uncollected is not absent" — reporting an EVIDENCE hole for what is really
+     * a formatting difference. It failed safe on the verdict and deflated
+     * determinacy while misdirecting the diagnosis.
+     *
+     * Normalising is safe in the specific sense that matters: platform table
+     * names are lower-case, so no two distinct tables differ only by case or
+     * surrounding space. Where that assumption would break — two snapshot keys
+     * colliding once normalised — the probe refuses rather than picking one.
+     */
+    test('a case variant of a collected table resolves to it', () => {
+        expect(probeModule.makeProbe(snapshot())('ZZ_Child').fields).toContain('zz_shared');
+    });
+
+    test('surrounding whitespace is trimmed', () => {
+        expect(probeModule.makeProbe(snapshot())('  zz_child ').table_exists).toBe(true);
+    });
+
+    test('a genuinely uncollected table still throws — normalisation does not invent evidence', () => {
+        expect(() => probeModule.makeProbe(snapshot())('ZZ_Never_Collected')).toThrow(/never_collected/i);
+    });
+
+    test('two snapshot keys colliding under normalisation are refused, not silently merged', () => {
+        const snap = snapshot();
+        snap.tables.ZZ_CHILD = { exists: true, super_class: null, own_fields: ['sys_id'] };
+
+        expect(() => probeModule.makeProbe(snap)).toThrow(/collid|duplicate/i);
     });
 });
 

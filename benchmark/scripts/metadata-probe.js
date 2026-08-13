@@ -72,6 +72,49 @@ function fail(message) {
     throw new Error('metadata-probe: ' + message);
 }
 
+function hasOwn(object, key) {
+    return Object.prototype.hasOwnProperty.call(object, key);
+}
+
+/**
+ * The lookup key for a table name.
+ *
+ * Table names on this platform are lower-case, so no two distinct tables differ
+ * only by case or by surrounding space. Without this, a name the model wrote
+ * from report prose as `Incident` threw "uncollected is not absent" — an
+ * EVIDENCE gap reported for what is really a key-formatting gap. It failed safe
+ * on the verdict and deflated determinacy while misdirecting the diagnosis
+ * (review of PR #257).
+ *
+ * Where the assumption behind it would break — two snapshot keys colliding once
+ * normalised — `buildIndex` refuses the snapshot rather than picking one.
+ */
+function normaliseName(name) {
+    return String(name).trim().toLowerCase();
+}
+
+/**
+ * Index the snapshot's tables by normalised name.
+ *
+ * `Object.create(null)` and not `{}`: with a bare object a table named after a
+ * prototype member reads as already-present, and the cycle check below fires on
+ * a first visit (review of PR #257).
+ */
+function buildIndex(tables) {
+    const index = Object.create(null);
+    const names = Object.keys(tables);
+
+    for (let i = 0; i < names.length; i++) {
+        const key = normaliseName(names[i]);
+        if (index[key] !== undefined) {
+            fail('snapshot keys "' + index[key].name + '" and "' + names[i] + '" collide once normalised');
+        }
+        index[key] = { name: names[i], entry: tables[names[i]] };
+    }
+
+    return index;
+}
+
 /**
  * Reject a snapshot that cannot support a verdict, at construction rather than
  * at the first read.
@@ -109,12 +152,13 @@ function validateSnapshot(snapshot) {
  * whole point: the first says nobody looked, the second says somebody looked
  * and it was not there. Only the second is an observation.
  */
-function entryFor(tables, name, context) {
-    const entry = tables[name];
-    if (entry === undefined) {
+function entryFor(index, name, context) {
+    const found = index[normaliseName(name)];
+    if (found === undefined) {
         fail('table "' + name + '" is not in the snapshot' + context + ' — uncollected is not absent');
     }
-    if (typeof entry.exists !== 'boolean') {
+    const entry = found.entry;
+    if (!entry || typeof entry.exists !== 'boolean') {
         fail('table "' + name + '" has no exists flag' + context);
     }
     return entry;
@@ -127,19 +171,20 @@ function entryFor(tables, name, context) {
  * without its own control column — all three mean the union is missing
  * something, and a union missing something cannot support a `refuted`.
  */
-function unionOverChain(tables, leaf) {
-    const fields = {};
-    const seen = {};
+function unionOverChain(index, leaf) {
+    const fields = Object.create(null);
+    const seen = Object.create(null);
     let name = leaf;
     let depth = 0;
 
     while (name) {
-        if (seen[name]) fail('cycle in the super_class chain at "' + name + '"');
-        seen[name] = true;
+        const key = normaliseName(name);
+        if (seen[key]) fail('cycle in the super_class chain at "' + name + '"');
+        seen[key] = true;
         if (++depth > MAX_CHAIN_DEPTH) fail('super_class chain from "' + leaf + '" exceeds the depth limit');
 
-        const context = name === leaf ? '' : ' (ancestor of "' + leaf + '")';
-        const entry = entryFor(tables, name, context);
+        const context = key === normaliseName(leaf) ? '' : ' (ancestor of "' + leaf + '")';
+        const entry = entryFor(index, name, context);
         if (entry.exists !== true) {
             fail('table "' + name + '" is recorded absent' + context + ' — a table cannot extend one that is not there');
         }
@@ -159,9 +204,32 @@ function unionOverChain(tables, leaf) {
 
         for (let i = 0; i < entry.own_fields.length; i++) fields[entry.own_fields[i]] = true;
 
+        /**
+         * THE KEY MUST BE THERE, AND A ROOT SAYS SO EXPLICITLY.
+         *
+         * This was the most serious finding in review of PR #257, and it was
+         * this module's own defect in the species it exists to prevent:
+         * `exists` and `own_fields` were both asserted, while `super_class` was
+         * type-checked only WHEN PRESENT. A collector that dropped or renamed
+         * the key for one row terminated the walk at the leaf — union truncated,
+         * per-link control passing because the leaf declares its own `sys_id`,
+         * and a report correctly naming an inherited column scored a
+         * control-approved `refuted`.
+         *
+         * Saying nothing is not saying "root". A root declares `null`.
+         */
+        if (!hasOwn(entry, 'super_class')) {
+            fail(
+                'table "' +
+                    name +
+                    '" declares no super_class key' +
+                    context +
+                    ' — a root must say so with null, and a missing key is not a declared root'
+            );
+        }
         const parent = entry.super_class;
-        if (parent !== null && parent !== undefined && typeof parent !== 'string') {
-            fail('table "' + name + '" has a super_class that is neither a name nor null');
+        if (parent !== null && typeof parent !== 'string') {
+            fail('table "' + name + '" has a super_class that is neither a name nor null' + context);
         }
         name = parent || null;
     }
@@ -177,26 +245,35 @@ function unionOverChain(tables, leaf) {
  */
 function makeProbe(snapshot) {
     validateSnapshot(snapshot);
-    const tables = snapshot.tables;
+    const index = buildIndex(snapshot.tables);
     const controlName = snapshot.control_table;
 
     /**
      * The table-level control, resolved once from the same snapshot as every
      * observation it qualifies — which is what brief §2.1 rule 2 means by "the
      * same call and the same auth context" once the call has been made ahead of
-     * time. A control table that is missing or was itself not found does not
-     * throw: it reports `exists: false`, and the adjudicator turns that into
-     * `control_failed`, which is the correct reading. The instrument worked;
-     * what it saw does not support a verdict.
+     * time.
+     *
+     * The two states are NOT collapsed, and the first version of this collapsed
+     * them (review of PR #257). A control table the collector **never read** is
+     * a hole in the snapshot: it throws here, at construction, because every
+     * verdict drawn from that snapshot would be equally unqualified and failing
+     * per-claim would report a snapshot-level hole once per claim as though it
+     * were claim-level. A control table that **was** looked for and not found is
+     * an observation: `exists: false`, which the adjudicator renders
+     * `control_failed`. The instrument worked; what it saw supports no verdict.
+     *
+     * The earlier code reported the first case as the second — §AX14.3's own
+     * rule, broken by the code registering it.
      */
-    const controlEntry = tables[controlName];
+    const controlEntry = entryFor(index, controlName, ' (the snapshot control table)');
     const control = {
         name: controlName,
-        exists: !!(controlEntry && controlEntry.exists === true),
+        exists: controlEntry.exists === true,
     };
 
     return function probe(table) {
-        const entry = entryFor(tables, table, '');
+        const entry = entryFor(index, table, '');
 
         if (entry.exists !== true) {
             /**
@@ -211,7 +288,7 @@ function makeProbe(snapshot) {
 
         return {
             table_exists: true,
-            fields: unionOverChain(tables, table),
+            fields: unionOverChain(index, table),
             control: control,
         };
     };

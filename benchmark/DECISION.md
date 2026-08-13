@@ -9236,3 +9236,36 @@ inherited column returns `supported` where a declaration-only read would have re
 genuinely absent column refutes an assertion and supports a denial; an absent table refutes; a value on a
 live column and a count both return `mutable`; an uncollected table returns `probe_failed`. All three
 verdicts and five of the six reasons, against metadata read from the instance rather than a stub.
+
+### AX14.7 What review found in the first implementation, recorded rather than quietly fixed
+
+Five findings, all before any measurement, following §AX13.5's precedent — the record belongs here
+because the fixes are load-bearing behaviour rather than tidying. Two bear on what the axis can say.
+
+1. **A missing `super_class` key was silently read as "no parent" — this module's own defect, in the
+   species it exists to prevent.** `exists` and `own_fields` were both asserted explicitly; `super_class`
+   was type-checked only *when present*, so a collector that dropped or renamed the key for one row
+   terminated the walk at the leaf. Union truncated, per-link control passing because the leaf declares
+   its own `sys_id`, and a report correctly naming an inherited column scored a **control-approved
+   `refuted`** — §AX14.1 arriving through the missing-key door rather than the declaration-only door.
+   No test could see it: the fixture always set the key. **A root now declares `null`, and saying nothing
+   is not saying "root".**
+2. **The control table was the one place uncollected WAS reported as absent** — the lookup bypassed the
+   entry check, so a control table the collector never read produced `control_failed`, which asserts the
+   instrument looked. §AX14.3's rule, broken by the code that registered it. It now fails at
+   construction, because a snapshot-level hole reported once per claim reads as claim-level.
+
+The other three were narrower: prototype keys leaking into the cycle set and the field union (a column
+named `__proto__` vanished from the union and read `field_absent` with the control passing — the
+fabricating direction, not the fail-safe one); no table-name normalisation, so a case variant the model
+wrote from prose returned `probe_failed`, reporting an *evidence* gap for a *key-formatting* gap and
+deflating determinacy while misdirecting diagnosis; and the discovery widening capturing the snapshot's
+own natural filename, which would have gone red mid-sweep with one of its two exits contradicting
+§AX14.5. The snapshot path is now **pinned at `benchmark/v14-metadata-snapshot.json`** and excluded by
+data-file extension, with a test asserting no cleared file can take that exit.
+
+**What this says about the instrument, and it is §AX13.5's sentence unchanged.** Findings 1 and 2 are
+both the registered principle defeated by a mechanical detail — an optional key and a bypassed lookup —
+in a module written specifically to enforce that principle, by an author who had just finished writing
+the registration. Neither would have appeared in a figure. **A rule and its enforcement are different
+artifacts, and writing the first is not evidence about the second.**
