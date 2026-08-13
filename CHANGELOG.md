@@ -17,6 +17,53 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1301 — 2026-08-13
+
+### Fixed — the §AW11e repair leaked the answer into the brief (§AW11f, #212)
+
+**Dispatch 3 aborted on `EXTRACTOR-BRIEF.md` §4's tripwire, correctly, on a defect this repo's own
+previous release introduced.** Third abort, zero calibration burn — the set is intact.
+
+`2026.08.1218` withdrew `./test/**` from the brief's allowlist and explained why by **quoting the
+offending fixture strings verbatim and labelling what each one adjudicated.** That prose went into the
+one file every author is *required* to read. It is strictly worse than the leak it documented: the
+original strings were unlabelled fixture data in a test file an author had to stumble across and
+recognise, and the repair supplied the significance plus guaranteed delivery — handing over a
+ground-truth value and the claim shapes the calibration rows share, which is the pair an extractor
+could be tuned against.
+
+§AW11d had already recorded this exact mechanism (*"a string becomes answer-key material
+retroactively"*) and its remedy (*"state the defect's shape with no vocabulary shared with the
+corpus"*), **four paragraphs above where the new prose was appended.** The remedy was in view and the
+defect recurred, which is the evidence that care is not the control:
+
+> **The artifact that describes the boundary sits inside the boundary.** Whoever is qualified to write
+> that description is contaminated by construction — they know what must be withheld — so they cannot
+> be the one who clears it. The clearing must be mechanical.
+
+Three-part repair: the brief's note now states shape only (no quotation, no table, no counts, no file
+named); the detail moves to `DECISION.md` §AW11e/§AW11f, which is on the author's exclusion list, making
+*the record belongs where the author cannot read it* the standing rule for brief-side findings; and
+**`test/extractorBriefBlindness.test.js`** adds a mechanical vocabulary check on the brief —
+mutation-verified against the leaking version, where **6 of its 8 assertions fail.**
+
+### Fixed — the project auto-memory redaction was incomplete (§AW11f)
+
+The 2026-08-12 redaction removed row numbers but left the false row's **scoring attribute** and, in the
+mission memory, a **claim shape** with a mechanism hint. Row numbers had been treated as the answer; the
+answer is any locator **or** any ground-truth value. Both removed from `MEMORY.md` and
+`foundry-troubleshooter-mission.md`.
+
+The scoring attribute was adjudicated **non-locating** and was *not* the reason for the abort — report
+bodies carry no score, so nothing connects it to a report identity. It went anyway, because removal is
+free and §9 resolves doubt against the instrument.
+
+**Scope isolation failed as a control, again.** Dispatch 3 ran from a git worktree outside this project
+on the theory that auto-memory is keyed by working directory; project memory was injected regardless.
+Whether the key is not the path, or the session simply started elsewhere, cannot be determined from the
+operator side — and **a control whose success the operator cannot verify is not a control.** Redaction
+of the source is now the mechanism, with scope as defence in depth.
+
 ## 2026.08.1218 — 2026-08-12
 
 ### Fixed — the #212 extractor allowlist admitted the answer it exists to withhold (§AW11e)

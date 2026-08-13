@@ -8402,3 +8402,71 @@ the operator who happens to have looked.
 only reason this is cheap, and it is the argument for clearing every entry *before* dispatch rather
 than after the first burn. The next author dispatched is the first one to receive a per-entry-cleared
 allowlist.
+
+### AW11f. The §AW11e repair leaked the answer into the brief — fifth leak, second one authored by the fix
+
+**Dispatch 3 aborted 2026-08-13 on §4's tripwire, and the abort was correct.** It is the first abort
+triggered by a defect the *operator* introduced rather than by inherited context, and it was surfaced
+by §9's question 2 — an author volunteering pre-loaded knowledge nobody had asked about a third time.
+Recorded per §AW7 rule 3. **No registered term is amended.**
+
+**The defect.** §AW11e withdrew `./test/**` from the brief's allowlist and explained why by quoting the
+offending fixture strings verbatim — the fixture table name, its field count, and a row-count string —
+**and labelling what each one adjudicated** ("which **is** the adjudication of one calibration row").
+That prose went into `EXTRACTOR-BRIEF.md`, the one file every author is *required* to read.
+
+This is strictly worse than the leak it documented. The original strings were unlabelled fixture data
+in a test file an author had to stumble across and recognise; the repair supplied the significance and
+guaranteed delivery. It hands over the ground-truth value **and** the claim shapes the calibration rows
+share, which is the pair an extractor could be tuned against.
+
+**§AW11d had already named this mechanism and prescribed the remedy** — *"a string becomes answer-key
+material retroactively"*, fixed by *"state the defect's shape with no vocabulary shared with the
+corpus"* — and it sits four paragraphs above where §AW11e's prose was appended. The remedy was in view
+and the defect recurred anyway. That is the evidence that care is not the control:
+
+> **Registered principle:** *the artifact that describes the boundary sits inside the boundary.*
+> Whoever is qualified to write that description is contaminated by construction — they know what must
+> be withheld — so **they cannot be the one who clears it.** The clearing must be mechanical.
+
+**Repair.** Three parts:
+
+1. The brief's §3 note now states the defect's *shape* only: a file in that tree carried strings that
+   happen to state ground truth, no quotation, no table, no counts, no file named. The residual
+   paragraph likewise names no specific files or fixture identifiers.
+2. **The record lives here, not there.** `DECISION.md` is on the author's exclusion list, so detail is
+   safe in this section and unsafe four files away. That split is now the rule for every future
+   brief-side finding: *the record belongs where the author cannot read it.*
+3. **`test/extractorBriefBlindness.test.js`** — a mechanical vocabulary check on the brief: fixture
+   table identifiers, field-count and row-count assertions, seed identifiers, row locators, and any
+   `./test/` file outside the six permitted. Mutation-verified against the leaking version: **6 of its
+   8 assertions fail on it.** It is a vocabulary check and claims nothing more — but all three
+   brief-side leaks to date (§AW11d ×2, this one) were vocabulary leaks, not inferences.
+
+**The other two items the author disclosed, adjudicated.**
+
+- **Aggregate v14 figures plus "the false row scored well" (from auto-memory).** Accepted as
+  **non-locating** and *not* the reason for the abort. The author's argument is correct: report bodies
+  carry no score, so there is no channel from a scoring attribute to a report identity, and an
+  extractor cannot fire on "the row that scored well." §5 already discloses the existential fact. It
+  was removed anyway, because removal is free and §9 resolves doubt against the instrument.
+- **Fixture identifiers in `./src` comments.** Accepted as non-locating; fixtures are not reports. The
+  brief no longer names which files or which identifiers.
+
+**The 2026-08-12 memory redaction was incomplete, and that is its own finding.** It removed row
+numbers but left the scoring attribute and, in the mission memory, a **claim shape** with a mechanism
+hint. Row numbers were treated as the answer; the answer is any locator *or* any ground-truth value.
+Both are now removed.
+
+**Scope isolation failed as a control — again.** Dispatch 3 was set up in a git worktree at a path
+outside this project, on the theory that auto-memory is keyed by working directory. The author
+reported project memory injected at session start regardless. Whether the key is not the path or the
+session simply started elsewhere cannot be determined from the operator side, and that is the point:
+**a control whose success the operator cannot verify is not a control.** §AW4's "neither a neutral
+working directory nor a redacted memory file is sufficient on its own" is re-confirmed, and the
+operative control is now **redaction of the source**, with scope as defence in depth rather than the
+mechanism.
+
+**What it cost:** nothing measured. Three dispatches, three aborts, zero calibration burn — the set is
+intact. That is the tripwire and attestation working as designed, and it is the argument for keeping
+both even though each abort feels like a failure.
