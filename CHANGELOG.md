@@ -17,6 +17,55 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1302 — 2026-08-13
+
+### Added — §AX: enumeration recall and artifact-level clearing, superseding §AW's blind-author procedure (#212)
+
+Pre-registered **before any extractor exists and before any claim has been extracted.** §AW forbids
+amendment after the first measurement; none has occurred — three dispatches aborted before writing a
+line, and the calibration set is unspent — so amendment is permitted. Registered as a new section rather
+than edited into §AW, so the change is legible.
+
+**The design error.** §AW protected the recall figure by requiring a **blind author** — a property of a
+person's context, unverifiable from outside, which is why §AW4 had to place the burden on the author to
+*demonstrate* blindness. Three dispatches, three aborts, zero measurement; two of the three aborts were
+caused by the operator's own repairs (§AW11e, §AW11f). What worked instead was §AW11f's remedy, a test
+that reads the artifact. Hence:
+
+> **Prefer a property you can check on the artifact over a property you must certify about the author.**
+> An unfalsifiable precondition can only be discharged by attestation, and attestation is what kept
+> failing.
+
+**The measurement error underneath it.** §AW measured recall as *detection of false claims* on three
+known-bad rows, which is why an answer key mattered. But the extractor does not find false claims — it
+finds claims, and the adjudicator decides truth by probing. The property to measure is **enumeration
+completeness**, which is measurable on *any* report because which claims are false is irrelevant to
+whether they were listed. Recall therefore needs no answer key, is no longer one-shot, is repeatable,
+and needs no blind author.
+
+**What replaces blinding.** Two artifact properties, both verifiable by third parties: hand-authored
+claim inventories **committed before the extractor exists** (commit order is the guarantee, checkable
+with `git log`), and a **mechanical vocabulary check on the extractor's own prompt and source** —
+mutation-verified, not merely passing. That is what lets a contaminated operator author the extractor:
+the question moves from what the author knows to what the artifact encodes, and the second is decidable.
+
+**The weakness, named rather than discovered later.** Inventory author and extractor author are the same
+operator, so enumeration recall measures agreement with a pre-committed specification of "a claim" —
+self-consistency across a time gap — not agreement with an independent oracle. R-27 is mitigated, not
+eliminated. Prediction **AX-4** turns the residual into a bet: if enumeration misses concentrate among
+`refuted` claims, recall overstates detection and the substitution fails.
+
+Also registered: the operational definition of a claim; a set-assignment rule fixed before content was
+read (alternating positions over the 15 eligible reports, 8 development / 7 held-out, the three
+sensitivity rows reserved and the two bodiless reports excluded); disclosed operator exposure; four
+predictions with exact-complement falsifiers; a stopping condition including the rule that a held-out set
+is not re-usable after the extractor changes in response to its misses; and §AX9's itemised list of what
+§AW terms are retired versus retained.
+
+`EXTRACTOR-BRIEF.md` is retired as a dispatch instrument and retained as a record.
+`test/extractorBriefBlindness.test.js` is retained — the brief must not accumulate corpus vocabulary
+while it sits in the repo.
+
 ## 2026.08.1301 — 2026-08-13
 
 ### Fixed — the §AW11e repair leaked the answer into the brief (§AW11f, #212)
