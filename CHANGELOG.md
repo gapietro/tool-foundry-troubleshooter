@@ -64,6 +64,31 @@ module-path version drift from an instance sitting at `2026.08.1216` while dist 
 Guard extended: `presenceArgs` joins the #239/#240 auth-parity and source-scan checks, plus a new
 assertion that every `execFileSync` site routes through a helper.
 
+**Six review findings on PR #250, all fixed here.** Four were real defects in the new code, and three
+of those failed in the CONFIDENT direction — the shape this whole issue is about:
+
+1. **A page of rows with no readable `sys_id` succeeded with an empty set**, so every dist record
+   would be reported `MISSING` citing Build Rule #34 — a red run with a precisely wrong cause. Not
+   hypothetical: a DENIED column is omitted silently rather than errored on these very tables, and
+   `sys_id` is a column. Now fails the sweep as `unreadable`.
+2. **No full-page truncation guard**, unlike every other read path here. `hasMore` derives server-side
+   from the `Link: rel="next"` header alone, so a stripped header reads as "that was everything" and
+   the unswept rows report `MISSING`. Now mirrors `probeByNaturalKey`'s existing refusal to guess.
+3. **The `PRESENCE ONLY` count could not detect the duplication it claimed to detect.** The printed
+   number counted records *dist declares* — bounded at 4 and constant across redeploys. The number
+   that moves is the sweep's own row count, which the code computed and threw away. Both numbers are
+   now printed (`2 of ours found, 648 rows on the instance`).
+4. **The grade line counted missing records as present.** With one presence record absent it printed
+   `165 of 165 records present — 162 field-matched` while printing that record's `MISSING` underneath.
+   `missing` findings now come off the probed count, same as `unreadable` already did.
+5. **The recorded mechanism for `-q ''` was wrong.** It does NOT produce a request without a
+   `sysparm_query`: `buildQueryParams` in the SDK connector sets that parameter unconditionally, so the
+   request carries `sysparm_query=` with an empty value. The 403-avoidance is real but comes from an
+   empty query naming **no field operands**. Corrected in the comment, because as written it would have
+   sent a future maintainer chasing a property the CLI never had.
+6. **`report` had no test** — the one piece of logic here whose whole purpose is not stating something
+   false. Now exported and covered by 8 tests; all four code fixes above are mutation-verified.
+
 **Not fixed here — #242's second finding**, 6 records whose `short_description` the platform truncates
 (`sys_ws_definition` ×1, `sys_ws_operation` ×5). It passes the gate and is disclosed; split out.
 

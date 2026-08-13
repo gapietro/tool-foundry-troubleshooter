@@ -244,13 +244,23 @@ function queryArgs(table, encodedQuery, limit, alias) {
  * argv for a PRESENCE sweep — the same subcommand, deliberately without a
  * `sysparm_query` (issue #242).
  *
- * `-q ''` rather than no `-q` at all: the flag is `[required]` by the CLI's own
- * arg parser, and an empty value satisfies it while producing a request that
- * carries no `sysparm_query` — which is the whole trick, and is why this needs
- * no MCP path and no direct Table API call. The issue was filed believing
- * `now-sdk query` could not express this; measured, it can, so the read stays
- * on the single authenticated channel and no new credential surface is
- * introduced.
+ * `-q ''`: the flag is `[required]` by the CLI's own arg parser, and an empty
+ * value satisfies it. The issue was filed believing `now-sdk query` could not
+ * express this read; measured, it can, so the read stays on the single
+ * authenticated channel and no new credential surface is introduced.
+ *
+ * ⚠ THE MECHANISM IS "NO FIELD OPERANDS", NOT "NO PARAMETER" — and the
+ * difference decides what a future cleanup is allowed to do here. An earlier
+ * version of this comment said an empty `-q` produces a request carrying no
+ * `sysparm_query`. It does not. `buildQueryParams` in
+ * `@servicenow/sdk-api/dist/connector.js` runs
+ * `params.set('sysparm_query', options.encodedQuery)` UNCONDITIONALLY, so the
+ * request goes out as `sysparm_query=` with an empty value. What avoids the 403
+ * is that an empty query names no FIELDS, and the denial is evaluated against
+ * the fields a query mentions ("Field(s) present in the query do not have
+ * permission to be read"). So: do not "improve" this by hunting for a way to
+ * omit the flag — the CLI has no such path, and it would not be the thing that
+ * made the read legal anyway. (Review of PR #250.)
  *
  * `-f sys_id` IS safe here, and the no-`-f` rule on `queryArgs` still stands
  * for the reason stated there: that rule exists because a NONEXISTENT field
@@ -327,9 +337,37 @@ function presenceSweep(table, alias) {
         const result = runQuery(presenceArgs(table, PRESENCE_LIMIT, offset, alias))
         if (!result.ok) return { ok: false, error: result.error }
 
+        let usable = 0
         result.records.forEach(function (record) {
-            if (record && record.sys_id) sysIds.add(record.sys_id)
+            if (record && record.sys_id) {
+                sysIds.add(record.sys_id)
+                usable++
+            }
         })
+
+        // A page that returned ROWS but no readable sys_id fails in the
+        // CONFIDENT direction: the sweep would succeed with an empty set and
+        // every dist record would be reported MISSING citing Build Rule #34 —
+        // a red run with a precisely wrong cause. Not hypothetical: this file's
+        // header records that on these tables a DENIED column is omitted
+        // silently rather than errored, and `sys_id` is a column. Refuse to
+        // guess, as the natural-key path does. (Review of PR #250.)
+        if (result.records.length > 0 && usable === 0) {
+            return { ok: false, error: 'page ' + page + ' returned ' + result.records.length + ' row(s) with no readable sys_id' }
+        }
+
+        // A page sitting exactly ON the limit may have been cut. `hasMore` is
+        // derived server-side from the `Link: rel="next"` header alone
+        // (`parseNextOffset` in the SDK connector), so a stripped or absent
+        // header reads as "that was everything" and the rows we never saw would
+        // be reported MISSING. `probeByNaturalKey` already refuses to guess in
+        // precisely this situation; this path now matches it.
+        if (!result.hasMore && result.records.length >= PRESENCE_LIMIT) {
+            return {
+                ok: false,
+                error: 'page ' + page + ' hit the ' + PRESENCE_LIMIT + '-row limit without a next link; results may be truncated',
+            }
+        }
 
         if (!result.hasMore) return { ok: true, sysIds: sysIds, pages: page }
 
@@ -493,9 +531,21 @@ function probeByPresence(table, tableRecords, alias, findings) {
         return
     }
 
+    // `instanceRows` is the sweep's OWN row count, carried onto each finding.
+    // It is NOT the same number as the count of these findings: that count is
+    // bounded by what dist declares (4 today) and is constant across redeploys,
+    // so it cannot show Build Rule #33's duplication however many duplicate
+    // rows pile up. The sweep total is the number that actually moves. An
+    // earlier version threw it away while the report claimed the printed count
+    // was the duplication signal. (Review of PR #250.)
     tableRecords.forEach(function (expected) {
         if (sweep.sysIds.has(expected.sysId)) {
-            findings.push({ kind: 'presence_only', table: table, sysId: expected.sysId })
+            findings.push({
+                kind: 'presence_only',
+                table: table,
+                sysId: expected.sysId,
+                instanceRows: sweep.sysIds.size,
+            })
         } else {
             findings.push({ kind: 'missing', table: table, sysId: expected.sysId })
         }
@@ -651,22 +701,28 @@ function report(allFindings, total) {
     summarize(allFindings, 'nondeterministic', 'regenerated per build — equal once the per-build value is erased')
 
     // Verified PRESENT, with field comparison impossible rather than skipped
-    // (#242). Reported per table with its count, because the count is half of
-    // what this recovers: Build Rule #33 duplicates these records on every
-    // redeploy, so a number that grows between runs is the signal.
+    // (#242). Each line carries TWO numbers answering different questions: how
+    // many of OUR records were found, and how many rows the table holds. Only
+    // the second can move on a redeploy, so only the second can show Build Rule
+    // #33's duplication — the first is bounded by what dist declares.
     const presenceOnly = allFindings.filter(function (f) { return f.kind === 'presence_only' })
     if (presenceOnly.length > 0) {
         const byTable = new Map()
         presenceOnly.forEach(function (f) {
-            byTable.set(f.table, (byTable.get(f.table) || 0) + 1)
+            const seen = byTable.get(f.table) || { found: 0, instanceRows: f.instanceRows }
+            seen.found += 1
+            byTable.set(f.table, seen)
         })
         process.stdout.write(
             '\nPRESENCE ONLY — verified present; field values NOT compared\n' +
             '  (these tables 403 on any sysparm_query and deny field reads, so\n' +
             '   presence and count are all that is recoverable — see issue #242)\n'
         )
-        byTable.forEach(function (count, table) {
-            process.stdout.write('  ' + table + ' (' + count + ' record' + (count === 1 ? '' : 's') + ')\n')
+        byTable.forEach(function (seen, table) {
+            process.stdout.write(
+                '  ' + table + ' — ' + seen.found + ' of ours found, ' + seen.instanceRows +
+                ' rows on the instance (watch this second number across redeploys — Build Rule #33)\n'
+            )
         })
     }
 
@@ -676,6 +732,14 @@ function report(allFindings, total) {
     allFindings.forEach(function (f) {
         if (f.kind === 'unreadable') probed -= f.count
     })
+
+    // ...and so does every record we looked for and did NOT find. Without this
+    // the headline said "165 of 165 records present" while printing a MISSING
+    // finding for one of them directly underneath — the identical overclaim
+    // this issue exists to remove, committed by the line that reports it.
+    // (Review of PR #250.)
+    const missingCount = allFindings.filter(function (f) { return f.kind === 'missing' }).length
+    probed -= missingCount
 
     // The pass line names the two grades of verification separately. Folding
     // them into one "present and matching" figure would state something false
@@ -730,4 +794,5 @@ module.exports = {
     presenceArgs: presenceArgs,
     presenceSweep: presenceSweep,
     probeByPresence: probeByPresence,
+    report: report,
 }

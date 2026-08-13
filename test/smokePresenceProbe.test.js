@@ -255,10 +255,45 @@ describe('probeByPresence', () => {
 
         probeByPresence('sys_gen_ai_feature_mapping', RECORDS, null, findings)
 
+        // `instanceRows` is the sweep's own row count (3 here), NOT the number
+        // of our records found (2). Only the former can move on a redeploy, so
+        // only the former can show Build Rule #33's duplication.
         expect(findings).toEqual([
-            { kind: 'presence_only', table: 'sys_gen_ai_feature_mapping', sysId: 'aaa' },
-            { kind: 'presence_only', table: 'sys_gen_ai_feature_mapping', sysId: 'bbb' },
+            { kind: 'presence_only', table: 'sys_gen_ai_feature_mapping', sysId: 'aaa', instanceRows: 3 },
+            { kind: 'presence_only', table: 'sys_gen_ai_feature_mapping', sysId: 'bbb', instanceRows: 3 },
         ])
+    })
+
+    test('a page of rows with NO readable sys_id fails the sweep instead of reporting every record missing', () => {
+        // The confident-wrong-direction failure the review caught: this file's
+        // header documents that a DENIED column is omitted silently rather than
+        // errored, and `sys_id` is a column. Without this guard the sweep
+        // succeeds with an empty set and every dist record is reported MISSING
+        // citing Build Rule #34 — a red run with a precisely wrong cause.
+        respondWith([JSON.stringify({ ok: true, hasMore: false, records: [{}, {}] })])
+        const findings = []
+
+        probeByPresence('sys_gen_ai_feature_mapping', RECORDS, null, findings)
+
+        expect(findings).toHaveLength(1)
+        expect(findings[0].kind).toBe('unreadable')
+        expect(findings[0].error).toContain('no readable sys_id')
+        expect(findings.filter((f) => f.kind === 'missing')).toEqual([])
+    })
+
+    test('a full page with no next link fails rather than reporting the rest missing', () => {
+        // `hasMore` comes from the `Link: rel="next"` header alone, so a
+        // stripped header reads as "that was everything". probeByNaturalKey
+        // already refuses to guess here; this path now matches it.
+        const full = Array.from({ length: PRESENCE_LIMIT }, (_, i) => ({ sys_id: 'x' + i }))
+        respondWith([JSON.stringify({ ok: true, hasMore: false, records: full })])
+        const findings = []
+
+        probeByPresence('sys_gen_ai_feature_mapping', RECORDS, null, findings)
+
+        expect(findings).toHaveLength(1)
+        expect(findings[0].kind).toBe('unreadable')
+        expect(findings[0].error).toContain('may be truncated')
     })
 
     // ---- THE COVERAGE THIS ISSUE RECOVERS --------------------------------
@@ -318,5 +353,106 @@ describe('presence_only is classified as a disclosure', () => {
 
     test('has no failure printer, which would contradict being a note', () => {
         expect(PRINTERS.presence_only).toBeUndefined()
+    })
+})
+
+// ===========================================================================
+// report() — the grade line, which is this issue's whole thesis
+// ===========================================================================
+
+/**
+ * The summary line is the one sentence anyone reads, and #242 is entirely about
+ * it not stating something false. It was also the only logic in the fix with no
+ * test (review of PR #250) — the three probe functions were pinned by 23 tests
+ * while the branch computing the headline was exercised by nothing.
+ */
+describe('report — the grade line', () => {
+    let out
+
+    beforeEach(() => {
+        out = []
+        jest.spyOn(process.stdout, 'write').mockImplementation((s) => {
+            out.push(String(s))
+            return true
+        })
+        process.exitCode = 0
+    })
+
+    afterEach(() => {
+        process.stdout.write.mockRestore()
+        process.exitCode = 0
+    })
+
+    const text = () => out.join('')
+    const presence = (n, table, instanceRows) =>
+        Array.from({ length: n }, (_, i) => ({
+            kind: 'presence_only',
+            table: table || 'sys_gen_ai_feature_mapping',
+            sysId: 'p' + i,
+            instanceRows: instanceRows === undefined ? 648 : instanceRows,
+        }))
+
+    test('with no presence records it keeps the original wording', () => {
+        smoke.report([], 165)
+        expect(text()).toContain('✓ deploy smoke passed — 165 of 165 records present and matching')
+    })
+
+    test('names the two grades separately rather than folding them into one figure', () => {
+        smoke.report(presence(4), 165)
+        expect(text()).toContain(
+            '✓ deploy smoke passed — 165 of 165 records present — 161 field-matched, 4 presence-only'
+        )
+    })
+
+    // ---- the review finding: the headline must not contradict the findings --
+    test('a MISSING presence record comes off the present count, not the matched count', () => {
+        // Previously this printed "165 of 165 records present — 162
+        // field-matched" while a MISSING finding for that very record was
+        // printed underneath. 165 were not present and 162 were not matched.
+        const findings = presence(3).concat([
+            { kind: 'missing', table: 'sys_gen_ai_feature_mapping', sysId: 'gone' },
+        ])
+        smoke.report(findings, 165)
+
+        expect(text()).toContain('164 of 165 records present — 161 field-matched, 3 presence-only')
+        expect(text()).not.toContain('165 of 165')
+    })
+
+    test('a MISSING record on any table comes off the count too', () => {
+        smoke.report([{ kind: 'missing', table: 'sys_script_include', sysId: 'x' }], 165)
+        expect(text()).toContain('164 of 165')
+    })
+
+    test('unreadable and missing both subtract, without double-counting', () => {
+        const findings = [
+            { kind: 'unreadable', table: 't', count: 10, error: 'refused' },
+            { kind: 'missing', table: 'u', sysId: 'x' },
+        ]
+        smoke.report(findings, 165)
+        expect(text()).toContain('154 of 165')
+    })
+
+    test('the presence block reports BOTH numbers, and says which one moves', () => {
+        // The finding count is bounded by dist and constant across redeploys;
+        // only the instance row count can show Build Rule #33's duplication.
+        smoke.report(presence(2, 'sys_gen_ai_feature_mapping', 648), 165)
+
+        expect(text()).toContain('sys_gen_ai_feature_mapping — 2 of ours found, 648 rows on the instance')
+        expect(text()).toContain('Build Rule #33')
+    })
+
+    test('presence_only alone does not redden the exit code', () => {
+        smoke.report(presence(4), 165)
+        expect(process.exitCode).toBe(0)
+        expect(text()).toContain('✓')
+    })
+
+    test('a missing presence record DOES redden the exit code', () => {
+        smoke.report(
+            presence(3).concat([{ kind: 'missing', table: 'sys_gen_ai_feature_mapping', sysId: 'gone' }]),
+            165
+        )
+        expect(process.exitCode).toBe(1)
+        expect(text()).toContain('✗ deploy smoke FAILED')
     })
 })
