@@ -21,14 +21,22 @@
 > plugin, and the `syslog` caller restriction. **None of it is established for gpinst01.**
 > Re-verify before relying on any of it here.
 >
-> **keynexus01 now has an auth entry, and it is the DEFAULT one** (corrected 2026-08-12,
-> issue #236 — the previous text said no entry existed). `now-sdk auth --list` shows
-> `keynexus01 … default = Yes`, so **any `now-sdk install` that does not name a
-> credential deploys to keynexus01, not gpinst01.** Combined with `now-sdk` silently
-> ignoring unknown flags, a mistyped credential flag is an unannounced deploy to the
-> wrong half of this instance split. Always pass `--auth gpinst01`, and read the
-> `Attempting to log into instance …` line before believing a deploy landed where you
-> meant.
+> **Both instances have `now-sdk auth` entries, and gpinst01 is the DEFAULT** (set
+> 2026-08-12 with `now-sdk auth --use gpinst01`, issue #236). Two earlier versions of
+> this paragraph were wrong in sequence — it first claimed keynexus01 had no entry at
+> all, then that keynexus01 was the default — so **check `now-sdk auth --list` rather
+> than trusting this line.**
+>
+> Why it was made the default: `now-sdk` **silently ignores unknown flags**, so a
+> mistyped credential flag falls through to the default. That is not hypothetical —
+> `now-sdk install --alias gpinst01` (the command this file used to document; `--alias`
+> is only valid on `auth --add`) deployed the app to keynexus01 while reporting success.
+> With gpinst01 as the default, that class of typo now lands on the intended instance
+> instead of the wrong half of this split.
+>
+> Still pass `--auth gpinst01` explicitly, and read the `Attempting to log into
+> instance …` line before believing a deploy landed where you meant — the default is a
+> safety net, not a substitute for naming the target.
 
 ### Project Structure
 
