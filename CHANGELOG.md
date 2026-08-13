@@ -66,6 +66,37 @@ is not re-usable after the extractor changes in response to its misses; and §AX
 `test/extractorBriefBlindness.test.js` is retained — the brief must not accumulate corpus vocabulary
 while it sits in the repo.
 
+**Seven review findings fixed before merge, three of which would have invalidated the instrument.**
+
+1. **Recall had no counterweight.** Recall alone is gameable by verbosity — emit every sentence as a
+   "claim" and score 1.0. §AW4's detection framing was self-limiting; the substitution removed that
+   self-limit without replacing it. A **spurious rate** is now registered, coupled to recall the way
+   §AW8 couples veracity to recall, with a "correct additions" carve-out that cuts against the operator.
+2. **AX-4 was unmeasurable.** Its denominator was adjudicated-`refuted` claims, but a *missed* claim
+   never reaches the probe under output-driven adjudication, so the one prediction guarding the whole
+   substitution could not fire. Adjudication is now **inventory-driven** (§AX2.4). It also reports
+   `not exercised` rather than `passed` when the refuted population is < 5 — the §AQ4 error otherwise.
+3. **AX-1 was a pooled cross-arm threshold**, the exact defect §AW7.2 was corrected for in review of
+   PR #225, landing on the primary prediction. Split into per-arm AX-1a/AX-1b; **no pooled figure is
+   produced at all**, resolving a straight contradiction between §AX7.1 and §AX8.
+4. **The repair path drew from the development set** — training data, the failure the rule exists to
+   prevent. The eligible 15 are exhausted, so the registered consequence is now hard: repair the
+   extractor in response to held-out misses and **no valid v14 recall figure exists**, leaving only a
+   labelled training-accuracy figure (which under §AX8 blocks the veracity figure) or a future pass.
+5. **AX-3 is withdrawn.** It measured *detection* on the three known rows — the answer-key-dependent
+   property blinding protected — so with a contaminated author a pass is circular. §AX had been
+   retiring blinding while one prediction still depended on it. **What it cost is stated:** there is now
+   no direct check that the extractor catches a known false claim, and AX-4 is a weaker substitute.
+6. **The named clearing instrument did not enforce what §AX5 registered.** Its locator pattern was
+   whitespace-separated and matched none of this corpus's `row-NN` filenames — so an extractor
+   special-casing a report by name would have passed. Widened and proven: it now catches `row-01`,
+   `row-07.md` and `report === 'row-09'` while still ignoring `borrow-01`. Mutation verification must
+   include a hyphenated-filename variant.
+7. **`BACKLOG.md` and `EXTRACTOR-BRIEF.md` still instructed the retired procedure.** `/next` reads the
+   backlog, so the next prioritisation session would have dispatched under §AW's superseded rules. Both
+   now carry retirement banners; the brief's says plainly that nothing in it is wrong as history and all
+   of it is wrong as instructions.
+
 ## 2026.08.1301 — 2026-08-13
 
 ### Fixed — the §AW11e repair leaked the answer into the brief (§AW11f, #212)

@@ -8517,7 +8517,26 @@ blind author.
    Commit order is the guarantee, and unlike author blindness it is *verifiable by anyone* with
    `git log`. This is the artifact-property substitution in its concrete form.
 3. **Enumeration recall** = (inventory claims the extractor emitted) / (inventory claims), reported per
-   report and pooled, with misses listed verbatim.
+   report and **per arm** — never pooled across arms (§AD7; see §AX7.1) — with misses listed verbatim.
+4. **Every inventory claim is adjudicated, whether or not the extractor emitted it.** Adjudication is
+   driven by the *inventory*, not by the extractor's output. Without this a missed claim never reaches
+   the probe, and AX-4 — the prediction that guards this whole substitution — has no denominator
+   (found in review of PR #246).
+5. **Spurious rate** = (emitted claims absent from the inventory, after excluding those an operator
+   review rules *correct additions* the inventory missed) / (emitted claims). Reported alongside
+   recall, per arm.
+
+**Why a spurious rate is registered and not optional (review of PR #246).** Recall alone is gameable by
+verbosity: an extractor that emits every sentence of a report as a "claim" scores recall 1.0 and clears
+AX-1 without doing anything. §AW4's detection framing was self-limiting — a tuned extractor still had to
+hit the *right* claim — and the substitution in §AX1 removes that self-limit, so the counterweight has to
+be put back explicitly. **A recall figure is not reportable without its spurious rate**, the same
+coupling §AW8 imposes between veracity and recall.
+
+The "correct additions" carve-out is deliberate and cuts against the operator: a claim the extractor
+found and the hand inventory missed is an inventory defect, and counting it as spurious would penalise
+the extractor for being better than its fixture. Every such ruling is listed individually in the pass
+record with its justification, so the carve-out cannot be used to absorb genuine noise.
 
 **The honest limitation, stated because it is real.** The inventory author and the extractor author are
 the same operator, so this measures *"does the implementation match the pre-committed specification of a
@@ -8554,8 +8573,16 @@ from recall (a report with no claims cannot exhibit enumeration failure).
 Stated as a rule rather than a list of chosen files, so easy reports cannot be selected into the
 measured set.
 
-- **Reserved (excluded from both sets):** the three §AW4 sensitivity rows. They remain available for
-  the §AX6 AX-3 confirmation check and are still spent at most once.
+- **Excluded from both sets:** the three former §AW4 sensitivity rows. They are still part of the
+  20-report veracity sweep; they are merely not used to measure recall, because the operator knows their
+  answers and a recall figure computed over them would be circular.
+
+  **Their secrecy no longer has a function, and pretending otherwise would be the incoherence review
+  found (PR #246).** §AX retires blinding; AX-3 — the one prediction that depended on knowing which rows
+  were flagged — is withdrawn (§AX6). Review also noted these rows are derivable by complement from the
+  lists below anyway, which is true and is now moot rather than a leak: nothing in §AX requires anyone
+  not to know them. **§AW11b's "the author is not told which rows form the sensitivity set" is retired
+  with the rest of the blinding apparatus** (§AX9), not quietly violated.
 - **Structurally claim-free:** the two bodiless reports, excluded from recall per §AX3.
 - **Remaining 15**, sorted ascending by filename, alternating from the first: **odd positions →
   development set (8), even positions → held-out set (7).**
@@ -8580,6 +8607,15 @@ locator, no adjudication verdict for any specific report. Same instrument as
 `test/extractorBriefBlindness.test.js`, pointed at the extractor, and it must be **mutation-verified**
 (fail against a deliberately tuned variant) rather than merely pass.
 
+**The locator pattern must match the HYPHENATED form, and as filed it did not** (review of PR #246). The
+existing check uses `/\brows?\s+0?\d+\b/i` — whitespace-separated — which does not match the
+`row-NN` filename form used throughout this corpus and in §AX4 itself. Pointed at an extractor that
+special-cases a named report file, the check would have passed while the locator sat in the source: a
+"mechanical, decidable" clearing that was unenforced in its single most likely form. The pattern is
+widened to cover `row-NN`, and the mutation verification must include **a variant that special-cases a
+report by hyphenated filename** as one of its deliberately-tuned cases. An extractor is expected to
+enumerate its corpus directory, never to name a member of it.
+
 This is what allows a contaminated operator to author the extractor: the question moves from *"what does
 the author know"* to *"what does the artifact encode"*, and the second is decidable.
 
@@ -8587,26 +8623,55 @@ the author know"* to *"what does the artifact encode"*, and the second is decida
 
 | # | Prediction | Falsifier |
 |---|---|---|
-| **AX-1** | Pooled enumeration recall on the held-out set is **≥ 0.80** | **< 0.80** |
+| **AX-1a** | Enumeration recall on the held-out **native** reports is **≥ 0.80** | **< 0.80** |
+| **AX-1b** | Enumeration recall on the held-out **custom** reports is **≥ 0.80** | **< 0.80** |
 | **AX-2** | **≥ 1 claim is `refuted`** across the 20 reports | **0 refuted** |
-| **AX-3** | Run on the three reserved rows, the extractor emits the claim that each was flagged for — **≥ 2 of 3** | **≤ 1 of 3** |
-| **AX-4** | Enumeration misses are **not** concentrated in refuted claims: the miss rate among adjudicated-`refuted` claims is **≤** the pooled miss rate | **miss rate among refuted claims exceeds the pooled rate** — enumeration recall then overstates detection recall and AX-1 does not transfer |
+| **AX-4** | Enumeration misses are **not** concentrated in refuted claims: among **inventory** claims adjudicated `refuted`, the miss rate is **≤** the per-arm miss rate | **miss rate among refuted inventory claims exceeds the per-arm rate** — enumeration recall then overstates detection recall and AX-1a/1b do not transfer |
+| **AX-5** | Spurious rate is **≤ 0.25** on each arm | **> 0.25** on either arm |
 
-**AX-4 is the residual §AX1 creates, stated as a bet rather than an assumption.** It is the one
-prediction whose failure would invalidate the whole substitution, and it is measurable only because
-adjudication happens anyway. **AX-2 remains pre-satisfied and is labelled as such** (§AW6's reasoning
-is unchanged: one row's false claim is already known, so its falsifier is impossible — that is the
-finding, not the test).
+**AX-1 was split per arm in review of PR #246.** As filed it stated a threshold on a *pooled* figure
+across 4 native and 3 custom held-out reports — a blended cross-arm number, which is the exact defect
+§AW7.2 was corrected for in review of PR #225. The ambiguity landed on the primary prediction, so it is
+resolved in the strict direction: two thresholds, no pooled figure.
+
+**AX-4 was unmeasurable as filed, and the repair is §AX2.4.** Its denominator was "adjudicated-`refuted`
+claims", but a *missed* claim is by definition one the extractor never emitted, so under output-driven
+adjudication it never reaches the probe and the miss rate among refuted claims could not be computed at
+all. Adjudication is now inventory-driven, which makes the denominator exist. **Honest limit on its
+power:** if the refuted count turns out to be small — AX-2 only guarantees ≥1 — the comparison carries
+little signal, so AX-4 is reported as **`not exercised`** rather than `passed` when the refuted
+population is **< 5**. Recording it as passed on n=1 would be the §AQ4 "not exercised, NOT passed"
+error repeated.
+
+**AX-3 is withdrawn, not weakened (review of PR #246).** It predicted that the extractor would emit the
+specific claim each reserved row was flagged for — a *detection* check, the answer-key-dependent
+property blinding existed to protect. With a contaminated operator authoring the extractor it measures
+nothing: the author already knows those answers, so a pass is circular and a failure is only evidence of
+carelessness. Keeping it would have left §AX retiring blinding while one prediction still depended on it.
+**What is lost by withdrawing it, stated plainly:** there is now no direct check that the extractor
+catches a *known* false claim. AX-4 is the indirect substitute and it is weaker. This is a real
+reduction in the instrument's power and it is the price of authoring without blinding.
+
+**AX-2 remains pre-satisfied and is labelled as such** (§AW6's reasoning unchanged: one row's false claim
+is already known, so its falsifier is impossible — that is the finding, not the test).
 
 ### AX7. Stopping condition — mandatory, written before the first pass
 
-1. **The pass is one sweep.** 20 reports → **two veracity figures (native, custom)**, one pooled
-   enumeration-recall figure with per-report detail, and the AX-3/AX-4 checks. Written into this
-   section. Done.
+1. **The pass is one sweep.** 20 reports → **two veracity figures (native, custom)**, **two
+   enumeration-recall figures (native, custom)** with per-report detail, **two spurious rates**, and the
+   AX-4 check. **No pooled cross-arm figure is produced at all** — not for recall, not for veracity
+   (§AD7; corrected in review of PR #246, which found AX7.1 and §AX8 contradicting each other here).
+   Written into this section. Done.
 2. **Recall is repeatable, but the held-out set is not re-usable after the extractor has been changed
-   in response to its misses.** Fixing a miss and re-measuring on the same reports reports training
-   accuracy. A repaired extractor needs a fresh held-out draw from the development set, and the
-   substitution is recorded here when made.
+   in response to its misses** — that reports training accuracy. **And this corpus has no clean pool to
+   redraw from** (review of PR #246: the original text said "a fresh held-out draw from the development
+   set", which is the eight reports the extractor was developed *against* — training data, the exact
+   failure the rule exists to prevent). The eligible 15 are exhausted by the two sets. So the registered
+   consequence is a hard one: **if the extractor is repaired in response to held-out misses, no valid
+   recall figure is available from v14 at all.** The options are then (a) report the post-repair figure
+   explicitly labelled *training accuracy, not recall*, which under §AX8 means no veracity figure may be
+   reported with it, or (b) draw a fresh held-out set from a **future** pass's reports. There is no third
+   option, and "redraw from development" is not one.
 3. **Findings about this instrument default to documented-not-fixed**, in an §AX-closing subsection.
 4. **Reopening needs a named condition**, written when the pass closes.
 
