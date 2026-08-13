@@ -111,8 +111,32 @@ look harmless, files you are merely curious about, and files referenced by the o
 | `benchmark/EXTRACTOR-BRIEF.md` | This file |
 | `benchmark/scorecard-template.md` | The report *shape* — the only description of report structure you get |
 | `benchmark/v14-reports/*.md` | The 20 raw report bodies. **This is your corpus and your only sample of real report prose** |
-| `./src/**`, `./test/**` — **repository root only** | Codebase conventions, ES5/Rhino constraints, existing test style |
+| `./src/**` — **repository root only** | Codebase conventions, ES5/Rhino constraints. Cleared at dispatch time with a residual noted below — read it for *how code is written here*, never for facts about fixtures |
+| `./test/_loadScriptInclude.js`, `./test/_glideStub.js`, `./test/_stripComments.js`, `./test/stripComments.test.js`, `./test/utf16ClipContract.test.js`, `./test/PaRetentionSweep.test.js` | Test style, the `vm` loader, and the Glide stub — **six named files, verified clean. NOT `./test/**`; see below** |
 | `./package.json`, `./eslint.config.mjs` | Toolchain |
+
+> **`./test/**` was withdrawn as an entry, and this is the reason (§AW11e).** The glob admitted the
+> answer. `test/PaFixReport.test.js` contains, as ordinary fixture prose, a `schema` evidence item
+> reading *"`x_snc_tsbench_ticket` exists with 8 fields"* — which **is** the adjudication of one
+> calibration row — and two `data` items reading *"`x_snc_tsbench_ticket` has 0 rows"*, the shape of
+> another. Nothing names a report number, so this is not a complete key; it is worse than harmless,
+> because it hands you the ground truth for the claim class the calibration rows share and would
+> pre-supply a refutation the live probe is supposed to produce.
+>
+> **This is the fourth leak found in this procedure and the first one INSIDE the boundary.** §AW11b
+> replaced a thrice-failed deny-list with this allowlist, arguing a closed allowlist "has no
+> default-admit". That argument answers *enumeration* failures. It does not answer an allowlisted
+> entry whose own contents carry the answer — a permitted path is reachable, which is not the same as
+> cleared. Every entry above has now been cleared individually, and that clearing is the guard, not
+> the inversion.
+>
+> **Residual on `./src/**`, stated rather than waved through.** It is clear of the calibration
+> answers, but it is not free of fixture context: comments reference seed numbers and what the model
+> chose on earlier passes (e.g. `src/server/PaAgentLoop.js` on seed-04's layer choice,
+> `src/fluent/tables.now.ts` on seed-01 run counts). None of that identifies a false claim in this
+> corpus. It is disclosed so that if any of it *does* surface a specific fact about a specific
+> numbered report while you read, §4's tripwire applies and you stop — and so that the §9 attestation
+> has something concrete to answer against.
 
 > **The two `src`/`test` rows are anchored to the repository root and the anchor is load-bearing.**
 > There is a second, unrelated `src/` tree nested under `benchmark/`, and **it is an answer key** —
@@ -132,8 +156,9 @@ yourself that a file is safe. You are not in a position to know — that is the 
 `src/`**), `benchmark/seeds/**`, `benchmark/DECISION.md`, `BACKLOG.md`, `GRADE.md`, `CHANGELOG.md`,
 `DESIGN.md`, `benchmark/README.md`, `benchmark/v14-rows.json`, `benchmark/scorecard-v14.md`,
 `benchmark/v14-ambiguity-flags.json`, `benchmark/scoring-v14/**`, or any
-`benchmark/raw-evidence-*.md`. This list is redundant with the allowlist and is given only so that a
-slip is obvious rather than subtle — **the allowlist governs; if the two ever disagree, the
+`benchmark/raw-evidence-*.md`, **or any file under `./test/` other than the six named above — in
+particular `test/PaFixReport.test.js`**. This list is redundant with the allowlist and is given only
+so that a slip is obvious rather than subtle — **the allowlist governs; if the two ever disagree, the
 allowlist wins and you ask.**
 
 ---

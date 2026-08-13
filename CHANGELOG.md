@@ -17,7 +17,53 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
-## 2026.08.1217 — 2026-08-12
+## 2026.08.1218 — 2026-08-12
+
+### Fixed — the #212 extractor allowlist admitted the answer it exists to withhold (§AW11e)
+
+Found while preparing the #212 dispatch, **before any measurement and before any extractor exists**.
+Recorded as `DECISION.md` §AW11e per §AW7 rule 3 and the §AW11a–d precedent. No registered term is
+amended — §AW4's blinding requirement, §AW6's predictions and §AW7's stopping condition are untouched.
+What changed is one row of `EXTRACTOR-BRIEF.md` §3, which is dispatch procedure.
+
+`EXTRACTOR-BRIEF.md` §3 permitted `./test/**` for "existing test style". Inside it,
+`test/PaFixReport.test.js:2877` carries as ordinary fixture prose a `schema` evidence item reading
+*"`x_snc_tsbench_ticket` exists with 8 fields"* — which **is** §AW1's adjudication of a calibration
+row — plus two `data` items reading *"`x_snc_tsbench_ticket` has 0 rows"*, the shape of a second one.
+No report number is named, so it is not a complete key; it is worse than harmless, because it supplies
+ground truth for the claim class all three calibration rows share and would pre-supply a refutation the
+live probe exists to produce. An extractor authored after reading it is not cold in §AW4's sense, and
+per §AW8 a void recall figure voids the veracity figure too — the pass would return nothing.
+
+**This is the fourth leak in this procedure and the first one inside the boundary,** which is why it
+partially refutes the reasoning that produced the boundary. The first three were enumeration failures —
+a deny-list that did not name a file — and §AW11b's remedy was to invert to a closed allowlist on the
+grounds it "has no default-admit". That argument answers enumeration. It does not answer an allowlisted
+entry whose own contents carry the answer. Registered as a principle in §AW11e: **an allowlist bounds
+what is reachable, not what is safe; inversion removes default-admit but not the duty to clear each
+entry.** The inversion is retained and is now insufficient on its own.
+
+**The repair is a narrowed positive entry, not another exclusion.** `./test/**` is withdrawn and
+replaced by six named files, each verified clean individually: `_loadScriptInclude.js`, `_glideStub.js`,
+`_stripComments.js`, `stripComments.test.js`, `utf16ClipContract.test.js`, `PaRetentionSweep.test.js`.
+Excluding `PaFixReport.test.js` by name would have been enumeration a fifth time. Cost, stated: the
+author sees less house test style and may have to ask, which §3 already instructs.
+
+`./src/**` stands with a **disclosed residual** — clear of the calibration answers, but its comments
+reference seed numbers and earlier passes' model behaviour. Written into the brief so §4's tripwire and
+§9's attestation have something concrete to answer against, rather than being silently judged safe by
+whoever happened to look.
+
+### Note — #212 cannot be authored or dispatched from a session that has read §AW
+
+Not a code change; recorded because it is the practical blocker on #212 and it cost a session to
+discover. `EXTRACTOR-BRIEF.md` §10 and §AW4 requirement 1: blinding is a property of the **dispatching
+session**, not the author, and project-scoped memory injects into every spawned agent. Reading §AW1 to
+understand the task — the correct operator move, since §AW4 assigns the calibration instruction to the
+operator and not the author — permanently disqualifies that session from authoring *or* delegating.
+The extractor must be dispatched from a new session in a scope that never carried the answer, given
+`benchmark/EXTRACTOR-BRIEF.md` as its entry point. Two authors have already aborted correctly on §4's
+tripwire; aborting is a success.
 
 ### Fixed — sixteen instruction sites told agents to deploy with a flag that does not exist (#241, skills half)
 
