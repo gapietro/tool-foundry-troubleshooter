@@ -50,6 +50,34 @@ lists now route through one `authArgs(alias)` behind an `AUTH_FLAG` constant, an
 review-#230 block already in that file — when two places must agree, a test holds them together, not
 care.
 
+**The guard needed a second layer, and the first version of this entry overclaimed.** Review of PR
+#240 caught that those five tests bind the *helpers* and not the *call sites* — an edit inlining argv
+at `main()` or `query()`, which is the original bug's exact shape, left all five green while the
+spawned command went back to `--alias`. Three source-scan tests now sit at the spawn seam: no
+subcommand argv literal outside the helpers, both helpers actually called, and `--alias` surviving
+only as the operator-facing npm-script input (which was never the defect — passing it onward to
+now-sdk was). **Verified by mutation:** re-inlining `['install', '--alias', alias]` at `smoke.js:263`
+turns all three RED, and they were confirmed RED before being trusted.
+
+### Fixed — CLAUDE.md named the wrong default credential (#239 review)
+
+The Key Commands block said a silently-ignored flag falls back to "the DEFAULT credential — which is
+keynexus01, not gpinst01." `now-sdk auth --list` says otherwise: `*[gpinst01] … default = Yes`,
+`[keynexus01] … default = No`. The claim also contradicted the instance-split block 25 lines above it
+and `29adab5`/#238, which made gpinst01 the default. It now names gpinst01 and points at
+`now-sdk auth --list` as the only trustworthy source — the third correction to this paragraph, which
+is why it now cites the command rather than restating the answer.
+
+Two operator instructions carrying the same wrong flag fixed alongside: `benchmark/seed-app/README.md`
+and `benchmark/README.md`'s fixture-install step. `benchmark/README.md:488` was deliberately left —
+it is past-tense evidence of a reinstall that happened, not an instruction, and rewriting a record to
+match present-day correctness destroys the evidence that the command was once wrong.
+
+The remaining ~14 sites are **#241**, split deliberately: four agent-followed `.claude/skills/` files
+are safe mechanical fixes, while `benchmark/scripts/build-packets.js` and the eight seed specs emit
+text into scorer packets and are pinned by `test/packetGeneratorParity.test.js`, so they wait for
+#212's in-flight pass rather than repeating §AO3's mid-pass instrument change.
+
 **Evidence, and the limit of it.** `npm test` 37 suites / **1906** tests pass (up exactly the 5
 added); `npm run lint` clean; `npm run smoke -- --alias gpinst01` completed the real install path and
 passed 161/165. That last run is a positive control that the corrected argv is accepted end to end —

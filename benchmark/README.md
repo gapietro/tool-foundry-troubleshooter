@@ -271,7 +271,9 @@ an operator reads top to bottom skipped the first two things they have to do. Th
 the per-seed specs remain authoritative for the detail.
 
 1. **Install the fixture app.** `cd benchmark/seed-app && npm install && now-sdk build && now-sdk
-   install --alias gpinst01`. This is a **second scoped app** (`x_snc_tsbench`), installed alongside
+   install --auth gpinst01`. (`--auth`, not `--alias`: #239 — `install` has no `--alias`, and
+   now-sdk ignores unknown flags silently, so the misspelling deploys to whatever the default
+   credential happens to be.) This is a **second scoped app** (`x_snc_tsbench`), installed alongside
    the product app, never instead of it — see `seed-app/README.md` and `DECISION-seed-location.md`.
    Task 11 stops at a passing build; the install is Task 12's step.
 

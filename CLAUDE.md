@@ -56,9 +56,11 @@ now-sdk build                        # compile src/ -> dist/ (must pass before i
 now-sdk install --auth gpinst01      # deploy to instance (#236: the flag is --auth;
                                      # --alias is NOT an option, and now-sdk ignores
                                      # unknown flags silently, so it falls back to the
-                                     # DEFAULT credential — which is keynexus01, not
-                                     # gpinst01. Check the "Attempting to log into
-                                     # instance ..." line before believing a deploy.)
+                                     # DEFAULT credential — currently gpinst01 (#238),
+                                     # verified with `now-sdk auth --list`, which is the
+                                     # only trustworthy source for this. Check the
+                                     # "Attempting to log into instance ..." line
+                                     # before believing a deploy.)
 now-sdk explain <topic>              # live API docs from the installed SDK version
 now-sdk explain --list               # browse topics
 npm test                             # jest

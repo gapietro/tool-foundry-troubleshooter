@@ -644,6 +644,66 @@ describe('install and probe resolve the same instance (issue #239)', () => {
         expect(installArgs(null)[0]).toBe('install')
         expect(installArgs('keynexus01')[0]).toBe('install')
     })
+
+    // -----------------------------------------------------------------------
+    // The five tests above bind the HELPERS. They do not bind the CALL SITES,
+    // and the gap is the original bug's exact shape: an edit that inlines argv
+    // at `main()` or `query()` leaves all five green while the spawned command
+    // goes back to `--alias`. Found in review of PR #240 — the first version of
+    // this block claimed the two targets "cannot drift apart again", which
+    // overstated a guard sitting one layer above the spawn.
+    //
+    // A source scan is the cheap instrument that reaches the right layer, and
+    // it is this repo's established idiom for exactly this (`blindRule.test.js`
+    // scans 16 sources through the same `stripComments` helper). Verified by
+    // mutation, not by assumption: re-inlining `['install', '--alias', alias]`
+    // at smoke.js:263 turns the first test below RED.
+    // -----------------------------------------------------------------------
+    describe('the spawn seam still routes through the helpers', () => {
+        const { stripComments } = require('./_stripComments')
+        const fs = require('fs')
+        const path = require('path')
+
+        const SHELL = path.join(__dirname, '..', 'scripts', 'smoke.js')
+
+        /** Source with comments AND the two helper bodies removed. */
+        function callSiteSource() {
+            const code = stripComments(fs.readFileSync(SHELL, 'utf8'))
+            // Everything from the first helper's declaration to the start of
+            // `query()` is helper territory — the only place an argv literal
+            // legitimately lives.
+            const start = code.indexOf('function authArgs')
+            const end = code.indexOf('function query(')
+            expect(start).toBeGreaterThan(-1)
+            expect(end).toBeGreaterThan(start)
+            return code.slice(0, start) + code.slice(end)
+        }
+
+        test('no argv literal names a subcommand outside the helpers', () => {
+            const outside = callSiteSource()
+            expect(outside).not.toContain("'install'")
+            expect(outside).not.toContain("'query'")
+        })
+
+        test('both helpers are actually called', () => {
+            // A helper nothing calls is decoration, and the tests above would
+            // still pass on it.
+            const code = stripComments(fs.readFileSync(SHELL, 'utf8'))
+            expect(code).toContain('installArgs(args.alias)')
+            expect(code).toContain('queryArgs(table, encodedQuery, limit, alias)')
+        })
+
+        test('`--alias` survives only as the operator-facing input flag', () => {
+            // parseArgs still ACCEPTS `--alias` as the npm-script argument —
+            // that is the documented user interface and is not the defect. The
+            // defect was passing it onward to now-sdk. So it may appear in
+            // parseArgs and nowhere else in code.
+            const code = stripComments(fs.readFileSync(SHELL, 'utf8'))
+            const occurrences = code.split("'--alias'").length - 1
+            expect(occurrences).toBe(1) // the argv comparison in parseArgs, nothing else
+            expect(callSiteSource()).toContain("'--alias'") // and it is inside parseArgs
+        })
+    })
 })
 
 describe('the SBOM excuse is tied to the artifact, not to a filename (review #230)', () => {

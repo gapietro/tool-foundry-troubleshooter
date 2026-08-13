@@ -156,9 +156,12 @@ function run(command, commandArgs, label) {
  * this tier reported a clean pass for an instance it never deployed to
  * (#239).
  *
- * Both argv builders below route through `authArgs`, so the install target and
- * the probe target cannot drift apart again — `test/smokeDeployProbe.test.js`
- * holds them to it.
+ * Both argv builders below route through `authArgs`, and
+ * `test/smokeDeployProbe.test.js` guards that at two layers: the helpers must
+ * agree on the auth portion, AND a source scan keeps subcommand argv literals
+ * out of the call sites. The second layer exists because the first one alone
+ * left the original bug reachable — inlining argv at `main()` kept every
+ * helper test green (review of PR #240).
  */
 const AUTH_FLAG = '-a'
 
