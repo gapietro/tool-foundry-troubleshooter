@@ -17,6 +17,59 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1303 — 2026-08-13
+
+### Added — the seven held-out claim inventories, committed before any extractor exists (#212)
+
+`benchmark/v14-claim-inventory-heldout.json` — hand-authored claim inventories for the §AX4 held-out
+set (`row-02, row-04, row-07, row-12, row-15, row-17, row-19`), plus `test/claimInventoryShape.test.js`
+guarding the fixture. **§AX2.2's guarantee is commit order:** the inventories land before the extractor
+exists, so `git log` proves they were not shaped by observed extractor behaviour. That ordering is the
+whole reason this is a separate commit and a separate PR. #212 stays open.
+
+**What is in the fixture.** Per report: the claims, each with a normalised proposition, a kind, a
+subject, every textual occurrence (line + verbatim quote), and the rule that admitted it — plus every
+**rejected candidate** with the rule that rejected it. The rejections are not decoration: §AX2.5's
+"correct additions" carve-out is operator discretion exercised *after* seeing extractor output, and
+pre-recording the borderline cases converts most of it into a lookup. Two genuinely arguable
+rejections are flagged as arguable in the fixture itself.
+
+**Seven reading rules, recorded with the fixture rather than in prose here.** §AX3 is a definition, not
+a pattern list, so applying it needed line-drawing the definition does not supply: asserted-not-
+presupposed, identity pairing, the run boundary, atomicity, an entailment floor, dedup, and §AX3's
+not-claims list extended with the two families it implies but does not name. The consequential one is
+the **run boundary** — assertions about the diagnosed execution and about the diagnostic execution are
+both out of scope. Its cost is stated in `§AX10` rather than buried: it discards content that is
+readable on gpinst01 today, about two thirds of the factual surface of `row-17` and `row-19`.
+
+**The finding it produced, documented and not fixed (§AX7.3, new `§AX10`).** The **custom arm's recall
+denominator is 2 claims across 3 reports** — `row-02` and `row-04` have non-empty bodies that assert
+nothing about instance state, because both diagnose runs that succeeded. The native arm carries 60
+across 4. **AX-1b is therefore a threshold on n=2** whose falsifier fires on a single miss; no
+registered threshold is changed, and whether AX-1b is reportable at all at that size is left open
+**deliberately** — that would be a new term, and it must be decided before the extractor runs, not
+after the figure is seen. §AX7.2 already forecloses the obvious repair: the eligible 15 reports are
+exhausted and redrawing from development is forbidden.
+
+One adjacent gap **is** closed rather than documented, because leaving it open was itself the §AU6
+hazard: per-report recall on a zero-claim report is 0/0, and §AX2.3 demands a per-report figure.
+**Registered: `not applicable` — never 1.0, never 0.0, never folded into a per-arm figure as either.**
+Pinned in the fixture and asserted by its test rather than left in prose.
+
+**The fixture test is not the extractor and must not become it.** It checks artifact properties, which
+is §AX0's substitution applied to the fixture: every occurrence quote appears verbatim at the line it
+cites (this caught a mis-cited line during authoring), ids are unique and namespaced, `claim_count`
+matches the claims listed, the report set equals §AX4's held-out list and names no development or
+sensitivity row, arms match `v14-rows.json`, the per-arm summary is arithmetically true, no pooled
+cross-arm total is published (§AX7.1), **no object anywhere carries a verdict-shaped key** — the
+inventory must not be able to leak an adjudication answer — and no claim-extractor implementation
+exists in the repository at this commit.
+
+### Removed
+
+`~/aw-author-4`, the staging directory built for the retired §AW blind-dispatch procedure. Obsolete
+under §AX9; deleted.
+
 ## 2026.08.1302 — 2026-08-13
 
 ### Added — §AX: enumeration recall and artifact-level clearing, superseding §AW's blind-author procedure (#212)
