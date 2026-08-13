@@ -20,7 +20,7 @@
 
 | Concern | Where it lives | Notes |
 |---|---|---|
-| Every platform artifact — tables, Script Includes, the AI Agent, REST APIs | **Fluent DSL in `src/fluent/*.now.ts`** | SDK owns creation. `now-sdk build` then `now-sdk install --alias gpinst01` |
+| Every platform artifact — tables, Script Includes, the AI Agent, REST APIs | **Fluent DSL in `src/fluent/*.now.ts`** | SDK owns creation. `now-sdk build` then `now-sdk install --auth gpinst01` |
 | Jest tests | **`test/*.test.js` at the repo root** | NEVER under `src/` — `now-sdk build` lints the whole source tree and a test's Node `require` breaks the build (DESIGN.md **R-14**) |
 | Script Include **bodies** (the JS the platform runs) | `src/server/*.js`, referenced by `Now.include('./<file>.js')` from the Fluent `ScriptInclude` | ES5/Rhino-safe — no `let`/`const`/arrow/`Set`/`Map`. Pattern: `.claude/context/sdk-examples/script-include.now.ts` |
 | Runtime execution, tracing, log reads | **Foundry MCP tools** | MCP owns runtime. Never create or edit via MCP anything defined in `src/fluent/` |
@@ -72,7 +72,7 @@
 
 **What:** The `harness` field is what lets one run table serve both worlds. Follow `.claude/context/sdk-examples/table.now.ts`; note Build Rule #9 (export name must equal table name) and #8 (`ChoiceColumn` choices are `{ value_key: 'Label' }`, not `[{value,label}]`) — the `harness`, `mode`, `status` and `action_type` columns are all choices.
 
-**Verify:** `now-sdk build` passes, then `now-sdk install --alias gpinst01`, then confirm both tables exist in `sys_db_object` with `sys_scope.scope = x_snc_troubleshoot`.
+**Verify:** `now-sdk build` passes, then `now-sdk install --auth gpinst01`, then confirm both tables exist in `sys_db_object` with `sys_scope.scope = x_snc_troubleshoot`.
 
 **Commit:** `feat: add scoped run and audit tables as Fluent definitions`
 
@@ -252,7 +252,7 @@ Four things to carry forward rather than rediscover:
 - `input_schema` is an **array** of `{name, description, mandatory}` — a JSON-Schema object causes a silent, never-terminating stall (DESIGN.md R-5). This is the single most expensive defect found in Phase 0
 - No `triggerConfig` here — Agent Doctor is invoked conversationally, and `triggerConfig` on a bare `AiAgent` yields a trigger with a null usecase that never fires (Rule #31)
 
-**On-instance step:** `now-sdk build` → `now-sdk install --alias gpinst01`, then smoke-test one conversation ("diagnose execution `<sys_id>`") via MCP before benchmarking. Verify the deployed `instructions` text matches `docs/agent/agent-doctor-instructions.md`.
+**On-instance step:** `now-sdk build` → `now-sdk install --auth gpinst01`, then smoke-test one conversation ("diagnose execution `<sys_id>`") via MCP before benchmarking. Verify the deployed `instructions` text matches `docs/agent/agent-doctor-instructions.md`.
 
 **Commit:** `feat: add Agent Doctor as a Fluent AiAgent definition`
 
@@ -372,7 +372,7 @@ Task 1 (version + changelog) → Task 2 (Fluent tables) → Task 3 (playbook)
 - `npm test` — PaArtifactStore truncation/paging, PaScriptToolAdapter parse/stringify/error-shaping all pass
 
 ### On-Instance
-1. `now-sdk install --alias gpinst01` — deploys tables, Script Includes and Agent Doctor together. Confirm the tables landed in `sys_db_object` under `sys_scope.scope = x_snc_troubleshoot`, and that the agent's tool records exist in `sn_aia_tool` (Rule #34: a tool whose record was silently skipped still leaves its `sn_aia_agent_tool_m2m` row, so checking the m2m alone proves nothing)
+1. `now-sdk install --auth gpinst01` — deploys tables, Script Includes and Agent Doctor together. Confirm the tables landed in `sys_db_object` under `sys_scope.scope = x_snc_troubleshoot`, and that the agent's tool records exist in `sn_aia_tool` (Rule #34: a tool whose record was silently skipped still leaves its `sn_aia_agent_tool_m2m` row, so checking the m2m alone proves nothing)
 2. Smoke test via MCP: one conversation diagnosing a real (non-seeded) failed execution — all 7 tools invocable, artifact paging works, audit rows written with `harness: native`
 3. The benchmark itself (Task 12) is the milestone: a filled scorecard and a written harness decision
 
