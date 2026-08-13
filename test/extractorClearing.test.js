@@ -57,9 +57,31 @@ const CLEARED = [
     // directly, and nobody diffs a file no check covers.
     'benchmark/scripts/claim-adjudication.js',
     'test/claimAdjudication.test.js',
+    // §AX14 widens it again to the probe, on §AX13.4's own reasoning. The probe
+    // decides what the instance is taken to have said, so an answer key hidden
+    // there would move the veracity figure without touching either file above —
+    // and its snapshot is deliberately NOT cleared (it must name whatever tables
+    // the frozen claims name), which puts the whole burden on this source.
+    'benchmark/scripts/metadata-probe.js',
+    'test/metadataProbe.test.js',
 ];
 
 const PROMPT = 'benchmark/extraction/claim-extraction-prompt.md';
+
+/**
+ * Where the collected metadata snapshot goes, pinned before it exists.
+ *
+ * §AX14.5 registers it as evidence rather than instrument, so it is never
+ * cleared. Deliberately outside `benchmark/extraction/`, `benchmark/scripts` and
+ * `test/` — the three trees the discovery test walks — so its exclusion does not
+ * rest on the extension rule alone.
+ */
+const SNAPSHOT_PATH = 'benchmark/v14-metadata-snapshot.json';
+
+/** Collected evidence, not instrument source. An instrument here is code. */
+function isCollectedEvidence(rel) {
+    return /\.json$/i.test(rel);
+}
 
 function read(rel) {
     return fs.readFileSync(path.join(REPO, rel), 'utf8');
@@ -115,14 +137,43 @@ describe('§AX5 — the extractor encodes no corpus vocabulary', () => {
         for (const dir of ['benchmark/scripts', 'test']) {
             for (const name of fs.readdirSync(path.join(REPO, dir))) {
                 const rel = dir + '/' + name;
-                if (/claim-(extraction|adjudication)|claim(Extraction|Adjudication)|extractorClearing/i.test(name)) {
+                if (
+                    /claim-(extraction|adjudication)|claim(Extraction|Adjudication)|metadata-probe|metadataProbe|extractorClearing/i.test(
+                        name
+                    )
+                ) {
                     found.push(rel);
                 }
             }
         }
 
-        const uncleared = found.filter((f) => CLEARED.indexOf(f) === -1 && f !== 'test/extractorClearing.test.js');
+        const uncleared = found.filter(
+            (f) => CLEARED.indexOf(f) === -1 && f !== 'test/extractorClearing.test.js' && !isCollectedEvidence(f)
+        );
         expect(uncleared.sort()).toEqual([]);
+    });
+
+    test('the snapshot is excluded as evidence, and only where §AX14.5 puts it', () => {
+        /**
+         * §AX14.5 registers the metadata snapshot as NOT cleared: it must name
+         * whatever tables the frozen claims name, including the fixture table
+         * the vocabulary check forbids. It is evidence, constrained by
+         * provenance rather than by vocabulary.
+         *
+         * Left implicit, that collides with the discovery widening above — the
+         * natural filename for it matches the probe pattern, so the suite would
+         * have gone red mid-sweep with two ways out, one of which contradicts
+         * the registration (review of PR #257). So the path is PINNED here, and
+         * the exclusion is by data-file extension rather than by name: an
+         * instrument is code, and a `.js`/`.md` file can never take this route
+         * out of clearing.
+         */
+        expect(SNAPSHOT_PATH.startsWith('benchmark/')).toBe(true);
+        expect(isCollectedEvidence(SNAPSHOT_PATH)).toBe(true);
+        expect(CLEARED).not.toContain(SNAPSHOT_PATH);
+
+        // The exclusion cannot be widened into a hole for instrument source.
+        for (const rel of CLEARED) expect(isCollectedEvidence(rel)).toBe(false);
     });
 });
 
