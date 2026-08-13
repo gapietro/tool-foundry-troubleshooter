@@ -369,6 +369,26 @@ export const paAgentLoop = ScriptInclude({
     script: Now.include('../server/PaAgentLoop.js'),
 })
 
+/**
+ * PaRetentionSweep — the data-at-rest lifecycle (issue #216).
+ *
+ * Driven by the daily `ScheduledScript` in `async-wiring.now.ts`, and reads its
+ * window from the `x_snc_troubleshoot.retention_days` Property declared there
+ * too. See the Script Include's own header for why the sweep queries
+ * `sys_attachment` rather than walking run rows, and for the deliberate
+ * asymmetry between an ABSENT property (30-day default) and an unparseable one
+ * (sweep disabled).
+ */
+export const paRetentionSweep = ScriptInclude({
+    $id: Now.ID['pa-retention-sweep'],
+    name: 'PaRetentionSweep',
+    // Build Rule #29: ONE literal, no `+` concatenation.
+    description: `Agent Doctor infrastructure: the data-at-rest lifecycle for run artifacts. sweep() deletes sys_attachment rows on x_snc_troubleshoot_run records older than the x_snc_troubleshoot.retention_days window (default 30), scoped to this app's own run table and capped per pass so the remainder is purged by the next run. Run ROWS are deliberately never deleted - only the bulk artifact excerpts that carry customer table data. An absent property falls back to the default; a present but unparseable one disables the sweep entirely and warns, because deleting on a typo is the one direction that cannot be undone.`,
+    active: true,
+    accessibleFrom: 'public',
+    script: Now.include('../server/PaRetentionSweep.js'),
+})
+
 export const paRestHandlers = ScriptInclude({
     $id: Now.ID['pa-rest-handlers'],
     name: 'PaRestHandlers',

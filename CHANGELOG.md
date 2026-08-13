@@ -17,6 +17,68 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1215 — 2026-08-12
+
+### Added — a retention lifecycle for run artifacts, where there was none (#216)
+
+`PaToolQueryTable` returns rows from arbitrary customer tables and `PaArtifactStore` persists the
+oversized ones as attachments on the run record. A grep for `retention|purge|ttl|expire` across
+`src/server/` and `src/fluent/` returned **nothing**: the only scheduled jobs were the run-start
+worker and the stale-run sweep, and the latter changes a status without deleting anything. Customer
+data accumulated in the instance indefinitely.
+
+"No customer data ever leaves the platform" is about **egress** and stays true. Retention is a
+separate obligation and it was absent — which is what blocks customer install / handoff.
+
+New: `PaRetentionSweep` (Script Include), the `x_snc_troubleshoot.retention_days` Property
+(**default 30**), and a daily `Troubleshooter Artifact Retention Purge` at 03:30 — half an hour
+after the existing stale-run sweep so the two do not contend.
+
+**Why the sweep drives off attachments, not runs.** The obvious shape — walk runs older than N days,
+delete their attachments — carries a bug that only appears after the job has been live a while: a
+run whose attachments are already gone stays old forever, so with any per-pass cap and an
+oldest-first order every later pass re-examines the same already-clean runs and never reaches newer
+ones that still hold data. The job looks like it is running and quietly stops purging. Querying
+`sys_attachment` directly has none of that — the work set shrinks as it purges, there is no
+run-table scan at all, and no "already purged" marker column is needed (which would have been a
+schema change, unverifiable without an install).
+
+**The destructive direction is the dangerous one,** so the property handling is deliberately
+asymmetric: an **absent or blank** value falls back to the documented 30-day default, while a
+**present but unparseable** one (`never`, `thirty`, `0`, a negative, an unreplaced template)
+**disables the sweep entirely** and warns. "Not configured yet" and "configured wrong" are different
+facts and only the first has a safe default.
+
+Other properties asserted by tests: the query is scoped to this app's own run table first (an
+unqualified aged-`sys_attachment` delete would take the whole instance's attachments), the age test
+is pushed to the **database** rather than filtered in JS, each pass is capped and says so when it
+hits the cap, and one refused or throwing delete is counted as a failure without aborting the pass.
+
+### What this deliberately does NOT delete, stated in the PRD too
+
+Run **records** survive — status, transcript, `fix_report`, `context_summary` and the verbatim
+`request` body. They are the evidence ledger the benchmark and grading work read from. The
+consequence is written down rather than left implied: the row still carries 200-char digests of tool
+output and the original request text, so this closes the **bulk** data-at-rest exposure, not every
+trace of it. A second window over run rows is a separate decision. The PRD's Data Privacy & Security
+section now carries a retention row and a note spelling all of this out.
+
+### Test harness
+
+`test/_glideStub.js` gained three additive capabilities the retention work needed and nothing else
+had: `deleteRecord()` (with `failDelete` / `throwOnDelete` / `failDeleteIf`), a `calls.deletes` log,
+and three-argument `addQuery(field, op, value)` so a database-side `sys_created_on <` filter is
+actually exercised instead of silently matching nothing. `gs.getProperty` was added to the loader's
+`gs` stub, backed by a `properties` map a test can set after load.
+
+23 new tests. Unit-verified only — **the Fluent half (Property + ScheduledScript) has not been
+installed to gpinst01**, so per `CLAUDE.md` the job is unverified at runtime. The emitted `dist/`
+records were inspected directly per Build Rule #44: the property lands as `type=integer value=30`
+under the right name, and the job lands `active=true`, `run_type=daily`, at the same +5h `run_time`
+offset the existing sweep shows.
+
+---
+
 ## 2026.08.1214 — 2026-08-12
 
 ### Fixed — coverage was unmeasurable by construction; it now measures, and it gates (#217)

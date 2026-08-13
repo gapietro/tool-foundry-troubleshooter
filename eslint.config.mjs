@@ -61,6 +61,7 @@ const SERVICENOW_GLOBALS = {
     PaFixReport: 'writable',
     PaLlmProxy: 'writable',
     PaRestHandlers: 'writable',
+    PaRetentionSweep: 'writable',
     PaRunAnchor: 'writable',
     PaRunManager: 'writable',
     PaScriptToolAdapter: 'writable',

@@ -46,7 +46,7 @@
  */
 
 import '@servicenow/sdk/global'
-import { Record, ScriptAction, ScheduledScript } from '@servicenow/sdk/core'
+import { Record, ScriptAction, ScheduledScript, Property } from '@servicenow/sdk/core'
 // Duration is a GLOBAL — do NOT import it.
 
 // ---------------------------------------------------------------------------
@@ -144,4 +144,47 @@ export const staleRunSweep = ScheduledScript({
     frequency: 'daily',
     executionTime: { hours: 3, minutes: 0, seconds: 0 },
     script: Now.include('../server/async/sweep-stale-runs.js'),
+})
+
+// ---------------------------------------------------------------------------
+// 4. Artifact retention — the data-at-rest lifecycle (issue #216)
+// ---------------------------------------------------------------------------
+//
+// `PaToolQueryTable` returns rows from arbitrary customer tables and
+// `PaArtifactStore` persists the oversized ones as attachments on the run
+// record. Nothing ever removed them: the two jobs above are a run-start worker
+// and a status sweep that deletes nothing, so customer data accumulated in the
+// instance indefinitely. The PRD's "no customer data ever leaves the platform"
+// is about EGRESS and stays true — retention is a separate obligation, and a
+// diagnostic tool with no stated lifecycle cannot be handed to a customer.
+//
+// The window is a PROPERTY rather than a constant because it is exactly the
+// kind of thing a customer's own policy dictates, and changing it must not
+// require a redeploy. `PaRetentionSweep` reads it at sweep time.
+//
+// WHY 30 DAYS AS THE SHIPPED DEFAULT: long enough that a diagnosis stays
+// reviewable well past the incident that prompted it, short enough that the
+// data does not become a liability nobody remembers agreeing to. It is a
+// starting point for a conversation with a customer, not a claim about their
+// obligations.
+export const retentionDaysProperty = Property({
+    $id: Now.ID['retention-days-property'],
+    name: 'x_snc_troubleshoot.retention_days',
+    type: 'integer',
+    value: 30,
+    description:
+        'Days to keep diagnostic run ARTIFACTS (the sys_attachment excerpts of tool output, which may contain customer table data) before the daily purge deletes them. Run records themselves are never deleted by this job. Clear the value to fall back to 30 days. A value that is not a positive whole number DISABLES the purge entirely and logs a warning - deleting on a misconfiguration is the one direction that cannot be undone.',
+})
+
+// Runs at 03:30, half an hour after the stale-run sweep, so the two nightly
+// jobs do not contend and their log lines stay readable in order.
+export const artifactRetentionPurge = ScheduledScript({
+    $id: Now.ID['artifact-retention-purge'],
+    name: 'Troubleshooter Artifact Retention Purge',
+    active: true,
+    // As above, ScheduledScript has no `description` field — the rationale is
+    // in this comment, in `purge-artifacts.js`, and in PaRetentionSweep's header.
+    frequency: 'daily',
+    executionTime: { hours: 3, minutes: 30, seconds: 0 },
+    script: Now.include('../server/async/purge-artifacts.js'),
 })

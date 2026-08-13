@@ -41,6 +41,10 @@ declare global {
                         table: 'sys_security_acl'
                         id: 'ef1f815d97a0431e8b87f4a055ba5b3d'
                     }
+                    'artifact-retention-purge': {
+                        table: 'sysauto_script'
+                        id: '7b2f5925cbb642b4a55ce99d37881bc7'
+                    }
                     bom_json: {
                         table: 'sys_module'
                         id: 'cfd6e48922964e20ade700d69db34931'
@@ -156,6 +160,10 @@ declare global {
                         table: 'sys_script_include'
                         id: 'bb56fbba83d6439a9a786dbbffcde463'
                     }
+                    'pa-retention-sweep': {
+                        table: 'sys_script_include'
+                        id: 'bf391ee2a40d40b2afe0a2afa292feaa'
+                    }
                     'pa-run-anchor': {
                         table: 'sys_script_include'
                         id: '442109ddbf1c459d919c2b04ffa9e71f'
@@ -208,6 +216,10 @@ declare global {
                         table: 'sys_module'
                         id: '296e46a72ad14ef5a7f123411966e86e'
                     }
+                    'retention-days-property': {
+                        table: 'sys_properties'
+                        id: '624103c977b64a80aca704e85f4ee398'
+                    }
                     'run-start-event': {
                         table: 'sysevent_register'
                         id: '0d32b2c4557446f09def2634cd9342f6'
@@ -253,6 +265,10 @@ declare global {
                         table: 'sys_ws_version'
                         id: '75b650020ec04fd8a583813797f4e91c'
                     }
+                    'src_server_async_purge-artifacts_js': {
+                        table: 'sys_module'
+                        id: '528f00d60341494d8ecf194214e2afcf'
+                    }
                     'src_server_async_sweep-stale-runs_js': {
                         table: 'sys_module'
                         id: 'e0fe3faf665743c4ac95cc3b6116e93b'
@@ -276,6 +292,10 @@ declare global {
                     src_server_PaLlmProxy_js: {
                         table: 'sys_module'
                         id: 'd894b2b8ac994e1c8c41330b40b51d8a'
+                    }
+                    src_server_PaRetentionSweep_js: {
+                        table: 'sys_module'
+                        id: 'f4f7aab6b1cb42d1b49167d0d60a4e83'
                     }
                     src_server_PaRunAnchor_js: {
                         table: 'sys_module'

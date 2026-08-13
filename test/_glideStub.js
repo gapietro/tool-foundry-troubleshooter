@@ -254,6 +254,10 @@ function makeQueryingGlideRecordSecure(tables, options) {
  *   throwOnInsert throw this value from insert() — pass an object whose
  *                 `.message` getter throws, to enforce R-1
  *   throwOnQuery  same, for query()
+ *   failDelete    deleteRecord() returns false, as a denied delete does (#216)
+ *   throwOnDelete same, for deleteRecord() — R-1
+ *   failDeleteIf  OPTIONAL function(table, row) -> Boolean; fails THAT ONE
+ *                 delete, so "three of four rows purge" is expressible (#216)
  *   failUpdate    update() returns null, as a denied or rejected write does
  *   throwOnUpdate same, for update() — R-1
  *   failUpdateIf  OPTIONAL function(table, row, pendingFields) -> Boolean.
@@ -272,7 +276,7 @@ function makeWritableWorld(options) {
     Object.keys(opts.rows || {}).forEach(function (t) {
         tables[t] = opts.rows[t].slice(0)
     })
-    var calls = { inserts: [], queries: [], updates: [] }
+    var calls = { inserts: [], queries: [], updates: [], deletes: [] }
     var seq = 0
 
     function rowsFor(table) {
@@ -283,6 +287,7 @@ function makeWritableWorld(options) {
     function GlideRecord(table) {
         this._table = table
         this._filters = {}
+        this._conditions = []
         this._order = []
         this._pending = null
         this._matched = null
@@ -339,12 +344,51 @@ function makeWritableWorld(options) {
         return row.sys_id
     }
 
-    GlideRecord.prototype.addQuery = function (field, value) {
-        this._filters[field] = String(value)
+    /**
+     * Two forms, matching the platform's:
+     *   addQuery(field, value)      equality, unchanged from before
+     *   addQuery(field, op, value)  '<' '<=' '>' '>=' '=' '!=' (issue #216)
+     *
+     * The three-argument form was added for the retention sweep, which asks
+     * the DATABASE for `sys_created_on < cutoff` rather than reading every row
+     * and filtering in JS. Without it here the operator would land in the
+     * value slot and the filter would silently match nothing — a retention job
+     * that deletes nothing, and a test that proves it works.
+     */
+    GlideRecord.prototype.addQuery = function (field, opOrValue, maybeValue) {
+        if (arguments.length >= 3) {
+            this._conditions.push({ field: field, op: String(opOrValue), value: String(maybeValue) })
+        } else {
+            this._filters[field] = String(opOrValue)
+        }
         return {
             addOrCondition: function () {},
             addCondition: function () {},
         }
+    }
+
+    /**
+     * Removes the positioned row from the world (issue #216).
+     *
+     * `_matched` is a separate array from the table's own row list, so
+     * splicing the table does not disturb an in-flight `next()` walk — which
+     * is the shape the retention sweep relies on when it deletes every row it
+     * iterates.
+     *
+     * @returns {Boolean} false on a denied/rejected delete, as the platform's does.
+     */
+    GlideRecord.prototype.deleteRecord = function () {
+        if (opts.throwOnDelete) throw opts.throwOnDelete
+        if (opts.failDelete) return false
+        var row = (this._matched || [])[this._i]
+        if (!row) return false
+        if (typeof opts.failDeleteIf === 'function' && opts.failDeleteIf(this._table, row)) return false
+
+        var rows = rowsFor(this._table)
+        var idx = rows.indexOf(row)
+        if (idx !== -1) rows.splice(idx, 1)
+        calls.deletes.push({ table: this._table, row: row })
+        return true
     }
 
     GlideRecord.prototype.orderBy = function (field) {
@@ -356,10 +400,27 @@ function makeWritableWorld(options) {
     GlideRecord.prototype.query = function () {
         if (opts.throwOnQuery) throw opts.throwOnQuery
         var filters = this._filters
+        var conditions = this._conditions
         var order = this._order
         var matched = rowsFor(this._table).filter(function (row) {
-            return Object.keys(filters).every(function (k) {
-                return String(row[k] === undefined || row[k] === null ? '' : row[k]) === filters[k]
+            function cell(k) {
+                return String(row[k] === undefined || row[k] === null ? '' : row[k])
+            }
+            var equalityOk = Object.keys(filters).every(function (k) {
+                return cell(k) === filters[k]
+            })
+            if (!equalityOk) return false
+            // String comparison throughout, which is correct for the only use:
+            // `sys_created_on` is stored in the lexically-sortable
+            // 'YYYY-MM-DD HH:MM:SS' form this app compares elsewhere.
+            return conditions.every(function (c) {
+                var v = cell(c.field)
+                if (c.op === '<') return v < c.value
+                if (c.op === '<=') return v <= c.value
+                if (c.op === '>') return v > c.value
+                if (c.op === '>=') return v >= c.value
+                if (c.op === '!=') return v !== c.value
+                return v === c.value
             })
         })
         if (order.length) {

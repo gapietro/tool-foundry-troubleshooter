@@ -119,8 +119,17 @@ function classStub() {
 /** Records what the script logged, so tests can assert on it if they care. */
 function gsStub() {
     const calls = { info: [], warn: [], error: [], debug: [] }
+    // System properties, settable by a test AFTER load — the retention sweep
+    // (#216) reads its window through `gs.getProperty` at sweep time, not at
+    // construction, so a test can set this between the two.
+    const properties = {}
     return {
         calls: calls,
+        properties: properties,
+        getProperty: function (name, fallback) {
+            if (Object.prototype.hasOwnProperty.call(properties, name)) return properties[name]
+            return fallback === undefined ? null : fallback
+        },
         info: function (m) {
             calls.info.push(m)
         },
