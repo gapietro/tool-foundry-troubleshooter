@@ -153,6 +153,38 @@ describe('adjudication — presupposition refutation, and it does not depend on 
         }
     });
 
+    test('an existence claim DENYING a column, on a table that is not there, is not refuted', () => {
+        /**
+         * Review of PR #256, and the finding is right. The first version
+         * returned `refuted` for every claim naming a field once the table was
+         * absent, polarity discarded — so a report that correctly observed "that
+         * table has no such column" was scored as having made a false claim.
+         *
+         * The instance does not contradict it: there is no such column. Nor does
+         * it corroborate it, because the claim asserted a fact about a table
+         * that does not exist. That is a presupposition failure, and the honest
+         * verdict for a claim the instrument cannot place on either side is the
+         * third one — the whole reason there are three.
+         */
+        const out = verdictOf(
+            claim({ polarity: 'denies', subject: { table: 'zz_missing', field: 'zz_absent' } }),
+            read({ table_exists: false, fields: [] })
+        );
+        expect(out.verdict).toBe('unresolvable');
+        expect(out.reason).toBe('presupposition_failed');
+    });
+
+    test('the same claim ASSERTING the column is still refuted', () => {
+        // The direction that does rest on a contradiction: the report says the
+        // column is there, and there is not even a table to hold it.
+        const out = verdictOf(
+            claim({ polarity: 'asserts', subject: { table: 'zz_missing', field: 'zz_absent' } }),
+            read({ table_exists: false, fields: [] })
+        );
+        expect(out.verdict).toBe('refuted');
+        expect(out.reason).toBe('presupposed_table_absent');
+    });
+
     test('a count claim about a table the instance does not have is refuted', () => {
         const out = verdictOf(
             claim({ kind: 'count', subject: { table: 'zz_missing' } }),
@@ -273,6 +305,32 @@ describe('adjudication — claims the instrument cannot reduce to a test', () =>
         }
     });
 
+    test('an absent table needs no field list — the shape check must not disable the refuted route', () => {
+        /**
+         * Review of PR #256. The field-list check ran BEFORE `table_exists` was
+         * examined, so a probe answering about a nonexistent table — which
+         * naturally has no field list to return — produced `probe_failed` for
+         * every such read. That silently disables the only route that can
+         * return `refuted`, with no error anywhere: the instrument would have
+         * reported "nothing false found" while never having looked.
+         *
+         * `fields` is required only where a field is actually read.
+         */
+        const out = verdictOf(
+            claim({ kind: 'count', subject: { table: 'zz_missing' } }),
+            { table_exists: false, control: { name: 'zz_control_table', exists: true } }
+        );
+        expect(out.verdict).toBe('refuted');
+        expect(out.reason).toBe('presupposed_table_absent');
+    });
+
+    test('a non-boolean table_exists is an unusable read', () => {
+        // The contract is explicit at the boundary rather than implied: a probe
+        // that does not say whether the table is there has not answered.
+        const out = verdictOf(claim(), { fields: ['sys_id'], control: { name: 'zz_control_table', exists: true } });
+        expect(out.reason).toBe('probe_failed');
+    });
+
     test('a probe that throws is unresolvable, and the error is recorded', () => {
         const out = adjudication.adjudicate(claim(), function () {
             throw new Error('gateway timeout');
@@ -321,5 +379,25 @@ describe('adjudication — determinism and inertness', () => {
         };
         adjudication.adjudicateAll([claim({ id: 'demo-01/E01' }), claim({ id: 'demo-01/E02' })], probe);
         expect(seen).toEqual(['zz_demo_widget']);
+    });
+
+    test('a probe that throws is also read once — a failure is a read too', () => {
+        /**
+         * Review of PR #256: the memo only cached successful reads, so after a
+         * transient failure the next claim re-read the table. Two claims about
+         * one table would then be adjudicated against two different reads of a
+         * moving instance — the exact condition the memo's own comment says it
+         * exists to rule out, holding in every case except the one where the
+         * instance was already misbehaving.
+         */
+        let calls = 0;
+        const probe = function () {
+            calls += 1;
+            throw new Error('gateway timeout');
+        };
+        const out = adjudication.adjudicateAll([claim({ id: 'demo-01/E01' }), claim({ id: 'demo-01/E02' })], probe);
+        expect(calls).toBe(1);
+        expect(out.map((r) => r.reason)).toEqual(['probe_failed', 'probe_failed']);
+        expect(out[1].evidence.error).toMatch(/gateway timeout/);
     });
 });

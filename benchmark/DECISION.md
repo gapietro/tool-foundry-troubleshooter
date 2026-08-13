@@ -9056,9 +9056,22 @@ Three routes, in order, and everything falling through them is `unresolvable` wi
    enough to adjudicate in both directions (§2.2), and with `polarity` present it now can be:
    observed-present + `asserts` → `supported`; observed-absent + `denies` → `supported`; the crossed
    cases → `refuted`, each control-paired.
-3. **Everything else → `unresolvable`**, with a reason: `mutable` for counts, record-scoped claims and
-   field values (§AW5 E-2, brief §2.2), `control_failed` where a probe's control did not come back, and
-   `not_reducible` where no deterministic test applies.
+3. **Everything else → `unresolvable`**, with a reason drawn from this closed set — **corrected in
+   review of PR #256**, which found the registration naming a `not_reducible` the implementation never
+   emits while three shipped reasons appeared nowhere in the registration. That is the §AR1a divergence
+   this very section cites as its reason to exist, committed inside it:
+
+   | reason | when |
+   |---|---|
+   | `mutable` | counts, record-scoped claims and field values — §AW5 E-2, brief §2.2 |
+   | `control_failed` | an absence observed through a read whose control did not come back |
+   | `probe_failed` | the probe threw, or answered in a shape the contract does not admit |
+   | `no_polarity` | the extractor emitted none, or its variants disagreed about it |
+   | `no_subject_table` | the claim names nothing to probe |
+   | `presupposition_failed` | an existence claim DENYING a column of a table that does not exist |
+
+   The last one is itself a review finding: scoring that case `refuted` — as the first implementation
+   did — manufactures a false claim out of a correct observation of an absence.
 
 **The honest consequence, stated before the figure exists:** `supported` is reachable only for schema
 existence claims, so a corpus whose claims are mostly values and counts will return mostly
@@ -9075,3 +9088,33 @@ directly, and no reviewer would see it in a diff of a file nobody was checking.
 > **Registered:** the adjudicator's source and its tests join the §AX5 cleared set, checked by the same
 > shared instrument, and the discovery test that finds uncleared extractor files is widened to find
 > uncleared adjudicator files too.
+
+### AX13.5 What review found in the first implementation, recorded rather than quietly fixed
+
+Seven findings, all before any measurement. Three bear on what the axis can say and are kept here
+because the fixes are now load-bearing behaviour, not tidying:
+
+1. **Polarity was decided by a tie-break.** Where a model emitted one proposition with contradicting
+   polarity, the survivor was chosen by the variant sort — and `asserts` sorts before `denies`, so
+   every self-contradicting emission was silently read as **affirmative**. The forbidden assumption of
+   §AX13.1 arriving through a sort order rather than through a parser. A contradiction is now the same
+   evidential state as a missing polarity: the claim keeps none and the adjudicator says so.
+2. **The probe contract disabled the only route to `refuted`.** The field-list check ran before
+   `table_exists` was examined, so a probe answering about a nonexistent table — which has no field
+   list to return — yielded `probe_failed` for every such read. The pass would have reported nothing
+   false found while never having looked. **This is the §AX13.3 route-1 path**, the one the axis exists
+   for, and it was disabled by a guard clause ordering.
+3. **A record-scoped existence claim was answered with its table's existence** — `supported` about a
+   row nobody looked for.
+
+The other four were narrower: a memo that did not cache failed reads (so two claims about one table
+could be adjudicated against two different reads of a moving instance); defects reported from variants
+that were never emitted; and internal keys joined on NUL, which put `claim-extraction.js` over git's
+binary heuristic — **its diff was invisible in the pull request**, in a file §AX5 clears precisely
+because nobody diffs a file no check covers.
+
+**What this says about the instrument, stated plainly.** Findings 1 and 2 are both cases of the
+registered principle being defeated by a mechanical detail rather than by a disagreement about the
+principle — a sort order and a guard clause. Neither would have been visible in a figure; both would
+have produced a clean-looking pass. The §AX0 substitution holds — check the artifact, not the author —
+but only where the check is pointed at the behaviour and not at the intent.

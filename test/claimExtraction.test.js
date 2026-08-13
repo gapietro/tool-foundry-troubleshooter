@@ -190,18 +190,62 @@ describe('claim extraction — polarity (§AX13), and why a missing one does NOT
         expect(forward).toEqual(['Alpha claim.', 'Bravo claim.']);
     });
 
-    test('polarity disagreement across variants of one proposition is recorded as a conflict', () => {
+    test('polarity disagreement across variants leaves the claim with NO polarity', () => {
         /**
-         * Same rule the module already applies to `kind` and `subject`: a model
-         * contradicting itself is a finding about the extraction, not noise to
-         * be tidied. Without polarity in the variant key, one of the two would
-         * be chosen by arrival order and the disagreement would vanish.
+         * Review of PR #256 found the first version resolving this by the
+         * variant sort, under which `asserts` always wins because it sorts
+         * first. A model that contradicted itself was therefore read as
+         * AFFIRMATIVE — the adjudicator would then return a confident verdict
+         * off a coin flip, which is the affirmative-polarity assumption §AX13.1
+         * says the instrument may not make, arriving through the tie-break.
+         *
+         * Contradiction is the same evidential state as an unrecognised
+         * polarity: the extractor did not tell us which way the claim cuts. So
+         * the claim survives with none, the disagreement is recorded, and the
+         * adjudicator returns `unresolvable`.
          */
         const out = run([claim({ polarity: 'asserts' }), claim({ polarity: 'denies' })]);
         expect(out.claims).toHaveLength(1);
+        expect(out.claims[0].polarity).toBeUndefined();
         expect(out.conflicts).toHaveLength(1);
-        expect(out.conflicts[0].kept.polarity).toBe('asserts');
-        expect(out.conflicts[0].discarded[0].polarity).toBe('denies');
+        expect(out.defects).toEqual([
+            {
+                proposition: 'Table zz_demo_widget exists.',
+                field: 'polarity',
+                reason: 'variants disagree: asserts, denies',
+            },
+        ]);
+    });
+
+    test('a defect on a LOSING variant is not reported against the emitted claim', () => {
+        /**
+         * Review of PR #256: defects were collected from every accepted
+         * variant, so one proposition emitted twice — once well-formed, once
+         * without polarity — produced a claim carrying a valid polarity AND a
+         * defect saying its polarity was missing. Anyone reading `defects` as
+         * "claims lacking polarity" would overcount.
+         *
+         * `defects` describes the EMITTED claim. What the discarded variants
+         * said is `conflicts`.
+         */
+        const out = run([claim({ polarity: 'asserts' }), claim({ polarity: undefined })]);
+        expect(out.claims[0].polarity).toBe('asserts');
+        expect(out.defects).toEqual([]);
+    });
+
+    test('the module is a text file — separators must not make it binary to git', () => {
+        /**
+         * Review of PR #256. The internal dedup keys joined on NUL, which puts
+         * the file over git's binary heuristic: `git diff` reported
+         * `Bin 13357 -> 16953 bytes` and the whole change was INVISIBLE in the
+         * pull request. §AX5 clears this file precisely because nobody diffs a
+         * file no check covers; making it undiffable defeats the review that
+         * clearing exists to enable.
+         */
+        const fs = require('fs');
+        const path = require('path');
+        const raw = fs.readFileSync(path.join(__dirname, '..', 'benchmark', 'scripts', 'claim-extraction.js'));
+        expect(raw.indexOf(0)).toBe(-1);
     });
 });
 

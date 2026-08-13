@@ -97,23 +97,39 @@ function adjudicate(claim, probe) {
         return result(claim, 'unresolvable', 'probe_failed', { error: String((err && err.message) || err) });
     }
 
-    if (!read || typeof read !== 'object' || !Array.isArray(read.fields)) {
+    /**
+     * THE PROBE CONTRACT, ENFORCED AT THE BOUNDARY RATHER THAN IMPLIED.
+     *
+     * `table_exists` must be a boolean — a probe that does not say whether the
+     * table is there has not answered. `fields` is required only where a field
+     * is actually read: the first version demanded it unconditionally, so a
+     * probe answering about a NONEXISTENT table — which naturally has no field
+     * list to return — produced `probe_failed` for every such read. That
+     * silently disables the only route that can return `refuted`, and the pass
+     * would have reported "nothing false found" while never having looked
+     * (review of PR #256).
+     */
+    if (!read || typeof read !== 'object' || typeof read.table_exists !== 'boolean') {
         return result(claim, 'unresolvable', 'probe_failed', {});
     }
+    if (read.table_exists && !Array.isArray(read.fields)) {
+        return result(claim, 'unresolvable', 'probe_failed', {});
+    }
+    const fields = Array.isArray(read.fields) ? read.fields : [];
 
     const control = read.control || {};
     const tableControlPassed = control.exists === true;
-    const fieldControlPassed = read.fields.indexOf(CONTROL_FIELD) !== -1;
+    const fieldControlPassed = fields.indexOf(CONTROL_FIELD) !== -1;
     const asserts = claim.polarity === 'asserts';
 
     const evidence = {
         table: subject.table,
-        table_exists: read.table_exists === true,
+        table_exists: read.table_exists,
         control_table: control.name,
         control_table_present: tableControlPassed,
         control_field_present: fieldControlPassed,
     };
-    if (subject.field) evidence.field_present = read.fields.indexOf(subject.field) !== -1;
+    if (subject.field) evidence.field_present = fields.indexOf(subject.field) !== -1;
 
     // ---- The table, first: everything else is read through it. ----
     if (read.table_exists !== true) {
@@ -125,11 +141,31 @@ function adjudicate(claim, probe) {
             return result(claim, asserts ? 'refuted' : 'supported', 'table_absent', evidence);
         }
         /**
+         * An existence claim about one of the table's COLUMNS, where the table
+         * itself is gone, splits by polarity — and the first version did not
+         * split it, returning `refuted` either way (review of PR #256).
+         *
+         * `asserts` — the report says the column is there, and there is not even
+         * a table to hold it. The instance contradicts it.
+         *
+         * `denies` — the report says the column is not there, and it is not.
+         * The instance does not contradict that; nor does it corroborate it,
+         * because the claim asserted a fact about a table that does not exist.
+         * Scoring it `refuted` manufactures a false claim out of a correct
+         * observation, which is the failure mode this axis exists to catch and
+         * the one §AX13 amended the frozen prompt to prevent. A claim the
+         * instrument cannot place on either side gets the third verdict, which
+         * is the entire reason there are three.
+         */
+        if (claim.kind === 'existence' && subject.field && !asserts) {
+            return result(claim, 'unresolvable', 'presupposition_failed', evidence);
+        }
+
+        /**
          * Everything else names the table as the thing it is talking about, so
-         * an absent table is a presupposition failure — INCLUDING an existence
-         * claim about one of its columns. "That table has no such column" is not
-         * vindicated by the table not existing; it asserted a fact about a table
-         * that is not there, and the instance contradicts it.
+         * an absent table is a presupposition failure that cuts one way only:
+         * the claim said something about the contents of a table that is not
+         * there.
          */
         return result(claim, 'refuted', 'presupposed_table_absent', evidence);
     }
@@ -194,8 +230,25 @@ function adjudicate(claim, probe) {
 function adjudicateAll(claims, probe) {
     const cache = new Map();
     const memoised = function (table) {
-        if (!cache.has(table)) cache.set(table, probe(table));
-        return cache.get(table);
+        if (!cache.has(table)) {
+            /**
+             * A FAILURE IS A READ TOO. The first version only cached successful
+             * reads, so a transient failure sent the next claim back to the
+             * instance — and two claims about one table were then adjudicated
+             * against two different reads of a moving instance, which is the
+             * condition this memo exists to rule out. It held in every case
+             * except the one where the instance was already misbehaving
+             * (review of PR #256).
+             */
+            try {
+                cache.set(table, { value: probe(table) });
+            } catch (err) {
+                cache.set(table, { error: err });
+            }
+        }
+        const entry = cache.get(table);
+        if (entry.error) throw entry.error;
+        return entry.value;
     };
 
     return claims

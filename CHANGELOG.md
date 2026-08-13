@@ -91,7 +91,25 @@ vocabulary scan, and an uncleared `claim-adjudication-*.js` helper fails the dis
 code cannot be tuned" is an argument about likelihood — the same one §AX5 makes about the extractor's
 plumbing before clearing it anyway.
 
-**Verification:** `npm test` 2187 passing across 46 suites; `npx eslint` clean on every changed file.
+### Fixed — seven findings from review of PR #256, three of them load-bearing
+
+All found before any measurement. Full record in §AX13.5.
+
+| # | defect | why it mattered |
+|---|---|---|
+| 1 | polarity disagreement between variants resolved by the **variant sort**, and `asserts` sorts before `denies` | every self-contradicting emission was silently read as **affirmative** — §AX13.1's forbidden assumption arriving through a sort order instead of a parser. Contradiction now yields **no** polarity, and `unresolvable` follows |
+| 2 | the `fields` shape check ran **before** `table_exists` was examined | a probe answering about a nonexistent table has no field list, so every such read became `probe_failed` — **silently disabling the only route that can return `refuted`**. The pass would have reported nothing false found while never having looked |
+| 3 | an existence claim **denying** a column, on a table that does not exist, returned `refuted` | manufactured a false claim out of a correct observation of an absence — the exact failure this PR amended the prompt to prevent, reinstated in the one branch that discarded polarity. Now `unresolvable`/`presupposition_failed` |
+| 4 | `adjudicateAll`'s memo did not cache a **throwing** probe | two claims about one table could be adjudicated against two different reads of a moving instance — the condition the memo exists to rule out, holding everywhere except when the instance was already misbehaving |
+| 5 | §AX13.3 registered a `not_reducible` reason the code never emits, while three shipped reasons were unregistered | the §AR1a divergence the section itself cites as its reason to exist. Registered vocabulary corrected to the closed set the code emits |
+| 6 | defects were collected from **losing** variants | a claim with a valid polarity could carry a defect saying its polarity was missing; `defects` now describes the emitted claim, `conflicts` the discarded ones |
+| 7 | internal keys joined on **NUL**, putting `claim-extraction.js` over git's binary heuristic | the file's changes were **invisible in the pull request** — in a file §AX5 clears precisely because nobody diffs a file no check covers. Now a unit separator (`U+001F`), with a test asserting the file contains no NUL. *(This PR's own diff still renders binary because the copy on `main` is; it is textual from here on.)* |
+
+Findings 1 and 2 are the same shape: a registered principle defeated by a mechanical detail — a sort
+order and a guard-clause ordering — where neither would have shown up in a figure and both would have
+produced a clean-looking pass.
+
+**Verification:** `npm test` 2194 passing across 46 suites; `npx eslint` clean on every changed file.
 No instance was contacted.
 
 ---
