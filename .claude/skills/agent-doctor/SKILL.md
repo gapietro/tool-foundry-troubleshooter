@@ -29,7 +29,7 @@ When invoked:
 6. **Verify demo data** with `servicenow_query` / `servicenow_script` — confirm the records the agent needs actually exist with the expected field values (`number`, `active`, `workflow_state`, `category`, location, etc.).
 7. **Identify root cause** using the "Typical root-cause patterns" table below.
 8. **Report diagnosis and proposed fix**, then **STOP** and wait for user approval. Use the output format shown further down.
-9. **On approval:** create a GitHub issue, cut a feature branch from main, edit Fluent DSL files in `src/fluent/`, run `now-sdk build && now-sdk install --alias <alias>`, verify via MCP (re-simulate tool logic, re-trace if possible, confirm created records).
+9. **On approval:** create a GitHub issue, cut a feature branch from main, edit Fluent DSL files in `src/fluent/`, run `now-sdk build && now-sdk install --auth <alias>`, verify via MCP (re-simulate tool logic, re-trace if possible, confirm created records).
 10. **Commit (referencing the issue with `Closes #N`), push, and open a PR with a test plan.** Stop after the PR is opened — user reviews and merges.
 
 **Hard rules:** SDK owns creation/edits; MCP owns runtime. Never edit Fluent until the user approves. Never commit to main. Never stage `src/fluent/generated/`. Skip testing copilot tools via MCP — hand off to AI Agent Studio.
@@ -39,7 +39,7 @@ When invoked:
 These encode the workflow proven in the PPL Customer Service Orchestrator troubleshooting session.
 
 1. **SDK owns creation and edits. MCP owns runtime.**
-   - Any change to agents, tools, workflows, skills, tables, flows, demo data → edit Fluent DSL in `src/fluent/`, run `now-sdk build && now-sdk install --alias <alias>`.
+   - Any change to agents, tools, workflows, skills, tables, flows, demo data → edit Fluent DSL in `src/fluent/`, run `now-sdk build && now-sdk install --auth <alias>`.
    - Never mutate a Fluent-defined record directly via MCP — the instance will drift from source.
    - MCP is for: listing, reading, tracing, executing, querying, running one-off diagnostic scripts.
 
@@ -92,7 +92,7 @@ These encode the workflow proven in the PPL Customer Service Orchestrator troubl
    └─> git checkout main && git pull && git checkout -b fix/<slug>
    └─> Edit src/fluent/*.now.ts (and src/fluent/*-demo-data.now.ts)
    └─> Edit narrative HTML ONLY if user agreed to sync it
-   └─> now-sdk build && now-sdk install --alias <alias>
+   └─> now-sdk build && now-sdk install --auth <alias>
    └─> Verify with MCP: run the fixed tool's query logic directly or invoke a child agent
 
 10. Commit, push, open PR
@@ -152,7 +152,7 @@ These encode the workflow proven in the PPL Customer Service Orchestrator troubl
 | Command | When | Notes |
 |---|---|---|
 | `now-sdk build` | After every Fluent edit | Must succeed before install; fix type errors first. |
-| `now-sdk install --alias <alias>` | After successful build | Deploys `dist/` to the instance. |
+| `now-sdk install --auth <alias>` | After successful build | Deploys `dist/` to the instance. |
 | `now-sdk download src/` | Only when instance was edited directly and you need to reconcile | Do not use in normal loop. |
 
 **Critical Fluent DSL rules** (from the project's `sdk-reference.md`):
@@ -177,7 +177,7 @@ git checkout -b fix/<short-slug>
 # 3. Make the Fluent edits
 
 # 4. Build + install
-now-sdk build && now-sdk install --alias <alias>
+now-sdk build && now-sdk install --auth <alias>
 
 # 5. Verify with MCP (trace, simulate tool logic, check created records)
 

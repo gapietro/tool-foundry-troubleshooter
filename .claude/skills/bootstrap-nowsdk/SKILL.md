@@ -186,7 +186,7 @@ If the `now-sdk-explain` skill is loaded (installed via `/plugin install fluent`
 2. **Find the API** — check the Golden Example Index in sdk-reference.md, or run `now-sdk explain --list` / `now-sdk explain <topic>` for live API specs
 3. **Read the golden example** — `.claude/context/sdk-examples/<api>.now.ts` has build-validated patterns
 4. **Write Fluent DSL** in `src/fluent/` — follow the example patterns exactly
-5. **Build and deploy** — `now-sdk build && now-sdk install --alias <alias>`
+5. **Build and deploy** — `now-sdk build && now-sdk install --auth <alias>`
 6. **Verify on instance** — check the URL printed by install
 7. **Commit to feature branch** — never commit to main directly
 
@@ -208,7 +208,7 @@ Fluent DSL in `src/fluent/`, version-controlled, deployed via build + install.
 
 | Task | Tool |
 |------|------|
-| Create/modify agent, skill, flow, table | Edit `.now.ts` → `now-sdk build` → `now-sdk install --alias <alias>` |
+| Create/modify agent, skill, flow, table | Edit `.now.ts` → `now-sdk build` → `now-sdk install --auth <alias>` |
 | Test agent | `aia_execute` (MCP) |
 | Debug agent | `aia_logs`, `aia_trace`, `aia_errors` (MCP) |
 | Test skill | `skill_execute` (MCP) |
@@ -224,7 +224,7 @@ If you use MCP to create/modify an agent or skill:
 
 ```
 now-sdk build                          # Compile src/ → dist/ (required before install)
-now-sdk install --alias <alias>        # Deploy dist/ to instance
+now-sdk install --auth <alias>        # Deploy dist/ to instance
 now-sdk download src/                  # Pull from instance (only if instance-side edits)
 now-sdk explain <topic>                # Live API docs — see "Live API Docs" section above
 now-sdk dev                            # Local dev server with hot reload (React UI projects)
@@ -284,7 +284,7 @@ git push -u origin main
 
 ```bash
 now-sdk build
-now-sdk install --alias <alias>
+now-sdk install --auth <alias>
 ```
 
 On success, `now-sdk install` prints a URL to the app on the instance.

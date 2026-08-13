@@ -24,7 +24,7 @@ Build `PaToolAgentTrace`, the first Agent Doctor tool core, in this repo.
 
 `PaToolAgentTrace` per LLD §4.1 — a Script Include in `src/fluent/`, exposed later as an AI Agent script tool. Start with the core: plan header → task tree → tool calls → messages → error mining → failure signatures → latency flags. Detail mode and `PaArtifactStore` paging can follow.
 
-Follow the SDK/MCP boundary in `CLAUDE.md`: **SDK owns creation** (Fluent DSL in `src/fluent/`, `now-sdk build` then `now-sdk install --alias gpinst01`); **MCP owns runtime** (execute, trace, query). Never commit to `main` — branch, PR, merge.
+Follow the SDK/MCP boundary in `CLAUDE.md`: **SDK owns creation** (Fluent DSL in `src/fluent/`, `now-sdk build` then `now-sdk install --auth gpinst01`); **MCP owns runtime** (execute, trace, query). Never commit to `main` — branch, PR, merge.
 
 ## Verified facts — use these, don't re-derive them
 

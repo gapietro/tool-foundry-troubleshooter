@@ -23,7 +23,7 @@ tags:
 
 ## Decision ladder (check in order)
 
-1. **`now-sdk install --alias <alias>`** — the supported path. Use it
+1. **`now-sdk install --auth <alias>`** — the supported path. Use it
    whenever the target instance has SDK auth.
 2. **Studio → "Publish to Update Set"** — on any instance where the app is
    already installed. Produces a platform-native update set.

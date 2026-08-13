@@ -462,7 +462,7 @@ Repo layout (⚠ **corrected — the `src/instance/**` / `src/agent-doctor/**` t
 - `test/**/*.test.js` — Jest, **outside `src/`**: `now-sdk build` lints the whole source tree and a test's `require('vm')` fails the build (R-14)
 - `benchmark/**` — seeds and scorecards
 
-**Deploy target: `gpinst01`** (`now-sdk install --alias gpinst01`). ⚠ This line previously said keynexus01, which has **no `now-sdk auth` entry** and is not currently reachable; add one with `now-sdk auth --add keynexus01` before targeting it.
+**Deploy target: `gpinst01`** (`now-sdk install --auth gpinst01` — `--auth`, not `--alias`: `install` has no `--alias`, and now-sdk ignores unknown flags silently, so the misspelling deploys to whatever the default credential is; see #239). ⚠ This line previously said keynexus01. Both instances now have `now-sdk auth` entries and **gpinst01 is the default** (#236/#238) — check `now-sdk auth --list` rather than trusting this sentence, since the surrounding claim has been wrong three times.
 
 Order of operations after SDK setup: install scoped app → run `/status`-equivalent readability check (§3 cross-scope) → create Agent Doctor records → smoke test → build seeds → benchmark.
 
