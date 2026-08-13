@@ -17,6 +17,48 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1216 — 2026-08-12
+
+### Fixed — the deploy smoke installed to one instance and verified another (#239)
+
+`scripts/smoke.js` authenticated its two halves through separate argv lists, and they had drifted.
+The install emitted `--alias`; the probe emitted `-a`. **`now-sdk install` has no `--alias`** — both
+subcommands document `-a, --auth`, and `--alias` is valid only on `auth --add`. Per #236 `now-sdk`
+**ignores unknown flags silently** and falls through to the default credential, so:
+
+| path | flag emitted | actually targeted |
+|---|---|---|
+| install | `--alias x` → ignored | **default credential** |
+| probe | `-a x` | **x** |
+
+`npm run smoke -- --alias keynexus01` installed to gpinst01 and then verified keynexus01.
+
+**The dangerous outcome is the quiet one.** If the named instance held no matching copy, the tier
+printed a wall of phantom `missing` findings and sent the reader after a deploy failure that never
+happened. If it held a *matching older* copy, the tier **reported a clean pass for an instance it
+never deployed to** while the real payload landed on the other half of the instance split — the
+#236 failure mode reproduced inside the tier built to catch exactly that. Noted for the record:
+`scripts/smoke.js:112-118` is a PR #229 review hardening against "a typo deploying to the wrong
+instance and reporting a clean pass for it", validating the *value* of a flag that does not exist.
+
+**Why the fix is a shared helper and not a two-character flag change.** Correcting `--alias` to `-a`
+would leave two independent call sites free to diverge again, which is how this arrived. Both argv
+lists now route through one `authArgs(alias)` behind an `AUTH_FLAG` constant, and
+`test/smokeDeployProbe.test.js` binds them: five tests assert the install and probe auth portions are
+*identical* for a named alias, that both fall back together when none is given, that neither emits
+`--alias`, and that the install argv still names its subcommand. Same binding shape as the
+review-#230 block already in that file — when two places must agree, a test holds them together, not
+care.
+
+**Evidence, and the limit of it.** `npm test` 37 suites / **1906** tests pass (up exactly the 5
+added); `npm run lint` clean; `npm run smoke -- --alias gpinst01` completed the real install path and
+passed 161/165. That last run is a positive control that the corrected argv is accepted end to end —
+it is **not** a discriminating test, because gpinst01 *is* the default credential, so the broken and
+fixed code would both have landed there. The cross-instance discrimination is proven by unit test
+only; proving it live would mean deploying to keynexus01, which was not done.
+
+---
+
 ## 2026.08.1215 — 2026-08-12
 
 ### Added — a retention lifecycle for run artifacts, where there was none (#216)

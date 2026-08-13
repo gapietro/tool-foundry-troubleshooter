@@ -590,6 +590,62 @@ describe('every finding kind is classified (review #230, finding 2)', () => {
     })
 })
 
+describe('install and probe resolve the same instance (issue #239)', () => {
+    // The two halves of this script authenticate through separate argv lists,
+    // and they drifted: install emitted `--alias`, the probe emitted `-a`.
+    // `now-sdk install` has no `--alias` (the flag is `-a, --auth`), and per
+    // #236 now-sdk IGNORES UNKNOWN FLAGS SILENTLY and falls back to the
+    // DEFAULT credential. So `--alias keynexus01` installed to gpinst01 and
+    // then verified keynexus01 — and if the named instance happened to hold a
+    // matching older copy, the tier reported a CLEAN PASS for an instance it
+    // never deployed to. That is the #236 failure mode inside the tier built
+    // to catch it.
+    //
+    // Same binding shape as the review-#230 block above: when two places must
+    // agree, a test holds them together. A two-character flag fix alone leaves
+    // both call sites free to diverge again.
+    const { installArgs, queryArgs, AUTH_FLAG } = require('../scripts/smoke')
+
+    function authPortion(argv) {
+        const i = argv.indexOf(AUTH_FLAG)
+        return i === -1 ? [] : argv.slice(i, i + 2)
+    }
+
+    test('a named alias reaches the install command and the probe command identically', () => {
+        expect(authPortion(installArgs('keynexus01'))).toEqual(authPortion(
+            queryArgs('sys_app', 'sys_id=abc', 1, 'keynexus01'),
+        ))
+        expect(authPortion(installArgs('keynexus01'))).toEqual([AUTH_FLAG, 'keynexus01'])
+    })
+
+    test('no alias leaves BOTH commands on the default credential', () => {
+        // Consistency matters more than which credential wins: the pass is
+        // only meaningful if the instance installed to is the instance probed.
+        expect(authPortion(installArgs(null))).toEqual([])
+        expect(authPortion(queryArgs('sys_app', 'sys_id=abc', 1, null))).toEqual([])
+    })
+
+    test('neither command emits `--alias`, which now-sdk would silently ignore', () => {
+        // The regression itself. `--alias` is valid only on `auth --add`.
+        expect(installArgs('keynexus01')).not.toContain('--alias')
+        expect(queryArgs('sys_app', 'sys_id=abc', 1, 'keynexus01')).not.toContain('--alias')
+    })
+
+    test('the shared auth flag is the one both subcommands document', () => {
+        // `now-sdk install --help` and `now-sdk query --help` (SDK 4.9.2) both
+        // list `-a, --auth`. Asserted as a constant so a future edit to either
+        // call site has to come through here.
+        expect(AUTH_FLAG).toBe('-a')
+    })
+
+    test('the install command still names the install subcommand first', () => {
+        // Guards the refactor: a helper that forgot the subcommand would make
+        // every install a no-op while the probe read a stale instance clean.
+        expect(installArgs(null)[0]).toBe('install')
+        expect(installArgs('keynexus01')[0]).toBe('install')
+    })
+})
+
 describe('the SBOM excuse is tied to the artifact, not to a filename (review #230)', () => {
     const bom = (uuid) => '{"bomFormat":"CycloneDX","serialNumber":"urn:uuid:' + uuid + '"}'
     const A = 'b59fb687-a622-4959-9d2b-88043224b09a'
