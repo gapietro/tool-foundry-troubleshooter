@@ -48,10 +48,26 @@ the new file and confirming it fails at 54.44%.
 **One assertion was wrong and the code was right** — the `/status` body keys each row as `check`, not
 `name`. Corrected in the test.
 
-> **Reading note on the global figure.** Jest REMOVES files matched by a path/glob threshold from the
-> `global` pool. Adding the `src/server/rest/**` entry therefore made `global` read 92.88% where the
-> all-files figure is 93.06% — a reporting artifact of the split, not a coverage regression. Global
-> thresholds are set against the post-split pool.
+New `src/server/rest/**` floor at **95 / 88 / 95 / 97**; global stays at 90 / 83 / 93 / 92.
+
+> **Two things a path/glob threshold does that are easy to get wrong**, both raised in review of
+> PR #249 and both settled here.
+>
+> **(1) Jest REMOVES matched files from the `global` pool.** Adding the `src/server/rest/**` entry
+> makes `global` measure a smaller, different set — it is a reporting artifact of the split, never a
+> coverage regression. The global numbers are therefore set against the POST-split pool, measured
+> directly: 93.07 / 85.44 / 97.35 / 95.40, leaving 2.4-4.4pp of headroom so an unrelated later PR does
+> not trip a threshold error naming nothing it touched.
+>
+> **(2) The key is a glob, so Jest applies it PER FILE, not as a directory aggregate.** The first
+> version of this entry set `functions: 100` on `src/server/rest/**`, and `PaRestHandlers.js` sits at
+> exactly 52/52 functions — so one new uncovered helper, or any new file added under that directory,
+> would have failed the whole coverage run. Loosened to `functions: 95`.
+>
+> `src/server/async/**` deliberately KEEPS `100` on all four despite the same mechanics: it is a
+> two-file, 53-line directory where every file is a ScheduledScript body that runs unattended on a
+> customer instance, so "a new file here must be fully tested" is the gate that is wanted, not an
+> accident of the glob.
 
 ## 2026.08.1304 — 2026-08-13
 
