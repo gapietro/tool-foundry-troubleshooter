@@ -277,6 +277,65 @@ describe('claim inventory — carries no truth values', () => {
   });
 });
 
+describe('claim inventory — the small-denominator reportability floor (§AX11)', () => {
+  /**
+   * §AX10 left AX-1b's reportability on n=2 open and required the call be made
+   * BEFORE the extractor runs. §AX11 makes it. Pinned here rather than left in
+   * prose for the same reason zero_claim_reporting_rule is: a rule that only a
+   * reader enforces is not enforced.
+   */
+  const floor = fixture.recall_reportability_floor;
+
+  test('the floor is registered in the fixture, at the K AX-4 already carries', () => {
+    expect(floor).toBeDefined();
+    expect(floor.k).toBe(5);
+    expect(floor.registered_under).toContain('§AX11');
+    expect(floor.registered_before_extractor_existed).toBe(true);
+  });
+
+  test('the verdict it mandates is `not exercised`, and it governs the verdict not the fraction', () => {
+    // §AQ4's ruling, encoded: "not exercised" is neither "passed" nor "failed".
+    expect(floor.rule).toContain('not exercised');
+    expect(floor.rule).toContain('never `passed`');
+    expect(floor.rule).toContain('never `failed`');
+    // The fraction survives — the floor is a label rule, not a suppression rule.
+    expect(floor.rule).toContain('still computed and recorded');
+  });
+
+  test('the floor binds the arm the committed denominators actually make small', () => {
+    /**
+     * Derived from denominator_summary, never hardcoded. If a future edit moved a
+     * claim across the threshold, a hardcoded expectation would keep this green
+     * while the registered consequence in §AX11.1 silently became false.
+     */
+    const below = [];
+    for (const arm of ['native', 'custom']) {
+      if (fixture.denominator_summary[arm].claims < floor.k) below.push(arm);
+    }
+    expect(below).toEqual(['custom']);
+    expect(floor.applied_to_this_pass).toContain('AX-1b');
+    expect(floor.applied_to_this_pass).toContain('not exercised');
+  });
+
+  test('it is a rule about arms, naming no individual report', () => {
+    /**
+     * The floor is stated over per-arm denominators. If it ever names a report it
+     * has stopped being a rule and become a carve-out for a known case — the shape
+     * §AX5 clears the extractor for, applied to the fixture that measures it.
+     *
+     * Deliberately NOT a scan for verdict words: the `why` text cites AX-4's
+     * "refuted population" as the source of K, which is a reference to a
+     * denominator, not a truth value. Verdict-shaped KEYS anywhere in the fixture
+     * — this object included — are already caught by the walk above, and a second
+     * substring-based check bought nothing but a false positive.
+     */
+    const raw = JSON.stringify(floor);
+    for (const name of HELD_OUT) {
+      expect(raw).not.toContain(name);
+    }
+  });
+});
+
 describe('claim inventory — provenance (§AX2.2)', () => {
   test('declares the registration it is bound by and that it precedes the extractor', () => {
     expect(fixture.registered_under).toContain('§AX');

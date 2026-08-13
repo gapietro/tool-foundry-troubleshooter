@@ -7,6 +7,15 @@
   "purpose": "Fixture the enumeration-recall figure is computed against. Recall = (inventory claims the extractor emitted) / (inventory claims), per report and per arm. The spurious rate is computed against emitted claims absent from this inventory; `rejected_candidates` pre-commits the ruling for the candidates most likely to be emitted, so the §AX2.5 'correct additions' carve-out cannot be stretched after output is seen.",
   "contains_no_truth_values": "By construction. No claim carries a verdict, an expected verdict, or any hint of one. Adjudication (§AW2's three-valued verdict) happens elsewhere and must not be able to read its answer out of this file.",
   "zero_claim_reporting_rule": "Per-report enumeration recall for a report with zero inventory claims (row-02, row-04) is reported as `not applicable` — never as 1.0, never as 0.0, and never folded into a per-arm figure as either. §AX2.3 requires a per-report figure and 0/0 has none; leaving that to be resolved after output is seen is the §AU6 hazard this fixture exists to avoid. Registered 2026-08-13, before any extractor exists (§AX10).",
+  "recall_reportability_floor": {
+    "k": 5,
+    "rule": "For each arm independently, the per-arm enumeration-recall verdict (AX-1a native, AX-1b custom) is reported as `not exercised` — never `passed`, never `failed` — when that arm's held-out inventory denominator is < 5 claims. The same floor applies to the per-arm spurious-rate verdict (AX-5), keyed to that arm's count of emitted claims. The underlying fraction is still computed and recorded; the floor governs the VERDICT, and the fraction may not be quoted without the `not exercised (n=<d> < 5)` label attached.",
+    "why": "AX-1b's falsifier fires on a single miss out of two claims, so both outcomes are quotable and neither is evidence. A number whose meaning depends on a caveat being re-attached by whoever quotes it will eventually be quoted without it; the status belongs in the verdict, where it travels. K=5 is adopted unchanged from the threshold AX-4 already carries for its refuted population, so the instrument has one small-denominator rule rather than two.",
+    "registered_under": "benchmark/DECISION.md §AX11",
+    "registered": "2026-08-13",
+    "registered_before_extractor_existed": true,
+    "applied_to_this_pass": "The custom arm's inventory denominator is 2, so AX-1b is `not exercised` — fixed by the fixture before the extractor was written, not by output. The native arm is 60 and unaffected. AX-5's status is not determinable until emitted counts exist, which is why its floor is registered now rather than then."
+  },
   "reading_rules": [
     {
       "id": "R-A",

@@ -8797,3 +8797,79 @@ guard.**
 
 **Reopening condition for §AX10:** a pass whose custom arm yields ≥ 10 held-out inventory claims makes
 this finding obsolete; nothing else does.
+
+---
+
+## AX11. The small-denominator reportability floor — closing the term §AX10 left open
+
+Registered **2026-08-13**, before any extractor exists and before any claim has been extracted from any
+report. §AX10 left one question open and said explicitly that it *"must be made **before** the extractor
+runs, not after the figure is seen"*. This section makes it. `git log` is the proof of ordering, the
+same guarantee §AX2.2 rests on.
+
+### AX11.1 The term
+
+> **Registered:** for each arm independently, a per-arm **enumeration-recall** verdict (AX-1a native,
+> AX-1b custom) is reported as **`not exercised`** — never `passed`, never `failed` — when that arm's
+> held-out **inventory denominator is < 5 claims**. The same floor applies to the per-arm **spurious
+> rate** verdict (AX-5), keyed instead to that arm's count of **emitted** claims, since that is its
+> denominator.
+>
+> The underlying fraction is still computed and recorded. What the floor governs is the **verdict**, and
+> the fraction may not be quoted without the `not exercised (n=<d> < 5)` label attached.
+
+**K = 5 is not a fresh judgement.** It is the threshold AX-4 already carries for its refuted population
+(§AX6), adopted unchanged so the instrument has one small-denominator rule rather than two. Choosing a
+different K here would have needed its own argument; reusing one that was registered before any
+measurement needs none.
+
+**Applied to this pass:** the custom arm's inventory denominator is **2** (§AX10), so **AX-1b is
+`not exercised` before the extractor is written** — a verdict fixed by the fixture, not by output. The
+native arm is 60 and unaffected; AX-1a remains live and decidable. AX-5's status on each arm is not yet
+determinable, because emitted counts do not exist until the extractor runs — which is the point of
+registering its floor now rather than when they do.
+
+### AX11.2 Why a floor rather than a caveat, stated as the principle it teaches
+
+AX-1b's falsifier (`< 0.80`) fires on a single miss out of two claims. Both outcomes are quotable and
+neither is evidence: a `pass` reads as *the extractor works on custom reports* and a `fail` reads as
+*it does not*, and the honest content of both is *we do not know*.
+
+> **Registered principle:** *a number whose meaning depends on a caveat being re-attached by whoever
+> quotes it will eventually be quoted without it. Put the status in the verdict, where it travels.*
+
+This is not a hypothetical failure mode in this repository. §AD7 exists because a pooled figure was
+quoted without its arms; the note in the mission record exists because v4's 3/10 shipped once as a v12
+baseline. §AQ4's ruling — *"not exercised" is not "passed"* — is the same lesson from the other
+direction, and AX-4 already encodes it. AX-1b was the remaining place where an uninformative figure
+could acquire a verdict, and it is now closed.
+
+**What the floor costs, stated rather than discovered later.** The custom arm produces **no recall
+verdict at all** from this pass. §AX7.2 already ruled the obvious repair unavailable — the eligible 15
+reports are exhausted and redrawing from the development set is forbidden — so the cost is not
+recoverable within v14 by any means. It is paid to a future pass, which is where §AX10 consequence 4
+had already located it.
+
+### AX11.3 The interaction with §AX8, resolved here rather than by implementation
+
+§AX8 holds that **no veracity figure may be reported without its enumeration-recall figure.** A
+`not exercised` verdict still publishes a *figure* — the fraction is computed and recorded — so §AX8 is
+satisfied on its literal terms. **Registered: the custom arm's veracity figure remains reportable this
+pass, and must carry `enumeration recall not exercised (n=2 < 5)` wherever it appears.**
+
+The stricter reading — that `not exercised` recall blacks out its arm's veracity figure entirely — was
+considered and **rejected**, for a reason that is procedural rather than one of taste: the floor was
+registered as a bound on a *prediction verdict*, and extending it to suppress a different figure would
+widen a term beyond what was decided. §AT3's test for what earns amendment status rather than fresh
+pre-registration is that the change be a **strict subset** of the registered form; the strict reading is
+a superset and would need its own registration.
+
+This is recorded because resolving it silently is precisely the error §AX10 caught in **R-C**, where a
+registered term *"acquired [its meaning] by implementation rather than by decision"*. The two readings
+are both defensible; what is not defensible is discovering which one the code chose after the figures
+are in.
+
+### AX11.4 What this section does not do
+
+It commissions no gate term, changes no §AX6 threshold, and touches no figure from v12–v14. **§AQ3
+stands.** It adds a reportability condition to three existing predictions and nothing else.
