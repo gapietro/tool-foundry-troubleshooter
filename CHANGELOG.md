@@ -17,6 +17,58 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1305 — 2026-08-13
+
+### Fixed — the six /status health checks are no longer unexecuted by any test (#235)
+
+`test/PaRestStatusChecks.test.js` (67 tests). `src/server/rest/PaRestHandlers.js` went from
+**54.44% statements / 56.96% branches / 61.53% functions / 56.36% lines** — the outlier in a codebase
+where every other file sits at 85-98% — to **95.41 / 88.29 / 100 / 97.57**, with the uncovered ranges
+`642-874` and `893-993` closed. Pinned by a per-path `coverageThreshold` entry.
+
+**What was actually untested.** `PaRestHandlers.test.js` replaces the whole check list wholesale via
+`options.checks`, which is the right way to test the R-19b aggregation rule and covers it well. The
+consequence is that the aggregation was tested against fakes while no check's own logic ran anywhere.
+This file drives the DEFAULT implementations — `options.checks` is deliberately never used in it —
+plus `_statusChecks` itself, `_defaultReadRun`, `_defaultEventQueue`, both seam-fallthrough branches
+and the `_now` clock.
+
+**Three checks guard traps this repo has already been bitten by**, and each now has a test that fails
+if the guard is removed: Build Rule #40 (a NASK skill that EXISTS but is deactivated must read as
+error — existence is not readiness), Build Rule #42 (an unexpected `GlideRecordSecure` denial is
+error, while the known `syslog` restriction is reported under R-11 but excluded from the gate), and
+the stuck-run detection that #73 found was dead code matching nothing by construction.
+
+**Mutation-checked, six seeded defects, all caught:** dropping the skills activation requirement;
+counting the known `syslog` denial against the gate; dropping the native/custom harness filter (R-20);
+accepting `api_type` without `api`; reverting to the wrong documented plugin id `com.snc.now_assist`;
+and flipping the stuck-run cutoff comparison. The per-path threshold was proven non-vacuous by hiding
+the new file and confirming it fails at 54.44%.
+
+**One assertion was wrong and the code was right** — the `/status` body keys each row as `check`, not
+`name`. Corrected in the test.
+
+New `src/server/rest/**` floor at **95 / 88 / 95 / 97**; global stays at 90 / 83 / 93 / 92.
+
+> **Two things a path/glob threshold does that are easy to get wrong**, both raised in review of
+> PR #249 and both settled here.
+>
+> **(1) Jest REMOVES matched files from the `global` pool.** Adding the `src/server/rest/**` entry
+> makes `global` measure a smaller, different set — it is a reporting artifact of the split, never a
+> coverage regression. The global numbers are therefore set against the POST-split pool, measured
+> directly: 93.07 / 85.44 / 97.35 / 95.40, leaving 2.4-4.4pp of headroom so an unrelated later PR does
+> not trip a threshold error naming nothing it touched.
+>
+> **(2) The key is a glob, so Jest applies it PER FILE, not as a directory aggregate.** The first
+> version of this entry set `functions: 100` on `src/server/rest/**`, and `PaRestHandlers.js` sits at
+> exactly 52/52 functions — so one new uncovered helper, or any new file added under that directory,
+> would have failed the whole coverage run. Loosened to `functions: 95`.
+>
+> `src/server/async/**` deliberately KEEPS `100` on all four despite the same mechanics: it is a
+> two-file, 53-line directory where every file is a ScheduledScript body that runs unattended on a
+> customer instance, so "a new file here must be fully tested" is the gate that is wanted, not an
+> accident of the glob.
+
 ## 2026.08.1304 — 2026-08-13
 
 ### Fixed — the two scheduled-job bodies are no longer unexecuted by any test (#234)
