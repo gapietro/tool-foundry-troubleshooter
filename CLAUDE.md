@@ -19,8 +19,16 @@
 > **keynexus01**, not gpinst01. That includes the tool-call ceiling of 25, `autopilot`
 > availability, the `_agentic_context_` runtime global, the missing Now Assist product
 > plugin, and the `syslog` caller restriction. **None of it is established for gpinst01.**
-> Re-verify before relying on any of it here. keynexus01 has no `now-sdk auth` entry yet;
-> add one with `now-sdk auth --add keynexus01` when you want to deploy there.
+> Re-verify before relying on any of it here.
+>
+> **keynexus01 now has an auth entry, and it is the DEFAULT one** (corrected 2026-08-12,
+> issue #236 — the previous text said no entry existed). `now-sdk auth --list` shows
+> `keynexus01 … default = Yes`, so **any `now-sdk install` that does not name a
+> credential deploys to keynexus01, not gpinst01.** Combined with `now-sdk` silently
+> ignoring unknown flags, a mistyped credential flag is an unannounced deploy to the
+> wrong half of this instance split. Always pass `--auth gpinst01`, and read the
+> `Attempting to log into instance …` line before believing a deploy landed where you
+> meant.
 
 ### Project Structure
 
@@ -37,7 +45,12 @@
 
 ```
 now-sdk build                        # compile src/ -> dist/ (must pass before install)
-now-sdk install --alias gpinst01     # deploy to instance
+now-sdk install --auth gpinst01      # deploy to instance (#236: the flag is --auth;
+                                     # --alias is NOT an option, and now-sdk ignores
+                                     # unknown flags silently, so it falls back to the
+                                     # DEFAULT credential — which is keynexus01, not
+                                     # gpinst01. Check the "Attempting to log into
+                                     # instance ..." line before believing a deploy.)
 now-sdk explain <topic>              # live API docs from the installed SDK version
 now-sdk explain --list               # browse topics
 npm test                             # jest
