@@ -15,6 +15,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const REPO = path.join(__dirname, '..');
 const FIXTURE = path.join(REPO, 'benchmark', 'v14-claim-inventory-heldout.json');
@@ -375,36 +376,47 @@ describe('claim inventory — provenance (§AX2.2)', () => {
     expect(fixture.authored_before_extractor_existed).toBe(true);
   });
 
-  test('no extractor implementation exists in the repository at this commit', () => {
+  /**
+   * RETIRED: "no extractor implementation exists in the repository at this commit".
+   *
+   * It was in-repo corroboration for §AX2.2's ordering guarantee, and that
+   * guarantee is now discharged PERMANENTLY by merged history rather than by a
+   * test: the inventories landed in PR #247, the §AX11 floor in PR #254
+   * (`c1f5969`), and no extractor existed in either. `git log` is the proof
+   * §AX2.2 always said it was, and unlike a test it cannot be edited by the
+   * commit it is supposed to constrain.
+   *
+   * Keeping the check would have meant deleting it in the same commit that
+   * introduced the extractor — a guard that gets removed by the change it
+   * guards against was never guarding anything.
+   *
+   * WHAT REPLACES IT IS NOT NOTHING. The absence check pointed at a risk that
+   * expires; the FREEZE below points at the risk that begins exactly where the
+   * old one ended — that the inventory gets edited to agree with extractor
+   * output once that output exists. See §AX7.2 on why a fixture repaired in
+   * response to its misses reports training accuracy rather than recall.
+   */
+  test('the inventory content is frozen at its pre-extractor state', () => {
     /**
-     * §AX2.2's guarantee is commit ORDER, and git log is its proof. This is the
-     * cheap in-repo corroboration: if an extractor lands in the same commit as the
-     * fixture, the ordering claim is false and this fails loudly rather than
-     * leaving the point to a reviewer's reading of the diff.
+     * A content hash over every claim and every rejected candidate, taken while
+     * no extraction had been run and committed alongside the extractor's first
+     * appearance. Any edit to a proposition, an occurrence, a kind, a subject, a
+     * rejection or its rule changes this digest.
+     *
+     * Deliberately covers claims and rejections ONLY — not the reading rules,
+     * not the prose notes, not the reportability floor. Those are commentary and
+     * registered terms that may legitimately be amended before the burn (§AX11
+     * is exactly such an amendment). The DENOMINATOR may not.
      */
-    // Recursive over the whole repo. The first version scanned two directories,
-    // non-recursively, for a name containing BOTH "claim" and "extract" — an
-    // extractor at benchmark/claimExtractor.js or benchmark/scripts/extractor/index.js
-    // would have passed silently, so the guard asserted far less than its name
-    // promised (review of PR #247).
-    const SKIP = new Set(['node_modules', 'dist', '.git', '.now', '.snc', 'coverage', '@types']);
-    const ALLOWED = new Set([path.join('test', 'extractorBriefBlindness.test.js')]);
-    const hits = [];
-    (function walk(dir) {
-      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-        if (SKIP.has(entry.name)) continue;
-        const full = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-          walk(full);
-        } else if (/\.(js|mjs|cjs|ts)$/.test(entry.name)) {
-          // Match the PATH, not the basename: an extractor at
-          // benchmark/scripts/extractor/index.js has no "extract" in its filename and
-          // slipped a basename check (caught by mutation-verifying this guard).
-          const rel = path.relative(REPO, full);
-          if (/extract/i.test(rel) && !ALLOWED.has(rel)) hits.push(rel);
-        }
-      }
-    })(REPO);
-    expect(hits).toEqual([]);
+    const canonical = JSON.stringify(
+      fixture.reports.map((r) => ({
+        report: r.report,
+        arm: r.arm,
+        claims: r.claims,
+        rejected_candidates: r.rejected_candidates
+      }))
+    );
+    const digest = crypto.createHash('sha256').update(canonical).digest('hex');
+    expect(digest).toBe('546728ae6b2a931730724006105d053d561b5fc30f562d477f363595048eb60e');
   });
 });
