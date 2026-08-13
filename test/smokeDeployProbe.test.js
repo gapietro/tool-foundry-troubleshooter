@@ -538,7 +538,8 @@ describe('the SBOM carries TWO per-build stamps, not one', () => {
     // the unit tests could not have shown it, because the fixture only had
     // the value I already knew about.
     const bom = (uuid, ts) =>
-        '{"serialNumber":"urn:uuid:' + uuid + '","metadata":{"timestamp":"' + ts + '"},"components":[]}'
+        '{"bomFormat":"CycloneDX","serialNumber":"urn:uuid:' + uuid +
+        '","metadata":{"timestamp":"' + ts + '"},"components":[]}'
     const rec = (content) => ({
         table: 'sys_module', sysId: 'a',
         fields: { path: 'app/1.0/bom.json', content: content },
@@ -555,5 +556,67 @@ describe('the SBOM carries TWO per-build stamps, not one', () => {
     test('an ISO timestamp OUTSIDE the SBOM is still compared literally', () => {
         const e = { table: 'sys_script_include', sysId: 'a', fields: { script: 'var t = "2026-08-12T23:56:51.909Z"' } }
         expect(compareRecord(e, { script: 'var t = "2026-08-12T23:41:10.920Z"' })[0].kind).toBe('mismatch')
+    })
+})
+
+describe('every finding kind is classified (review #230, finding 2)', () => {
+    // compare.js EMITS kinds; smoke.js decides whether each reddens the exit
+    // code and how it prints. Nothing bound the two files together, so a kind
+    // added in one and forgotten in the other fell through to a generic `else`
+    // and printed "UNPARSEABLE undefined" while still failing the run — a red
+    // probe with an unactionable line, which is the "gets ignored, then gets
+    // deleted" death this tier warns about. This test is that binding.
+    const { EMITTED_KINDS } = require('../scripts/smoke/compare')
+    const { NOTE_KINDS, PRINTERS, SHELL_KINDS } = require('../scripts/smoke')
+
+    const ALL_KINDS = EMITTED_KINDS.concat(SHELL_KINDS)
+
+    test.each(ALL_KINDS)('kind "%s" is either a note or has a printer', (kind) => {
+        const classified = NOTE_KINDS.indexOf(kind) !== -1 || typeof PRINTERS[kind] === 'function'
+        expect(classified).toBe(true)
+    })
+
+    test('no kind is BOTH a note and a failure printer', () => {
+        // Ambiguity here would mean the exit code and the printed output
+        // disagree about whether something is a failure.
+        const both = NOTE_KINDS.filter((k) => typeof PRINTERS[k] === 'function')
+        expect(both).toEqual([])
+    })
+
+    test('requiring the shell does not run it', () => {
+        // The export above is only safe because main() is behind a
+        // require.main guard; without it, importing would drive a real build.
+        expect(typeof PRINTERS.missing).toBe('function')
+    })
+})
+
+describe('the SBOM excuse is tied to the artifact, not to a filename (review #230)', () => {
+    const bom = (uuid) => '{"bomFormat":"CycloneDX","serialNumber":"urn:uuid:' + uuid + '"}'
+    const A = 'b59fb687-a622-4959-9d2b-88043224b09a'
+    const B = '7225f488-bd24-4f40-bf8e-56cfc64b9178'
+
+    test('a non-CycloneDX file merely NAMED bom.json is compared literally', () => {
+        const e = { table: 'sys_module', sysId: 'a', fields: { path: 'app/1.0/bom.json', content: '{"serialNumber":"urn:uuid:' + A + '"}' } }
+        expect(compareRecord(e, { path: 'app/1.0/bom.json', content: '{"serialNumber":"urn:uuid:' + B + '"}' })[0].kind).toBe('mismatch')
+    })
+
+    test('a bare bom.json path with no directory is still excused', () => {
+        const e = { table: 'sys_module', sysId: 'a', fields: { path: 'bom.json', content: bom(A) } }
+        expect(compareRecord(e, { path: 'bom.json', content: bom(B) })[0].kind).toBe('nondeterministic')
+    })
+
+    test('a timestamp with no fractional seconds is still erased', () => {
+        // The SDK's bom generator chooses this format, not us. Pinning it to
+        // exactly three fractional digits meant an SDK upgrade would silently
+        // turn the excuse into a no-op and send the probe permanently red.
+        const t = (ts) => '{"bomFormat":"CycloneDX","metadata":{"timestamp":"' + ts + '"}}'
+        const e = { table: 'sys_module', sysId: 'a', fields: { path: 'a/bom.json', content: t('2026-08-12T23:56:51Z') } }
+        expect(compareRecord(e, { path: 'a/bom.json', content: t('2026-08-12T23:41:10Z') })[0].kind).toBe('nondeterministic')
+    })
+
+    test('a timestamp with a numeric offset is still erased', () => {
+        const t = (ts) => '{"bomFormat":"CycloneDX","metadata":{"timestamp":"' + ts + '"}}'
+        const e = { table: 'sys_module', sysId: 'a', fields: { path: 'a/bom.json', content: t('2026-08-12T23:56:51+00:00') } }
+        expect(compareRecord(e, { path: 'a/bom.json', content: t('2026-08-12T23:41:10+02:00') })[0].kind).toBe('nondeterministic')
     })
 })

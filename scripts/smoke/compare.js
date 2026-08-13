@@ -211,7 +211,13 @@ function compareRecord(expected, actual, options) {
 
 /** The build's generated CycloneDX SBOM, and only that. */
 function isGeneratedBom(expected, field) {
-    return field === 'content' && /\/bom\.json$/.test(String(expected.fields.path || ''))
+    if (field !== 'content') return false
+    // `(^|/)` so a bare `bom.json` path is covered too — the directory shape is
+    // the SDK's to choose, not ours. And the content must actually BE the
+    // generated SBOM: keying the excuse on a filename alone would extend it to
+    // any CycloneDX fixture this app ever ships at such a path.
+    if (!/(^|\/)bom\.json$/.test(String(expected.fields.path || ''))) return false
+    return /"bomFormat"\s*:\s*"CycloneDX"/.test(String(expected.fields.content || ''))
 }
 
 /**
@@ -225,7 +231,12 @@ function isGeneratedBom(expected, field) {
 function withoutBuildStamps(text) {
     return text
         .replace(/urn:uuid:[0-9a-f-]{36}/gi, 'urn:uuid:*')
-        .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/g, '*')
+        // Fractional seconds optional, and an offset accepted as well as `Z`:
+        // the exact format is chosen by the SDK's bom generator, not by this
+        // repo, so pinning it to `.\d{3}Z` meant an SDK upgrade would silently
+        // make this a no-op and send the probe permanently red again — the very
+        // regression this excuse exists to remove. (Review of PR #230.)
+        .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})/g, '*')
 }
 
 /**
@@ -244,8 +255,16 @@ function firstDifference(a, b) {
     return a.length === b.length ? -1 : shorter
 }
 
+/**
+ * Every finding kind this module can emit. Exported so a test can pin it
+ * against the shell's NOTE_KINDS + PRINTERS — the two files must agree, and
+ * before this nothing bound them together. (Review of PR #230.)
+ */
+const EMITTED_KINDS = ['missing', 'mismatch', 'uncomparable', 'unasserted', 'truncated', 'nondeterministic']
+
 module.exports = {
     CAPPED_COLUMNS: CAPPED_COLUMNS,
+    EMITTED_KINDS: EMITTED_KINDS,
     compareRecord: compareRecord,
     firstDifference: firstDifference,
     normalize: normalize,
