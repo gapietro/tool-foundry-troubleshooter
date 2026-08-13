@@ -115,28 +115,27 @@ look harmless, files you are merely curious about, and files referenced by the o
 | `./test/_loadScriptInclude.js`, `./test/_glideStub.js`, `./test/_stripComments.js`, `./test/stripComments.test.js`, `./test/utf16ClipContract.test.js`, `./test/PaRetentionSweep.test.js` | Test style, the `vm` loader, and the Glide stub — **six named files, verified clean. NOT `./test/**`; see below** |
 | `./package.json`, `./eslint.config.mjs` | Toolchain |
 
-> **`./test/**` was withdrawn as an entry, and this is the reason (§AW11e).** The glob admitted the
-> answer. `test/PaFixReport.test.js` contains, as ordinary fixture prose, a `schema` evidence item
-> reading *"`x_snc_tsbench_ticket` exists with 8 fields"* — which **is** the adjudication of one
-> calibration row — and two `data` items reading *"`x_snc_tsbench_ticket` has 0 rows"*, the shape of
-> another. Nothing names a report number, so this is not a complete key; it is worse than harmless,
-> because it hands you the ground truth for the claim class the calibration rows share and would
-> pre-supply a refutation the live probe is supposed to produce.
+> **`./test/**` was withdrawn as an entry (§AW11e/§AW11f).** One file in that tree carried, as
+> ordinary fixture prose, strings that happen to state ground truth an adjudication in this pass
+> depends on. Nothing there names a report, so it was not a complete key — but it would have supplied
+> an answer the live probe exists to produce, and an extractor authored after meeting it is not cold
+> in the sense this pass requires. The six files named above are permitted because each was checked
+> individually; the rest of the tree is not.
 >
-> **This is the fourth leak found in this procedure and the first one INSIDE the boundary.** §AW11b
-> replaced a thrice-failed deny-list with this allowlist, arguing a closed allowlist "has no
-> default-admit". That argument answers *enumeration* failures. It does not answer an allowlisted
-> entry whose own contents carry the answer — a permitted path is reachable, which is not the same as
-> cleared. Every entry above has now been cleared individually, and that clearing is the guard, not
-> the inversion.
+> **No detail beyond that is given here, and the omission is deliberate (§AW11f).** An earlier version
+> of this paragraph quoted the offending strings verbatim and labelled what each one adjudicated. That
+> reproduced the leak into the one file every author is required to read — a worse version of the
+> defect it documented, since the original strings were unlabelled fixture data and the description
+> supplied their significance. The full detail lives in `DECISION.md` §AW11e/§AW11f, which is on your
+> exclusion list, and that split is the point: **the record belongs where the author cannot read it.**
 >
-> **Residual on `./src/**`, stated rather than waved through.** It is clear of the calibration
-> answers, but it is not free of fixture context: comments reference seed numbers and what the model
-> chose on earlier passes (e.g. `src/server/PaAgentLoop.js` on seed-04's layer choice,
-> `src/fluent/tables.now.ts` on seed-01 run counts). None of that identifies a false claim in this
-> corpus. It is disclosed so that if any of it *does* surface a specific fact about a specific
-> numbered report while you read, §4's tripwire applies and you stop — and so that the §9 attestation
-> has something concrete to answer against.
+> **Residual on `./src/**`, stated rather than waved through.** It is clear of this pass's
+> adjudications, but not free of fixture context: some comments reference fixture identifiers and how
+> earlier passes behaved. None of it identifies a false claim in this corpus. Specific files and
+> identifiers are deliberately not named, for the reason in the paragraph above. It is disclosed so
+> that if anything you meet there *does* surface a specific fact about a specific numbered report,
+> §4's tripwire applies and you stop — and so §9's attestation has something concrete to answer
+> against.
 
 > **The two `src`/`test` rows are anchored to the repository root and the anchor is load-bearing.**
 > There is a second, unrelated `src/` tree nested under `benchmark/`, and **it is an answer key** —
@@ -156,10 +155,10 @@ yourself that a file is safe. You are not in a position to know — that is the 
 `src/`**), `benchmark/seeds/**`, `benchmark/DECISION.md`, `BACKLOG.md`, `GRADE.md`, `CHANGELOG.md`,
 `DESIGN.md`, `benchmark/README.md`, `benchmark/v14-rows.json`, `benchmark/scorecard-v14.md`,
 `benchmark/v14-ambiguity-flags.json`, `benchmark/scoring-v14/**`, or any
-`benchmark/raw-evidence-*.md`, **or any file under `./test/` other than the six named above — in
-particular `test/PaFixReport.test.js`**. This list is redundant with the allowlist and is given only
-so that a slip is obvious rather than subtle — **the allowlist governs; if the two ever disagree, the
-allowlist wins and you ask.**
+`benchmark/raw-evidence-*.md`, **or any file under `./test/` other than the six named above**. This
+list is redundant with the allowlist and is given only so that a slip is obvious rather than subtle —
+**the allowlist governs; if the two ever disagree, the allowlist wins and you ask.** (No individual
+`./test/` file is singled out here; naming one would point at it, which is §AW11f's lesson.)
 
 ---
 
