@@ -1399,3 +1399,123 @@ describe('markRunning', () => {
         expect(world.tables[RUN_TABLE][0].status).toBe('complete')
     })
 })
+
+// ===========================================================================
+// markRunning as a CLAIM — issue #218
+//
+// The #73 version above was a read-then-write: read `status`, compare it to
+// 'queued' in JS, then update. Two workers handed the same run — which event
+// redelivery makes reachable — both read 'queued', both passed the guard, and
+// both wrote 'running'. `PaAgentLoop` then ignored the result entirely, so a
+// lost claim bought a second full reasoning pass: double LLM spend, an
+// interleaved transcript, and last-write-wins on `fix_report`.
+//
+// The status test now lives in the QUERY, so the row is only ever positioned
+// while it is still queued, and the refusal carries a machine-readable
+// `reason` — the caller has to be able to tell "another worker owns this"
+// (refuse to reason) from "the row is missing" (keep failing open, because
+// that is a monitoring gap and not a reason to refuse to diagnose).
+//
+// WHAT THIS DOES NOT CLOSE, deliberately and with a test of its own below:
+// a true interleave between the query and the update. ServiceNow exposes no
+// compare-and-swap, and a claim token with read-back does not help — if both
+// workers re-read before the other's write lands, both see their own token.
+// Closing it completely needs a DB-level unique constraint. The window goes
+// from "the whole reasoning pass" to "between two adjacent Glide calls",
+// which is the reduction that was actually available.
+// ===========================================================================
+
+describe('markRunning as a claim (#218)', () => {
+    test('the queued test is part of the query, not a read-then-compare', () => {
+        const { mgr, world } = load({ world: { rows: { [RUN_TABLE]: [seedRun({ status: 'queued' })] } } })
+        mgr.markRunning('run1')
+
+        const claimQueries = world.calls.queries.filter(
+            (q) => q.table === RUN_TABLE && q.filters.status === 'queued'
+        )
+        expect(claimQueries).toHaveLength(1)
+        expect(claimQueries[0].filters.sys_id).toBe('run1')
+    })
+
+    test('a run already running is refused with reason claim_lost', () => {
+        const { mgr } = load({ world: { rows: { [RUN_TABLE]: [seedRun({ status: 'running' })] } } })
+        const res = mgr.markRunning('run1')
+
+        expect(res.success).toBe(false)
+        expect(res.reason).toBe('claim_lost')
+        expect(res.status).toBe('running')
+    })
+
+    const terminal = ['complete', 'failed', 'awaiting_confirmation']
+    test.each(terminal)('a run already %s is refused as claim_lost — it has already been worked', (from) => {
+        const { mgr } = load({ world: { rows: { [RUN_TABLE]: [seedRun({ status: from })] } } })
+        const res = mgr.markRunning('run1')
+
+        expect(res.success).toBe(false)
+        expect(res.reason).toBe('claim_lost')
+        expect(res.status).toBe(from)
+    })
+
+    test('an unknown run is reason not_found, NOT claim_lost — the caller fails open on it', () => {
+        const { mgr } = load({ world: { rows: { [RUN_TABLE]: [] } } })
+        const res = mgr.markRunning('nope')
+
+        expect(res.success).toBe(false)
+        expect(res.reason).toBe('not_found')
+    })
+
+    test('a missing run id is reason no_run_id', () => {
+        const { mgr } = load({ world: { rows: { [RUN_TABLE]: [] } } })
+        expect(mgr.markRunning('').reason).toBe('no_run_id')
+    })
+
+    test('a rejected write is reason update_failed, NOT claim_lost — also fail-open', () => {
+        const { mgr } = load({
+            world: { rows: { [RUN_TABLE]: [seedRun({ status: 'queued' })] }, failUpdate: true },
+        })
+        const res = mgr.markRunning('run1')
+
+        expect(res.success).toBe(false)
+        expect(res.reason).toBe('update_failed')
+    })
+
+    test('ACCEPTANCE: two workers handed the same run — exactly one claim succeeds', () => {
+        const { mgr, world } = load({ world: { rows: { [RUN_TABLE]: [seedRun({ status: 'queued' })] } } })
+
+        const first = mgr.markRunning('run1')
+        const second = mgr.markRunning('run1')
+
+        expect([first.success, second.success]).toEqual([true, false])
+        expect(second.reason).toBe('claim_lost')
+        expect(world.tables[RUN_TABLE][0].status).toBe('running')
+    })
+
+    test('CHARACTERIZATION: a query/update interleave is NOT closed — this is the known residual', () => {
+        // Worker B runs its ENTIRE claim inside worker A's update() call, i.e.
+        // after A positioned its record and before A's write landed. Both see
+        // 'queued'. This is what no ServiceNow-available primitive can stop,
+        // and it is why PaAgentLoop's refusal is defence in depth rather than
+        // the only guard. If a future change closes this, DELETE this test —
+        // do not weaken it.
+        let reentered = null
+        let mgr
+        const { mgr: created } = load({
+            world: {
+                rows: { [RUN_TABLE]: [seedRun({ status: 'queued' })] },
+                failUpdateIf: function (table, row, pending) {
+                    if (reentered === null && pending.status === 'running') {
+                        reentered = false // guard before re-entry, so B cannot recurse
+                        reentered = mgr.markRunning('run1')
+                    }
+                    return false
+                },
+            },
+        })
+        mgr = created
+
+        const a = mgr.markRunning('run1')
+
+        expect(a.success).toBe(true)
+        expect(reentered.success).toBe(true) // BOTH claimed — the residual window
+    })
+})

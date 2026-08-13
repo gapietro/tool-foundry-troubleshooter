@@ -480,26 +480,91 @@ PaRunManager.prototype = {
      * workers believe they own the run, which is worth surfacing rather than
      * absorbing, and `_checkStuckRuns` is the only consumer of the state.
      *
+     * THIS IS A CLAIM, NOT JUST A TRANSITION (issue #218).
+     *
+     * The #73 shape was a read-then-write: `_getRun`, compare `status` in JS,
+     * then update. Two workers handed the same run — reachable on event
+     * redelivery, since `x_snc_troubleshoot.run.start` is the only entry to
+     * `PaAgentLoop.run` — both read 'queued', both passed the guard, and both
+     * wrote 'running'. Nothing downstream noticed, because the caller ignored
+     * the result: the cost of a lost claim was a second full reasoning pass
+     * (double LLM spend, interleaved transcript, last-write-wins fix_report).
+     *
+     * The status test now lives in the QUERY, so the row is only ever
+     * positioned while it is still queued. The refusal carries a
+     * machine-readable `reason` because the caller cannot treat every failure
+     * alike — `claim_lost` means another worker owns the run and reasoning
+     * must not re-enter, while `not_found` / `update_failed` are monitoring
+     * gaps that must stay fail-open (PaAgentLoop.run's #73 rationale).
+     *
+     * WHAT THIS DOES NOT CLOSE: a true interleave between the query and the
+     * update — worker B claiming in the gap between A positioning its record
+     * and A's write landing. ServiceNow exposes no compare-and-swap, and a
+     * claim token with read-back does not help either: if both workers re-read
+     * before the other's write lands, both see their own token. Only a
+     * DB-level unique constraint would settle it. The window is narrowed from
+     * "the whole reasoning pass" to "between two adjacent Glide calls", which
+     * is the reduction actually available here; the residual is held by a
+     * named CHARACTERIZATION test in PaRunManager.test.js rather than left to
+     * be rediscovered.
+     *
      * @param {String} runId
-     * @returns {Object} {success:true, run_id, status:'running'} | {success:false, error}
+     * @returns {Object} {success:true, run_id, status:'running'}
+     *          | {success:false, reason:'no_run_id'|'not_found'|'claim_lost'|'update_failed',
+     *             error, status?} — `status` is the observed status on
+     *          `claim_lost`, so a caller can say WHO holds the run.
      */
     markRunning: function (runId) {
         var rid = this._str(runId)
-        if (!rid) return { success: false, error: 'run id is required' }
+        if (!rid) return { success: false, reason: 'no_run_id', error: 'run id is required' }
 
-        var gr = this._getRun(rid)
-        if (!gr) return { success: false, error: 'run not found: ' + rid }
+        var gr = this._claimQueued(rid)
+        if (!gr) {
+            // The claim query matched nothing. Two very different causes, and
+            // the caller acts differently on each — so read the row once more
+            // to tell them apart rather than collapsing both into one error.
+            var existing = this._getRun(rid)
+            if (!existing) return { success: false, reason: 'not_found', error: 'run not found: ' + rid }
 
-        var current = gr.getValue('status')
-        if (current !== 'queued') {
-            return { success: false, error: 'illegal transition: ' + (current || '(empty)') + ' -> running' }
+            var current = existing.getValue('status')
+            return {
+                success: false,
+                reason: 'claim_lost',
+                status: current,
+                // Message preserved verbatim from #73 — `_checkStuckRuns` and
+                // the transcript notes both read it.
+                error: 'illegal transition: ' + (current || '(empty)') + ' -> running',
+            }
         }
 
         if (!this._writeUpdate(gr, { status: 'running' })) {
-            return { success: false, error: 'update failed' }
+            return { success: false, reason: 'update_failed', error: 'update failed' }
         }
 
         return { success: true, run_id: rid, status: 'running' }
+    },
+
+    /**
+     * A GlideRecord positioned on `runId` ONLY IF it is still `queued`, with
+     * the status test pushed into the query — see markRunning's header for why
+     * the test cannot live in JS.
+     *
+     * @returns {GlideRecord|null} positioned and claimable, or null.
+     */
+    _claimQueued: function (runId) {
+        if (typeof GlideRecord === 'undefined') return null
+        try {
+            var gr = new GlideRecord(this.RUN_TABLE)
+            gr.addQuery('sys_id', String(runId))
+            gr.addQuery('status', 'queued')
+            gr.setLimit(1)
+            gr.query()
+            if (!gr.next()) return null
+            return gr
+        } catch (e) {
+            // R-1: `e` untouched. An unusable query is not a claim.
+            return null
+        }
     },
 
     close: function (runId, status, options) {
