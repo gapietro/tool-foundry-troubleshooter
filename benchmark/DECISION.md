@@ -8348,3 +8348,57 @@ Recorded for completeness; none amend a registered term.
   is unavoidably disclosed by any brief — but a 1:1 enumeration is narrower than the class.
   Temporal scope stated separately (§2.2 of the brief): the reference state is the run, not today,
   so state-dependent claims are `unresolvable` by construction rather than by judgement.
+
+### AW11e. The allowlist itself admitted the answer — the fourth leak, and the first one inside the boundary
+
+Found 2026-08-12 while preparing the dispatch, before any measurement and before any extractor
+exists. Recorded here rather than filed, per §AW7 rule 3 and the §AW11a–d precedent. **No registered
+term is amended:** §AW4's blinding requirement, §AW6's predictions, and §AW7's stopping condition are
+untouched. What changes is one row of the brief's §3 allowlist, which is dispatch procedure.
+
+**The defect.** §3 permitted `./test/**` for "existing test style". Inside it,
+`test/PaFixReport.test.js` carries as ordinary fixture prose:
+
+| line | string |
+|---|---|
+| `:2877` | `{ source: 'schema', detail: 'x_snc_tsbench_ticket exists with 8 fields' }` |
+| `:2349`, `:2385` | `{ source: 'data', detail: 'x_snc_tsbench_ticket has 0 rows' }` |
+
+The first **is** §AW1's adjudication of a calibration row — the field count that refutes its claimed
+column. The other two are the shape of a second calibration row's claim. Nothing names a report
+number, so this is not a complete key; it is worse than harmless, because it supplies the ground truth
+for the claim class all three calibration rows share, and would pre-supply a refutation the live probe
+exists to produce. An extractor authored after reading it is not cold in the sense §AW4 requires, and
+per §AW8 a void recall figure voids the veracity figure too — the whole pass would return nothing.
+
+**Why this is not simply the fourth instance of §AW11a's pattern.** The first three leaks were
+*enumeration* failures: a deny-list that did not name a file. §AW11b's remedy was inversion, arguing a
+closed allowlist "has no default-admit". §AW11d already qualified that once — an allowlist inherits
+the ambiguity of its path syntax. This is the sharper version:
+
+> **Registered principle:** *An allowlist bounds what is REACHABLE, not what is SAFE. Inversion
+> removes default-admit; it does not discharge the duty to clear each entry's contents. A permitted
+> path is not a cleared path.*
+
+§AW11b's inversion was necessary and is retained. It is now **insufficient on its own**, and the
+operative guard is per-entry clearing at dispatch time — which is what found this.
+
+**The repair, and why it is not another exclusion.** `./test/**` is withdrawn as an entry and replaced
+by **six named files, individually verified clean**: `_loadScriptInclude.js`, `_glideStub.js`,
+`_stripComments.js`, `stripComments.test.js`, `utf16ClipContract.test.js`, `PaRetentionSweep.test.js`.
+Excluding `PaFixReport.test.js` by name would have been enumeration again — the failure mode that has
+now burned four times. Narrowing the *positive* entry is the only move that does not depend on having
+thought of every bad file. Cost, stated: the author sees less of the house test style and may have to
+ask, which §3 already instructs.
+
+**Residual, disclosed rather than waved through.** `./src/**` is clear of the calibration answers but
+not of fixture context: comments reference seed numbers and earlier passes' model behaviour
+(`PaAgentLoop.js` on seed-04's layer choice, `tables.now.ts` on seed-01 run counts). None identifies a
+false claim in this corpus, so the entry stands. It is written into the brief so §4's tripwire and
+§9's attestation have something concrete to answer against, rather than being silently judged safe by
+the operator who happens to have looked.
+
+**What this costs the registration:** nothing measured, because nothing has been measured. That is the
+only reason this is cheap, and it is the argument for clearing every entry *before* dispatch rather
+than after the first burn. The next author dispatched is the first one to receive a per-entry-cleared
+allowlist.
