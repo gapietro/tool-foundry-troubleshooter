@@ -17,6 +17,85 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1310 — 2026-08-13
+
+### Added — the deterministic adjudicator, and the prompt amendment that makes it possible (issue #212)
+
+**No sweep was run, no report was extracted, no probe touched an instance, and no figure exists.**
+Measurement is the next change, and it is the one that spends the corpus.
+
+| file | what it is |
+|---|---|
+| `benchmark/scripts/claim-adjudication.js` | the adjudicator — three-valued verdict, injected probe, no model call, no prose parsed |
+| `test/claimAdjudication.test.js` | every branch, with four tests on the control-failure path alone |
+| `benchmark/DECISION.md` §AX13 | the registration, written **before** the change it authorises |
+
+### Changed — the frozen prompt emits `polarity`, and this was the last moment that was legal
+
+**The defect.** §AW3 registers adjudication as a deterministic membership test with no model call. The
+prompt, frozen before this change, emitted `proposition` (prose), `kind`, `subject` and `occurrences` —
+**and nothing saying what the report asserted.** Given a claim about a table and a column, the
+adjudicator could see whether the column was there. It could not see whether the report said it *was*
+there or *was not*. That is not a missing feature; an adjudicator that assumed affirmative polarity
+would return `refuted` for a report that correctly observed an absence — a verdict manufactured out of
+a distinction the instrument cannot draw, which is §AW2's forbidden shape exactly.
+
+**Why the model and not a parser.** A deterministic negation-detector over prose was considered and
+rejected in §AX13.2: a negation its token list did not anticipate (*lacks*, *is missing*, *was never*)
+reads as affirmative and silently flips a correct observation into a `refuted`. That is uncleared
+claim-logic living in the half §AW3 registered as having none. **Put each judgement in the engine that
+can make it** — polarity is a language fact and extraction is where language is handled.
+
+**Why now and not later.** §AX7.2 and the prompt's own header freeze it against revision *in response to
+output seen on the corpus*. Nothing had been extracted, so there was no output to respond to. **That
+window closed with this commit**; the same edit after the first extraction would be a repair against
+observed misses, which §AX7.2 rules leaves no valid recall figure available from v14 at all.
+
+`asserted_value` is emitted alongside and is **recorded, never consumed** — no registered probe compares
+it to anything, because field values are mutable state that brief §2.2 routes to `unresolvable`
+regardless. Stated in §AX13.2 so no verdict is later read as having checked a value.
+
+### Added — a missing polarity does NOT reject the claim
+
+Recall measures **enumeration**, and a claim found without its polarity was still found. Moving it to
+`rejected` would depress the figure for a formatting defect and blame detection for it. So the claim
+survives with no polarity, the defect is recorded in a new `defects` list in the frozen artifact, and
+the adjudicator returns `unresolvable`/`no_polarity`. An unrecognised polarity is likewise **never
+coerced** — reading `probably` as `asserts` would manufacture the distinction §AX13.1 says the
+instrument cannot draw, silently.
+
+### Fixed — a record-scoped existence claim was being answered with the table's existence
+
+Found by its own test before any instance was touched. `"record R exists"` names its table only to
+locate the record; the first draft fell through to the table-existence branch and returned a confident
+`supported` about a row nobody had looked for — a fabrication of §AW2's shape wearing a schema read as
+a disguise. Record-scoped existence is mutable state and now routes to `unresolvable`.
+
+### What the adjudicator may settle, stated before any figure exists
+
+1. **Presupposition** — a claim asserting something *about* a table or column that the metadata says is
+   absent is `refuted`, whatever value it asserted and whichever polarity it carried. The only route
+   that survives the mutability rule, and the shape of the one known false claim.
+2. **Schema existence** — structural, so adjudicable in both directions now that polarity exists.
+3. **Everything else → `unresolvable`** with its reason: `mutable`, `control_failed`, `probe_failed`,
+   `no_polarity`, `no_subject_table`.
+
+**The honest consequence:** `supported` is reachable only through route 2, so a corpus whose claims are
+mostly values and counts will return mostly `unresolvable`. That is the registered instrument's reach,
+not an implementation shortfall.
+
+### Added — §AX13.4 widens the §AX5 clearing check to the adjudicator
+
+Mutation-verified in both directions: a corpus table name planted in the adjudicator fails the
+vocabulary scan, and an uncleared `claim-adjudication-*.js` helper fails the discovery test. "Mechanical
+code cannot be tuned" is an argument about likelihood — the same one §AX5 makes about the extractor's
+plumbing before clearing it anyway.
+
+**Verification:** `npm test` 2187 passing across 46 suites; `npx eslint` clean on every changed file.
+No instance was contacted.
+
+---
+
 ## 2026.08.1309 — 2026-08-13
 
 ### Added — the claim extractor and its §AX5 clearing check (issue #212)

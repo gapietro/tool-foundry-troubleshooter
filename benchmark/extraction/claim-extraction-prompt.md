@@ -10,6 +10,10 @@
 >
 > **Frozen.** Do not revise it in response to output seen on the corpus. §AX7.2 governs what a
 > post-repair figure may be called.
+>
+> **Amended once, under §AX13, before any report had been extracted** — `polarity` and `asserted_value`
+> were added to the output schema. The freeze is against revision in response to *observed output*;
+> nothing had been run, so there was no output to respond to. That window is now closed.
 
 ---
 
@@ -85,6 +89,8 @@ Return a single JSON object:
     {
       "proposition": "A self-contained statement of the claim, readable without the report.",
       "kind": "existence | field_value | count | identity | state",
+      "polarity": "asserts | denies",
+      "asserted_value": "the value the report states, where it states one",
       "subject": { "table": "...", "record": "...", "field": "..." },
       "occurrences": [{ "line": 12, "quote": "verbatim substring of line 12" }]
     }
@@ -96,6 +102,16 @@ Return a single JSON object:
   it true.
 - `kind` — the closest of the five. If a claim asserts a field's value, that is `field_value` even when
   it also implies the record exists.
+- `polarity` — required, and it is a statement about the proposition you just wrote, not about the
+  report's tone. `asserts` where the proposition says the thing holds — it is there, it has that value,
+  it is active. `denies` where the proposition says it does not hold — it is not there, there are none
+  of them, it is not active. Write the proposition first and then read it back: whichever of the two
+  makes the proposition true of an instance is the one to record. **Do not leave it out and do not guess
+  it from context**; nothing downstream can recover it, and a claim recorded with the wrong one is worse
+  than one recorded with none.
+- `asserted_value` — the value the report states for the thing, where it states one, copied as the report
+  gives it. Omit it entirely where the claim asserts no particular value. It is a record of what was
+  claimed; it is not used to decide anything, so do not normalise, round or interpret it.
 - `subject` — include the parts you can identify; omit keys you cannot. Include a record identifier
   whenever the report supplies one.
 - `occurrences` — at least one, each with the **1-based** line number within the report body you were

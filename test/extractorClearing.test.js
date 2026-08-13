@@ -50,6 +50,13 @@ const CLEARED = [
     'benchmark/extraction/claim-extraction-prompt.md',
     'benchmark/scripts/claim-extraction.js',
     'test/claimExtraction.test.js',
+    // §AX13.4 widened this set to the adjudicator. It is mechanical, so tuning
+    // is unlikely there — but "unlikely" is the same argument §AX5 makes about
+    // the extractor's own plumbing before clearing it anyway. An adjudicator
+    // that special-cased a corpus table by name would move the veracity figure
+    // directly, and nobody diffs a file no check covers.
+    'benchmark/scripts/claim-adjudication.js',
+    'test/claimAdjudication.test.js',
 ];
 
 const PROMPT = 'benchmark/extraction/claim-extraction-prompt.md';
@@ -108,7 +115,9 @@ describe('§AX5 — the extractor encodes no corpus vocabulary', () => {
         for (const dir of ['benchmark/scripts', 'test']) {
             for (const name of fs.readdirSync(path.join(REPO, dir))) {
                 const rel = dir + '/' + name;
-                if (/claim-extraction|claimExtraction|extractorClearing/i.test(name)) found.push(rel);
+                if (/claim-(extraction|adjudication)|claim(Extraction|Adjudication)|extractorClearing/i.test(name)) {
+                    found.push(rel);
+                }
             }
         }
 

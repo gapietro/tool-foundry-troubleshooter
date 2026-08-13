@@ -8990,3 +8990,88 @@ not concede that both artifacts may be built from the same private rules.
 extractor may inventory things R-A or R-G excluded, which lands in the **spurious rate** rather than in
 recall, and may omit things they admitted, which lands in recall. That is not noise to be engineered
 away. It is the measurement.
+
+---
+
+## AX13. The extractor emits polarity — the amendment that makes a deterministic adjudicator possible
+
+Registered **2026-08-13**, while building the adjudicator, **before any report has been extracted and
+before any probe has been run**. It amends an artifact §AX5 has already cleared, so it is recorded here
+at the moment it is made rather than in a commit message — §AR1a's ruling, which found a shipped
+condition narrower than its registration with the narrowing recorded only in code.
+
+### AX13.1 The defect: the registered split left a language judgement on the mechanical side
+
+§AW3 registers the division of labour — *"extraction is a model's job; adjudication is not"* — and makes
+adjudication a **deterministic membership test with no model call and no rubric**. §AX5's prompt, frozen
+before this amendment, emits `proposition` (prose), `kind`, `subject` and `occurrences`.
+
+**Nothing in that schema says what the report asserted.** Given a claim whose subject is a table and a
+column, the adjudicator can read the metadata and see whether the column is there. It cannot see whether
+the report said the column *is* there or *is not* there — that fact exists only inside the prose
+proposition. The same gap covers a claim's asserted value.
+
+The consequence is not a missing feature, it is a **fabrication risk of the exact shape §AW2 forbids**.
+An adjudicator that assumed affirmative polarity would return `refuted` for a report that correctly
+observed an absence — a confident verdict manufactured out of a distinction the instrument cannot draw.
+Routing every such claim to `unresolvable` avoids the fabrication and is the honest fallback, but it
+also makes AX-2's `refuted` population reachable only through presupposition failure, and it is a
+worse answer than fixing the schema before anything has been measured.
+
+### AX13.2 What changes, and why it is legal now and would not have been later
+
+> **Registered:** the prompt emits, per claim, a required **`polarity`** of `asserts` | `denies` — whether
+> the proposition says the subject's named thing holds or does not hold — and an optional
+> **`asserted_value`**, the value the report states where it states one.
+
+**The freeze this does not break.** §AX7.2 and the prompt's own header freeze it against revision *in
+response to output seen on the corpus*. No report has been extracted, no probe has been run, and no
+figure exists — the corpus is untouched, so there is no output this could be a response to. **This
+window closes at the first extraction**, and after that the same change would be a repair against
+observed misses, which §AX7.2 rules leaves no valid recall figure available from v14 at all.
+
+**Why the model and not the adjudicator.** Polarity is a fact about language and the adjudicator is
+registered as mechanical. A deterministic negation-detector over prose was considered and rejected: a
+negation its token list did not anticipate (*lacks*, *is missing*, *was never*) reads as affirmative and
+flips a correct observation into a `refuted`, silently. That is uncleared claim-logic living in the half
+§AW3 registered as having none, and its failure mode is the one failure mode this axis exists to catch.
+**Put each judgement in the engine that can make it** is the principle, and it is the same substitution
+§AX0 made one level up.
+
+**`asserted_value` is recorded, not consumed — stated so no verdict is later read as more than it is.**
+No registered probe compares it to anything: field values on records are mutable state, which brief §2.2
+and §AW5 E-2 route to `unresolvable` regardless of what the report said they were. It is emitted because
+the frozen artifact is the permanent record of what each report claimed, and an operator reviewing a
+spurious-rate ruling should not have to re-read the report to see it. **A verdict never rests on it.**
+
+### AX13.3 What the adjudicator may settle, and the honest shape of the result
+
+Three routes, in order, and everything falling through them is `unresolvable` with its reason recorded:
+
+1. **Presupposition.** A claim that asserts *something about* a table or column presupposes that table
+   or column exists. If the metadata says it does not — control-paired — the claim is **`refuted`**
+   whatever value it asserted and whatever has changed since. This is the only route that survives the
+   mutability rule, and it is the shape of the one known false claim.
+2. **Schema existence.** An existence claim about a table or a column is structural, so it is stable
+   enough to adjudicate in both directions (§2.2), and with `polarity` present it now can be:
+   observed-present + `asserts` → `supported`; observed-absent + `denies` → `supported`; the crossed
+   cases → `refuted`, each control-paired.
+3. **Everything else → `unresolvable`**, with a reason: `mutable` for counts, record-scoped claims and
+   field values (§AW5 E-2, brief §2.2), `control_failed` where a probe's control did not come back, and
+   `not_reducible` where no deterministic test applies.
+
+**The honest consequence, stated before the figure exists:** `supported` is reachable only for schema
+existence claims, so a corpus whose claims are mostly values and counts will return mostly
+`unresolvable`. That is the registered instrument's actual reach, not an implementation shortfall — and
+per §AX8 the veracity figure is reported with its enumeration-recall figure and does not gate anything.
+
+### AX13.4 The clearing check extends to the adjudicator
+
+§AX5 clears the extractor because that is where tuning is likely. The adjudicator is mechanical, but
+"mechanical" is an argument about likelihood, not a guarantee — the same sentence §AX5 uses about its own
+plumbing. An adjudicator that special-cased a corpus table by name would tune the veracity figure
+directly, and no reviewer would see it in a diff of a file nobody was checking.
+
+> **Registered:** the adjudicator's source and its tests join the §AX5 cleared set, checked by the same
+> shared instrument, and the discovery test that finds uncleared extractor files is widened to find
+> uncleared adjudicator files too.
