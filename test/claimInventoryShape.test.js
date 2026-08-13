@@ -302,19 +302,51 @@ describe('claim inventory — the small-denominator reportability floor (§AX11)
     expect(floor.rule).toContain('still computed and recorded');
   });
 
+  test('it floors enumeration recall ONLY, and says so where AX-5 is concerned', () => {
+    /**
+     * The floor as first drafted covered AX-5 too, keyed to EMITTED claims — a
+     * denominator the extractor controls, so an extractor could escape the
+     * spurious-rate falsifier by emitting less (review of PR #254, §AX11.2a).
+     *
+     * Both halves are pinned: that recall is the sole floored verdict, and that
+     * AX-5's exemption is recorded rather than merely absent. An unstated absence
+     * is indistinguishable from an oversight the next reader will "fix".
+     */
+    expect(floor.applies_to).toBe('enumeration recall only');
+    expect(floor.rule).not.toContain('AX-5');
+    expect(floor.rule).not.toContain('emitted');
+    expect(floor.ax5_is_not_floored).toContain('NOT floored');
+    expect(floor.ax5_is_not_floored).toContain('emit');
+    expect(floor.registered_principle).toContain('the system under test controls');
+  });
+
   test('the floor binds the arm the committed denominators actually make small', () => {
     /**
-     * Derived from denominator_summary, never hardcoded. If a future edit moved a
-     * claim across the threshold, a hardcoded expectation would keep this green
-     * while the registered consequence in §AX11.1 silently became false.
+     * Derived from denominator_summary, never hardcoded — including the arm names
+     * themselves (review of PR #254: a hardcoded ['native','custom'] would throw
+     * or silently skip if an arm were ever renamed or added).
+     *
+     * If a future edit moved a claim across the threshold, a hardcoded expectation
+     * would keep this green while §AX11.1's registered consequence became false.
      */
-    const below = [];
-    for (const arm of ['native', 'custom']) {
-      if (fixture.denominator_summary[arm].claims < floor.k) below.push(arm);
-    }
+    const arms = Object.keys(fixture.denominator_summary).filter((k) => k !== 'note');
+    expect(arms.sort()).toEqual(['custom', 'native']);
+    const below = arms.filter((arm) => fixture.denominator_summary[arm].claims < floor.k);
     expect(below).toEqual(['custom']);
     expect(floor.applied_to_this_pass).toContain('AX-1b');
     expect(floor.applied_to_this_pass).toContain('not exercised');
+  });
+
+  test('the narrative denominators are the committed ones, not stale literals', () => {
+    /**
+     * `applied_to_this_pass` states both arms' denominators in prose. §AX11.3
+     * mandates a label carrying the custom denominator wherever the veracity
+     * figure appears, so a drifted literal here propagates into a registered term
+     * (review of PR #254). Bound to the summary rather than asserted as "2"/"60".
+     */
+    for (const arm of ['custom', 'native']) {
+      expect(floor.applied_to_this_pass).toContain(String(fixture.denominator_summary[arm].claims));
+    }
   });
 
   test('it is a rule about arms, naming no individual report', () => {

@@ -8811,12 +8811,14 @@ same guarantee §AX2.2 rests on.
 
 > **Registered:** for each arm independently, a per-arm **enumeration-recall** verdict (AX-1a native,
 > AX-1b custom) is reported as **`not exercised`** — never `passed`, never `failed` — when that arm's
-> held-out **inventory denominator is < 5 claims**. The same floor applies to the per-arm **spurious
-> rate** verdict (AX-5), keyed instead to that arm's count of **emitted** claims, since that is its
-> denominator.
+> held-out **inventory denominator is < 5 claims**.
 >
 > The underlying fraction is still computed and recorded. What the floor governs is the **verdict**, and
-> the fraction may not be quoted without the `not exercised (n=<d> < 5)` label attached.
+> the fraction may not be quoted without the `not exercised (n=<d> < 5)` label attached, where `<d>` is
+> that arm's actual denominator.
+>
+> **The floor applies to enumeration recall only. AX-5, the spurious rate, is NOT floored** — see
+> §AX11.2a for why that asymmetry is deliberate.
 
 **K = 5 is not a fresh judgement.** It is the threshold AX-4 already carries for its refuted population
 (§AX6), adopted unchanged so the instrument has one small-denominator rule rather than two. Choosing a
@@ -8825,9 +8827,7 @@ measurement needs none.
 
 **Applied to this pass:** the custom arm's inventory denominator is **2** (§AX10), so **AX-1b is
 `not exercised` before the extractor is written** — a verdict fixed by the fixture, not by output. The
-native arm is 60 and unaffected; AX-1a remains live and decidable. AX-5's status on each arm is not yet
-determinable, because emitted counts do not exist until the extractor runs — which is the point of
-registering its floor now rather than when they do.
+native arm is 60 and unaffected; AX-1a remains live and decidable.
 
 ### AX11.2 Why a floor rather than a caveat, stated as the principle it teaches
 
@@ -8837,6 +8837,41 @@ neither is evidence: a `pass` reads as *the extractor works on custom reports* a
 
 > **Registered principle:** *a number whose meaning depends on a caveat being re-attached by whoever
 > quotes it will eventually be quoted without it. Put the status in the verdict, where it travels.*
+
+### AX11.2a Why AX-5 is NOT floored — the denominator asymmetry
+
+The floor as first drafted covered AX-5 as well, keyed to that arm's **emitted** claim count. **That was
+a defect, caught in review of PR #254 before any measurement, and it is recorded rather than quietly
+deleted** because the reasoning generalises.
+
+**The two denominators are not the same kind of thing.** Enumeration recall's denominator is the
+**inventory** — pre-committed, fixed by a fixture the extractor cannot influence, and knowable before
+the extractor exists. AX-5's denominator is the count of claims the extractor **chose to emit**. Flooring
+a verdict on a denominator the system under test controls hands that system a way to escape the verdict:
+**emit fewer claims, fall under K, and the spurious-rate falsifier never fires.**
+
+That is not an abstract hazard here. §AX2.5 registers AX-5 precisely as the counterweight to recall being
+*"gameable by verbosity"*; an emission-keyed floor re-opens the same gap in the terseness direction. And
+it compounds: with AX-1b already `not exercised` at n=2, an extractor emitting ≤ 4 custom-arm claims
+would leave **the custom arm with zero live falsifiers** while §AX11.3 keeps its veracity figure
+reportable. An arm that can fail nothing is not being measured.
+
+**The bound considered and rejected.** Flooring AX-5 only when the arm's *inventory* denominator is also
+< K does not fix it: the custom inventory is 2, so AX-5 would still be floored and the zero-falsifier
+state is unchanged. The bound looks like a repair and is not one.
+
+**The honest limit, since dropping the floor is not free.** A spurious rate on a small emitted count is
+weak evidence — but it is weak **asymmetrically**, and that asymmetry is the reason no floor is needed.
+A *failure* on small n is a concrete, inspectable defect: some named claim was emitted that the inventory
+does not contain and that operator review did not rule a correct addition. A *pass* on small n proves
+close to nothing. **Registered accordingly: an AX-5 `pass` on an arm with < 5 emitted claims must be
+reported with its emitted count attached and carries no weight as evidence of a clean extractor; an
+AX-5 `failure` counts at any n.** This is a reporting obligation, not a verdict rule — the verdict stays
+live in both directions, which is the whole point.
+
+> **Registered principle, the generalisation worth keeping:** *never floor, cap, or excuse a verdict on a
+> denominator the system under test controls. The subject of the measurement must not be able to choose
+> the conditions under which it is exempt.*
 
 This is not a hypothetical failure mode in this repository. §AD7 exists because a pooled figure was
 quoted without its arms; the note in the mission record exists because v4's 3/10 shipped once as a v12
@@ -8855,7 +8890,13 @@ had already located it.
 §AX8 holds that **no veracity figure may be reported without its enumeration-recall figure.** A
 `not exercised` verdict still publishes a *figure* — the fraction is computed and recorded — so §AX8 is
 satisfied on its literal terms. **Registered: the custom arm's veracity figure remains reportable this
-pass, and must carry `enumeration recall not exercised (n=2 < 5)` wherever it appears.**
+pass, and must carry `enumeration recall not exercised (n=<d> < 5)` wherever it appears, where `<d>` is
+that arm's inventory denominator — 2 for the custom arm as the fixture stands.**
+
+**The label is registered in its derived form, not with the literal baked in** (review of PR #254). An
+earlier draft mandated the string `(n=2 < 5)` verbatim; had a later edit moved the custom denominator to
+3 or 4, the arm would still be correctly floored while every mandated label in this section became
+false. A registered term that hardcodes a number it does not own is a stale claim waiting for its edit.
 
 The stricter reading — that `not exercised` recall blacks out its arm's veracity figure entirely — was
 considered and **rejected**, for a reason that is procedural rather than one of taste: the floor was
@@ -8869,7 +8910,19 @@ registered term *"acquired [its meaning] by implementation rather than by decisi
 are both defensible; what is not defensible is discovering which one the code chose after the figures
 are in.
 
-### AX11.4 What this section does not do
+### AX11.4 What this section does and does not do
 
-It commissions no gate term, changes no §AX6 threshold, and touches no figure from v12–v14. **§AQ3
-stands.** It adds a reportability condition to three existing predictions and nothing else.
+It commissions **no gate term**, changes **no §AX6 threshold**, and touches **no figure from v12–v14**.
+**§AQ3 stands.**
+
+What it *does* add, enumerated so an §AQ3 audit reading this subsection alone is not misled (review of
+PR #254 found the earlier "and nothing else" wording contradicting §AX11.3):
+
+1. a **verdict** floor on the two per-arm enumeration-recall predictions, AX-1a and AX-1b (§AX11.1);
+2. a **reporting obligation** on AX-5 — a pass below 5 emitted claims carries its emitted count and no
+   evidential weight, with the verdict itself left live in both directions (§AX11.2a);
+3. a **reporting obligation** on the v14 per-arm **veracity figure** — it must carry its arm's
+   enumeration-recall status wherever it appears (§AX11.3).
+
+Items 2 and 3 attach to a figure rather than to a prediction, which is why "a reportability condition on
+predictions and nothing else" was the wrong description of this section.
