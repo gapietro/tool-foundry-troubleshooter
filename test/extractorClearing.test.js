@@ -57,6 +57,13 @@ const CLEARED = [
     // directly, and nobody diffs a file no check covers.
     'benchmark/scripts/claim-adjudication.js',
     'test/claimAdjudication.test.js',
+    // §AX14 widens it again to the probe, on §AX13.4's own reasoning. The probe
+    // decides what the instance is taken to have said, so an answer key hidden
+    // there would move the veracity figure without touching either file above —
+    // and its snapshot is deliberately NOT cleared (it must name whatever tables
+    // the frozen claims name), which puts the whole burden on this source.
+    'benchmark/scripts/metadata-probe.js',
+    'test/metadataProbe.test.js',
 ];
 
 const PROMPT = 'benchmark/extraction/claim-extraction-prompt.md';
@@ -115,7 +122,11 @@ describe('§AX5 — the extractor encodes no corpus vocabulary', () => {
         for (const dir of ['benchmark/scripts', 'test']) {
             for (const name of fs.readdirSync(path.join(REPO, dir))) {
                 const rel = dir + '/' + name;
-                if (/claim-(extraction|adjudication)|claim(Extraction|Adjudication)|extractorClearing/i.test(name)) {
+                if (
+                    /claim-(extraction|adjudication)|claim(Extraction|Adjudication)|metadata-probe|metadataProbe|extractorClearing/i.test(
+                        name
+                    )
+                ) {
                     found.push(rel);
                 }
             }

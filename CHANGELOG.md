@@ -17,6 +17,78 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1311 — 2026-08-13
+
+### Added — the metadata probe, and the truncation that would have fabricated a `refuted` (issue #212)
+
+**Still no sweep, no extraction, no snapshot, and no figure.** This closes the last gap between a frozen
+claim and a verdict: the adjudicator took its instance read as an injected function and nothing in the
+tree supplied one.
+
+| file | what it is |
+|---|---|
+| `benchmark/scripts/metadata-probe.js` | the injected read — a pure function over a committed snapshot, no client, no network |
+| `test/metadataProbe.test.js` | the union, the per-link control, and every refuse-rather-than-answer path |
+| `benchmark/DECISION.md` §AX14 | the registration, written **before** the sweep it feeds |
+
+### Fixed — building the probe found a defect that would have produced a clean-looking wrong pass
+
+`sys_dictionary` lists the columns a table **declares**, not the columns it **has**. A child table
+inherits most of what a report would name about it: measured on gpinst01, a core ITSM child table
+declares a few dozen columns of its own, and the record number, short description and assignee are
+**not among them** — they belong to the parent.
+
+A probe answering from the child's declaration alone reports those columns absent. What turns that from
+incompleteness into a **fabrication** is the control: the adjudicator's in-band field control is the
+presence of `sys_id`, and **every table re-declares `sys_id` locally** (verified across base and
+extended, scoped and global). The control passes while the read is truncated, so a report that
+correctly described an inherited column is scored a **control-approved `refuted`**.
+
+That is §AX13.1's forbidden assumption one layer down, and §AX13.5's lesson verbatim: the registered
+principle defeated by a mechanical detail, in a pass that would have looked clean.
+
+**The fix is two halves of one decision** (§AX14.2): field existence is the **union over the
+`super_class` chain**, and the control moves from "the read returned `sys_id`" to "**every link
+returned its own**". Taking the union without moving the control would leave the instrument correct in
+the common case and silently wrong exactly where the evidence is incomplete. A control only controls for
+the failure it can actually see.
+
+### Changed — collection and adjudication split, and the sequencing flips with it
+
+Every instance read here goes through the MCP broker so no credential enters an argv, an environment or
+a transcript, and a Node process cannot make that call. So the metadata is read once through the broker,
+committed as a snapshot with its provenance, and the probe replays it — which makes the adjudication
+reproducible by anyone holding the repository, and reproducible **after the instance has moved on**.
+
+`BACKLOG.md` scheduled the probe before the sweep. Its **code** still comes first; its **data** cannot,
+because the snapshot must cover the tables the frozen claims name. Registered order is now **probe code →
+sweep → snapshot → adjudication**, with the exposure that creates declared in §AX14.4 rather than
+absorbed silently.
+
+**Uncollected is never absent** (§AX14.3): a table missing from the snapshot, a link missing from the
+chain, and a link that came back without its control all **refuse the read** rather than shaping an
+answer. Only a table the collector looked for and did not find is an observation.
+
+### Changed — the §AX5 cleared set widens to the probe, and deliberately not to its snapshot
+
+The probe decides what the instance is taken to have said, so an answer key hidden there would move the
+veracity figure without touching the extractor or the adjudicator. Probe source and tests join the
+cleared set and the discovery test is widened to find an uncleared probe — **mutation-verified**:
+removing the probe from the set fails the discovery test by name.
+
+The **snapshot is not cleared and cannot be** — it must name whatever tables the frozen claims name,
+including the fixture table the vocabulary check forbids. It is evidence, constrained by provenance
+rather than by vocabulary, and §AX14.5 states what carries the burden in its place.
+
+### Verified
+
+- `npm test` — 2224 passed, 47 suites, including 20 new probe tests.
+- `npx eslint` clean on every changed file.
+- **Live-exercised on gpinst01's real metadata** (§AX14.6): an inherited column returns `supported`
+  where a declaration-only read returns `refuted`; a genuinely absent column refutes an assertion and
+  supports a denial; an absent table refutes; a value on a live column and a count return `mutable`; an
+  uncollected table returns `probe_failed`. All three verdicts, five of the six reasons.
+
 ## 2026.08.1310 — 2026-08-13
 
 ### Added — the deterministic adjudicator, and the prompt amendment that makes it possible (issue #212)

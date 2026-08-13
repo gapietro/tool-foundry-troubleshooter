@@ -9118,3 +9118,121 @@ registered principle being defeated by a mechanical detail rather than by a disa
 principle — a sort order and a guard clause. Neither would have been visible in a figure; both would
 have produced a clean-looking pass. The §AX0 substitution holds — check the artifact, not the author —
 but only where the check is pointed at the behaviour and not at the intent.
+
+---
+
+## AX14. The metadata probe — the injected read, and the truncation that would have fabricated `refuted`
+
+Registered **2026-08-13**, with the probe being built and **before any report has been extracted, any
+snapshot collected, or any figure produced**. Same window and same reason as §AX13: it settles the shape
+of an artifact §AX5 clears, so it is recorded at the moment the decision is made rather than in a commit
+message — §AR1a's ruling, earned by a shipped condition whose narrowing lived only in code.
+
+### AX14.1 The defect: the control could not see the failure it was placed to catch
+
+`claim-adjudication.js` takes its instance read as an injected function and nothing in the tree supplied
+one. Building that supplier surfaced a defect in the platform surface it reads from.
+
+A table's `sys_dictionary` entry lists the columns it **declares**, not the columns it **has**. A child
+table inherits most of what a report would naturally name about it. Measured on the target instance: a
+core ITSM child table declares a few dozen columns of its own, and the columns a diagnostic report is
+most likely to cite — the record number, the short description, the assignee — are **not among them**.
+They belong to the parent.
+
+A probe answering from the child's own declaration would report those columns **absent**. That alone is
+incompleteness. What makes it a fabrication is the control: the adjudicator's in-band field control is
+the presence of `sys_id` in the returned list, and **every table re-declares `sys_id` locally** — checked
+across base and extended tables, scoped and global, and it held in every case. So the control **passes
+while the read is truncated**, and a report that correctly described an inherited column is scored a
+control-approved `refuted`.
+
+That is §AX13.1's forbidden assumption reappearing one layer down, and §AX13.5's lesson repeating
+verbatim: *the registered principle defeated by a mechanical detail rather than by a disagreement about
+the principle.* Neither would have shown in a figure. Both produce a clean-looking pass.
+
+### AX14.2 What is registered
+
+> **Registered:** field existence is decided by the **union of declared columns over the `super_class`
+> chain**, walked from the named table to its root — field existence as a `GlideRecord` would see it,
+> which is what a report means when it names a column of a table.
+>
+> **And the control moves with it:** every link in the chain must have returned its **own**
+> `sys_id`. A link that did not is a truncated contribution to the union, and the whole read is refused
+> — the probe throws, and the adjudicator records `probe_failed`. A control only controls for the
+> failure it can actually see, and `sys_id` at the leaf cannot see a missing link above it.
+
+The two halves are one decision. Taking the union without moving the control would leave the instrument
+correct in the common case and silently wrong in exactly the case where the evidence is incomplete,
+which is the case that matters.
+
+**Rejected alternative, recorded because it was the safe one:** routing every claim about a table with a
+parent to `unresolvable`. It fabricates nothing, and it blinds the axis on every out-of-box table a
+report is likely to name — the seed table is a base table, but almost nothing else a diagnostic report
+touches is. Safety bought by refusing to look is the shape §AW2 warns about pointed the other way.
+
+### AX14.3 A snapshot, not a live client — and what a snapshot may not do
+
+Every instance read in this project goes through the MCP broker so no credential enters an argv, an
+environment or a transcript. A Node process cannot make that call. So collection and adjudication split:
+the metadata is read **once** through the broker, written to a committed snapshot carrying its
+provenance, and the probe replays it.
+
+This is stronger than the brief asked for, not a concession to it. Brief §7 wanted an injected client;
+what this gives is an adjudication reproducible by anyone holding the repository, and reproducible
+**after the instance has moved on** — which it will, because the reference state is a run that already
+happened (brief §2.2).
+
+> **Registered:** a table absent **from the snapshot** and a table recorded **absent on the instance**
+> are different states and are never collapsed. The first throws (`probe_failed`); only the second is an
+> observation. Same for a link in the chain: uncollected, recorded-absent, or returned without its
+> control all refuse the read rather than shaping an answer.
+
+§AW2 applied to the evidence rather than to the instance. *"Nobody read this table"* is an inability to
+observe, and an inability to observe must never be recorded as an observation.
+
+### AX14.4 The sequencing changes, and the deviation is declared rather than absorbed
+
+`BACKLOG.md` scheduled the probe before the sweep. The probe's **code** does come first — it is built and
+tested here. Its **data** cannot: the snapshot must cover the tables the claims name, and which tables
+those are is not known until the frozen claims exist.
+
+> **Registered:** the order is **probe code → sweep → snapshot collection over the tables the frozen
+> claims name → adjudication.**
+
+**The exposure this creates, stated rather than waved through.** The snapshot is collected after its
+operator has seen extracted output. What bounds it is that the table list is **dictated by the frozen
+artifact**, and collection is a mechanical read with no judgement in it — but that is an argument about
+what the step is, not a check on it, and the distinction is exactly the one §AX0 exists to insist on.
+So it is bounded by a check instead: the collection queries are recorded in the snapshot's provenance,
+and the snapshot is re-derivable from them by anyone with instance access. Two collections cannot agree
+about a column that was never there.
+
+### AX14.5 Clearing extends to the probe, and deliberately not to its snapshot
+
+The probe decides what the instance is taken to have said. An answer key hidden there would move the
+veracity figure without touching the extractor or the adjudicator — §AX13.4's argument, one file along.
+
+> **Registered:** `benchmark/scripts/metadata-probe.js` and its tests join the §AX5 cleared set, and the
+> discovery test that finds uncleared instrument files is widened to find an uncleared probe. **The
+> snapshot is NOT cleared, and cannot be:** it must name whatever tables the frozen claims name,
+> including the fixture table the vocabulary check forbids. It is evidence, and evidence is constrained
+> by provenance rather than by vocabulary.
+
+**What carries the burden instead**, since the exemption is real: the snapshot holds no logic, its
+content is dictated by the frozen claims, and it is re-derivable from the queries recorded inside it.
+The whole of the clearing burden therefore sits on the probe source, which is why it is cleared and why
+the discovery widening was mutation-verified rather than assumed — removing the probe from the cleared
+set was checked to fail the discovery test by name.
+
+### AX14.6 What this does not decide
+
+No figure. No claim about what the corpus contains, how many claims are adjudicable, or what the
+per-arm veracity will be. The honest consequence §AX13.3 already registered stands unchanged: `supported`
+is reachable only for schema existence, so a corpus of values and counts returns mostly `unresolvable`,
+and per §AX8 the veracity figure is reported with its enumeration-recall figure and gates nothing.
+
+**Live-exercised before registration, on the target instance's real metadata** — a claim naming an
+inherited column returns `supported` where a declaration-only read would have returned `refuted`; a
+genuinely absent column refutes an assertion and supports a denial; an absent table refutes; a value on a
+live column and a count both return `mutable`; an uncollected table returns `probe_failed`. All three
+verdicts and five of the six reasons, against metadata read from the instance rather than a stub.
