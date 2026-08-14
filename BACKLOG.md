@@ -10,7 +10,8 @@ what is next. Ranked by gate-distance, not by issue age or severity label.
 > #259 was re-scoped.** A premise check run before designing #259 found that its gate statement —
 > *"SC-1 has never been measured"* — is contradicted by `DECISION.md` §AW0 and `DESIGN.md` §5.6,
 > both written the day before #259 was filed. Correctness has been in `passes_gate` since v9;
-> **SC-1 stands at native 7/10 · 70.0%, custom 0/10 · 0.0%** (§AD7, absolute only per §AQ3). The gate
+> **SC-1 stands at native 7/10 · 70.0%, custom 0/10 · 0.0%** (§AD7, both arms; a v14 absolute, and
+> **not** on §AQ3's authority — see the standing position below). The gate
 > is restated as *reliability of those judgements*, #259 is cut to the one direction that survives,
 > and no instrument was built. **Nothing was measured and nothing was designed this session** — the
 > deliverable is a corrected record.
@@ -56,15 +57,17 @@ what is next. Ranked by gate-distance, not by issue age or severity label.
 `fix_target_correct` (0/1/2) are correctness columns — 4 of the rubric's 6 points — and the former is
 one of the two terms in `passes_gate` (`scorecard-template.md` §A2). Ground truth is independent of
 the harness and predates every run: each seed spec declares **Expected root-cause layer** and
-**Expected fix target**, authored when the defect was injected, committed `1253cbf` (2026-07-31) and
-`0c4f36c` (2026-08-11) — checkable with `git merge-base --is-ancestor`, which is the §AX0-preferred
-shape (a property of the artifact, not a certification about an author).
+**Expected fix target**, authored when the defect was injected. The seeds v14 scores were committed
+in `82247ca` (seeds 01–03), `1253cbf` (seeds 04–05) — both 2026-07-31 — and `0c4f36c` (seeds 06–08,
+2026-08-11); all three predate every run, checkable with `git merge-base --is-ancestor`, which is the
+§AX0-preferred shape (a property of the artifact, not a certification about an author).
 
 **What is actually unmeasured is narrower: whether a report's factual claims are TRUE.** That is
 §AO2's own closing line, and it is why §AO2's row 09 scored **6/6 and cleared the gate while proposing
 a fix at a column that does not exist** — re-confirmed by live read (`DESIGN.md` §5.6 correction (b)).
-The judge reads report prose and never checks it against the instance. So **at least one of native's
-seven correct-layer rows is known-fabricated**, and that — not an absent measurement — is the gate.
+The judge reads report prose and never checks it against the instance. **Rows 09, 11 and 13 each
+named their layer correctly and carried false claims anyway** — so the reliability gap sits *beside*
+the layer call, not inside it, and that — not an absent measurement — is the gate.
 
 **Blockers to this gate: 1.** Not `#212`: that instrument is built, measured and closed (§AX17.5), and
 §AX17.3 rules that schema-level claim veracity cannot be bridged to root-cause correctness by
@@ -80,9 +83,18 @@ and labelled `next`.
 - **SC-1 itself** — `root_cause_layer_correct == 2`, the PRD's *"identifies the correct root cause"* —
   is a **different and looser figure** than the gate, because `passes_gate` ANDs in
   `fix_usable_unedited`. From `scorecard-v14.md` §1: native **7/10 · 70.0%** · custom **0/10 · 0.0%**.
-  Native is **one row short** of SC-1's ≥ 8/10 bar. Both arms together (§AD7); **absolute only —
-  §AQ3 forbids differencing either against v12/v13/v14.** Read it with the reliability caveat above:
-  one of those seven rows is known-fabricated, so 70.0% is an **upper bound**.
+  Native is **one row short** of SC-1's ≥ 8/10 bar. Both arms together (§AD7). **Quoted as a v14
+  absolute; no cross-pass series is offered.** *(§AQ3 does not govern this figure — it binds the
+  **v15 custom gate** figure and states in terms that "the native arm is unaffected … the native
+  series remains continuous". A v12→v14 SC-1 series would need its own justification against §AN1a's
+  not-single-variable finding, not §AQ3.)*
+- **What 70.0% does NOT say.** It counts whether a report **named** the right layer — nothing more.
+  §AO2's rows 09, 11 and 13 all named correctly *and* carried false factual claims (row 09's Fix 1
+  repoints at a nonexistent column; row 11 claims 0 rows against a 21-row table; row 13 lists five
+  `u_*` columns that do not exist). **Do not read 70.0% as seven sound diagnoses.** It is also not
+  shown to be an *upper bound*: row 09's layer call is explicitly correct in §AO2, so it does not
+  come out of the numerator, and row 11's alternative reading is a Build Rule #42 harness defect
+  rather than a fabrication — §AO2 leaves that open.
 - Native's middle band prescribes **triage only**; custom's bottom band prescribes **does not clear
   triage**. **Neither arm is a front door.**
 - **Phase 1b is closed on the board but its milestone is NOT met.** Board state and acceptance

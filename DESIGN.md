@@ -693,10 +693,13 @@ Carried forward from the ledger, because these constraints outlive the issues:
 > did not hold.** "Correctness went unmeasured" below is **imprecise, and it travels**:
 > `root_cause_layer_correct` and `fix_target_correct` are correctness columns and the former is a
 > `passes_gate` term, so layer-level correctness has been in the gate figure **since v9**
-> (`benchmark/DECISION.md` §AW0). Measured, v14: **native 7/10 · 70.0%, custom 0/10 · 0.0%** (§AD7;
-> absolute only, §AQ3). The genuinely unmeasured axis is narrower — **whether the report's factual
-> claims are true** — which is what §AO2's closing line says and what the first bullet below is an
-> instance of. §5.6 already carried this correction by reference; it was nonetheless re-imported
+> (`benchmark/DECISION.md` §AW0). Measured, v14: **native 7/10 · 70.0%, custom 0/10 · 0.0%** (§AD7,
+> both arms; a v14 absolute, no series claim — **§AQ3 is not the authority here**, it binds the v15
+> *custom gate* figure and says the native series remains continuous; see §5.1, which cites it
+> correctly). That figure counts whether a report **named** the right layer and nothing more: rows
+> 09, 11 and 13 all named correctly and carried false claims anyway. The genuinely unmeasured axis is
+> narrower — **whether the report's factual claims are true** — which is what §AO2's closing line
+> says and what the first bullet below is an instance of. §5.6 already carried this correction by reference; it was nonetheless re-imported
 > verbatim into `BACKLOG.md` and into issue #259 on 2026-08-13, so it is now stated where the claim
 > is read rather than one section away. **A correction that lives only at the pointer's far end is
 > not a correction.**
