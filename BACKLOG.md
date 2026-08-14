@@ -4,7 +4,7 @@ Persisted by `/next` so no session re-derives priorities from scratch. Read this
 what is next. Ranked by gate-distance, not by issue age or severity label.
 
 **Last ranked:** 2026-08-13 · shipped at version `2026.08.1312` · board **4 open** / 115 closed ·
-**1 open PR** · **blockers to gate: 1**
+**0 open PRs** · **blockers to gate: 1**
 
 > **What moved: the #212 sweep RAN, and its result is that the axis does not answer the gate.**
 > Twenty reports extracted in twenty fresh contexts, frozen, adjudicated against a live gpinst01
@@ -47,8 +47,9 @@ registered prediction with no trigger firing while correctness collapsed **4/4 �
 schema-level claim veracity does not settle root-cause correctness, and the two cannot be bridged by
 sharpening the adjudicator. Reason 2 of §AX17.5 names the shape of the thing that could — an adjudicator
 able to settle **values and counts** against a reference state contemporaneous with the run — and rules
-it a *different instrument*, not an amendment to this one. **A successor must be filed before this line
-means anything**; until then the gate has a known requirement and no owner.
+it a *different instrument*, not an amendment to this one. That successor is **#259**, filed 2026-08-13 and labelled
+`next`. The gate now has a known requirement AND an owner, which is the state the last three sessions
+each failed to leave it in.
 
 ### Standing position, so it is not re-derived
 
@@ -69,8 +70,8 @@ means anything**; until then the gate has a known requirement and no owner.
 
 | # | Item | Why it ranks here |
 |---|---|---|
-| **1** | **A successor to #212 — an instrument that can settle values and counts** *(not yet filed)* | The gate's only remaining blocker, and the pass just established what it has to be. §AX17.5 reason 2: an adjudicator settling **values and counts** against a reference state **contemporaneous with the run** — the v14 snapshot is a read of the instance *now*, and the runs it judges already happened, which is why 77% of claims came back `unresolvable` rather than false. That is a different instrument, not an amendment (§AX17.5 forbids treating it as one). **File it before ranking anything else** — a gate with a known requirement and no issue is how the last three sessions each re-derived the same thing. |
-| 2 | **#212 — commission the correctness axis** *(instrument complete; see below)* | Built, run, scored and closed out (§AX17). AX-1a 96.7% passed, AX-4 passed and exercised, AX-2 pre-satisfied. **Its headline ask is not satisfied** — the issue says "score whether a root cause is RIGHT" and §AX17.3 concludes the axis scores claim veracity instead. Close it against what it delivered and carry the unmet half into the successor, or keep it open as the successor's parent; **that call is the operator's and has not been made.** |
+| **1** | **#259 — a root-cause correctness instrument that settles values and counts** (`next`) | The gate's only remaining blocker, and the pass just established what it has to be. §AX17.5 reason 2: an adjudicator settling **values and counts** against a reference state **contemporaneous with the run** — the v14 snapshot is a read of the instance *now*, and the runs it judges already happened, which is why 77% of claims came back `unresolvable` rather than false. That is a different instrument, not an amendment (§AX17.5 forbids treating it as one). Filed 2026-08-13 as the successor to #212, with §AX17.5's reopening condition, the inherited constraints (§AX7.2's spent held-out set, §AX10's n≥10 custom bar, §AQ3, §AX0), and three candidate directions none of which is chosen. **Design gate first** — and §AX17.6 before that. |
+| 2 | **#212 — commission the correctness axis** *(instrument complete, kept open as #259's parent)* | Built, run, scored and closed out (§AX17). AX-1a 96.7% passed, AX-4 passed and exercised, AX-2 pre-satisfied. **Its headline ask is not satisfied** — the issue says "score whether a root cause is RIGHT" and §AX17.3 concludes the axis scores claim veracity instead. Kept open as #259's parent rather than closed, so the unmet half of its ask stays visible on the board instead of living only in a closed issue's tail. Closing it is still available and still the operator's call. |
 | — | Phase 2, shrunk — native triage + Fix Report export | The cheapest alternative source of correctness signal: put it in front of real SCs and let production supply the evidence. **Note it does NOT satisfy §5.6 reason 2**, which requires *the custom harness* in front of real users — shipping the native arm reopens nothing, so this buys production evidence on its own merits, not a reopening condition. Ranked below #1 because shipping a UI over an unmeasured diagnosis is the thing #1 exists to prevent. Considered and not chosen 2026-08-12. |
 | — | Close out and package for handoff | `/senior-grade` + `handoff-readiness`. The fallback if #1's design gate concludes a correctness axis cannot be built affordably. Not scheduled. |
 
