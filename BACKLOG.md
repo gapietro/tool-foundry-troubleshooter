@@ -3,28 +3,32 @@
 Persisted by `/next` so no session re-derives priorities from scratch. Read this first when asked
 what is next. Ranked by gate-distance, not by issue age or severity label.
 
-**Last ranked:** 2026-08-13 · shipped at version `2026.08.1311` · board **4 open** / 115 closed ·
-**0 open PRs** · **blockers to gate: 1**
+**Last ranked:** 2026-08-13 · shipped at version `2026.08.1312` · board **4 open** / 115 closed ·
+**1 open PR** · **blockers to gate: 1**
 
-> **What moved since the 2026-08-12 ranking — #212 stopped being procedure and became code.**
-> §AX landed (`0e895e0`), retiring §AW's blind-author regime for artifact-level clearing; the seven
-> held-out claim inventories were committed **before any extractor existed** (`77ef851`), which is the
-> guarantee §AX2.2 rests on and is verifiable by anyone with `git log`; §AX11 closed the
-> small-denominator reportability term (`c1f5969`); and the **extractor itself merged**
-> (`29e3266`, §AX12) — frozen prompt, deterministic plumbing, mutation-verified clearing check.
-> Three dispatch attempts had produced three aborts and zero code; that arc is closed.
+> **What moved: the #212 sweep RAN, and its result is that the axis does not answer the gate.**
+> Twenty reports extracted in twenty fresh contexts, frozen, adjudicated against a live gpinst01
+> metadata snapshot, scored. Figures in `benchmark/extraction/v14/results.json`, re-derivable with
+> `node benchmark/scripts/pass-figures.js`, recorded in `DECISION.md` §AX17.
 >
-> Also closed since: #216, #217, #218, #220, #234, #235, #236, #239, #241, #242. **The board shrank
-> while the register grew — that is the shape a good week has here.**
+> **AX-1a enumeration recall native 58/60 = 96.7% PASSED**; AX-1b custom `not exercised` (n=2 < 5, fixed
+> by the fixture before the extractor was written). AX-2 passed and pre-satisfied; **AX-4 passed and
+> EXERCISED** (0 of 7 refuted inventory claims missed vs a 3.3% per-arm rate) — that verdict is what
+> §AX16.2's polarity overlay bought. Spurious rate native 21.3% / custom 62.5%, both **upper bounds**:
+> §AX2.5's carve-out was deliberately not exercised because it can only lower the rate and the operator
+> is contaminated in the extractor's favour.
 >
-> **Still zero figures.** No sweep has run, and there is no adjudicator anywhere in the tree. The gate
-> has not moved because nothing yet produces a number.
+> **The headline is not a pass, it is the unresolvable column.** 195 of 254 claims — **77%** — are
+> `unresolvable`. §AX13.3 registered that consequence before any code ran and it held. So §AX17.3 states
+> plainly: **this is a claim-veracity axis, not the gate's answer.** A report can be truthful about every
+> table and column it names and still diagnose the wrong root cause — which is §AO2's finding, one of the
+> two that opened this gate in the first place.
 >
-> **This session (the one that ranked) may build and dispatch, but may NOT extract.** §AX retired the
-> blinding-by-author rule, so a `/next` session can author. §AX12.1 replaced it with a narrower and
-> checkable one: extraction of each report happens in a **fresh context holding only the frozen prompt
-> and that one report**. This session has read a held-out proposition and the denominators, so it
-> dispatches extraction rather than performing it.
+> Two instrument gaps were found and registered *before* being repaired: the held-out inventory predates
+> §AX13's polarity amendment (§AX16.1, AX-4 had no denominator), and §AX2.3 never registered **who
+> decides a match** (§AX16.3, dispatched to fresh contexts). A third was found by a guard: the scorer
+> must read the fixture that the cleared set is defined by not reading, so a **second artifact class**
+> was registered (§AX17.1) rather than the check being relaxed.
 
 ---
 
@@ -38,7 +42,13 @@ Benchmark passes v1–v14 scored **admissibility** (well-formed, sourced, determ
 §AO2 scored a row **6/6 proposing a fix at a column that does not exist**, and §AU passed every
 registered prediction with no trigger firing while correctness collapsed **4/4 → 0/4**.
 
-**Blockers to this gate: 1** (`#212`). That is the number that carries weight — not the open count.
+**Blockers to this gate: 1.** It is no longer `#212` — that instrument is built, measured and closed
+(§AX17.5). **The gate is still open, and the pass is why we now know what it would take.** §AX17.3:
+schema-level claim veracity does not settle root-cause correctness, and the two cannot be bridged by
+sharpening the adjudicator. Reason 2 of §AX17.5 names the shape of the thing that could — an adjudicator
+able to settle **values and counts** against a reference state contemporaneous with the run — and rules
+it a *different instrument*, not an amendment to this one. **A successor must be filed before this line
+means anything**; until then the gate has a known requirement and no owner.
 
 ### Standing position, so it is not re-derived
 
@@ -59,8 +69,8 @@ registered prediction with no trigger firing while correctness collapsed **4/4 �
 
 | # | Item | Why it ranks here |
 |---|---|---|
-| **1** | **#212 — commission the correctness axis** (`next`) · **build stage, in flight** | Removes the release blocker above. Still the only open item touching the current gate, and §5.2 says no further sharpening of the existing instrument can substitute for it. **Design gate discharged twice** — §AW (PR #225), then re-registered as §AX (PR #246) when the blind-author procedure was retired. **Done:** inventories committed pre-extractor (§AX2.2), extractor authored and cleared (§AX5/§AX12), **adjudicator built and unit-green (§AX13, v`2026.08.1310`)** — three-valued, injected probe, control-paired, mutation-verified clearing — and **the probe that feeds it (§AX14, v`2026.08.1311`)**, which found and closed a truncation defect that would have scored truthful reports `refuted` with the control passing. **The order registered in §AX14.4 supersedes this file's earlier one:** the probe's *code* comes before the sweep, its *data* cannot, because the snapshot must cover the tables the frozen claims name. **Next action: (b) dispatch the sweep** in fresh per-report contexts (§AX12.1); **(c) collect the snapshot over the tables those frozen claims name; (d) adjudicate inventory-driven (§AX2.4) → per-arm recall, spurious rate, veracity, AX-4.** Adjudicator went first because **the sweep effectively freezes the extractor**: §AX7.2 rules that repairing it in response to held-out misses leaves *no valid recall figure from v14 at all*, and the eligible 15 reports are exhausted by the two sets — so a plumbing bug discovered after the sweep is indistinguishable from a real miss and cannot be re-earned. |
-| 2 | **#253 — CLAUDE.md states there is no CI and no branch protection; both exist** | Premise verified at ranking time: `.github/workflows/ci.yml` is present and `main` requires the `build · test · lint` status check. A false statement in the **always-loaded** instruction file, so every session is told nothing enforces the checks and nothing blocks a merge. Blocks the **handoff** gate (a runbook that misdescribes the merge path), not this one — and it is a docs edit, so it ranks second on leverage, not on weight. |
+| **1** | **A successor to #212 — an instrument that can settle values and counts** *(not yet filed)* | The gate's only remaining blocker, and the pass just established what it has to be. §AX17.5 reason 2: an adjudicator settling **values and counts** against a reference state **contemporaneous with the run** — the v14 snapshot is a read of the instance *now*, and the runs it judges already happened, which is why 77% of claims came back `unresolvable` rather than false. That is a different instrument, not an amendment (§AX17.5 forbids treating it as one). **File it before ranking anything else** — a gate with a known requirement and no issue is how the last three sessions each re-derived the same thing. |
+| 2 | **#212 — commission the correctness axis** *(instrument complete; see below)* | Built, run, scored and closed out (§AX17). AX-1a 96.7% passed, AX-4 passed and exercised, AX-2 pre-satisfied. **Its headline ask is not satisfied** — the issue says "score whether a root cause is RIGHT" and §AX17.3 concludes the axis scores claim veracity instead. Close it against what it delivered and carry the unmet half into the successor, or keep it open as the successor's parent; **that call is the operator's and has not been made.** |
 | — | Phase 2, shrunk — native triage + Fix Report export | The cheapest alternative source of correctness signal: put it in front of real SCs and let production supply the evidence. **Note it does NOT satisfy §5.6 reason 2**, which requires *the custom harness* in front of real users — shipping the native arm reopens nothing, so this buys production evidence on its own merits, not a reopening condition. Ranked below #1 because shipping a UI over an unmeasured diagnosis is the thing #1 exists to prevent. Considered and not chosen 2026-08-12. |
 | — | Close out and package for handoff | `/senior-grade` + `handoff-readiness`. The fallback if #1's design gate concludes a correctness axis cannot be built affordably. Not scheduled. |
 

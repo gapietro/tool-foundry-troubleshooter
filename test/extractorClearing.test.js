@@ -64,7 +64,40 @@ const CLEARED = [
     // the frozen claims name), which puts the whole burden on this source.
     'benchmark/scripts/metadata-probe.js',
     'test/metadataProbe.test.js',
+    // §AX15 adds the sweep driver on the same reasoning one step further out.
+    // It decides which emission becomes the frozen artifact for each report, so
+    // a driver that special-cased a report — retrying only that one, or
+    // preferring an earlier attempt for it — would move both figures without
+    // touching any file above it.
+    'benchmark/scripts/claim-extraction-sweep.js',
+    'test/claimExtractionSweep.test.js',
 ];
+
+/**
+ * The SCORER — a second artifact class, registered in §AX17.
+ *
+ * It is not in CLEARED and cannot be: the cleared set forbids reading the
+ * held-out inventory at runtime, and recall's denominator IS that fixture. A
+ * scorer unable to open it could not compute the figure.
+ *
+ * So it is exempt from that ONE check and from nothing else. It is still held to
+ * every corpus-vocabulary pattern, still forbidden from naming a report file,
+ * and — the part that matters — still DISCOVERED by the walk below, so a scorer
+ * cannot be renamed or joined by a sibling without this test noticing. The
+ * exemption is a named list of one, not a category anything can drift into.
+ *
+ * DISCOVERABILITY IS A CONSTRAINT ON THE FILENAME, not a hope about it. The walk
+ * finds files by pattern, so a scorer helper named `scoring.js` would escape both
+ * lists and every vocabulary check while being scorer code — the comment above
+ * asserting more than the test did (review of PR #258). Every scorer file must
+ * MATCH the discovery pattern, asserted below: a scorer that cannot be
+ * discovered cannot be a scorer.
+ */
+const SCORER = ['benchmark/scripts/pass-figures.js'];
+
+/** The names the walk collects. Shared so the two cannot drift apart. */
+const DISCOVERY =
+    /claim-(extraction|adjudication)|claim(Extraction|Adjudication)|metadata-probe|metadataProbe|extractorClearing|figures|Figures/i;
 
 const PROMPT = 'benchmark/extraction/claim-extraction-prompt.md';
 
@@ -137,18 +170,18 @@ describe('§AX5 — the extractor encodes no corpus vocabulary', () => {
         for (const dir of ['benchmark/scripts', 'test']) {
             for (const name of fs.readdirSync(path.join(REPO, dir))) {
                 const rel = dir + '/' + name;
-                if (
-                    /claim-(extraction|adjudication)|claim(Extraction|Adjudication)|metadata-probe|metadataProbe|extractorClearing/i.test(
-                        name
-                    )
-                ) {
+                if (DISCOVERY.test(name)) {
                     found.push(rel);
                 }
             }
         }
 
         const uncleared = found.filter(
-            (f) => CLEARED.indexOf(f) === -1 && f !== 'test/extractorClearing.test.js' && !isCollectedEvidence(f)
+            (f) =>
+                CLEARED.indexOf(f) === -1 &&
+                SCORER.indexOf(f) === -1 &&
+                f !== 'test/extractorClearing.test.js' &&
+                !isCollectedEvidence(f)
         );
         expect(uncleared.sort()).toEqual([]);
     });
@@ -296,5 +329,101 @@ describe('§AX5 — the extractor names no member of its corpus', () => {
             if (/claim-inventory/.test(read(rel))) offenders.push(rel);
         }
         expect(offenders).toEqual([]);
+    });
+});
+
+describe('§AX17 — the scorer is exempt from ONE check and constrained by the rest', () => {
+    /**
+     * A scorer must read the fixture, so the check above cannot apply to it.
+     * Every other constraint does, and that is what keeps "scorer" from becoming
+     * the category anything inconvenient gets moved into.
+     */
+    for (const rel of SCORER) {
+        describe(rel, () => {
+            const raw = read(rel);
+            test.each(FORBIDDEN)('contains no $label', (pattern) => {
+                expect(scan(raw, rel, pattern)).toEqual([]);
+            });
+            test('names no report file', () => {
+                expect(/v1\d-reports\//.test(raw)).toBe(false);
+            });
+        });
+    }
+
+    test('every scorer file exists', () => {
+        for (const rel of SCORER) expect(fs.existsSync(path.join(REPO, rel))).toBe(true);
+    });
+
+    test('every scorer filename matches the discovery pattern', () => {
+        /**
+         * Without this, "cannot be joined by a sibling" was untrue: a scorer
+         * helper with an unmatched name escapes the walk, both lists, and every
+         * vocabulary check. Requiring the name to be discoverable makes the
+         * sibling case impossible rather than unlikely.
+         */
+        for (const rel of SCORER) expect(DISCOVERY.test(path.basename(rel))).toBe(true);
+    });
+
+    test('the scorer and the cleared set are disjoint', () => {
+        /**
+         * The exemption must not be reachable from inside the instrument. If a
+         * file were on both lists it would inherit the scorer's exemption while
+         * being part of the extractor — the hole this split exists to avoid.
+         */
+        for (const rel of SCORER) expect(CLEARED).not.toContain(rel);
+    });
+
+    test('no cleared file reaches the scorer through its requires', () => {
+        /**
+         * List disjointness alone asserted far less than the comment above
+         * promised (review of PR #258): a cleared file could `require` the
+         * scorer and reach the held-out fixture transitively, and the
+         * fixture-read guard — a per-file text scan — would not see it.
+         *
+         * The dependency currently runs the safe way round (the scorer requires
+         * the sweep driver, not the reverse), so this passes today. It is here
+         * so it keeps passing.
+         */
+        const scorerModules = SCORER.map((rel) => path.basename(rel, '.js'));
+        const seen = new Set();
+        const reaches = [];
+
+        const walkRequires = (rel, origin) => {
+            if (seen.has(rel)) return;
+            seen.add(rel);
+            const raw = read(rel);
+            const requires = raw.match(/require\(['"](\.[^'"]+)['"]\)/g) || [];
+            for (const call of requires) {
+                const target = call.replace(/^require\(['"]/, '').replace(/['"]\)$/, '');
+                const base = path.basename(target, '.js');
+                if (scorerModules.indexOf(base) !== -1) {
+                    reaches.push(origin + ' -> ' + rel + ' -> ' + target);
+                    continue;
+                }
+                const resolved = path.join(path.dirname(rel), target);
+                const candidate = /\.js$/.test(resolved) ? resolved : resolved + '.js';
+                if (fs.existsSync(path.join(REPO, candidate))) walkRequires(candidate, origin);
+            }
+        };
+
+        for (const rel of CLEARED) {
+            if (!/\.js$/.test(rel)) continue;
+            seen.clear();
+            walkRequires(rel, rel);
+        }
+        expect(reaches).toEqual([]);
+    });
+
+    test('the scorer decides nothing — it holds no verdict vocabulary of its own', () => {
+        /**
+         * §AX17's first property, made mechanical rather than promised. The
+         * scorer may COUNT verdicts, so it names them; what it must not do is
+         * compute one, which in this codebase means calling the adjudicator's
+         * decision surface or re-implementing a membership test over a probe
+         * read. It calls `adjudicateAll` and nothing else from that module.
+         */
+        const raw = read(SCORER[0]);
+        expect(/adjudication\.adjudicate\b(?!All)/.test(raw)).toBe(false);
+        expect(/table_exists|control_failed|presupposed/.test(raw)).toBe(false);
     });
 });

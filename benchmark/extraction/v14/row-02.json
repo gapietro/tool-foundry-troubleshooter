@@ -1,0 +1,39 @@
+{
+  "report": "row-02",
+  "arm": "custom",
+  "claim_count": 2,
+  "claims": [
+    {
+      "id": "row-02/E01",
+      "proposition": "A tool named measure_request exists and is available to the AI Agent on the instance.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "asserted_value": "measure_request",
+      "subject": {
+        "record": "measure_request"
+      },
+      "occurrences": [
+        {
+          "line": 2,
+          "quote": "The agent processed the input text using the measure_request tool"
+        }
+      ]
+    },
+    {
+      "id": "row-02/E02",
+      "proposition": "The number of errors reported in the AI Agent execution trace is zero.",
+      "kind": "count",
+      "polarity": "denies",
+      "asserted_value": "no errors",
+      "occurrences": [
+        {
+          "line": 2,
+          "quote": "with no errors reported in the execution trace"
+        }
+      ]
+    }
+  ],
+  "rejected": [],
+  "conflicts": [],
+  "defects": []
+}

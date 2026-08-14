@@ -9269,3 +9269,316 @@ both the registered principle defeated by a mechanical detail — an optional ke
 in a module written specifically to enforce that principle, by an author who had just finished writing
 the registration. Neither would have appeared in a figure. **A rule and its enforcement are different
 artifacts, and writing the first is not evidence about the second.**
+
+---
+
+## AX15. The retry, and the bound that keeps it from becoming a re-roll
+
+Registered **2026-08-13**, with the sweep driver being written and **before any report has been
+extracted, any raw emission has been written, or any figure produced**. Same window and same reason as
+§AX13 and §AX14: it settles the shape of the measurement while nothing about the outcome is known.
+
+### AX15.1 The choice, and why the choice alone is not enough
+
+A per-report extraction runs in a fresh context (§AX12.1) and returns an envelope. Sometimes an envelope
+comes back that is not JSON at all, or is JSON without the top-level array the prompt specifies. Two
+handlings were put to the operator before the sweep:
+
+- **retry once** — a broken envelope is a *serialisation* failure, and scoring it as an empty emission
+  blames inference for plumbing;
+- **no retry** — every retry is an opportunity to re-roll a result, and once retries exist, *"it came
+  back malformed"* is a door that can be pushed on.
+
+> **Registered: retry once.** The operator chose it before any report had been dispatched, which is the
+> only time either option was choosable — afterwards, whichever is picked is a response to output.
+
+**The choice does not carry itself.** "Retry on failure" is a judgement unless *failure* is decided
+mechanically, and a discretionary retry is exactly the re-roll the second option was guarding against.
+So the bound is registered with the permission, not left to care.
+
+### AX15.2 What may be retried, decided by the parser and not by a reader
+
+> **Registered.** A retry is permitted **only** on an **envelope-level** defect, defined as: the raw
+> emission does not parse as JSON, **or** it parses without a top-level `claims` array. Both are decided
+> by `JSON.parse` and `Array.isArray` in the driver. Nothing else qualifies.
+>
+> **`{"claims": []}` is a well-formed envelope and is never retried.** It is the result the prompt
+> registers for a report asserting nothing about instance state, and two reports in this corpus are
+> structurally claim-free (§AX4), so an empty emission is an *expected* outcome. Retrying it would let
+> the instrument re-roll precisely the reports whose correct answer is nothing.
+>
+> **Content is never grounds for a retry** — not a low claim count, not claims the driver rejected as
+> structurally invalid, not an emission that looks wrong to whoever is watching. `rejected` is already a
+> recorded outcome (`claim-extraction.js` keeps rejections rather than dropping them, so a plumbing
+> failure cannot masquerade as a miss), and a report that emits little is a measurement, not a fault.
+>
+> **At most one retry per report.** A second envelope-level failure is recorded as a failed extraction
+> and the report carries that status into the figures. There is no third attempt and no operator
+> discretion to grant one.
+
+### AX15.3 The retry is auditable, which is what makes the bound checkable
+
+A bound nobody can verify after the fact is an attestation, and §AX0's whole substitution is *prefer a
+property you can check on the artifact*.
+
+> **Registered:** every attempt is preserved on disk. A retried report keeps its first emission
+> alongside its second, and the driver writes a manifest recording, per report, how many attempts ran
+> and which envelope-level defect triggered each retry. **A re-roll is therefore visible in the
+> artifacts** — a retry with no recorded defect, or a second attempt on a report whose first emission
+> parsed, is detectable by anyone reading the tree, without trusting the operator's account of it.
+
+**What this does not claim.** The retry runs in a fresh context, so the second attempt is not informed by
+the first — but it is a second sample from a stochastic process, and on an envelope-level defect that is
+the entire point. It buys nothing against a model that emits a valid envelope with claims missing from
+it; that failure is invisible here by construction and is what enumeration recall exists to measure.
+
+### AX15.4 What this does not decide
+
+No figure. Nothing about how many reports will need a retry — the honest expectation is zero, and
+recording the rule is not a prediction that it will fire.
+
+---
+
+## AX16. The two gaps the sweep exposed, registered before either repair ran
+
+Registered **2026-08-13**, after the sweep was frozen and committed (`c9feb11`) and after the metadata
+snapshot was collected, but **before any recall, spurious or AX-4 figure was computed**. Both repairs
+below were put to the operator as choices and both were chosen; what is registered here is the *bound*
+on each, on §AX15.1's principle that a permission does not carry itself.
+
+### AX16.1 The fixture predates polarity, so §AX2.4's denominator was empty
+
+§AX13 added `polarity` to the extractor's output schema. It was legal when made — no report had been
+extracted, so there was no output to respond to — and the section says so. **What it did not check is
+the artifact one step away.** The held-out inventory was frozen earlier (§AX2.2), carries no `polarity`,
+and the adjudicator's first branch refuses a claim without one.
+
+Measured, not predicted: all **62** inventory claims adjudicate `unresolvable / no_polarity`. §AX2.4
+requires every inventory claim adjudicated precisely so **AX-4** has a denominator, so AX-4 was
+unmeasurable — the second time in this instrument's history a prediction has been found unmeasurable as
+filed (§AX6 records the first, and its repair *was* §AX2.4).
+
+**This is §AX14.7's sentence again, one artifact further out.** A rule and its enforcement are different
+artifacts; so are an amendment and the fixtures it invalidates. §AX13 reasoned carefully about whether
+the freeze permitted the change and never asked what else consumed the schema.
+
+### AX16.2 The polarity amendment is an OVERLAY, and the fixture is not touched
+
+The obvious repair — add the field to the inventory — would edit an artifact whose entire evidential
+value is that `git log` shows it predating the extractor.
+
+> **Registered:** polarity is recorded in a **separate overlay file**, keyed by inventory claim id. The
+> fixture `benchmark/v14-claim-inventory-heldout.json` is **not modified**, stays byte-identical to the
+> commit that precedes the extractor, and its guarantee is untouched. The overlay is a later artifact
+> and is labelled as one.
+>
+> **Authored in fresh contexts, one per report**, holding only that report's inventory propositions —
+> never any extractor output, never an adjudication verdict, never a denominator or a recall target.
+> Per-report rather than per-claim because the contamination that matters is *extractor output*, and
+> sibling propositions from the same report carry none of it; §AX12.1's isolation is reproduced against
+> the hazard that actually exists here rather than copied by shape.
+>
+> **Polarity only.** No proposition, kind, subject or occurrence may be altered, and this is checked
+> mechanically rather than promised: the overlay carries no field but `polarity`, so there is nothing
+> for a drifting judgement to alter.
+
+**What must travel with every AX-4 quote, and it is a real reduction:** §AX2.2's pre-extractor guarantee
+covers this fixture's propositions, kinds, subjects and occurrences. **It does not cover polarity**,
+which was assigned after output existed — by contexts blind to that output, which is a weaker property
+than commit order and is offered as exactly that.
+
+**Why the repair was judged worth making, disclosed because it is operator exposure.** Before choosing,
+the operator measured the refuted population under each polarity taken uniformly: **10 and 11**, either
+side of AX-4's **K=5** floor. So the repair buys a live verdict rather than another `not exercised`.
+This inspected the *size* of a population, never which claims compose it, and it tuned nothing.
+
+### AX16.3 Matching is a judgement, so it is dispatched and not performed
+
+§AX2.3 defines recall as *"inventory claims the extractor emitted"*, matched per proposition. **It never
+registers who decides a match.** Two independently-worded propositions asserting one thing must be
+judged the same, and §AX12.2 deliberately built the extractor from a different operationalisation than
+the fixture — so honest wording divergence is guaranteed by construction, and it is the measurement.
+
+The operator is the contaminated party (§AX12.1 discloses reading one held-out proposition and the
+per-arm denominators), and the contamination runs in the direction that **inflates** recall.
+
+> **Registered, before the first match was made:** matching runs in **fresh contexts, one per report**,
+> each holding that report's inventory propositions and that report's emitted propositions and nothing
+> else — never another report, never the fixture as a whole, never a denominator, never the recall
+> target, never `DECISION.md`. It is posed as a neutral correspondence task; the dispatched context is
+> not told a recall figure depends on it. **The operator dispatches; the operator does not match.**
+>
+> **The same pass yields the spurious rate**, since emitted claims left unmatched are exactly §AX2.5's
+> numerator — one judgement, not two, so the two figures cannot disagree about what "the same claim"
+> means.
+
+### AX16.4 The snapshot's table list is dictated by BOTH frozen artifacts
+
+§AX14.4 registered the snapshot as collected over "the tables the frozen claims name", written when the
+only frozen artifact in view was the sweep. §AX2.4 requires **inventory** claims adjudicated too, and
+one table named by the inventory is named by no emitted claim — so a snapshot scoped to emitted claims
+alone returns `probe_failed` for it, an instrument gap masquerading as claim-level indeterminacy.
+
+> **Registered (amendment, in §AT3's sense — it restores a shipped condition to what §AX2.4 already
+> required, and is strictly a widening):** the table list is the union over **every frozen artifact the
+> adjudication reads** — the sweep and the held-out inventory. Both predate the snapshot, so §AX14.4's
+> bound is unweakened: the list is still dictated by frozen artifacts and still re-derivable from the
+> queries recorded in the snapshot's provenance.
+
+### AX16.5 What this does not decide
+
+No figure. Nothing about how many inventory claims will be matched, what either arm's recall will be, or
+whether AX-1a/AX-1b pass. §AX7.2 is untouched and continues to govern: if the extractor is repaired in
+response to what the matching finds, no valid recall figure is available from v14 at all.
+
+---
+
+## AX17. The pass record — figures, and the scorer class the guard forced
+
+Written **2026-08-13**, closing the sweep §AX7.1 registered as one pass. Every number below is
+re-derivable from committed artifacts by `node benchmark/scripts/pass-figures.js`; none of it rests on
+a transcript of the session that produced it.
+
+### AX17.1 The scorer is a second artifact class, and a guard is why
+
+The figures code was first written inside the sweep driver, which is in the §AX5 cleared set, and the
+clearing test went red on *"no cleared file reads the inventory fixture at runtime"*.
+
+**The guard was right and the code was wrong.** Recall's denominator IS the fixture, so a scorer must
+read it — which means a scorer cannot be a member of a set defined by not reading it. The available
+move at that moment was to relax the check, since the author knew this particular read was innocent.
+That is precisely the move §AR1a and §AX14.7 record as the failure mode, so the check stands unchanged
+and the code moved out.
+
+> **Registered:** `benchmark/scripts/pass-figures.js` is a **scorer**, exempt from the fixture-read
+> check and **from nothing else**. It remains subject to every corpus-vocabulary pattern and to the
+> report-file-naming check, and it remains **discovered by the walk** — it cannot be renamed, or joined
+> by a sibling, without the test noticing. The exemption is a named list of one, not a category code can
+> drift into, and cleared-vs-scorer membership is asserted disjoint so the exemption is unreachable from
+> inside the instrument.
+>
+> Three properties carry the weight clearing used to: it **decides nothing** (asserted mechanically — it
+> may count verdicts but may not compute one), it **cannot feed back** (it runs after extraction and
+> adjudication are frozen), and it is **discovered**.
+
+### AX17.2 The figures
+
+Reported per arm, never pooled (§AD7, §AX7.1). Twenty reports; 254 claims emitted (native 214 over 10
+reports, custom 40 over 10).
+
+| | native | custom |
+|---|---|---|
+| **AX-1 enumeration recall** | **58/60 = 96.7% — PASSED** | 2/2 = 100% — **NOT EXERCISED (n=2 < 5)** |
+| **AX-5 spurious rate** (upper bound, no carve-out) | 17/80 = **21.3%** | 5/8 = **62.5%** |
+| **Veracity** — refuted / supported / unresolvable | 34 / 17 / 163 | 1 / 7 / 32 |
+
+**AX-2** — ≥1 claim refuted across the 20: **35 refuted, PASSED**, and *pre-satisfied* (§AX6): one
+report was already known to carry a false claim, so the falsifier was impossible. That is the finding,
+not the test.
+
+**AX-4** — misses not concentrated in refuted claims: **0 of 7** refuted inventory claims were missed
+(**0.0%**) against a per-arm miss rate of **3.3%**. **PASSED**, and exercised — the refuted population
+is 7, above the K=5 floor, which is what §AX16.2's overlay bought.
+
+**AX-5 carries no carve-out.** §AX2.5 permits ruling an emitted claim a *correct addition* the inventory
+missed; it was **not exercised**, deliberately. The carve-out can only lower the rate, and the operator
+is contaminated in the extractor's favour, so both figures above are **upper bounds** rather than
+estimates.
+
+### AX17.3 What the figures say, and the larger thing they do not
+
+**The extractor works.** 96.7% native recall against a fixture written before it existed, from an
+independent operationalisation of §AX3 (§AX12.2), is the substitution in §AX1 doing its job — and AX-4
+says the misses are not the ones that matter, which is the only evidence available that recall transfers
+to detection now that AX-3 is withdrawn.
+
+**The custom arm measures almost nothing, and this was known before the sweep** (§AX10, §AX11): a
+denominator of 2 floors AX-1b to `not exercised`, and its 62.5% spurious rate sits on 8 emitted claims.
+Both are recorded; neither is evidence.
+
+**The honest headline is the unresolvable column.** 195 of 254 emitted claims — **77%** — are
+`unresolvable`, overwhelmingly `mutable` and `no_subject_table`. §AX13.3 registered this consequence
+before any code ran: `supported` is reachable only for schema existence, so a corpus of values and
+counts returns mostly nothing. It did.
+
+**Therefore this axis does not answer the gate**, and saying so plainly is worth more than the numbers
+above. `BACKLOG.md`'s gate is *"measure whether the Troubleshooter's root causes are RIGHT."* What this
+pass measures is whether a report's **schema-level factual claims** survive a metadata read. A report
+can be entirely truthful about which tables and columns exist and still name the wrong root cause —
+which is §AO2's finding restated, and §AO2 is one of the two findings that opened this gate. **The
+correctness axis as commissioned is a claim-veracity axis.** It is a real instrument and it caught real
+false claims; it is not the gate's answer, and quoting it as one would be the substitution §AX1 was
+careful to avoid, arriving at the end instead of the beginning.
+
+### AX17.4 Findings, documented-not-fixed (§AX7.3)
+
+1. **§AX13's amendment invalidated a fixture nobody re-checked** — the whole of §AX16.1. An amendment is
+   an edit to a *system*, and the artifacts that consume the amended schema are part of it.
+2. **The snapshot's scope was derived from one frozen artifact when two fed the adjudication** (§AX16.4).
+   Same shape as 1: a rule stated against the case in view.
+3. **`no_subject_table` accounts for 50 of the 195 unresolvables** (22 native, 28 custom) — claims whose
+   subject the extractor could not attribute to a table. Whether that is an extractor limitation or a
+   property of the prose is **unmeasured**; it is the largest single lever on determinacy and nothing
+   here establishes which side it sits on.
+4. **The scorer class was created mid-pass** (§AX17.1). It is registered and constrained, but it was
+   introduced after figures existed rather than before, and that ordering is weaker than every other
+   artifact in §AX.
+
+### AX17.5 Reopening condition (§AX7.4)
+
+The v14 correctness instrument is **closed**. It reopens only on one of:
+
+1. **A custom arm with a held-out inventory denominator ≥ 10 claims** — §AX10's condition, unchanged.
+   Only a future pass can supply it; §AX7.2 forbids redrawing from the development set and the eligible
+   reports are exhausted.
+2. **An adjudicator that can settle values and counts** against a reference state contemporaneous with
+   the run — which is a different instrument, not an amendment to this one, and would have to be
+   commissioned as such.
+3. **A live observation** contradicting a figure above.
+
+**§AQ3 is untouched:** this commissions no gate term, so no gate figure moves and none may be differenced
+against v12/v13/v14.
+
+### AX17.6 What review found in the scorer, recorded rather than quietly fixed
+
+Following §AX13.5's and §AX14.7's precedent. Eight findings on PR #258, **all after the figures existed
+and none of which moved one** — the headline numbers are byte-identical before and after, which is the
+only reason this is a footnote rather than a retraction.
+
+1. **The overlay key was double-prefixed, and it worked.** Fixture claim ids are already
+   report-qualified (`row-NN/CNN`); the scorer prepended the report again, and §AX16.2's overlay was
+   authored to match that doubled shape. Reproduced by review: an overlay regenerated with the *natural*
+   key makes every lookup `undefined`, the adjudicator returns `no_polarity`, and **AX-4 collapses to
+   `not exercised (0 refuted)` with no error anywhere**. The figure was correct by a coincidence of two
+   artifacts sharing one mistake. Now keyed verbatim, with coverage asserted per claim.
+2. **A floored arm could set AX-4's bar.** The bar was `max` over both arms' miss rates, so the custom
+   arm — n=2, floored `not exercised` by §AX11 as evidentially worthless — could set it to 0.5 off a
+   single miss and pass AX-4 unconditionally, writing that floored fraction into `compared_against`
+   unlabelled. **This is §AX11's own failure reproduced inside the code applying §AX11.** Only arms that
+   reached the floor may now set the bar; with none eligible the verdict is `not exercised`, never a pass.
+3. **The scorer trusted the dispatched matching files with no structural check** — an extra `a_to_b` key
+   would push recall above its own denominator, a dropped one would lower it, silently in both
+   directions. A dispatched context is precisely the input that cannot be assumed well-formed. Key sets
+   are now asserted equal to both frozen artifacts, per report.
+4. **`freeze()` was not all-or-nothing** despite a header saying so in capitals: it normalised inside the
+   write loop, so a throw on a later report left earlier artifacts on disk with no manifest — a
+   half-frozen tree that reads as *complete* to a later scorer run. All records are now built before any
+   is written.
+5. **§AX15.2's ground for a retry was recorded but not enforced** — the attempt *count* was checked, so a
+   second attempt whose predecessor parsed cleanly was accepted and frozen. A re-roll, visible in the
+   manifest and not refused, under a header claiming the bound is enforced here rather than described
+   here. Now refused, including after an empty-but-well-formed envelope.
+6. **Two test comments asserted more than their tests did** — scorer/cleared disjointness was list
+   membership only (a cleared file could have reached the fixture transitively through a `require`), and
+   "cannot be joined by a sibling" was false for any scorer helper whose filename missed the discovery
+   pattern. Both are now checked: a require-graph walk, and a constraint that every scorer filename *be*
+   discoverable.
+7. **`0 of 0` rows contradicted the fixture's own `zero_claim_reporting_rule`** ("never as 1.0, never as
+   0.0"). Now emitted as `not applicable`.
+
+**What this says about the instrument, and it is the sentence §AX13.5 and §AX14.7 already wrote twice.**
+Findings 1, 2 and 5 are each a registered principle defeated by a mechanical detail — a key format, a
+`max`, an unchecked precondition — inside code written by the author who had just registered that
+principle. Finding 2 is the sharpest: the rule and its violation are in the same function. **Three
+sittings, three repetitions of one lesson: writing a rule is not evidence about its enforcement, and the
+gap is always mechanical rather than conceptual.**

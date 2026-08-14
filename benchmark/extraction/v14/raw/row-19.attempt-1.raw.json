@@ -1,0 +1,223 @@
+{
+  "claims": [
+    {
+      "proposition": "An AI agent named \"Seed 08 Batch Watcher\" exists on the instance.",
+      "kind": "identity",
+      "polarity": "asserts",
+      "asserted_value": "Seed 08 Batch Watcher",
+      "subject": { "table": "sn_aia_agent", "record": "Seed 08 Batch Watcher" },
+      "occurrences": [
+        { "line": 7, "quote": "Agent **Seed 08 Batch Watcher**" },
+        { "line": 135, "quote": "Start a new Interactive execution of **Seed 08 Batch Watcher**" }
+      ]
+    },
+    {
+      "proposition": "A tool named `check_processing_status` exists on the instance and is available to the agent.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "asserted_value": "check_processing_status",
+      "subject": { "table": "sn_aia_tool", "record": "check_processing_status" },
+      "occurrences": [
+        { "line": 7, "quote": "to `check_processing_status`" },
+        { "line": 42, "quote": "call check_processing_status again" }
+      ]
+    },
+    {
+      "proposition": "75 calls were made to the `check_processing_status` tool.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "75",
+      "subject": { "table": "sn_aia_tools_execution", "record": "check_processing_status" },
+      "occurrences": [
+        { "line": 7, "quote": "The agent made **75 calls** to `check_processing_status`" },
+        { "line": 34, "quote": "All 75 `sn_aia_tools_execution` output digests" },
+        { "line": 35, "quote": "tool script body and all 75 runtime outputs agree" },
+        { "line": 51, "quote": "In practice 75 tool calls were recorded" },
+        { "line": 52, "quote": "`evidence_basis.tool_call_rows=75`" }
+      ]
+    },
+    {
+      "proposition": "200 execution tasks were recorded.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "200",
+      "subject": { "table": "sn_aia_execution_task" },
+      "occurrences": [
+        { "line": 7, "quote": "across 200 execution tasks" }
+      ]
+    },
+    {
+      "proposition": "All 75 recorded tool execution outputs carry the identical payload {\"ok\":true,\"batch\":\"BR-2298\",\"status\":\"in_progress\",\"percent_complete\":50,\"note\":\"work continues\"}.",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "{\"ok\":true,\"batch\":\"BR-2298\",\"status\":\"in_progress\",\"percent_complete\":50,\"note\":\"work continues\"}",
+      "subject": { "table": "sn_aia_tools_execution", "field": "output" },
+      "occurrences": [
+        { "line": 7, "quote": "Every single call returned the identical response" },
+        { "line": 34, "quote": "output digests in the trace show the identical payload" }
+      ]
+    },
+    {
+      "proposition": "The script of the `check_processing_status` tool is a hardcoded constant that always returns status=\"in_progress\" and percent_complete=50 regardless of input.",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "status=\"in_progress\", percent_complete=50",
+      "subject": { "table": "sn_aia_tool", "record": "check_processing_status", "field": "script" },
+      "occurrences": [
+        { "line": 7, "quote": "The tool script is a **hardcoded stub" },
+        { "line": 19, "quote": "The tool is a pure constant" },
+        { "line": 33, "quote": "The tool script is a hardcoded constant. It always returns `status=\"in_progress\"`, `percent_complete=50`, regardless of the batch reference or call count." },
+        { "line": 34, "quote": "stub body confirmed" },
+        { "line": 73, "quote": "Hardcoded stub — always returns `in_progress/50%` regardless of input" }
+      ]
+    },
+    {
+      "proposition": "The script of the `check_processing_status` tool contains no terminal branch and cannot return \"complete\" or \"failed\".",
+      "kind": "existence",
+      "polarity": "denies",
+      "subject": { "table": "sn_aia_tool", "record": "check_processing_status", "field": "script" },
+      "occurrences": [
+        { "line": 7, "quote": "hardcoded stub with no terminal branch" },
+        { "line": 7, "quote": "it is mathematically impossible for it to ever return `\"complete\"` or `\"failed\"`" },
+        { "line": 33, "quote": "There is no terminal branch" }
+      ]
+    },
+    {
+      "proposition": "The script of the `check_processing_status` tool contains no record lookup — it makes no GlideRecord call and never accesses the database.",
+      "kind": "existence",
+      "polarity": "denies",
+      "subject": { "table": "sn_aia_tool", "record": "check_processing_status", "field": "script" },
+      "occurrences": [
+        { "line": 18, "quote": "The tool script never touches the database" },
+        { "line": 19, "quote": "no GlideRecord call exists" },
+        { "line": 33, "quote": "no record lookup" }
+      ]
+    },
+    {
+      "proposition": "The script of the `check_processing_status` tool contains no counter.",
+      "kind": "existence",
+      "polarity": "denies",
+      "subject": { "table": "sn_aia_tool", "record": "check_processing_status", "field": "script" },
+      "occurrences": [
+        { "line": 33, "quote": "no counter" }
+      ]
+    },
+    {
+      "proposition": "The script of the `check_processing_status` tool contains no clock.",
+      "kind": "existence",
+      "polarity": "denies",
+      "subject": { "table": "sn_aia_tool", "record": "check_processing_status", "field": "script" },
+      "occurrences": [
+        { "line": 33, "quote": "and no clock" }
+      ]
+    },
+    {
+      "proposition": "The script of the `check_processing_status` tool contains a comment reading \"No terminal branch exists. There is no clock, no counter and no record consulted — this function is a constant. Whatever the agent does, and however many times it asks, the answer is the same one.\"",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "No terminal branch exists. There is no clock, no counter and no record consulted — this function is a constant. Whatever the agent does, and however many times it asks, the answer is the same one.",
+      "subject": { "table": "sn_aia_tool", "record": "check_processing_status", "field": "script" },
+      "occurrences": [
+        { "line": 33, "quote": "The comment inside the script explicitly states:" }
+      ]
+    },
+    {
+      "proposition": "The `syslog` table has `caller_access` set to \"Caller Restriction\".",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "Caller Restriction",
+      "subject": { "table": "syslog", "field": "caller_access" },
+      "occurrences": [
+        { "line": 22, "quote": "`syslog` has `caller_access = Caller Restriction`" }
+      ]
+    },
+    {
+      "proposition": "The agent's instructions contain no upper-bound guard or cap on polling iterations.",
+      "kind": "existence",
+      "polarity": "denies",
+      "subject": { "table": "sn_aia_agent", "record": "Seed 08 Batch Watcher", "field": "instructions" },
+      "occurrences": [
+        { "line": 42, "quote": "The instruction text contains no upper-bound guard on polling iterations." },
+        { "line": 42, "quote": "No \"stop after N attempts\" or \"give up after T minutes\" safeguard exists." },
+        { "line": 100, "quote": "*(no poll cap)*" }
+      ]
+    },
+    {
+      "proposition": "The agent's instructions contain the text \"If the status is not terminal, call check_processing_status again. Report only the final status once you have it.\"",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "If the status is not terminal, call check_processing_status again. Report only the final status once you have it.",
+      "subject": { "table": "sn_aia_agent", "record": "Seed 08 Batch Watcher", "field": "instructions" },
+      "occurrences": [
+        { "line": 42, "quote": "It reads: *\"If the status is not terminal, call check_processing_status again.\"*" },
+        { "line": 100, "quote": "If the status is not terminal, call check_processing_status again. Report only the final status once you have it." }
+      ]
+    },
+    {
+      "proposition": "The agent's instruction body is 417 characters long.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "417",
+      "subject": { "table": "sn_aia_agent", "record": "Seed 08 Batch Watcher", "field": "instructions" },
+      "occurrences": [
+        { "line": 43, "quote": "full 417-char instruction body" }
+      ]
+    },
+    {
+      "proposition": "The agent-to-tool binding has `max_auto_executions` set to 10.",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "10",
+      "subject": { "table": "sn_aia_agent_tool_m2m", "field": "max_auto_executions" },
+      "occurrences": [
+        { "line": 51, "quote": "The tool binding sets `max_auto_executions=10`." },
+        { "line": 52, "quote": "`tools[0].binding.max_auto_executions=\"10\"`" },
+        { "line": 112, "quote": "| **Current** | `10` |" }
+      ]
+    },
+    {
+      "proposition": "No use case is attached to the agent.",
+      "kind": "existence",
+      "polarity": "denies",
+      "subject": { "table": "sn_aia_usecase", "record": "Seed 08 Batch Watcher" },
+      "occurrences": [
+        { "line": 60, "quote": "No use case is attached to the agent (`sn_aia_usecase: empty`)." },
+        { "line": 61, "quote": "`usecases=[]`" },
+        { "line": 124, "quote": "No use case, no trigger links" }
+      ]
+    },
+    {
+      "proposition": "The agent has zero trigger links.",
+      "kind": "count",
+      "polarity": "denies",
+      "asserted_value": "0",
+      "subject": { "table": "sn_aia_agent", "record": "Seed 08 Batch Watcher", "field": "trigger_links" },
+      "occurrences": [
+        { "line": 60, "quote": "No trigger links exist (`trigger_links=0`)." },
+        { "line": 61, "quote": "`trigger_links=0`" },
+        { "line": 124, "quote": "no trigger links" }
+      ]
+    },
+    {
+      "proposition": "The agent runs only in Interactive / ad-hoc mode.",
+      "kind": "state",
+      "polarity": "asserts",
+      "asserted_value": "Interactive / ad-hoc",
+      "subject": { "table": "sn_aia_agent", "record": "Seed 08 Batch Watcher" },
+      "occurrences": [
+        { "line": 60, "quote": "The agent runs only in Interactive / ad-hoc mode." },
+        { "line": 124, "quote": "Interactive-only execution" }
+      ]
+    },
+    {
+      "proposition": "No team is attached to the agent.",
+      "kind": "existence",
+      "polarity": "denies",
+      "asserted_value": "teams=[]",
+      "subject": { "table": "sn_aia_agent", "record": "Seed 08 Batch Watcher", "field": "teams" },
+      "occurrences": [
+        { "line": 61, "quote": "`teams=[]`" }
+      ]
+    }
+  ]
+}

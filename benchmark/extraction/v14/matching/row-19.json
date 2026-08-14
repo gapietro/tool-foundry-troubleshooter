@@ -1,0 +1,39 @@
+{
+  "a_to_b": {
+    "row-19/C01": "row-19/E07",
+    "row-19/C02": "row-19/E10",
+    "row-19/C03": "row-19/E08",
+    "row-19/C04": "row-19/E13",
+    "row-19/C05": "row-19/E14",
+    "row-19/C06": "row-19/E15",
+    "row-19/C07": "row-19/E16",
+    "row-19/C08": "row-19/E17",
+    "row-19/C09": "row-19/E18",
+    "row-19/C10": "row-19/E20",
+    "row-19/C11": "row-19/E09",
+    "row-19/C12": "row-19/E02",
+    "row-19/C13": "row-19/E01"
+  },
+  "b_class": {
+    "row-19/E01": "a",
+    "row-19/E02": "a",
+    "row-19/E03": "neither",
+    "row-19/E04": "neither",
+    "row-19/E05": "neither",
+    "row-19/E06": "a",
+    "row-19/E07": "a",
+    "row-19/E08": "a",
+    "row-19/E09": "a",
+    "row-19/E10": "a",
+    "row-19/E11": "neither",
+    "row-19/E12": "neither",
+    "row-19/E13": "a",
+    "row-19/E14": "a",
+    "row-19/E15": "a",
+    "row-19/E16": "a",
+    "row-19/E17": "a",
+    "row-19/E18": "a",
+    "row-19/E19": "c",
+    "row-19/E20": "a"
+  }
+}

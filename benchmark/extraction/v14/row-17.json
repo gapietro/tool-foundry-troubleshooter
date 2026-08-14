@@ -1,0 +1,392 @@
+{
+  "report": "row-17",
+  "arm": "native",
+  "claim_count": 15,
+  "claims": [
+    {
+      "id": "row-17/E01",
+      "proposition": "75 calls to the tool `check_processing_status` were made, recorded as 75 tool-call rows in `sn_aia_tools_execution`.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "75",
+      "subject": {
+        "table": "sn_aia_tools_execution"
+      },
+      "occurrences": [
+        {
+          "line": 7,
+          "quote": "made **75 calls** to `check_processing_status`"
+        },
+        {
+          "line": 35,
+          "quote": "Every one of the 75 tool-call output digests"
+        },
+        {
+          "line": 56,
+          "quote": "75 tool-call rows (`sn_aia_tools_execution`) are recorded"
+        },
+        {
+          "line": 59,
+          "quote": "agent_trace summary: `tool_call_rows: 75`"
+        },
+        {
+          "line": 125,
+          "quote": "investigate why 75 tool calls occurred"
+        },
+        {
+          "line": 146,
+          "quote": "appears in all 75 tool-call output digests"
+        }
+      ]
+    },
+    {
+      "id": "row-17/E02",
+      "proposition": "A tool named `check_processing_status` exists on the instance.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "subject": {
+        "table": "sn_aia_tool",
+        "record": "check_processing_status"
+      },
+      "occurrences": [
+        {
+          "line": 7,
+          "quote": "`check_processing_status`"
+        }
+      ]
+    },
+    {
+      "id": "row-17/E03",
+      "proposition": "The GenAI provider configured for the instance is Amazon Bedrock with model claude-sonnet-4-6.",
+      "kind": "identity",
+      "polarity": "asserts",
+      "asserted_value": "Amazon Bedrock / claude-sonnet-4-6",
+      "subject": {
+        "record": "31fee654ff116e10b9c9fffffffffffd"
+      },
+      "occurrences": [
+        {
+          "line": 7,
+          "quote": "The GenAI provider (Amazon Bedrock / claude-sonnet-4-6)"
+        }
+      ]
+    },
+    {
+      "id": "row-17/E04",
+      "proposition": "The instructions field of the AI agent contains no maximum retry count, no polling cap, no wall-clock timeout, no fallback message, and no condition permitting the agent to stop without a terminal status.",
+      "kind": "state",
+      "polarity": "denies",
+      "subject": {
+        "table": "sn_aia_agent",
+        "record": "fad5a34c531446f6989b071636f5491e",
+        "field": "instructions"
+      },
+      "occurrences": [
+        {
+          "line": 7,
+          "quote": "the agent instructions contain no polling cap, retry limit, or timeout escape"
+        },
+        {
+          "line": 44,
+          "quote": "There is no maximum retry count, no wall-clock timeout, no fallback message"
+        },
+        {
+          "line": 113,
+          "quote": "(no limit)"
+        }
+      ]
+    },
+    {
+      "id": "row-17/E05",
+      "proposition": "An execution plan record with sys_id c24f27032ba6431017a6ffbeee91bf4d exists on the instance.",
+      "kind": "identity",
+      "polarity": "asserts",
+      "asserted_value": "c24f27032ba6431017a6ffbeee91bf4d",
+      "subject": {
+        "record": "c24f27032ba6431017a6ffbeee91bf4d"
+      },
+      "occurrences": [
+        {
+          "line": 15,
+          "quote": "execution plan `c24f27032ba6431017a6ffbeee91bf4d`"
+        }
+      ]
+    },
+    {
+      "id": "row-17/E06",
+      "proposition": "An AI agent record exists on the instance in table `sn_aia_agent` with sys_id fad5a34c531446f6989b071636f5491e.",
+      "kind": "identity",
+      "polarity": "asserts",
+      "asserted_value": "fad5a34c531446f6989b071636f5491e",
+      "subject": {
+        "table": "sn_aia_agent",
+        "record": "fad5a34c531446f6989b071636f5491e"
+      },
+      "occurrences": [
+        {
+          "line": 16,
+          "quote": "agent `fad5a34c531446f6989b071636f5491e`"
+        },
+        {
+          "line": 43,
+          "quote": "`sn_aia_agent`, sys_id `fad5a34c531446f6989b071636f5491e`, field `instructions`"
+        },
+        {
+          "line": 112,
+          "quote": "`sn_aia_agent`, sys_id `fad5a34c531446f6989b071636f5491e`, field `instructions`"
+        }
+      ]
+    },
+    {
+      "id": "row-17/E07",
+      "proposition": "A tool record exists on the instance in table `sn_aia_tool` with sys_id 96d2f732dda847868688307d4c5cd375.",
+      "kind": "identity",
+      "polarity": "asserts",
+      "asserted_value": "96d2f732dda847868688307d4c5cd375",
+      "subject": {
+        "table": "sn_aia_tool",
+        "record": "96d2f732dda847868688307d4c5cd375"
+      },
+      "occurrences": [
+        {
+          "line": 17,
+          "quote": "tool `96d2f732dda847868688307d4c5cd375`"
+        },
+        {
+          "line": 31,
+          "quote": "`sn_aia_tool`, sys_id `96d2f732dda847868688307d4c5cd375`, field `script`"
+        },
+        {
+          "line": 69,
+          "quote": "`sn_aia_tool`, sys_id `96d2f732dda847868688307d4c5cd375`, field `script`"
+        }
+      ]
+    },
+    {
+      "id": "row-17/E08",
+      "proposition": "The tool script reads no table and consults no records.",
+      "kind": "state",
+      "polarity": "denies",
+      "subject": {
+        "table": "sn_aia_tool",
+        "record": "96d2f732dda847868688307d4c5cd375",
+        "field": "script"
+      },
+      "occurrences": [
+        {
+          "line": 18,
+          "quote": "The tool script reads no table (pure constant)"
+        },
+        {
+          "line": 19,
+          "quote": "No records are consulted by the tool"
+        }
+      ]
+    },
+    {
+      "id": "row-17/E09",
+      "proposition": "A GenAI definition record with sys_id 31fee654ff116e10b9c9fffffffffffd exists on the instance.",
+      "kind": "identity",
+      "polarity": "asserts",
+      "asserted_value": "31fee654ff116e10b9c9fffffffffffd",
+      "subject": {
+        "record": "31fee654ff116e10b9c9fffffffffffd"
+      },
+      "occurrences": [
+        {
+          "line": 20,
+          "quote": "definition `31fee654ff116e10b9c9fffffffffffd`"
+        }
+      ]
+    },
+    {
+      "id": "row-17/E10",
+      "proposition": "The agent is configured for conversational invocation (its trigger and wiring configuration is conversational).",
+      "kind": "state",
+      "polarity": "asserts",
+      "asserted_value": "conversational invocation",
+      "subject": {
+        "table": "sn_aia_agent",
+        "record": "fad5a34c531446f6989b071636f5491e"
+      },
+      "occurrences": [
+        {
+          "line": 21,
+          "quote": "conversational invocation confirmed"
+        }
+      ]
+    },
+    {
+      "id": "row-17/E11",
+      "proposition": "The `syslog` table has caller_access set to 'Caller Restriction', so access is denied for cross-scope callers.",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "Caller Restriction",
+      "subject": {
+        "table": "syslog",
+        "field": "caller_access"
+      },
+      "occurrences": [
+        {
+          "line": 22,
+          "quote": "syslog declares `caller_access = Caller Restriction`; DENIED for cross-scope callers."
+        },
+        {
+          "line": 150,
+          "quote": "syslog is caller-restricted"
+        }
+      ]
+    },
+    {
+      "id": "row-17/E12",
+      "proposition": "The script field of the AI agent tool contains a comment reading '// No terminal branch exists…this function is a constant'.",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "// No terminal branch exists…this function is a constant",
+      "subject": {
+        "table": "sn_aia_tool",
+        "record": "96d2f732dda847868688307d4c5cd375",
+        "field": "script"
+      },
+      "occurrences": [
+        {
+          "line": 32,
+          "quote": "The script body contains an explicit comment (`// No terminal branch exists…this function is a constant`)"
+        },
+        {
+          "line": 74,
+          "quote": "// No terminal branch exists…"
+        }
+      ]
+    },
+    {
+      "id": "row-17/E13",
+      "proposition": "The instructions field of the AI agent contains the sentence 'If the status is not terminal, call check_processing_status again.'",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "If the status is not terminal, call check_processing_status again.",
+      "subject": {
+        "table": "sn_aia_agent",
+        "record": "fad5a34c531446f6989b071636f5491e",
+        "field": "instructions"
+      },
+      "occurrences": [
+        {
+          "line": 44,
+          "quote": "If the status is not terminal, call check_processing_status again."
+        },
+        {
+          "line": 113,
+          "quote": "If the status is not terminal, call check_processing_status again."
+        }
+      ]
+    },
+    {
+      "id": "row-17/E14",
+      "proposition": "The instructions field of the AI agent is 417 characters long.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "417 chars",
+      "subject": {
+        "table": "sn_aia_agent",
+        "record": "fad5a34c531446f6989b071636f5491e",
+        "field": "instructions"
+      },
+      "occurrences": [
+        {
+          "line": 46,
+          "quote": "`instructions.agent.instructions` (417 chars)"
+        }
+      ]
+    },
+    {
+      "id": "row-17/E15",
+      "proposition": "An agent-tool binding record exists on the instance in table `sn_aia_agent_tool_m2m` with sys_id 9a1926554cb945b8a5fc6762a928058f.",
+      "kind": "identity",
+      "polarity": "asserts",
+      "asserted_value": "9a1926554cb945b8a5fc6762a928058f",
+      "subject": {
+        "table": "sn_aia_agent_tool_m2m",
+        "record": "9a1926554cb945b8a5fc6762a928058f"
+      },
+      "occurrences": [
+        {
+          "line": 55,
+          "quote": "`sn_aia_agent_tool_m2m`, sys_id `9a1926554cb945b8a5fc6762a928058f`, field `max_auto_executions`"
+        },
+        {
+          "line": 123,
+          "quote": "`sn_aia_agent_tool_m2m`, sys_id `9a1926554cb945b8a5fc6762a928058f`, field `max_auto_executions`"
+        }
+      ]
+    }
+  ],
+  "rejected": [
+    {
+      "claim": {
+        "proposition": "The script field of the AI agent tool always returns a constant result of status 'in_progress' with percent_complete 50, regardless of input, and contains no code path that can return 'complete' or 'failed'.",
+        "kind": "field_value",
+        "polarity": "asserts",
+        "asserted_value": "return JSON.stringify({ ok: true, batch: ref, status: 'in_progress', percent_complete: 50, note: 'work continues' });",
+        "subject": {
+          "table": "sn_aia_tool",
+          "record": "96d2f732dda847868688307d4c5cd375",
+          "field": "script"
+        },
+        "occurrences": [
+          {
+            "line": 7,
+            "quote": "the tool script is a **hardcoded constant** — it is physically incapable of returning any status other than `in_progress`"
+          },
+          {
+            "line": 28,
+            "quote": "Tool script is a hardcoded constant (PRIMARY)"
+          },
+          {
+            "line": 32,
+            "quote": "There is no code path that can ever return `complete` or `failed`."
+          },
+          {
+            "line": 34,
+            "quote": "return JSON.stringify({ ok: true, batch: ref, status: 'in_progress', percent_complete: 50, note: 'work continues' });"
+          },
+          {
+            "line": 78,
+            "quote": "status: 'in_progress', percent_complete: 50,"
+          }
+        ]
+      },
+      "reason": "quote is not verbatim at line 78"
+    },
+    {
+      "claim": {
+        "proposition": "The `max_auto_executions` field on the agent-tool binding record is set to 10.",
+        "kind": "field_value",
+        "polarity": "asserts",
+        "asserted_value": "10",
+        "subject": {
+          "table": "sn_aia_agent_tool_m2m",
+          "record": "9a1926554cb945b8a5fc6762a928058f",
+          "field": "max_auto_executions"
+        },
+        "occurrences": [
+          {
+            "line": 56,
+            "quote": "The binding declares `max_auto_executions: 10`"
+          },
+          {
+            "line": 59,
+            "quote": "binding field `max_auto_executions: \"10\"`"
+          },
+          {
+            "line": 124,
+            "quote": "- **Current value:** `10`"
+          }
+        ]
+      },
+      "reason": "quote is not verbatim at line 59"
+    }
+  ],
+  "conflicts": [],
+  "defects": []
+}

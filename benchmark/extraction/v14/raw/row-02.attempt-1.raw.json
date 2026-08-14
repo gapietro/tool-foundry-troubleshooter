@@ -1,0 +1,23 @@
+{
+  "claims": [
+    {
+      "proposition": "A tool named measure_request exists and is available to the AI Agent on the instance.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "asserted_value": "measure_request",
+      "subject": { "record": "measure_request" },
+      "occurrences": [
+        { "line": 2, "quote": "The agent processed the input text using the measure_request tool" }
+      ]
+    },
+    {
+      "proposition": "The number of errors reported in the AI Agent execution trace is zero.",
+      "kind": "count",
+      "polarity": "denies",
+      "asserted_value": "no errors",
+      "occurrences": [
+        { "line": 2, "quote": "with no errors reported in the execution trace" }
+      ]
+    }
+  ]
+}

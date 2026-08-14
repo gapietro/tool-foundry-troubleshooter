@@ -1,0 +1,51 @@
+{
+  "claims": [
+    {
+      "proposition": "An AI agent named \"Seed 08 Batch Watcher\" exists on the instance.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "subject": { "record": "Seed 08 Batch Watcher" },
+      "occurrences": [
+        { "line": 2, "quote": "The Seed 08 Batch Watcher agent execution" }
+      ]
+    },
+    {
+      "proposition": "A batch identified by the reference BR-2298 exists on the instance.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "asserted_value": "BR-2298",
+      "subject": { "record": "BR-2298" },
+      "occurrences": [
+        { "line": 2, "quote": "the processing status of batch BR-2298" }
+      ]
+    },
+    {
+      "proposition": "The table sn_aia_tools_execution exists on the instance.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "subject": { "table": "sn_aia_tools_execution" },
+      "occurrences": [
+        { "line": 18, "quote": "sn_aia_tools_execution table exists" }
+      ]
+    },
+    {
+      "proposition": "An execution task record with sys_id bf24bf0b2b6a431017a6ffbeee91bf3a exists on the instance.",
+      "kind": "identity",
+      "polarity": "asserts",
+      "asserted_value": "bf24bf0b2b6a431017a6ffbeee91bf3a",
+      "subject": { "record": "bf24bf0b2b6a431017a6ffbeee91bf3a", "field": "sys_id" },
+      "occurrences": [
+        { "line": 36, "quote": "execution_task sys_id: bf24bf0b2b6a431017a6ffbeee91bf3a" }
+      ]
+    },
+    {
+      "proposition": "A tool named check_processing_status is configured on the instance.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "subject": { "record": "check_processing_status" },
+      "occurrences": [
+        { "line": 61, "quote": "the check_processing_status tool call" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "claims": [
+    {
+      "proposition": "A count of incident tickets with category 'hardware' and subcategory 'bench' returns 0.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "0",
+      "subject": { "table": "incident", "field": "category" },
+      "occurrences": [
+        { "line": 2, "quote": "a count of 0 hardware category bench tickets" },
+        { "line": 8, "quote": "tool_call response showed count: 0" },
+        { "line": 17, "quote": "tool_call response showed count: 0" },
+        { "line": 29, "quote": "count tool returned 0" }
+      ]
+    },
+    {
+      "proposition": "No incident records matching the hardware category / bench subcategory criteria exist on the instance.",
+      "kind": "existence",
+      "polarity": "denies",
+      "subject": { "table": "incident" },
+      "occurrences": [
+        { "line": 2, "quote": "the absence of matching records in the system" },
+        { "line": 16, "quote": "no data found" },
+        { "line": 29, "quote": "no matching records exist" }
+      ]
+    },
+    {
+      "proposition": "The incident table exists on the instance.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "subject": { "table": "incident" },
+      "occurrences": [
+        { "line": 7, "quote": "incident table exists" }
+      ]
+    },
+    {
+      "proposition": "The incident table has valid fields.",
+      "kind": "state",
+      "polarity": "asserts",
+      "subject": { "table": "incident" },
+      "occurrences": [
+        { "line": 7, "quote": "has valid fields" }
+      ]
+    }
+  ]
+}
