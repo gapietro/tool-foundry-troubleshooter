@@ -1,6 +1,6 @@
 # Foundry Troubleshooter
 
-![Version](https://img.shields.io/badge/version-2026.08.1311-blue)
+![Version](https://img.shields.io/badge/version-2026.08.1312-blue)
 
 An AI-powered diagnostic agent that runs **entirely within ServiceNow**. When an AI Agent built with Foundry fails on a customer instance — where external AI tools are prohibited — the Troubleshooter ingests the failing execution, systematically inspects the agent's instructions, tools, schemas, data, and GenAI stack, finds the root cause, and produces a structured **Fix Report** to feed back into the builder AI.
 
@@ -51,6 +51,14 @@ middle band prescribes and no more — and the Phase 1b milestone is not met. Qu
 **v14** (`DESIGN.md` §5.1), as **native 5/10 · 50% · middle band** with **custom 0/10 · 0% · bottom
 band** — never one arm without the other. The v12 figures above are retained because they are what
 retired the cross-arm clauses; they are **not** the current standing.
+
+**Claim veracity is a separate axis and does not change the standing above.** The #212 pass
+(`benchmark/DECISION.md` §AX17) measured whether reports' factual claims survive a metadata read:
+enumeration recall **native 96.7%** (custom `not exercised`, n=2), and of 254 emitted claims **34
+refuted / 17 supported** on native and **1 / 7** on custom, with **77% unresolvable**. It is a
+claim-veracity axis, **not** an answer to "is the root cause right" — a report can be truthful about
+every table and column it names and still diagnose the wrong thing. Do not quote it as a correctness
+score.
 
 See `docs/ARCHITECTURE_DECISIONS.md` (Decision 0.5, partially superseded) and the benchmark protocol in `docs/IMPLEMENTATION_PLAN.md`.
 

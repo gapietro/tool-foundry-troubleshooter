@@ -9430,3 +9430,111 @@ alone returns `probe_failed` for it, an instrument gap masquerading as claim-lev
 No figure. Nothing about how many inventory claims will be matched, what either arm's recall will be, or
 whether AX-1a/AX-1b pass. §AX7.2 is untouched and continues to govern: if the extractor is repaired in
 response to what the matching finds, no valid recall figure is available from v14 at all.
+
+---
+
+## AX17. The pass record — figures, and the scorer class the guard forced
+
+Written **2026-08-13**, closing the sweep §AX7.1 registered as one pass. Every number below is
+re-derivable from committed artifacts by `node benchmark/scripts/pass-figures.js`; none of it rests on
+a transcript of the session that produced it.
+
+### AX17.1 The scorer is a second artifact class, and a guard is why
+
+The figures code was first written inside the sweep driver, which is in the §AX5 cleared set, and the
+clearing test went red on *"no cleared file reads the inventory fixture at runtime"*.
+
+**The guard was right and the code was wrong.** Recall's denominator IS the fixture, so a scorer must
+read it — which means a scorer cannot be a member of a set defined by not reading it. The available
+move at that moment was to relax the check, since the author knew this particular read was innocent.
+That is precisely the move §AR1a and §AX14.7 record as the failure mode, so the check stands unchanged
+and the code moved out.
+
+> **Registered:** `benchmark/scripts/pass-figures.js` is a **scorer**, exempt from the fixture-read
+> check and **from nothing else**. It remains subject to every corpus-vocabulary pattern and to the
+> report-file-naming check, and it remains **discovered by the walk** — it cannot be renamed, or joined
+> by a sibling, without the test noticing. The exemption is a named list of one, not a category code can
+> drift into, and cleared-vs-scorer membership is asserted disjoint so the exemption is unreachable from
+> inside the instrument.
+>
+> Three properties carry the weight clearing used to: it **decides nothing** (asserted mechanically — it
+> may count verdicts but may not compute one), it **cannot feed back** (it runs after extraction and
+> adjudication are frozen), and it is **discovered**.
+
+### AX17.2 The figures
+
+Reported per arm, never pooled (§AD7, §AX7.1). Twenty reports; 254 claims emitted (native 214 over 10
+reports, custom 40 over 10).
+
+| | native | custom |
+|---|---|---|
+| **AX-1 enumeration recall** | **58/60 = 96.7% — PASSED** | 2/2 = 100% — **NOT EXERCISED (n=2 < 5)** |
+| **AX-5 spurious rate** (upper bound, no carve-out) | 17/80 = **21.3%** | 5/8 = **62.5%** |
+| **Veracity** — refuted / supported / unresolvable | 34 / 17 / 163 | 1 / 7 / 32 |
+
+**AX-2** — ≥1 claim refuted across the 20: **35 refuted, PASSED**, and *pre-satisfied* (§AX6): one
+report was already known to carry a false claim, so the falsifier was impossible. That is the finding,
+not the test.
+
+**AX-4** — misses not concentrated in refuted claims: **0 of 7** refuted inventory claims were missed
+(**0.0%**) against a per-arm miss rate of **3.3%**. **PASSED**, and exercised — the refuted population
+is 7, above the K=5 floor, which is what §AX16.2's overlay bought.
+
+**AX-5 carries no carve-out.** §AX2.5 permits ruling an emitted claim a *correct addition* the inventory
+missed; it was **not exercised**, deliberately. The carve-out can only lower the rate, and the operator
+is contaminated in the extractor's favour, so both figures above are **upper bounds** rather than
+estimates.
+
+### AX17.3 What the figures say, and the larger thing they do not
+
+**The extractor works.** 96.7% native recall against a fixture written before it existed, from an
+independent operationalisation of §AX3 (§AX12.2), is the substitution in §AX1 doing its job — and AX-4
+says the misses are not the ones that matter, which is the only evidence available that recall transfers
+to detection now that AX-3 is withdrawn.
+
+**The custom arm measures almost nothing, and this was known before the sweep** (§AX10, §AX11): a
+denominator of 2 floors AX-1b to `not exercised`, and its 62.5% spurious rate sits on 8 emitted claims.
+Both are recorded; neither is evidence.
+
+**The honest headline is the unresolvable column.** 195 of 254 emitted claims — **77%** — are
+`unresolvable`, overwhelmingly `mutable` and `no_subject_table`. §AX13.3 registered this consequence
+before any code ran: `supported` is reachable only for schema existence, so a corpus of values and
+counts returns mostly nothing. It did.
+
+**Therefore this axis does not answer the gate**, and saying so plainly is worth more than the numbers
+above. `BACKLOG.md`'s gate is *"measure whether the Troubleshooter's root causes are RIGHT."* What this
+pass measures is whether a report's **schema-level factual claims** survive a metadata read. A report
+can be entirely truthful about which tables and columns exist and still name the wrong root cause —
+which is §AO2's finding restated, and §AO2 is one of the two findings that opened this gate. **The
+correctness axis as commissioned is a claim-veracity axis.** It is a real instrument and it caught real
+false claims; it is not the gate's answer, and quoting it as one would be the substitution §AX1 was
+careful to avoid, arriving at the end instead of the beginning.
+
+### AX17.4 Findings, documented-not-fixed (§AX7.3)
+
+1. **§AX13's amendment invalidated a fixture nobody re-checked** — the whole of §AX16.1. An amendment is
+   an edit to a *system*, and the artifacts that consume the amended schema are part of it.
+2. **The snapshot's scope was derived from one frozen artifact when two fed the adjudication** (§AX16.4).
+   Same shape as 1: a rule stated against the case in view.
+3. **`no_subject_table` accounts for 50 of the 195 unresolvables** (22 native, 28 custom) — claims whose
+   subject the extractor could not attribute to a table. Whether that is an extractor limitation or a
+   property of the prose is **unmeasured**; it is the largest single lever on determinacy and nothing
+   here establishes which side it sits on.
+4. **The scorer class was created mid-pass** (§AX17.1). It is registered and constrained, but it was
+   introduced after figures existed rather than before, and that ordering is weaker than every other
+   artifact in §AX.
+
+### AX17.5 Reopening condition (§AX7.4)
+
+The v14 correctness instrument is **closed**. It reopens only on one of:
+
+1. **A custom arm with a held-out inventory denominator ≥ 10 claims** — §AX10's condition, unchanged.
+   Only a future pass can supply it; §AX7.2 forbids redrawing from the development set and the eligible
+   reports are exhausted.
+2. **An adjudicator that can settle values and counts** against a reference state contemporaneous with
+   the run — which is a different instrument, not an amendment to this one, and would have to be
+   commissioned as such.
+3. **A live observation** contradicting a figure above.
+
+**§AQ3 is untouched:** this commissions no gate term, so no gate figure moves and none may be differenced
+against v12/v13/v14.

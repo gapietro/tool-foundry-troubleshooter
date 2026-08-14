@@ -17,6 +17,67 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1312 — 2026-08-13
+
+### Added — the sweep, the two repairs it exposed, and the first correctness figures (issue #212)
+
+**The pass ran.** Twenty reports extracted in twenty fresh contexts (§AX12.1 — the operator dispatches
+and does not extract), frozen, adjudicated against a live metadata snapshot, and scored. Figures are
+in `benchmark/extraction/v14/results.json` and re-derivable with
+`node benchmark/scripts/pass-figures.js`.
+
+| | native | custom |
+|---|---|---|
+| **AX-1 enumeration recall** | **58/60 = 96.7% — PASSED** | 2/2 — **NOT EXERCISED** (n=2 < 5) |
+| **AX-5 spurious rate** (upper bound, no carve-out) | 21.3% | 62.5% |
+| **Veracity** — refuted / supported / unresolvable | 34 / 17 / 163 | 1 / 7 / 32 |
+
+**AX-2** passed (35 refuted) and is *pre-satisfied*, §AX6. **AX-4** passed and is *exercised*: 0 of 7
+refuted inventory claims were missed, against a 3.3% per-arm miss rate.
+
+**The headline is the unresolvable column, not the passes.** 195 of 254 claims — 77% — are
+`unresolvable`, which §AX13.3 registered as the expected consequence before any code ran. So the axis
+**does not answer the gate**: it measures whether a report's schema-level claims survive a metadata
+read, and a report can be truthful about every table and column and still name the wrong root cause.
+That is §AO2 restated, and §AO2 is one of the two findings that opened this gate. Recorded in §AX17.3
+rather than left for a reader to notice.
+
+| file | what it is |
+|---|---|
+| `benchmark/scripts/claim-extraction-sweep.js` | sweep driver — enumerates the corpus, enforces the §AX15 retry bound, freezes all-or-nothing |
+| `benchmark/scripts/pass-figures.js` | the scorer — a **second artifact class** (§AX17.1) |
+| `benchmark/extraction/v14/` | frozen emissions, every raw attempt, matching results, manifest, results |
+| `benchmark/v14-metadata-snapshot.json` | 24 tables / 639 fields from gpinst01, provenance-recorded |
+| `benchmark/v14-claim-inventory-polarity-overlay.json` | §AX16.2 — polarity, as an overlay; the fixture is untouched |
+
+### Registered before running — §AX15, §AX16 (issue #212)
+
+- **§AX15** — the retry the operator chose, and the bound that keeps it from being a re-roll: envelope
+  defects only, decided by `JSON.parse`; an empty-but-well-formed envelope is never retried; content is
+  never grounds; one retry maximum; every attempt preserved and logged. **It never fired** — 20 of 20
+  envelopes were well-formed first time.
+- **§AX16.1–2** — the held-out inventory predates §AX13's polarity amendment, so all 62 inventory claims
+  adjudicated `no_polarity` and **AX-4 had no denominator**. Repaired as an **overlay**: the fixture
+  stays byte-identical to the commit preceding the extractor, and polarity was assigned in contexts
+  blind to extractor output — a weaker guarantee than commit order, labelled as such wherever AX-4 is
+  quoted.
+- **§AX16.3** — §AX2.3 never registered *who decides a match*. Matching is not mechanical and the
+  operator is contaminated in the direction that inflates recall, so it was dispatched to fresh
+  per-report contexts as a neutral correspondence task.
+- **§AX16.4** — the snapshot's table list is the union over **every** frozen artifact the adjudication
+  reads. One inventory-named table was outside the original scope and returned `probe_failed` — an
+  instrument gap wearing claim-level indeterminacy.
+
+### Changed — the clearing check gained a second artifact class (issue #212)
+
+The scorer must read the held-out inventory; the cleared set is defined by *not* reading it. The guard
+caught this when the figures code was written inside the cleared driver. **The check was not relaxed** —
+the code moved out, and `pass-figures.js` is exempt from that one check and from nothing else: still
+vocabulary-scanned, still forbidden from naming a report, still discovered by the walk, and asserted
+disjoint from the cleared set so the exemption is unreachable from inside the instrument.
+
+---
+
 ## 2026.08.1311 — 2026-08-13
 
 ### Added — the metadata probe, and the truncation that would have fabricated a `refuted` (issue #212)

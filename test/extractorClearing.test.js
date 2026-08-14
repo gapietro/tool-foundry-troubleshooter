@@ -73,6 +73,21 @@ const CLEARED = [
     'test/claimExtractionSweep.test.js',
 ];
 
+/**
+ * The SCORER — a second artifact class, registered in §AX17.
+ *
+ * It is not in CLEARED and cannot be: the cleared set forbids reading the
+ * held-out inventory at runtime, and recall's denominator IS that fixture. A
+ * scorer unable to open it could not compute the figure.
+ *
+ * So it is exempt from that ONE check and from nothing else. It is still held to
+ * every corpus-vocabulary pattern, still forbidden from naming a report file,
+ * and — the part that matters — still DISCOVERED by the walk below, so a scorer
+ * cannot be renamed or joined by a sibling without this test noticing. The
+ * exemption is a named list of one, not a category anything can drift into.
+ */
+const SCORER = ['benchmark/scripts/pass-figures.js'];
+
 const PROMPT = 'benchmark/extraction/claim-extraction-prompt.md';
 
 /**
@@ -145,7 +160,7 @@ describe('§AX5 — the extractor encodes no corpus vocabulary', () => {
             for (const name of fs.readdirSync(path.join(REPO, dir))) {
                 const rel = dir + '/' + name;
                 if (
-                    /claim-(extraction|adjudication)|claim(Extraction|Adjudication)|metadata-probe|metadataProbe|extractorClearing/i.test(
+                    /claim-(extraction|adjudication)|claim(Extraction|Adjudication)|metadata-probe|metadataProbe|extractorClearing|pass-figures|passFigures/i.test(
                         name
                     )
                 ) {
@@ -155,7 +170,11 @@ describe('§AX5 — the extractor encodes no corpus vocabulary', () => {
         }
 
         const uncleared = found.filter(
-            (f) => CLEARED.indexOf(f) === -1 && f !== 'test/extractorClearing.test.js' && !isCollectedEvidence(f)
+            (f) =>
+                CLEARED.indexOf(f) === -1 &&
+                SCORER.indexOf(f) === -1 &&
+                f !== 'test/extractorClearing.test.js' &&
+                !isCollectedEvidence(f)
         );
         expect(uncleared.sort()).toEqual([]);
     });
@@ -303,5 +322,50 @@ describe('§AX5 — the extractor names no member of its corpus', () => {
             if (/claim-inventory/.test(read(rel))) offenders.push(rel);
         }
         expect(offenders).toEqual([]);
+    });
+});
+
+describe('§AX17 — the scorer is exempt from ONE check and constrained by the rest', () => {
+    /**
+     * A scorer must read the fixture, so the check above cannot apply to it.
+     * Every other constraint does, and that is what keeps "scorer" from becoming
+     * the category anything inconvenient gets moved into.
+     */
+    for (const rel of SCORER) {
+        describe(rel, () => {
+            const raw = read(rel);
+            test.each(FORBIDDEN)('contains no $label', (pattern) => {
+                expect(scan(raw, rel, pattern)).toEqual([]);
+            });
+            test('names no report file', () => {
+                expect(/v1\d-reports\//.test(raw)).toBe(false);
+            });
+        });
+    }
+
+    test('every scorer file exists', () => {
+        for (const rel of SCORER) expect(fs.existsSync(path.join(REPO, rel))).toBe(true);
+    });
+
+    test('the scorer and the cleared set are disjoint', () => {
+        /**
+         * The exemption must not be reachable from inside the instrument. If a
+         * file were on both lists it would inherit the scorer's exemption while
+         * being part of the extractor — the hole this split exists to avoid.
+         */
+        for (const rel of SCORER) expect(CLEARED).not.toContain(rel);
+    });
+
+    test('the scorer decides nothing — it holds no verdict vocabulary of its own', () => {
+        /**
+         * §AX17's first property, made mechanical rather than promised. The
+         * scorer may COUNT verdicts, so it names them; what it must not do is
+         * compute one, which in this codebase means calling the adjudicator's
+         * decision surface or re-implementing a membership test over a probe
+         * read. It calls `adjudicateAll` and nothing else from that module.
+         */
+        const raw = read(SCORER[0]);
+        expect(/adjudication\.adjudicate\b(?!All)/.test(raw)).toBe(false);
+        expect(/table_exists|control_failed|presupposed/.test(raw)).toBe(false);
     });
 });

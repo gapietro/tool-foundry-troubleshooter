@@ -1,0 +1,105 @@
+{
+  "veracity": {
+    "native": {
+      "claims": 214,
+      "verdicts": {
+        "refuted": 34,
+        "supported": 17,
+        "unresolvable": 163
+      }
+    },
+    "custom": {
+      "claims": 40,
+      "verdicts": {
+        "refuted": 1,
+        "supported": 7,
+        "unresolvable": 32
+      }
+    }
+  },
+  "recall": {
+    "native": {
+      "hit": 58,
+      "total": 60,
+      "rate": 0.9666666666666667,
+      "per_report": [
+        {
+          "report": "row-07",
+          "hit": 19,
+          "of": 19
+        },
+        {
+          "report": "row-15",
+          "hit": 18,
+          "of": 18
+        },
+        {
+          "report": "row-17",
+          "hit": 8,
+          "of": 10
+        },
+        {
+          "report": "row-19",
+          "hit": 13,
+          "of": 13
+        }
+      ],
+      "verdict": "passed"
+    },
+    "custom": {
+      "hit": 2,
+      "total": 2,
+      "rate": 1,
+      "per_report": [
+        {
+          "report": "row-02",
+          "hit": 0,
+          "of": 0
+        },
+        {
+          "report": "row-04",
+          "hit": 0,
+          "of": 0
+        },
+        {
+          "report": "row-12",
+          "hit": 2,
+          "of": 2
+        }
+      ],
+      "verdict": "not exercised (n=2 < 5)"
+    }
+  },
+  "spurious": {
+    "native": {
+      "unmatched": 17,
+      "emitted": 80,
+      "rate": 0.2125,
+      "correct_additions_carve_out_applied": false,
+      "weight": "full"
+    },
+    "custom": {
+      "unmatched": 5,
+      "emitted": 8,
+      "rate": 0.625,
+      "correct_additions_carve_out_applied": false,
+      "weight": "full"
+    }
+  },
+  "ax2": {
+    "refuted_across_all_reports": 35,
+    "verdict": "passed",
+    "note": "Pre-satisfied and labelled as such (§AX6) — one report was already known to carry a false claim, so this falsifier was impossible. That is the finding, not the test."
+  },
+  "ax4": {
+    "refuted_population": 7,
+    "misses_among_refuted": 0,
+    "miss_rate_among_refuted": 0,
+    "per_arm_miss_rate": {
+      "native": 0.03333333333333333,
+      "custom": 0
+    },
+    "verdict": "passed",
+    "compared_against": 0.03333333333333333
+  }
+}
