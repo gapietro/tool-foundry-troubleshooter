@@ -1,0 +1,78 @@
+{
+  "claims": [
+    {
+      "proposition": "An AI agent named 'Seed 08 Batch Watcher' exists on the instance.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "subject": { "record": "Seed 08 Batch Watcher" },
+      "occurrences": [
+        { "line": 2, "quote": "for agent 'Seed 08 Batch Watcher'" },
+        { "line": 45, "quote": "Parent task: 'Seed 08 Batch Watcher'" }
+      ]
+    },
+    {
+      "proposition": "The execution plan associated with the agent 'Seed 08 Batch Watcher' has the sys_id c24f27032ba6431017a6ffbeee91bf4d.",
+      "kind": "identity",
+      "polarity": "asserts",
+      "asserted_value": "c24f27032ba6431017a6ffbeee91bf4d",
+      "subject": { "record": "c24f27032ba6431017a6ffbeee91bf4d" },
+      "occurrences": [
+        { "line": 2, "quote": "The execution plan c24f27032ba6431017a6ffbeee91bf4d" }
+      ]
+    },
+    {
+      "proposition": "An execution task record with sys_id 1a4f27032ba6431017a6ffbeee91bf9d exists on the instance.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "asserted_value": "1a4f27032ba6431017a6ffbeee91bf9d",
+      "subject": { "record": "1a4f27032ba6431017a6ffbeee91bf9d" },
+      "occurrences": [
+        { "line": 36, "quote": "execution task 1a4f27032ba6431017a6ffbeee91bf9d" }
+      ]
+    },
+    {
+      "proposition": "The table sn_aia_execution_task exists on the instance.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "subject": { "table": "sn_aia_execution_task" },
+      "occurrences": [
+        { "line": 18, "quote": "sn_aia_execution_task table exists" }
+      ]
+    },
+    {
+      "proposition": "A tool named check_processing_status is present and was invoked by the agent 'Seed 08 Batch Watcher'.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "subject": { "record": "check_processing_status" },
+      "occurrences": [
+        { "line": 2, "quote": "the subsequent tool call (order 200) for check_processing_status" }
+      ]
+    },
+    {
+      "proposition": "No agent_config calls were made during the diagnostic run (the count of agent_config calls is zero).",
+      "kind": "count",
+      "polarity": "denies",
+      "occurrences": [
+        { "line": 10, "quote": "No agent_config call made" },
+        { "line": 14, "quote": "No agent_config call made" },
+        { "line": 30, "quote": "No agent_config call made" }
+      ]
+    },
+    {
+      "proposition": "No query_table calls were made during the diagnostic run (the count of query_table calls is zero).",
+      "kind": "count",
+      "polarity": "denies",
+      "occurrences": [
+        { "line": 22, "quote": "No query_table call made" }
+      ]
+    },
+    {
+      "proposition": "No genai_log calls were made during the diagnostic run (the count of genai_log calls is zero).",
+      "kind": "count",
+      "polarity": "denies",
+      "occurrences": [
+        { "line": 26, "quote": "No genai_log call made" }
+      ]
+    }
+  ]
+}

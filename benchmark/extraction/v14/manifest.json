@@ -1,0 +1,306 @@
+{
+  "registered_under": "benchmark/DECISION.md §AX15",
+  "retry_rule": "envelope-level defects only; at most one retry; every attempt preserved",
+  "reports": [
+    {
+      "report": "row-01",
+      "arm": "native",
+      "claim_count": 21,
+      "rejected_count": 1,
+      "attempts": 1,
+      "attempt_log": [
+        {
+          "attempt": 1,
+          "file": "benchmark/extraction/v14/raw/row-01.attempt-1.raw.json",
+          "envelope_defect": null,
+          "detail": null
+        }
+      ]
+    },
+    {
+      "report": "row-02",
+      "arm": "custom",
+      "claim_count": 2,
+      "rejected_count": 0,
+      "attempts": 1,
+      "attempt_log": [
+        {
+          "attempt": 1,
+          "file": "benchmark/extraction/v14/raw/row-02.attempt-1.raw.json",
+          "envelope_defect": null,
+          "detail": null
+        }
+      ]
+    },
+    {
+      "report": "row-03",
+      "arm": "native",
+      "claim_count": 32,
+      "rejected_count": 0,
+      "attempts": 1,
+      "attempt_log": [
+        {
+          "attempt": 1,
+          "file": "benchmark/extraction/v14/raw/row-03.attempt-1.raw.json",
+          "envelope_defect": null,
+          "detail": null
+        }
+      ]
+    },
+    {
+      "report": "row-04",
+      "arm": "custom",
+      "claim_count": 2,
+      "rejected_count": 1,
+      "attempts": 1,
+      "attempt_log": [
+        {
+          "attempt": 1,
+          "file": "benchmark/extraction/v14/raw/row-04.attempt-1.raw.json",
+          "envelope_defect": null,
+          "detail": null
+        }
+      ]
+    },
+    {
+      "report": "row-05",
+      "arm": "native",
+      "claim_count": 26,
+      "rejected_count": 0,
+      "attempts": 1,
+      "attempt_log": [
+        {
+          "attempt": 1,
+          "file": "benchmark/extraction/v14/raw/row-05.attempt-1.raw.json",
+          "envelope_defect": null,
+          "detail": null
+        }
+      ]
+    },
+    {
+      "report": "row-06",
+      "arm": "custom",
+      "claim_count": 0,
+      "rejected_count": 0,
+      "attempts": 1,
+      "attempt_log": [
+        {
+          "attempt": 1,
+          "file": "benchmark/extraction/v14/raw/row-06.attempt-1.raw.json",
+          "envelope_defect": null,
+          "detail": null
+        }
+      ]
+    },
+    {
+      "report": "row-07",
+      "arm": "native",
+      "claim_count": 25,
+      "rejected_count": 0,
+      "attempts": 1,
+      "attempt_log": [
+        {
+          "attempt": 1,
+          "file": "benchmark/extraction/v14/raw/row-07.attempt-1.raw.json",
+          "envelope_defect": null,
+          "detail": null
+        }
+      ]
+    },
+    {
+      "report": "row-08",
+      "arm": "custom",
+      "claim_count": 0,
+      "rejected_count": 0,
+      "attempts": 1,
+      "attempt_log": [
+        {
+          "attempt": 1,
+          "file": "benchmark/extraction/v14/raw/row-08.attempt-1.raw.json",
+          "envelope_defect": null,
+          "detail": null
+        }
+      ]
+    },
+    {
+      "report": "row-09",
+      "arm": "native",
+      "claim_count": 19,
+      "rejected_count": 0,
+      "attempts": 1,
+      "attempt_log": [
+        {
+          "attempt": 1,
+          "file": "benchmark/extraction/v14/raw/row-09.attempt-1.raw.json",
+          "envelope_defect": null,
+          "detail": null
+        }
+      ]
+    },
+    {
+      "report": "row-10",
+      "arm": "custom",
+      "claim_count": 6,
+      "rejected_count": 0,
+      "attempts": 1,
+      "attempt_log": [
+        {
+          "attempt": 1,
+          "file": "benchmark/extraction/v14/raw/row-10.attempt-1.raw.json",
+          "envelope_defect": null,
+          "detail": null
+        }
+      ]
+    },
+    {
+      "report": "row-11",
+      "arm": "native",
+      "claim_count": 19,
+      "rejected_count": 0,
+      "attempts": 1,
+      "attempt_log": [
+        {
+          "attempt": 1,
+          "file": "benchmark/extraction/v14/raw/row-11.attempt-1.raw.json",
+          "envelope_defect": null,
+          "detail": null
+        }
+      ]
+    },
+    {
+      "report": "row-12",
+      "arm": "custom",
+      "claim_count": 4,
+      "rejected_count": 0,
+      "attempts": 1,
+      "attempt_log": [
+        {
+          "attempt": 1,
+          "file": "benchmark/extraction/v14/raw/row-12.attempt-1.raw.json",
+          "envelope_defect": null,
+          "detail": null
+        }
+      ]
+    },
+    {
+      "report": "row-13",
+      "arm": "native",
+      "claim_count": 17,
+      "rejected_count": 0,
+      "attempts": 1,
+      "attempt_log": [
+        {
+          "attempt": 1,
+          "file": "benchmark/extraction/v14/raw/row-13.attempt-1.raw.json",
+          "envelope_defect": null,
+          "detail": null
+        }
+      ]
+    },
+    {
+      "report": "row-14",
+      "arm": "custom",
+      "claim_count": 7,
+      "rejected_count": 0,
+      "attempts": 1,
+      "attempt_log": [
+        {
+          "attempt": 1,
+          "file": "benchmark/extraction/v14/raw/row-14.attempt-1.raw.json",
+          "envelope_defect": null,
+          "detail": null
+        }
+      ]
+    },
+    {
+      "report": "row-15",
+      "arm": "native",
+      "claim_count": 20,
+      "rejected_count": 0,
+      "attempts": 1,
+      "attempt_log": [
+        {
+          "attempt": 1,
+          "file": "benchmark/extraction/v14/raw/row-15.attempt-1.raw.json",
+          "envelope_defect": null,
+          "detail": null
+        }
+      ]
+    },
+    {
+      "report": "row-16",
+      "arm": "custom",
+      "claim_count": 6,
+      "rejected_count": 0,
+      "attempts": 1,
+      "attempt_log": [
+        {
+          "attempt": 1,
+          "file": "benchmark/extraction/v14/raw/row-16.attempt-1.raw.json",
+          "envelope_defect": null,
+          "detail": null
+        }
+      ]
+    },
+    {
+      "report": "row-17",
+      "arm": "native",
+      "claim_count": 15,
+      "rejected_count": 2,
+      "attempts": 1,
+      "attempt_log": [
+        {
+          "attempt": 1,
+          "file": "benchmark/extraction/v14/raw/row-17.attempt-1.raw.json",
+          "envelope_defect": null,
+          "detail": null
+        }
+      ]
+    },
+    {
+      "report": "row-18",
+      "arm": "custom",
+      "claim_count": 8,
+      "rejected_count": 0,
+      "attempts": 1,
+      "attempt_log": [
+        {
+          "attempt": 1,
+          "file": "benchmark/extraction/v14/raw/row-18.attempt-1.raw.json",
+          "envelope_defect": null,
+          "detail": null
+        }
+      ]
+    },
+    {
+      "report": "row-19",
+      "arm": "native",
+      "claim_count": 20,
+      "rejected_count": 0,
+      "attempts": 1,
+      "attempt_log": [
+        {
+          "attempt": 1,
+          "file": "benchmark/extraction/v14/raw/row-19.attempt-1.raw.json",
+          "envelope_defect": null,
+          "detail": null
+        }
+      ]
+    },
+    {
+      "report": "row-20",
+      "arm": "custom",
+      "claim_count": 5,
+      "rejected_count": 0,
+      "attempts": 1,
+      "attempt_log": [
+        {
+          "attempt": 1,
+          "file": "benchmark/extraction/v14/raw/row-20.attempt-1.raw.json",
+          "envelope_defect": null,
+          "detail": null
+        }
+      ]
+    }
+  ]
+}

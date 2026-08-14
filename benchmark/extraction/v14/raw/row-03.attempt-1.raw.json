@@ -1,0 +1,344 @@
+{
+  "claims": [
+    {
+      "proposition": "The AI agent named \"Seed 02 Request Router\" has instructions telling it to route requests to assignment groups and confirm the assignment to the user, including the wording \"assign it to the right group\".",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "assign it to the right group",
+      "subject": { "table": "sn_aia_agent", "record": "Seed 02 Request Router", "field": "instructions" },
+      "occurrences": [
+        { "line": 7, "quote": "is instructed to route requests to assignment groups and confirm the assignment to the user" },
+        { "line": 35, "quote": "The agent's stated instruction — *\"assign it to the right group\"*" }
+      ]
+    },
+    {
+      "proposition": "The agent \"Seed 02 Request Router\" has exactly one tool, named measure_request.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "1",
+      "subject": { "table": "sn_aia_agent", "record": "Seed 02 Request Router", "field": "tool_count" },
+      "occurrences": [
+        { "line": 7, "quote": "the agent possesses only one tool — `measure_request`" },
+        { "line": 35, "quote": "The agent has exactly one tool, `measure_request`." },
+        { "line": 37, "quote": "`tool_count: 1`" }
+      ]
+    },
+    {
+      "proposition": "The measure_request tool's script counts the characters and words of the text it is given (it splits text on spaces and counts words).",
+      "kind": "state",
+      "polarity": "asserts",
+      "subject": { "table": "sn_aia_tool", "record": "measure_request", "field": "script" },
+      "occurrences": [
+        { "line": 7, "quote": "which counts characters and words" },
+        { "line": 35, "quote": "That tool counts characters and words." },
+        { "line": 38, "quote": "script splits text on spaces and counts words" }
+      ]
+    },
+    {
+      "proposition": "The measure_request tool's script contains no GlideRecord call, no group lookup, and no assignment write.",
+      "kind": "state",
+      "polarity": "denies",
+      "subject": { "table": "sn_aia_tool", "record": "measure_request", "field": "script" },
+      "occurrences": [
+        { "line": 35, "quote": "It has no GlideRecord call, no group lookup, and no assignment write." },
+        { "line": 38, "quote": "no GlideRecord, no group lookup, no write" }
+      ]
+    },
+    {
+      "proposition": "No tool exists on the agent \"Seed 02 Request Router\" that can query sys_user_group, create a task, or write an assignment field on any record or task table.",
+      "kind": "existence",
+      "polarity": "denies",
+      "subject": { "table": "sn_aia_tool", "record": "routing/assignment tool for agent Seed 02 Request Router" },
+      "occurrences": [
+        { "line": 7, "quote": "It has no tool to query `sys_user_group`, create a task, or write an assignment field on any record." },
+        { "line": 35, "quote": "requires a tool that does not exist" },
+        { "line": 101, "quote": "No tool exists that can read `sys_user_group` or write an assignment field on any task table" }
+      ]
+    },
+    {
+      "proposition": "No group named \"IT Hardware / Facilities\" (or matching \"IT Hardware\") exists in sys_user_group; an unfiltered, ACL-bypassing count of matching rows returns 0.",
+      "kind": "existence",
+      "polarity": "denies",
+      "asserted_value": "unfiltered_row_count: 0",
+      "subject": { "table": "sys_user_group", "record": "IT Hardware / Facilities", "field": "name" },
+      "occurrences": [
+        { "line": 7, "quote": "The invented group does not exist in `sys_user_group`." },
+        { "line": 56, "quote": "Hallucinated group \"IT Hardware / Facilities\" does not exist" },
+        { "line": 60, "quote": "The unfiltered row count is 0" },
+        { "line": 62, "quote": "`verdict: genuinely_empty`, `unfiltered_row_count: 0`, `count_status: ok`" },
+        { "line": 125, "quote": "No group matching \"IT Hardware\" exists (`unfiltered_row_count: 0`, `verdict: genuinely_empty`)" }
+      ]
+    },
+    {
+      "proposition": "The description of the agent \"Seed 02 Request Router\" reads \"Benchmark seed - deliberately broken.\"",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "Benchmark seed - deliberately broken.",
+      "subject": { "table": "sn_aia_agent", "record": "Seed 02 Request Router", "field": "description" },
+      "occurrences": [
+        { "line": 7, "quote": "The agent description itself reads: *\"Benchmark seed - deliberately broken.\"*" }
+      ]
+    },
+    {
+      "proposition": "The execution plan ba4dd38b2b6e4310f243fed2ce91bf62 contains 6 tasks.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "6 tasks",
+      "subject": { "record": "ba4dd38b2b6e4310f243fed2ce91bf62", "field": "tasks" },
+      "occurrences": [
+        { "line": 15, "quote": "6 tasks, 1 tool call, 0 script errors" }
+      ]
+    },
+    {
+      "proposition": "The execution of plan ba4dd38b2b6e4310f243fed2ce91bf62 recorded exactly 1 tool call.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "1 tool call",
+      "subject": { "record": "ba4dd38b2b6e4310f243fed2ce91bf62", "field": "tool_calls" },
+      "occurrences": [
+        { "line": 15, "quote": "6 tasks, 1 tool call, 0 script errors" },
+        { "line": 39, "quote": "the only tool call" }
+      ]
+    },
+    {
+      "proposition": "Zero script errors are recorded in the execution trace of plan ba4dd38b2b6e4310f243fed2ce91bf62.",
+      "kind": "count",
+      "polarity": "denies",
+      "asserted_value": "0 script errors",
+      "subject": { "record": "ba4dd38b2b6e4310f243fed2ce91bf62", "field": "script errors" },
+      "occurrences": [
+        { "line": 15, "quote": "6 tasks, 1 tool call, 0 script errors" },
+        { "line": 23, "quote": "(zero found)" }
+      ]
+    },
+    {
+      "proposition": "There is exactly one tool-binding row in sn_aia_agent_tool_m2m for the agent \"Seed 02 Request Router\".",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "tool_binding_rows: 1",
+      "subject": { "table": "sn_aia_agent_tool_m2m", "record": "bindings for agent Seed 02 Request Router" },
+      "occurrences": [
+        { "line": 17, "quote": "1 binding" },
+        { "line": 37, "quote": "`tool_binding_rows: 1` (read status `ok`) — exactly one binding, confirmed." }
+      ]
+    },
+    {
+      "proposition": "The tool-quality checker ran 15 checks, one of which is binding_inactive.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "15 checks",
+      "subject": { "record": "tool-quality checker" },
+      "occurrences": [
+        { "line": 17, "quote": "tool-quality checker ran 15 checks" },
+        { "line": 51, "quote": "listed `binding_inactive` as one of its 15 checks" }
+      ]
+    },
+    {
+      "proposition": "The table sys_user_group exists on the instance.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "subject": { "table": "sys_user_group" },
+      "occurrences": [
+        { "line": 18, "quote": "`schema_lookup` on `sys_user_group` — table confirmed" }
+      ]
+    },
+    {
+      "proposition": "The table sys_user_group has 23 fields.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "23 fields",
+      "subject": { "table": "sys_user_group" },
+      "occurrences": [
+        { "line": 18, "quote": "23 fields" }
+      ]
+    },
+    {
+      "proposition": "The execution of plan ba4dd38b2b6e4310f243fed2ce91bf62 made 2 LLM calls.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "llm_call_rows: 2",
+      "subject": { "record": "ba4dd38b2b6e4310f243fed2ce91bf62", "field": "llm_call_rows" },
+      "occurrences": [
+        { "line": 20, "quote": "(2 LLM calls, both success)" },
+        { "line": 72, "quote": "2 calls, both `status: success`" },
+        { "line": 75, "quote": "`llm_call_rows: 2`" },
+        { "line": 151, "quote": "Two LLM calls succeeded in this run" }
+      ]
+    },
+    {
+      "proposition": "The agent \"Seed 02 Request Router\" has zero trigger links configured.",
+      "kind": "count",
+      "polarity": "denies",
+      "asserted_value": "0 trigger links",
+      "subject": { "table": "sn_aia_agent", "record": "Seed 02 Request Router", "field": "triggers" },
+      "occurrences": [
+        { "line": 21, "quote": "0 trigger links on both branches" }
+      ]
+    },
+    {
+      "proposition": "The syslog table declares caller_access = Caller Restriction on the instance.",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "caller_access = Caller Restriction",
+      "subject": { "table": "syslog", "field": "caller_access" },
+      "occurrences": [
+        { "line": 23, "quote": "`syslog` declares `caller_access = Caller Restriction`." }
+      ]
+    },
+    {
+      "proposition": "A cross-scope privilege is declared by this application and is installed on the instance.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "subject": { "table": "sys_scope_privilege" },
+      "occurrences": [
+        { "line": 23, "quote": "a cross-scope privilege IS declared and confirmed installed" }
+      ]
+    },
+    {
+      "proposition": "Zero tool calls in the execution produced the group value \"IT Hardware / Facilities\" that the user-facing message reported.",
+      "kind": "count",
+      "polarity": "denies",
+      "asserted_value": "zero",
+      "subject": { "record": "ba4dd38b2b6e4310f243fed2ce91bf62", "field": "tool_calls" },
+      "occurrences": [
+        { "line": 39, "quote": "with **zero** corresponding tool calls" },
+        { "line": 63, "quote": "no tool call produced this value" }
+      ]
+    },
+    {
+      "proposition": "The measure_request tool binding for the agent is inactive: the agent has active_tool_count 0 against tool_count 1.",
+      "kind": "state",
+      "polarity": "denies",
+      "asserted_value": "active_tool_count: 0",
+      "subject": { "table": "sn_aia_agent_tool_m2m", "record": "da3f01db9aec41da835887210ed4b902", "field": "active" },
+      "occurrences": [
+        { "line": 44, "quote": "Tool binding is inactive" },
+        { "line": 48, "quote": "`agent_config` overview reports `active_tool_count: 0` against `tool_count: 1`." },
+        { "line": 50, "quote": "`\"tool_count\":1, \"active_tool_count\":0`" },
+        { "line": 113, "quote": "`active_tool_count: 0` (binding inactive)" }
+      ]
+    },
+    {
+      "proposition": "The sn_aia_agent_tool_m2m binding record for the measure_request tool has sys_id da3f01db9aec41da835887210ed4b902.",
+      "kind": "identity",
+      "polarity": "asserts",
+      "asserted_value": "da3f01db9aec41da835887210ed4b902",
+      "subject": { "table": "sn_aia_agent_tool_m2m", "record": "da3f01db9aec41da835887210ed4b902" },
+      "occurrences": [
+        { "line": 47, "quote": "`sn_aia_agent_tool_m2m` record `da3f01db9aec41da835887210ed4b902`" },
+        { "line": 112, "quote": "`sn_aia_agent_tool_m2m` record `da3f01db9aec41da835887210ed4b902`" }
+      ]
+    },
+    {
+      "proposition": "No capability definition row matches the capability name \"AIA ReAct Engine\" — a filter on that short name returns 0 definitions.",
+      "kind": "count",
+      "polarity": "denies",
+      "asserted_value": "matched: 0",
+      "subject": { "table": "sys_one_extend_capability_definition", "record": "AIA ReAct Engine", "field": "name" },
+      "occurrences": [
+        { "line": 72, "quote": "`genai_log check_config` with `capability: \"AIA ReAct Engine\"` returned 0 definitions." },
+        { "line": 74, "quote": "`matched: 0`, `audit_status: empty`" }
+      ]
+    },
+    {
+      "proposition": "The capability definition used for the ReAct engine is stored under the name \"AIA ReAct Engine_Amazon Bedrock\".",
+      "kind": "identity",
+      "polarity": "asserts",
+      "asserted_value": "AIA ReAct Engine_Amazon Bedrock",
+      "subject": { "table": "sys_one_extend_capability_definition", "record": "AIA ReAct Engine_Amazon Bedrock", "field": "name" },
+      "occurrences": [
+        { "line": 75, "quote": "`definition_name: \"AIA ReAct Engine_Amazon Bedrock\"`" },
+        { "line": 148, "quote": "`sys_one_extend_capability_definition`, definition `AIA ReAct Engine_Amazon Bedrock`" }
+      ]
+    },
+    {
+      "proposition": "The measure_request tool is the sn_aia_tool record with sys_id c3beac9180474930a70e4a4a3de7126d.",
+      "kind": "identity",
+      "polarity": "asserts",
+      "asserted_value": "c3beac9180474930a70e4a4a3de7126d",
+      "subject": { "table": "sn_aia_tool", "record": "c3beac9180474930a70e4a4a3de7126d" },
+      "occurrences": [
+        { "line": 84, "quote": "`sn_aia_tool` `c3beac9180474930a70e4a4a3de7126d`, field `description`" },
+        { "line": 136, "quote": "`sn_aia_tool` `c3beac9180474930a70e4a4a3de7126d`, field `description`" }
+      ]
+    },
+    {
+      "proposition": "The description of the measure_request tool is a single short statement of 114 characters.",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "114 chars",
+      "subject": { "table": "sn_aia_tool", "record": "c3beac9180474930a70e4a4a3de7126d", "field": "description" },
+      "occurrences": [
+        { "line": 85, "quote": "description is a single short statement (114 chars)" }
+      ]
+    },
+    {
+      "proposition": "The description of the measure_request tool contains no negative guidance — it never says when not to use the tool.",
+      "kind": "field_value",
+      "polarity": "denies",
+      "subject": { "table": "sn_aia_tool", "record": "c3beac9180474930a70e4a4a3de7126d", "field": "description" },
+      "occurrences": [
+        { "line": 85, "quote": "no negative guidance (never says when NOT to use it)" }
+      ]
+    },
+    {
+      "proposition": "The description of the measure_request tool contains no input format guidance.",
+      "kind": "field_value",
+      "polarity": "denies",
+      "subject": { "table": "sn_aia_tool", "record": "c3beac9180474930a70e4a4a3de7126d", "field": "description" },
+      "occurrences": [
+        { "line": 85, "quote": "no input format guidance" }
+      ]
+    },
+    {
+      "proposition": "The agent \"Seed 02 Request Router\" is the record with sys_id cd050d48e810411d9f113fd530694fe6.",
+      "kind": "identity",
+      "polarity": "asserts",
+      "asserted_value": "cd050d48e810411d9f113fd530694fe6",
+      "subject": { "table": "sn_aia_agent", "record": "cd050d48e810411d9f113fd530694fe6" },
+      "occurrences": [
+        { "line": 100, "quote": "new binding in `sn_aia_agent_tool_m2m` for agent `cd050d48e810411d9f113fd530694fe6`" }
+      ]
+    },
+    {
+      "proposition": "The description field of the measure_request tool currently reads \"Measures an incoming request: returns its character count and an approximate word count. Give it the request text.\"",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "Measures an incoming request: returns its character count and an approximate word count. Give it the request text.",
+      "subject": { "table": "sn_aia_tool", "record": "c3beac9180474930a70e4a4a3de7126d", "field": "description" },
+      "occurrences": [
+        { "line": 137, "quote": "`\"Measures an incoming request: returns its character count and an approximate word count. Give it the request text.\"`" }
+      ]
+    },
+    {
+      "proposition": "An sn_aia_message record with sys_id 874dd38b2b6e4310f243fed2ce91bf68 exists with role user_profile and carries user profile content including a user sys_id and first/last name.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "asserted_value": "role `user_profile`",
+      "subject": { "table": "sn_aia_message", "record": "874dd38b2b6e4310f243fed2ce91bf68", "field": "role" },
+      "occurrences": [
+        { "line": 167, "quote": "(`sn_aia_message` row `874dd38b2b6e4310f243fed2ce91bf68`, role `user_profile`)" }
+      ]
+    },
+    {
+      "proposition": "The user email carried in the user_profile message content is admin@example.com.",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "admin@example.com",
+      "subject": { "table": "sn_aia_message", "record": "874dd38b2b6e4310f243fed2ce91bf68", "field": "user email" },
+      "occurrences": [
+        { "line": 167, "quote": "user email (`admin@example.com`)" }
+      ]
+    },
+    {
+      "proposition": "The conversation title associated with this execution is \"-3e4d138b2b6e4310f243fed2ce91bf3d\", which references an internal sys_id.",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "-3e4d138b2b6e4310f243fed2ce91bf3d",
+      "subject": { "record": "-3e4d138b2b6e4310f243fed2ce91bf3d", "field": "title" },
+      "occurrences": [
+        { "line": 168, "quote": "Conversation title (`-3e4d138b2b6e4310f243fed2ce91bf3d`)" }
+      ]
+    }
+  ]
+}

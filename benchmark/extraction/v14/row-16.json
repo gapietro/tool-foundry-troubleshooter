@@ -1,0 +1,108 @@
+{
+  "report": "row-16",
+  "arm": "custom",
+  "claim_count": 6,
+  "claims": [
+    {
+      "id": "row-16/E01",
+      "proposition": "A ticket record with sys_id 36dc13472bea031017a6ffbeee91bf75 exists on the instance.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "subject": {
+        "record": "36dc13472bea031017a6ffbeee91bf75"
+      },
+      "occurrences": [
+        {
+          "line": 2,
+          "quote": "classifying ticket 36dc13472bea031017a6ffbeee91bf75"
+        }
+      ]
+    },
+    {
+      "id": "row-16/E02",
+      "proposition": "Zero agent_config calls were made during the diagnostic work.",
+      "kind": "count",
+      "polarity": "denies",
+      "asserted_value": "No agent_config call made",
+      "occurrences": [
+        {
+          "line": 10,
+          "quote": "No agent_config call made to inspect instructions"
+        },
+        {
+          "line": 14,
+          "quote": "No agent_config call made to inspect tool definitions"
+        },
+        {
+          "line": 30,
+          "quote": "No agent_config call made to inspect trigger wiring"
+        }
+      ]
+    },
+    {
+      "id": "row-16/E03",
+      "proposition": "The table sn_aia_agent_tool_m2m exists on the instance.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "subject": {
+        "table": "sn_aia_agent_tool_m2m"
+      },
+      "occurrences": [
+        {
+          "line": 18,
+          "quote": "schema_lookup confirmed sn_aia_agent_tool_m2m table exists"
+        },
+        {
+          "line": 45,
+          "quote": "schema_lookup confirmed sn_aia_agent_tool_m2m table exists"
+        }
+      ]
+    },
+    {
+      "id": "row-16/E04",
+      "proposition": "Zero log_analysis calls were made during the diagnostic work.",
+      "kind": "count",
+      "polarity": "denies",
+      "asserted_value": "No query_table or log_analysis call made",
+      "occurrences": [
+        {
+          "line": 22,
+          "quote": "No query_table or log_analysis call made to check data existence"
+        },
+        {
+          "line": 26,
+          "quote": "No genai_log or log_analysis call made to inspect GenAI stack"
+        }
+      ]
+    },
+    {
+      "id": "row-16/E05",
+      "proposition": "Zero query_table calls were made during the diagnostic work.",
+      "kind": "count",
+      "polarity": "denies",
+      "asserted_value": "No query_table or log_analysis call made",
+      "occurrences": [
+        {
+          "line": 22,
+          "quote": "No query_table or log_analysis call made to check data existence"
+        }
+      ]
+    },
+    {
+      "id": "row-16/E06",
+      "proposition": "Zero genai_log calls were made during the diagnostic work.",
+      "kind": "count",
+      "polarity": "denies",
+      "asserted_value": "No genai_log or log_analysis call made",
+      "occurrences": [
+        {
+          "line": 26,
+          "quote": "No genai_log or log_analysis call made to inspect GenAI stack"
+        }
+      ]
+    }
+  ],
+  "rejected": [],
+  "conflicts": [],
+  "defects": []
+}

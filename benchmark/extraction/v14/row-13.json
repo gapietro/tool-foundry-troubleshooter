@@ -1,0 +1,392 @@
+{
+  "report": "row-13",
+  "arm": "native",
+  "claim_count": 17,
+  "claims": [
+    {
+      "id": "row-13/E01",
+      "proposition": "The description of the agent Seed 07 Ticket Classifier states that it is a deliberately broken benchmark seed.",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "deliberately broken benchmark seed",
+      "subject": {
+        "table": "sn_aia_agent",
+        "record": "Seed 07 Ticket Classifier",
+        "field": "description"
+      },
+      "occurrences": [
+        {
+          "line": 7,
+          "quote": "The agent description explicitly labels this a *deliberately broken* benchmark seed"
+        }
+      ]
+    },
+    {
+      "id": "row-13/E02",
+      "proposition": "The instance has an AI agent named \"Seed 07 Ticket Classifier\", whose sys_id is 56c9f86373974407ac1a276a91cdfa79.",
+      "kind": "identity",
+      "polarity": "asserts",
+      "asserted_value": "56c9f86373974407ac1a276a91cdfa79",
+      "subject": {
+        "table": "sn_aia_agent",
+        "record": "56c9f86373974407ac1a276a91cdfa79"
+      },
+      "occurrences": [
+        {
+          "line": 7,
+          "quote": "Seed 07 Ticket Classifier"
+        },
+        {
+          "line": 119,
+          "quote": "create trigger link for agent `56c9f86373974407ac1a276a91cdfa79`"
+        }
+      ]
+    },
+    {
+      "id": "row-13/E03",
+      "proposition": "The script of the read_ticket_context tool unconditionally builds a 260-iteration loop that appends synthetic ctx.event lines and assigns the result to out.raw_context_feed on every response.",
+      "kind": "state",
+      "polarity": "asserts",
+      "asserted_value": "260 lines / 260-iteration loop appended to out.raw_context_feed",
+      "subject": {
+        "table": "sn_aia_tool",
+        "record": "2465188619a2417682e91483d560c084",
+        "field": "script"
+      },
+      "occurrences": [
+        {
+          "line": 7,
+          "quote": "the tool unconditionally appends 260 lines of synthetic operational noise to every response"
+        },
+        {
+          "line": 46,
+          "quote": "The script unconditionally builds a 260-iteration loop appending lines of the form"
+        },
+        {
+          "line": 96,
+          "quote": "A 260-iteration loop appends synthetic `ctx.event` lines to `out.raw_context_feed`"
+        }
+      ]
+    },
+    {
+      "id": "row-13/E04",
+      "proposition": "The table x_snc_tsbench_ticket has no column named category.",
+      "kind": "existence",
+      "polarity": "denies",
+      "subject": {
+        "table": "x_snc_tsbench_ticket",
+        "field": "category"
+      },
+      "occurrences": [
+        {
+          "line": 7,
+          "quote": "has **no `category` column**"
+        },
+        {
+          "line": 19,
+          "quote": "`category` and `state` absent"
+        },
+        {
+          "line": 34,
+          "quote": "There is no `category` column."
+        },
+        {
+          "line": 35,
+          "quote": "field count 8, `category` absent"
+        },
+        {
+          "line": 84,
+          "quote": "No `category` column exists"
+        }
+      ]
+    },
+    {
+      "id": "row-13/E05",
+      "proposition": "The table x_snc_tsbench_ticket has exactly 8 columns: sys_id, short_description, priority, u_caller, u_description, u_impact, u_resolution, u_ticket_number.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "8",
+      "subject": {
+        "table": "x_snc_tsbench_ticket"
+      },
+      "occurrences": [
+        {
+          "line": 18,
+          "quote": "8 columns confirmed"
+        },
+        {
+          "line": 34,
+          "quote": "The table has 8 columns: `sys_id`, `short_description`, `priority`, `u_caller`, `u_description`, `u_impact`, `u_resolution`, `u_ticket_number`."
+        },
+        {
+          "line": 35,
+          "quote": "field count 8"
+        },
+        {
+          "line": 84,
+          "quote": "8 columns present"
+        }
+      ]
+    },
+    {
+      "id": "row-13/E06",
+      "proposition": "A record with sys_id e6dcdf072bea031017a6ffbeee91bfe4 exists in the table x_snc_tsbench_ticket.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "subject": {
+        "table": "x_snc_tsbench_ticket",
+        "record": "e6dcdf072bea031017a6ffbeee91bfe4"
+      },
+      "occurrences": [
+        {
+          "line": 19,
+          "quote": "record exists"
+        },
+        {
+          "line": 35,
+          "quote": "on record `e6dcdf072bea031017a6ffbeee91bfe4`"
+        },
+        {
+          "line": 141,
+          "quote": "`x_snc_tsbench_ticket[e6dcdf072bea031017a6ffbeee91bfe4]`"
+        }
+      ]
+    },
+    {
+      "id": "row-13/E07",
+      "proposition": "The table x_snc_tsbench_ticket has no field named state.",
+      "kind": "existence",
+      "polarity": "denies",
+      "subject": {
+        "table": "x_snc_tsbench_ticket",
+        "field": "state"
+      },
+      "occurrences": [
+        {
+          "line": 19,
+          "quote": "`category` and `state` absent"
+        },
+        {
+          "line": 35,
+          "quote": "`[\"category\", \"state\"]` listed as missing fields"
+        }
+      ]
+    },
+    {
+      "id": "row-13/E08",
+      "proposition": "There are zero trigger links wiring the agent, on both the agent-direct branch and the team/usecase chain, in sn_aia_trigger_agent_usecase_m2m.",
+      "kind": "count",
+      "polarity": "denies",
+      "asserted_value": "0",
+      "subject": {
+        "table": "sn_aia_trigger_agent_usecase_m2m",
+        "record": "56c9f86373974407ac1a276a91cdfa79"
+      },
+      "occurrences": [
+        {
+          "line": 21,
+          "quote": "no trigger wiring present"
+        },
+        {
+          "line": 70,
+          "quote": "Zero trigger links on both branches (agent-direct and team/usecase chain)."
+        },
+        {
+          "line": 71,
+          "quote": "agent-direct 0 rows, team/usecase chain 0 rows"
+        },
+        {
+          "line": 120,
+          "quote": "0 trigger links on both branches"
+        }
+      ]
+    },
+    {
+      "id": "row-13/E09",
+      "proposition": "The syslog table on the instance is caller-restricted, so it cannot be read from the current scope.",
+      "kind": "state",
+      "polarity": "asserts",
+      "asserted_value": "caller-restricted",
+      "subject": {
+        "table": "syslog",
+        "field": "caller_access"
+      },
+      "occurrences": [
+        {
+          "line": 22,
+          "quote": "`syslog` is caller-restricted"
+        }
+      ]
+    },
+    {
+      "id": "row-13/E10",
+      "proposition": "The read_ticket_context tool script neither reads nor returns a category value.",
+      "kind": "state",
+      "polarity": "denies",
+      "subject": {
+        "table": "sn_aia_tool",
+        "record": "2465188619a2417682e91483d560c084",
+        "field": "script"
+      },
+      "occurrences": [
+        {
+          "line": 34,
+          "quote": "The tool script never reads or returns one."
+        }
+      ]
+    },
+    {
+      "id": "row-13/E11",
+      "proposition": "The tool named read_ticket_context is the sn_aia_tool record with sys_id 2465188619a2417682e91483d560c084.",
+      "kind": "identity",
+      "polarity": "asserts",
+      "asserted_value": "2465188619a2417682e91483d560c084",
+      "subject": {
+        "table": "sn_aia_tool",
+        "record": "2465188619a2417682e91483d560c084"
+      },
+      "occurrences": [
+        {
+          "line": 45,
+          "quote": "`sn_aia_tool[2465188619a2417682e91483d560c084]` — `read_ticket_context` script"
+        },
+        {
+          "line": 57,
+          "quote": "`sn_aia_tool[2465188619a2417682e91483d560c084]` script"
+        },
+        {
+          "line": 95,
+          "quote": "`sn_aia_tool[2465188619a2417682e91483d560c084]` — field `script`"
+        },
+        {
+          "line": 107,
+          "quote": "`sn_aia_tool[2465188619a2417682e91483d560c084]` — field `input_schema`"
+        }
+      ]
+    },
+    {
+      "id": "row-13/E12",
+      "proposition": "A sn_aia_agent_tool_m2m record with sys_id b1b830fa038a444f9a7a890d6fd19948 exists, binding the read_ticket_context tool to the agent.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "subject": {
+        "table": "sn_aia_agent_tool_m2m",
+        "record": "b1b830fa038a444f9a7a890d6fd19948"
+      },
+      "occurrences": [
+        {
+          "line": 57,
+          "quote": "`sn_aia_agent_tool_m2m[b1b830fa038a444f9a7a890d6fd19948]` input schema"
+        },
+        {
+          "line": 107,
+          "quote": "`sn_aia_agent_tool_m2m[b1b830fa038a444f9a7a890d6fd19948]` — field `inputs`"
+        }
+      ]
+    },
+    {
+      "id": "row-13/E13",
+      "proposition": "The read_ticket_context tool script contains an early-return guard on an empty id that returns the JSON error payload {ok: false, error: 'ticket sys_id missing or not found'} instead of raising a hard failure.",
+      "kind": "state",
+      "polarity": "asserts",
+      "asserted_value": "{ok: false, error: 'ticket sys_id missing or not found'}",
+      "subject": {
+        "table": "sn_aia_tool",
+        "record": "2465188619a2417682e91483d560c084",
+        "field": "script"
+      },
+      "occurrences": [
+        {
+          "line": 58,
+          "quote": "The script guards against an empty `id` and returns `{ok: false, error: 'ticket sys_id missing or not found'}`"
+        },
+        {
+          "line": 59,
+          "quote": "Script early-return: `if (!id) { return JSON.stringify(out); }` in same source."
+        }
+      ]
+    },
+    {
+      "id": "row-13/E14",
+      "proposition": "The ticket input in the input schema of the sn_aia_agent_tool_m2m record b1b830fa038a444f9a7a890d6fd19948 is declared with mandatory: false.",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "mandatory: false",
+      "subject": {
+        "table": "sn_aia_agent_tool_m2m",
+        "record": "b1b830fa038a444f9a7a890d6fd19948",
+        "field": "inputs"
+      },
+      "occurrences": [
+        {
+          "line": 58,
+          "quote": "The input schema declares `ticket` with `mandatory: false`."
+        },
+        {
+          "line": 59,
+          "quote": "\"inputs\": \"[{\\\"name\\\":\\\"ticket\\\",\\\"mandatory\\\":false}]\""
+        },
+        {
+          "line": 108,
+          "quote": "`\"mandatory\": false` on the `ticket` input in both the binding and the tool record"
+        }
+      ]
+    },
+    {
+      "id": "row-13/E15",
+      "proposition": "The ticket input in the input_schema field of the sn_aia_tool record 2465188619a2417682e91483d560c084 is declared with mandatory: false.",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "mandatory: false",
+      "subject": {
+        "table": "sn_aia_tool",
+        "record": "2465188619a2417682e91483d560c084",
+        "field": "input_schema"
+      },
+      "occurrences": [
+        {
+          "line": 108,
+          "quote": "`\"mandatory\": false` on the `ticket` input in both the binding and the tool record"
+        }
+      ]
+    },
+    {
+      "id": "row-13/E16",
+      "proposition": "The short_description field of x_snc_tsbench_ticket record e6dcdf072bea031017a6ffbeee91bfe4 reads \"Conference bridge drops the first ninety seconds of every scheduled call in the east wing\".",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "Conference bridge drops the first ninety seconds of every scheduled call in the east wing",
+      "subject": {
+        "table": "x_snc_tsbench_ticket",
+        "record": "e6dcdf072bea031017a6ffbeee91bfe4",
+        "field": "short_description"
+      },
+      "occurrences": [
+        {
+          "line": 141,
+          "quote": "field `short_description`: *\"Conference bridge drops the first ninety seconds of every scheduled call in the east wing\"*"
+        }
+      ]
+    },
+    {
+      "id": "row-13/E17",
+      "proposition": "A user profile exists on the instance with email admin@example.com and name System Administrator.",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "email admin@example.com, name System Administrator",
+      "subject": {
+        "table": "sys_user",
+        "record": "admin@example.com"
+      },
+      "occurrences": [
+        {
+          "line": 143,
+          "quote": "User profile entry: email `admin@example.com`, name *System Administrator*"
+        }
+      ]
+    }
+  ],
+  "rejected": [],
+  "conflicts": [],
+  "defects": []
+}

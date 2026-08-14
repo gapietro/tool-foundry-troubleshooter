@@ -1,0 +1,271 @@
+{
+  "claims": [
+    {
+      "proposition": "An AI agent named \"Seed 05 Ticket Acknowledger\" exists on the instance.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "subject": { "table": "sn_aia_agent", "record": "Seed 05 Ticket Acknowledger" },
+      "occurrences": [
+        { "line": 7, "quote": "The agent `Seed 05 Ticket Acknowledger`" }
+      ]
+    },
+    {
+      "proposition": "No execution plan record exists for the agent \"Seed 05 Ticket Acknowledger\"; none was ever created.",
+      "kind": "existence",
+      "polarity": "denies",
+      "subject": { "table": "sn_aia_execution_plan", "record": "Seed 05 Ticket Acknowledger" },
+      "occurrences": [
+        { "line": 7, "quote": "produced no execution plan" },
+        { "line": 15, "quote": "`sn_aia_execution_plan` read status: `empty`. Absence confirmed; no plan was ever created." }
+      ]
+    },
+    {
+      "proposition": "A bench ticket record with sys_id 25e32b4b2b228310f243fed2ce91bf22 exists on the x_snc_tsbench_ticket table.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "subject": { "table": "x_snc_tsbench_ticket", "record": "25e32b4b2b228310f243fed2ce91bf22" },
+      "occurrences": [
+        { "line": 7, "quote": "The ticket exists" },
+        { "line": 19, "quote": "Ticket `25e32b4b2b228310f243fed2ce91bf22` exists" }
+      ]
+    },
+    {
+      "proposition": "The short_description field of ticket 25e32b4b2b228310f243fed2ce91bf22 is non-empty.",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "non-empty",
+      "subject": { "table": "x_snc_tsbench_ticket", "record": "25e32b4b2b228310f243fed2ce91bf22", "field": "short_description" },
+      "occurrences": [
+        { "line": 7, "quote": "its `short_description` is non-empty" },
+        { "line": 19, "quote": "(non-empty)" }
+      ]
+    },
+    {
+      "proposition": "The short_description of ticket 25e32b4b2b228310f243fed2ce91bf22 is \"Sprinkler inspection tag in the server room expired and needs recertification before audit\".",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "Sprinkler inspection tag in the server room expired and needs recertification before audit",
+      "subject": { "table": "x_snc_tsbench_ticket", "record": "25e32b4b2b228310f243fed2ce91bf22", "field": "short_description" },
+      "occurrences": [
+        { "line": 19, "quote": "`short_description` = *\"Sprinkler inspection tag in the server room expired and needs recertification before audit\"*" },
+        { "line": 88, "quote": "`short_description` of ticket `25e32b4b2b228310f243fed2ce91bf22`: *\"Sprinkler inspection tag in the server room expired and needs recertification before audit\"*" }
+      ]
+    },
+    {
+      "proposition": "A trigger configuration exists that links the agent \"Seed 05 Ticket Acknowledger\" to the x_snc_tsbench_ticket table.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "subject": { "table": "sn_aia_trigger_configuration", "record": "Seed 05 Bench Ticket Created" },
+      "occurrences": [
+        { "line": 7, "quote": "the trigger that links this agent to the `x_snc_tsbench_ticket` table" },
+        { "line": 60, "quote": "on table `x_snc_tsbench_ticket`" }
+      ]
+    },
+    {
+      "proposition": "The trigger's condition is `short_descriptionISNOTEMPTY`.",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "short_descriptionISNOTEMPTY",
+      "subject": { "table": "sn_aia_trigger_configuration", "record": "bfb77d6c64884500a80203ee029436ee", "field": "condition" },
+      "occurrences": [
+        { "line": 7, "quote": "the trigger condition `short_descriptionISNOTEMPTY`" },
+        { "line": 60, "quote": "The condition `short_descriptionISNOTEMPTY`" }
+      ]
+    },
+    {
+      "proposition": "The trigger configuration bfb77d6c64884500a80203ee029436ee is inactive — its `active` field holds the value 0.",
+      "kind": "field_value",
+      "polarity": "denies",
+      "asserted_value": "0",
+      "subject": { "table": "sn_aia_trigger_configuration", "record": "bfb77d6c64884500a80203ee029436ee", "field": "active" },
+      "occurrences": [
+        { "line": 7, "quote": "the `x_snc_tsbench_ticket` table is **inactive**" },
+        { "line": 34, "quote": "`active` = `\"0\"`. The trigger is disabled." },
+        { "line": 35, "quote": "`\"active\":\"0\"`" },
+        { "line": 58, "quote": "`false` (0)" }
+      ]
+    },
+    {
+      "proposition": "The agent \"Seed 05 Ticket Acknowledger\" has instructions configured, 118 characters long.",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "118 chars",
+      "subject": { "table": "sn_aia_agent", "record": "Seed 05 Ticket Acknowledger", "field": "instructions" },
+      "occurrences": [
+        { "line": 16, "quote": "Instructions present (118 chars)." }
+      ]
+    },
+    {
+      "proposition": "Zero tools are bound to the agent \"Seed 05 Ticket Acknowledger\" in sn_aia_agent_tool_m2m.",
+      "kind": "count",
+      "polarity": "denies",
+      "asserted_value": "Zero",
+      "subject": { "table": "sn_aia_agent_tool_m2m", "record": "Seed 05 Ticket Acknowledger" },
+      "occurrences": [
+        { "line": 17, "quote": "Zero tools bound (`sn_aia_agent_tool_m2m` read status: `empty`)." }
+      ]
+    },
+    {
+      "proposition": "The table x_snc_tsbench_ticket exists on the instance.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "subject": { "table": "x_snc_tsbench_ticket" },
+      "occurrences": [
+        { "line": 18, "quote": "`x_snc_tsbench_ticket` confirmed to exist" }
+      ]
+    },
+    {
+      "proposition": "The x_snc_tsbench_ticket table has no `state` field.",
+      "kind": "existence",
+      "polarity": "denies",
+      "subject": { "table": "x_snc_tsbench_ticket", "field": "state" },
+      "occurrences": [
+        { "line": 18, "quote": "`state` and `opened_by` are absent from this table" }
+      ]
+    },
+    {
+      "proposition": "The x_snc_tsbench_ticket table has no `opened_by` field.",
+      "kind": "existence",
+      "polarity": "denies",
+      "subject": { "table": "x_snc_tsbench_ticket", "field": "opened_by" },
+      "occurrences": [
+        { "line": 18, "quote": "`state` and `opened_by` are absent from this table" }
+      ]
+    },
+    {
+      "proposition": "Neither `state` nor `opened_by` is referenced by the trigger condition or by the agent's instructions.",
+      "kind": "state",
+      "polarity": "denies",
+      "subject": { "table": "sn_aia_trigger_configuration", "record": "Seed 05 Bench Ticket Created" },
+      "occurrences": [
+        { "line": 18, "quote": "neither is referenced by the trigger condition or agent instructions" }
+      ]
+    },
+    {
+      "proposition": "No capability definition row exists whose name matches \"Seed 05 Ticket Acknowledger\".",
+      "kind": "existence",
+      "polarity": "denies",
+      "subject": { "record": "Seed 05 Ticket Acknowledger" },
+      "occurrences": [
+        { "line": 20, "quote": "returned no matching capability definition row" }
+      ]
+    },
+    {
+      "proposition": "The agent uses the platform-level ReAct engine capability named \"AIA ReAct Engine_Amazon Bedrock\".",
+      "kind": "identity",
+      "polarity": "asserts",
+      "asserted_value": "AIA ReAct Engine_Amazon Bedrock",
+      "subject": { "record": "Seed 05 Ticket Acknowledger", "field": "capability" },
+      "occurrences": [
+        { "line": 20, "quote": "the agent uses the platform-level ReAct engine capability (\"AIA ReAct Engine_Amazon Bedrock\")" }
+      ]
+    },
+    {
+      "proposition": "The \"AIA ReAct Engine_Amazon Bedrock\" capability recorded 50 successful LLM calls in the last 24 hours.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "50",
+      "subject": { "record": "AIA ReAct Engine_Amazon Bedrock" },
+      "occurrences": [
+        { "line": 20, "quote": "50 successful LLM calls in the last 24 hours" }
+      ]
+    },
+    {
+      "proposition": "No LLM call record exists for the agent \"Seed 05 Ticket Acknowledger\".",
+      "kind": "existence",
+      "polarity": "denies",
+      "subject": { "record": "Seed 05 Ticket Acknowledger" },
+      "occurrences": [
+        { "line": 20, "quote": "No LLM call exists for this agent" }
+      ]
+    },
+    {
+      "proposition": "A sn_aia_trigger_configuration record named \"Seed 05 Bench Ticket Created\" exists with sys_id bfb77d6c64884500a80203ee029436ee.",
+      "kind": "identity",
+      "polarity": "asserts",
+      "asserted_value": "bfb77d6c64884500a80203ee029436ee",
+      "subject": { "table": "sn_aia_trigger_configuration", "record": "bfb77d6c64884500a80203ee029436ee" },
+      "occurrences": [
+        { "line": 33, "quote": "*Seed 05 Bench Ticket Created* — sys_id `bfb77d6c64884500a80203ee029436ee`" },
+        { "line": 35, "quote": "`\"trigger_sys_id\":\"bfb77d6c64884500a80203ee029436ee\"`" },
+        { "line": 57, "quote": "`sn_aia_trigger_configuration`, sys_id `bfb77d6c64884500a80203ee029436ee`" },
+        { "line": 67, "quote": "`sn_aia_trigger_configuration`, sys_id `bfb77d6c64884500a80203ee029436ee`" },
+        { "line": 76, "quote": "*Seed 05 Bench Ticket Created* (`bfb77d6c64884500a80203ee029436ee`)" }
+      ]
+    },
+    {
+      "proposition": "The count of active trigger links for this agent is zero.",
+      "kind": "count",
+      "polarity": "denies",
+      "asserted_value": "0",
+      "subject": { "record": "Seed 05 Ticket Acknowledger", "field": "active_trigger_links" },
+      "occurrences": [
+        { "line": 35, "quote": "`active_trigger_links=0`" }
+      ]
+    },
+    {
+      "proposition": "The count of active trigger configurations for this agent is zero.",
+      "kind": "count",
+      "polarity": "denies",
+      "asserted_value": "0",
+      "subject": { "table": "sn_aia_trigger_configuration", "record": "Seed 05 Ticket Acknowledger", "field": "active_trigger_configurations" },
+      "occurrences": [
+        { "line": 35, "quote": "`active_trigger_configurations=0`" }
+      ]
+    },
+    {
+      "proposition": "The `run_as_field` field of trigger configuration bfb77d6c64884500a80203ee029436ee is blank.",
+      "kind": "field_value",
+      "polarity": "denies",
+      "asserted_value": "blank",
+      "subject": { "table": "sn_aia_trigger_configuration", "record": "bfb77d6c64884500a80203ee029436ee", "field": "run_as_field" },
+      "occurrences": [
+        { "line": 44, "quote": "All three identity fields are blank" },
+        { "line": 68, "quote": "All blank" }
+      ]
+    },
+    {
+      "proposition": "The `run_as` field of trigger configuration bfb77d6c64884500a80203ee029436ee is blank.",
+      "kind": "field_value",
+      "polarity": "denies",
+      "asserted_value": "blank",
+      "subject": { "table": "sn_aia_trigger_configuration", "record": "bfb77d6c64884500a80203ee029436ee", "field": "run_as" },
+      "occurrences": [
+        { "line": 44, "quote": "All three identity fields are blank" },
+        { "line": 68, "quote": "All blank" }
+      ]
+    },
+    {
+      "proposition": "The `run_as_user` field of trigger configuration bfb77d6c64884500a80203ee029436ee is blank.",
+      "kind": "field_value",
+      "polarity": "denies",
+      "asserted_value": "blank",
+      "subject": { "table": "sn_aia_trigger_configuration", "record": "bfb77d6c64884500a80203ee029436ee", "field": "run_as_user" },
+      "occurrences": [
+        { "line": 44, "quote": "All three identity fields are blank" },
+        { "line": 68, "quote": "All blank" }
+      ]
+    },
+    {
+      "proposition": "The identity resolution for this trigger configuration is \"none\" — no run-as path (static user, per-record field, or script) is configured.",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "none",
+      "subject": { "table": "sn_aia_trigger_configuration", "record": "bfb77d6c64884500a80203ee029436ee", "field": "identity_resolution" },
+      "occurrences": [
+        { "line": 44, "quote": "`identity_resolution = \"none\"`" },
+        { "line": 45, "quote": "`\"run_as_paths\":{\"static_user\":0,\"per_record_field\":0,\"script\":0,\"none\":1}`" }
+      ]
+    },
+    {
+      "proposition": "The sys_created_on of ticket 25e32b4b2b228310f243fed2ce91bf22 is 2026-08-11 20:06:44.",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "2026-08-11 20:06:44",
+      "subject": { "table": "x_snc_tsbench_ticket", "record": "25e32b4b2b228310f243fed2ce91bf22", "field": "sys_created_on" },
+      "occurrences": [
+        { "line": 89, "quote": "Ticket `sys_created_on`: `2026-08-11 20:06:44`" }
+      ]
+    }
+  ]
+}

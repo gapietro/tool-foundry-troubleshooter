@@ -1,0 +1,220 @@
+{
+  "claims": [
+    {
+      "proposition": "The `ticket` input of the tool bound to the agent is declared non-mandatory (mandatory: false) in its input schema.",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "mandatory: false",
+      "subject": { "table": "sn_aia_tool", "record": "2465188619a2417682e91483d560c084", "field": "input_schema[ticket].mandatory" },
+      "occurrences": [
+        { "line": 8, "quote": "the tool's `ticket` input is declared non-mandatory" },
+        { "line": 32, "quote": "The `ticket` input is declared `mandatory: false`." },
+        { "line": 33, "quote": "`{\"name\":\"ticket\",\"mandatory\":false}`" },
+        { "line": 70, "quote": "{\"name\":\"ticket\",\"description\":\"The sys_id of the bench ticket to read.\",\"mandatory\":false}" }
+      ]
+    },
+    {
+      "proposition": "The `ticket` input of the tool has the description \"The sys_id of the bench ticket to read.\"",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "The sys_id of the bench ticket to read.",
+      "subject": { "table": "sn_aia_tool", "record": "2465188619a2417682e91483d560c084", "field": "input_schema[ticket].description" },
+      "occurrences": [
+        { "line": 70, "quote": "{\"name\":\"ticket\",\"description\":\"The sys_id of the bench ticket to read.\",\"mandatory\":false}" }
+      ]
+    },
+    {
+      "proposition": "The tool's script contains an early-return guard (at script lines 3–6) that returns {ok: false, error: \"ticket sys_id missing or not found\"} when the ticket sys_id is missing or not found.",
+      "kind": "state",
+      "polarity": "asserts",
+      "asserted_value": "{ok: false, error: \"ticket sys_id missing or not found\"}",
+      "subject": { "table": "sn_aia_tool", "record": "2465188619a2417682e91483d560c084", "field": "script" },
+      "occurrences": [
+        { "line": 32, "quote": "the script's early-return path executes, returning `{ok: false, error: \"ticket sys_id missing or not found\"}`" },
+        { "line": 33, "quote": "Corroborated by tool script lines 3–6 (id guard)." }
+      ]
+    },
+    {
+      "proposition": "The `priority` field of the ticket record x_snc_tsbench_ticket[36dc13472bea031017a6ffbeee91bf75] is blank (an empty string).",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "\"\" (blank)",
+      "subject": { "table": "x_snc_tsbench_ticket", "record": "36dc13472bea031017a6ffbeee91bf75", "field": "priority" },
+      "occurrences": [
+        { "line": 8, "quote": "the ticket's `priority` field is blank" },
+        { "line": 41, "quote": "The `priority` field is blank (empty string)." },
+        { "line": 42, "quote": "`priority=\"\"`" },
+        { "line": 77, "quote": "**Current:** `\"\"` (blank)" }
+      ]
+    },
+    {
+      "proposition": "The table `x_snc_tsbench_ticket` has no `category` column.",
+      "kind": "existence",
+      "polarity": "denies",
+      "subject": { "table": "x_snc_tsbench_ticket", "field": "category" },
+      "occurrences": [
+        { "line": 8, "quote": "the table has no `category` column" },
+        { "line": 47, "quote": "Table has no `category` column" },
+        { "line": 49, "quote": "`x_snc_tsbench_ticket` — missing column `category`" },
+        { "line": 50, "quote": "`category` is absent" },
+        { "line": 51, "quote": "`missing_fields:[\"category\"]`" },
+        { "line": 84, "quote": "Column does not exist (`field_count=8`, no `category` element)" }
+      ]
+    },
+    {
+      "proposition": "The table `x_snc_tsbench_ticket` has 8 fields.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "8",
+      "subject": { "table": "x_snc_tsbench_ticket" },
+      "occurrences": [
+        { "line": 50, "quote": "schema_lookup reports 8 fields" },
+        { "line": 51, "quote": "`field_count=8`" },
+        { "line": 84, "quote": "`field_count=8`" }
+      ]
+    },
+    {
+      "proposition": "The tool's script unconditionally builds 260 lines of synthetic \"operational_feed\" events and returns them as `raw_context_feed`, via a loop `for (var i = 0; i < 260; i++)`.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "260 lines",
+      "subject": { "table": "sn_aia_tool", "record": "2465188619a2417682e91483d560c084", "field": "script" },
+      "occurrences": [
+        { "line": 8, "quote": "the tool unconditionally emits 260 lines of synthetic noise" },
+        { "line": 59, "quote": "The script unconditionally builds 260 lines of synthetic \"operational_feed\" events" },
+        { "line": 60, "quote": "`raw_context_feed` loop `for (var i = 0; i < 260; i++)`" },
+        { "line": 91, "quote": "Script builds 260-line loop and returns `raw_context_feed`" },
+        { "line": 92, "quote": "Remove the `lines` array, `for` loop, and `out.raw_context_feed = lines.join(NL);` statement" }
+      ]
+    },
+    {
+      "proposition": "The synthetic feed lines generated by the tool's script carry the literal string `no-classification-relevant-content-in-this-record`.",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "no-classification-relevant-content-in-this-record",
+      "subject": { "table": "sn_aia_tool", "record": "2465188619a2417682e91483d560c084", "field": "script" },
+      "occurrences": [
+        { "line": 59, "quote": "carrying the literal string `no-classification-relevant-content-in-this-record`" }
+      ]
+    },
+    {
+      "proposition": "The description of the Seed 07 Ticket Classifier agent reads \"Benchmark seed - deliberately broken\".",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "Benchmark seed - deliberately broken",
+      "subject": { "table": "sn_aia_agent", "record": "Seed 07 Ticket Classifier", "field": "description" },
+      "occurrences": [
+        { "line": 8, "quote": "The agent description explicitly reads *\"Benchmark seed - deliberately broken\"*" }
+      ]
+    },
+    {
+      "proposition": "The agent's instructions contain the directive \"assign one category\".",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "assign one category",
+      "subject": { "table": "sn_aia_agent", "record": "Seed 07 Ticket Classifier", "field": "instructions" },
+      "occurrences": [
+        { "line": 50, "quote": "The agent instructions say \"assign one category\"" }
+      ]
+    },
+    {
+      "proposition": "The agent defines six categories: ACCESS, HARDWARE, APPLICATION, NETWORK, MESSAGING, GENERAL.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "six categories: ACCESS, HARDWARE, APPLICATION, NETWORK, MESSAGING, GENERAL",
+      "subject": { "table": "sn_aia_agent", "record": "Seed 07 Ticket Classifier", "field": "instructions" },
+      "occurrences": [
+        { "line": 85, "quote": "matching the agent's six categories: ACCESS, HARDWARE, APPLICATION, NETWORK, MESSAGING, GENERAL" }
+      ]
+    },
+    {
+      "proposition": "Two LLM calls were made during the execution recorded in the GenAI log for this execution.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "2",
+      "subject": { "table": "sys_generative_ai_log" },
+      "occurrences": [
+        { "line": 21, "quote": "2 LLM calls" }
+      ]
+    },
+    {
+      "proposition": "No configuration definition on the instance matches the name \"AIA ReAct Engine\" — the filter returned 0 definitions.",
+      "kind": "count",
+      "polarity": "denies",
+      "asserted_value": "0 definitions",
+      "subject": { "record": "AIA ReAct Engine" },
+      "occurrences": [
+        { "line": 21, "quote": "`check_config` filter \"AIA ReAct Engine\" matched 0 definitions" }
+      ]
+    },
+    {
+      "proposition": "The actual name of the ReAct engine definition on the instance is \"AIA ReAct Engine_Amazon Bedrock\".",
+      "kind": "identity",
+      "polarity": "asserts",
+      "asserted_value": "AIA ReAct Engine_Amazon Bedrock",
+      "subject": { "record": "AIA ReAct Engine_Amazon Bedrock", "field": "name" },
+      "occurrences": [
+        { "line": 21, "quote": "actual definition name is \"AIA ReAct Engine_Amazon Bedrock\"" }
+      ]
+    },
+    {
+      "proposition": "The agent has 0 trigger links configured.",
+      "kind": "count",
+      "polarity": "denies",
+      "asserted_value": "0",
+      "subject": { "table": "sn_aia_trigger_configuration", "record": "Seed 07 Ticket Classifier" },
+      "occurrences": [
+        { "line": 22, "quote": "0 trigger links" }
+      ]
+    },
+    {
+      "proposition": "The `caller_access` setting on the `syslog` table is set to Caller Restriction.",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "Caller Restriction",
+      "subject": { "table": "syslog", "field": "caller_access" },
+      "occurrences": [
+        { "line": 23, "quote": "`syslog.caller_access = Caller Restriction`" }
+      ]
+    },
+    {
+      "proposition": "The `short_description` of ticket x_snc_tsbench_ticket[36dc13472bea031017a6ffbeee91bf75] is \"Loading dock scanner misreads pallet barcodes whenever the overhead door is open\".",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "Loading dock scanner misreads pallet barcodes whenever the overhead door is open",
+      "subject": { "table": "x_snc_tsbench_ticket", "record": "36dc13472bea031017a6ffbeee91bf75", "field": "short_description" },
+      "occurrences": [
+        { "line": 110, "quote": "`short_description`: *\"Loading dock scanner misreads pallet barcodes whenever the overhead door is open\"*" }
+      ]
+    },
+    {
+      "proposition": "The user record with sys_id 6816f79cc0a8016401c5a33be04be441 has the email address admin@example.com.",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "admin@example.com",
+      "subject": { "table": "sys_user", "record": "6816f79cc0a8016401c5a33be04be441", "field": "email" },
+      "occurrences": [
+        { "line": 111, "quote": "email `admin@example.com`" }
+      ]
+    },
+    {
+      "proposition": "The user record with sys_id 6816f79cc0a8016401c5a33be04be441 has the name \"System Administrator\".",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "System Administrator",
+      "subject": { "table": "sys_user", "record": "6816f79cc0a8016401c5a33be04be441", "field": "name" },
+      "occurrences": [
+        { "line": 111, "quote": "name \"System Administrator\"" }
+      ]
+    },
+    {
+      "proposition": "The user account with sys_id 6816f79cc0a8016401c5a33be04be441 is an internal admin account.",
+      "kind": "state",
+      "polarity": "asserts",
+      "subject": { "table": "sys_user", "record": "6816f79cc0a8016401c5a33be04be441" },
+      "occurrences": [
+        { "line": 111, "quote": "this is an internal admin account" }
+      ]
+    }
+  ]
+}

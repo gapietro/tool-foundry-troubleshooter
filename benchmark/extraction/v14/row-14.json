@@ -1,0 +1,134 @@
+{
+  "report": "row-14",
+  "arm": "custom",
+  "claim_count": 7,
+  "claims": [
+    {
+      "id": "row-14/E01",
+      "proposition": "The priority field on the ticket record with sys_id e6dcdf072bea031017a6ffbeee91bfe4 is empty / not populated.",
+      "kind": "field_value",
+      "polarity": "denies",
+      "asserted_value": "empty",
+      "subject": {
+        "record": "e6dcdf072bea031017a6ffbeee91bfe4",
+        "field": "priority"
+      },
+      "occurrences": [
+        {
+          "line": 2,
+          "quote": "the priority field in the ticket record was not populated"
+        },
+        {
+          "line": 2,
+          "quote": "the priority field remained empty"
+        },
+        {
+          "line": 37,
+          "quote": "Priority field was not populated in the ticket record"
+        }
+      ]
+    },
+    {
+      "id": "row-14/E02",
+      "proposition": "Zero agent_config calls were made.",
+      "kind": "count",
+      "polarity": "denies",
+      "asserted_value": "No",
+      "occurrences": [
+        {
+          "line": 10,
+          "quote": "No agent_config call was made"
+        },
+        {
+          "line": 14,
+          "quote": "No agent_config call was made"
+        },
+        {
+          "line": 30,
+          "quote": "No agent_config call was made"
+        }
+      ]
+    },
+    {
+      "id": "row-14/E03",
+      "proposition": "A field named priority exists on the incident table.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "subject": {
+        "table": "incident",
+        "field": "priority"
+      },
+      "occurrences": [
+        {
+          "line": 18,
+          "quote": "priority exists on incident table"
+        },
+        {
+          "line": 45,
+          "quote": "priority exists on incident table"
+        }
+      ]
+    },
+    {
+      "id": "row-14/E04",
+      "proposition": "Zero query_table calls were made.",
+      "kind": "count",
+      "polarity": "denies",
+      "asserted_value": "No",
+      "occurrences": [
+        {
+          "line": 22,
+          "quote": "No query_table call was made"
+        }
+      ]
+    },
+    {
+      "id": "row-14/E05",
+      "proposition": "Zero genai_log calls were made.",
+      "kind": "count",
+      "polarity": "denies",
+      "asserted_value": "No",
+      "occurrences": [
+        {
+          "line": 26,
+          "quote": "No genai_log call was made"
+        }
+      ]
+    },
+    {
+      "id": "row-14/E06",
+      "proposition": "A tool named read_ticket_context exists.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "subject": {
+        "record": "read_ticket_context"
+      },
+      "occurrences": [
+        {
+          "line": 55,
+          "quote": "read_ticket_context tool's input schema"
+        }
+      ]
+    },
+    {
+      "id": "row-14/E07",
+      "proposition": "The output schema of the read_ticket_context tool does not include a priority field.",
+      "kind": "existence",
+      "polarity": "denies",
+      "asserted_value": "Missing priority field in output schema",
+      "subject": {
+        "record": "read_ticket_context",
+        "field": "priority"
+      },
+      "occurrences": [
+        {
+          "line": 56,
+          "quote": "Missing priority field in output schema"
+        }
+      ]
+    }
+  ],
+  "rejected": [],
+  "conflicts": [],
+  "defects": []
+}

@@ -1,0 +1,217 @@
+{
+  "claims": [
+    {
+      "proposition": "The table `x_snc_tsbench_ticket` has no column named `category`.",
+      "kind": "existence",
+      "polarity": "denies",
+      "subject": { "table": "x_snc_tsbench_ticket", "field": "category" },
+      "occurrences": [
+        { "line": 7, "quote": "the column `category` does not exist on that table" },
+        { "line": 18, "quote": "no `category` column" },
+        { "line": 28, "quote": "Missing `category` column on `x_snc_tsbench_ticket`" },
+        { "line": 34, "quote": "`category` is not a declared column on `x_snc_tsbench_ticket`" },
+        { "line": 35, "quote": "no `category` entry" },
+        { "line": 84, "quote": "No `category` column exists" }
+      ]
+    },
+    {
+      "proposition": "The table `x_snc_tsbench_ticket` contains zero records.",
+      "kind": "count",
+      "polarity": "denies",
+      "asserted_value": "0 rows",
+      "subject": { "table": "x_snc_tsbench_ticket" },
+      "occurrences": [
+        { "line": 7, "quote": "is also genuinely empty (0 rows, confirmed by unfiltered count)" },
+        { "line": 35, "quote": "`verdict: genuinely_empty`" },
+        { "line": 40, "quote": "`x_snc_tsbench_ticket` table is genuinely empty" },
+        { "line": 46, "quote": "The table has 0 rows." },
+        { "line": 47, "quote": "`unfiltered_row_count: 0`" },
+        { "line": 96, "quote": "0 rows (genuinely_empty, confirmed by unfiltered count)" }
+      ]
+    },
+    {
+      "proposition": "The `count_by_category` tool call returned a count of 0 bench tickets and zero rows.",
+      "kind": "count",
+      "polarity": "denies",
+      "asserted_value": "0",
+      "subject": { "table": "sn_aia_tools_execution", "record": "ad7d530f2b6e4310f243fed2ce91bf45" },
+      "occurrences": [
+        { "line": 7, "quote": "returned **\"0 bench tickets.\"**" },
+        { "line": 7, "quote": "That scan returned zero rows" },
+        { "line": 47, "quote": "`{\"ok\":true,\"category\":\"hardware\",\"count\":0,\"tickets\":[]}`" },
+        { "line": 152, "quote": "`{\"ok\":true,\"category\":\"hardware\",\"count\":0,\"tickets\":[]}`" }
+      ]
+    },
+    {
+      "proposition": "The script of the `count_by_category` tool queries the table `x_snc_tsbench_ticket` filtering with `gr.addQuery('category', category)`.",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "gr.addQuery('category', category)",
+      "subject": { "table": "sn_aia_tool", "record": "d7728c6477db44a29c2ad0fed0df7419", "field": "script" },
+      "occurrences": [
+        { "line": 7, "quote": "queries `x_snc_tsbench_ticket` with `addQuery('category', category)`" },
+        { "line": 34, "quote": "The tool script calls `gr.addQuery('category', category)`" },
+        { "line": 35, "quote": "script body `gr.addQuery('category', category)`" },
+        { "line": 86, "quote": "The tool script filters on `category`" }
+      ]
+    },
+    {
+      "proposition": "ServiceNow silently ignores a query filter on a non-existent column, degrading the query to a full-table scan rather than erroring.",
+      "kind": "state",
+      "polarity": "asserts",
+      "occurrences": [
+        { "line": 7, "quote": "ServiceNow silently ignores a filter on a non-existent column, degrading the query to a full-table scan." },
+        { "line": 34, "quote": "ServiceNow silently degrades a filter on a non-existent column to a no-op" },
+        { "line": 86, "quote": "Without the column the filter is silently dropped" }
+      ]
+    },
+    {
+      "proposition": "The description of the agent record `sn_aia_agent` `3e8b1e1f2b1c45c8b437c09ecb6c185a` reads \"Benchmark seed — deliberately broken.\"",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "Benchmark seed — deliberately broken.",
+      "subject": { "table": "sn_aia_agent", "record": "3e8b1e1f2b1c45c8b437c09ecb6c185a", "field": "description" },
+      "occurrences": [
+        { "line": 7, "quote": "The agent description itself states: *\"Benchmark seed — deliberately broken.\"*" },
+        { "line": 153, "quote": "**Agent description** on `sn_aia_agent` `3e8b1e1f2b1c45c8b437c09ecb6c185a`: *\"Benchmark seed — deliberately broken.\"*" }
+      ]
+    },
+    {
+      "proposition": "The agent's instructions field contains 194 characters.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "194",
+      "subject": { "table": "sn_aia_agent", "record": "3e8b1e1f2b1c45c8b437c09ecb6c185a", "field": "instructions" },
+      "occurrences": [
+        { "line": 16, "quote": "instruction body 194 chars" },
+        { "line": 52, "quote": "(194 chars)" },
+        { "line": 58, "quote": "The agent instruction body is only 194 characters" },
+        { "line": 59, "quote": "`instruction_chars: 194`" },
+        { "line": 132, "quote": "194 characters" }
+      ]
+    },
+    {
+      "proposition": "The table `x_snc_tsbench_ticket` has 8 declared columns.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "8",
+      "subject": { "table": "x_snc_tsbench_ticket" },
+      "occurrences": [
+        { "line": 18, "quote": "8 fields" },
+        { "line": 34, "quote": "`schema_lookup` found 8 columns" },
+        { "line": 35, "quote": "`field_count: 8`" },
+        { "line": 84, "quote": "8 columns declared" }
+      ]
+    },
+    {
+      "proposition": "Two LLM calls were made during the diagnosed execution, and both succeeded with no errors.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "2 successful LLM calls, no errors",
+      "occurrences": [
+        { "line": 20, "quote": "2 successful LLM calls, no errors" }
+      ]
+    },
+    {
+      "proposition": "The agent has two tool scripts configured.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "both tool scripts",
+      "subject": { "table": "sn_aia_agent", "record": "3e8b1e1f2b1c45c8b437c09ecb6c185a" },
+      "occurrences": [
+        { "line": 17, "quote": "both tool scripts fully read" }
+      ]
+    },
+    {
+      "proposition": "The agent has no trigger rows configured.",
+      "kind": "existence",
+      "polarity": "denies",
+      "subject": { "table": "sn_aia_agent", "record": "3e8b1e1f2b1c45c8b437c09ecb6c185a" },
+      "occurrences": [
+        { "line": 21, "quote": "no trigger rows" }
+      ]
+    },
+    {
+      "proposition": "A caller restriction on the `syslog` table blocks this application from reading it, and it cannot be lifted by the application.",
+      "kind": "state",
+      "polarity": "asserts",
+      "subject": { "table": "syslog", "field": "caller_access" },
+      "occurrences": [
+        { "line": 22, "quote": "Caller restriction on `syslog` cannot be lifted by this application." }
+      ]
+    },
+    {
+      "proposition": "An `sn_aia_tool` record with sys_id `d7728c6477db44a29c2ad0fed0df7419` exists and is the tool named `count_by_category`.",
+      "kind": "identity",
+      "polarity": "asserts",
+      "asserted_value": "count_by_category",
+      "subject": { "table": "sn_aia_tool", "record": "d7728c6477db44a29c2ad0fed0df7419" },
+      "occurrences": [
+        { "line": 33, "quote": "`sn_aia_tool` `d7728c6477db44a29c2ad0fed0df7419` (`count_by_category`)" },
+        { "line": 69, "quote": "`sn_aia_tool` `d7728c6477db44a29c2ad0fed0df7419` (`count_by_category`)" },
+        { "line": 107, "quote": "`sn_aia_tool` `d7728c6477db44a29c2ad0fed0df7419`, `description` field" },
+        { "line": 119, "quote": "`sn_aia_tool` `d7728c6477db44a29c2ad0fed0df7419`, `script` field" }
+      ]
+    },
+    {
+      "proposition": "An `sn_aia_agent` record exists with sys_id `3e8b1e1f2b1c45c8b437c09ecb6c185a` and has an `instructions` field.",
+      "kind": "identity",
+      "polarity": "asserts",
+      "subject": { "table": "sn_aia_agent", "record": "3e8b1e1f2b1c45c8b437c09ecb6c185a" },
+      "occurrences": [
+        { "line": 57, "quote": "`sn_aia_agent` `3e8b1e1f2b1c45c8b437c09ecb6c185a`, `instructions` field" },
+        { "line": 131, "quote": "`sn_aia_agent` `3e8b1e1f2b1c45c8b437c09ecb6c185a`, `instructions` field" },
+        { "line": 153, "quote": "`sn_aia_agent` `3e8b1e1f2b1c45c8b437c09ecb6c185a`" }
+      ]
+    },
+    {
+      "proposition": "The agent's instructions contain no directives on how to interpret a zero-count result or how to distinguish \"no data\" from a query error.",
+      "kind": "state",
+      "polarity": "denies",
+      "subject": { "table": "sn_aia_agent", "record": "3e8b1e1f2b1c45c8b437c09ecb6c185a", "field": "instructions" },
+      "occurrences": [
+        { "line": 58, "quote": "with no directives on how to interpret a zero-count result or how to distinguish \"no data\" from a query error" }
+      ]
+    },
+    {
+      "proposition": "The `count_by_category` tool script has no `setLimit` call and iterates all matching rows into an in-memory array.",
+      "kind": "state",
+      "polarity": "denies",
+      "subject": { "table": "sn_aia_tool", "record": "d7728c6477db44a29c2ad0fed0df7419", "field": "script" },
+      "occurrences": [
+        { "line": 64, "quote": "Tool script queries without `setLimit`" },
+        { "line": 70, "quote": "The script iterates all matching rows into an in-memory array without `setLimit`." },
+        { "line": 120, "quote": "`while (gr.next()) { matched.push(...) }` — unbounded" }
+      ]
+    },
+    {
+      "proposition": "The description field of the `count_by_category` tool reads \"Counts bench tickets in one category. Give it the category name, for example hardware or network.\"",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "Counts bench tickets in one category. Give it the category name, for example hardware or network.",
+      "subject": { "table": "sn_aia_tool", "record": "d7728c6477db44a29c2ad0fed0df7419", "field": "description" },
+      "occurrences": [
+        { "line": 108, "quote": "\"Counts bench tickets in one category. Give it the category name, for example hardware or network.\"" }
+      ]
+    },
+    {
+      "proposition": "An `sn_aia_tools_execution` record exists with sys_id `ad7d530f2b6e4310f243fed2ce91bf45` holding the tool call response digest.",
+      "kind": "identity",
+      "polarity": "asserts",
+      "subject": { "table": "sn_aia_tools_execution", "record": "ad7d530f2b6e4310f243fed2ce91bf45" },
+      "occurrences": [
+        { "line": 47, "quote": "`sn_aia_tools_execution` `ad7d530f2b6e4310f243fed2ce91bf45`" },
+        { "line": 152, "quote": "`sn_aia_tools_execution` `ad7d530f2b6e4310f243fed2ce91bf45`" }
+      ]
+    },
+    {
+      "proposition": "An `sn_aia_message` record with sys_id `b36d1fcb2b6e4310f243fed2ce91bf2c` contains the initiating user's email, sys_id, and name.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "subject": { "table": "sn_aia_message", "record": "b36d1fcb2b6e4310f243fed2ce91bf2c" },
+      "occurrences": [
+        { "line": 151, "quote": "**User profile** in execution message stream (`sn_aia_message` `b36d1fcb2b6e4310f243fed2ce91bf2c`): email, sys_id, and name of the initiating user." }
+      ]
+    }
+  ]
+}

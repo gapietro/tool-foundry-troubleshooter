@@ -64,6 +64,13 @@ const CLEARED = [
     // the frozen claims name), which puts the whole burden on this source.
     'benchmark/scripts/metadata-probe.js',
     'test/metadataProbe.test.js',
+    // §AX15 adds the sweep driver on the same reasoning one step further out.
+    // It decides which emission becomes the frozen artifact for each report, so
+    // a driver that special-cased a report — retrying only that one, or
+    // preferring an earlier attempt for it — would move both figures without
+    // touching any file above it.
+    'benchmark/scripts/claim-extraction-sweep.js',
+    'test/claimExtractionSweep.test.js',
 ];
 
 const PROMPT = 'benchmark/extraction/claim-extraction-prompt.md';

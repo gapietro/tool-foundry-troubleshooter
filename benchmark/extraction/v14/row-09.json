@@ -1,0 +1,386 @@
+{
+  "report": "row-09",
+  "arm": "native",
+  "claim_count": 19,
+  "claims": [
+    {
+      "id": "row-09/E01",
+      "proposition": "A tool named count_by_category exists on the instance.",
+      "kind": "identity",
+      "polarity": "asserts",
+      "asserted_value": "count_by_category",
+      "subject": {
+        "table": "sn_aia_tool",
+        "record": "d7728c6477db44a29c2ad0fed0df7419",
+        "field": "name"
+      },
+      "occurrences": [
+        {
+          "line": 8,
+          "quote": "The `count_by_category` tool"
+        },
+        {
+          "line": 56,
+          "quote": "`count_by_category` script"
+        }
+      ]
+    },
+    {
+      "id": "row-09/E02",
+      "proposition": "Records in x_snc_tsbench_ticket carry values in the type column including 'hardware' and 'software'.",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "hardware, software",
+      "subject": {
+        "table": "x_snc_tsbench_ticket",
+        "field": "type"
+      },
+      "occurrences": [
+        {
+          "line": 8,
+          "quote": "several carry `type = 'hardware'`"
+        },
+        {
+          "line": 39,
+          "quote": "same query with `type` → values `hardware`, `software` confirmed"
+        },
+        {
+          "line": 64,
+          "quote": "The `type` column carries values `hardware`, `software`, etc."
+        }
+      ]
+    },
+    {
+      "id": "row-09/E03",
+      "proposition": "The script of the count_by_category tool queries the table x_snc_tsbench_ticket using addQuery('category', category).",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "gr.addQuery('category', category);",
+      "subject": {
+        "table": "sn_aia_tool",
+        "record": "d7728c6477db44a29c2ad0fed0df7419",
+        "field": "script"
+      },
+      "occurrences": [
+        {
+          "line": 8,
+          "quote": "The `count_by_category` tool queries `x_snc_tsbench_ticket` with `addQuery('category', category)`"
+        },
+        {
+          "line": 36,
+          "quote": "Script calls `addQuery('category', category)`"
+        },
+        {
+          "line": 37,
+          "quote": "script body: `gr.addQuery('category', category)`"
+        },
+        {
+          "line": 62,
+          "quote": "`gr.addQuery('category', category);`"
+        }
+      ]
+    },
+    {
+      "id": "row-09/E04",
+      "proposition": "The table x_snc_tsbench_ticket contains more than 20 records.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "20+ records",
+      "subject": {
+        "table": "x_snc_tsbench_ticket"
+      },
+      "occurrences": [
+        {
+          "line": 8,
+          "quote": "The table contains 20+ records"
+        }
+      ]
+    },
+    {
+      "id": "row-09/E05",
+      "proposition": "The table x_snc_tsbench_ticket has no column named category.",
+      "kind": "existence",
+      "polarity": "denies",
+      "subject": {
+        "table": "x_snc_tsbench_ticket",
+        "field": "category"
+      },
+      "occurrences": [
+        {
+          "line": 8,
+          "quote": "the column `category` does not exist on that table"
+        },
+        {
+          "line": 36,
+          "quote": "Column `category` does not exist on `x_snc_tsbench_ticket`"
+        },
+        {
+          "line": 38,
+          "quote": "`category` absent"
+        },
+        {
+          "line": 39,
+          "quote": "`field_warnings: [\"category\"]` (field does not exist)"
+        },
+        {
+          "line": 64,
+          "quote": "`x_snc_tsbench_ticket` has no `category` column"
+        }
+      ]
+    },
+    {
+      "id": "row-09/E06",
+      "proposition": "There is no trigger wiring configured for the agent.",
+      "kind": "existence",
+      "polarity": "denies",
+      "subject": {
+        "record": "3e8b1e1f2b1c45c8b437c09ecb6c185a"
+      },
+      "occurrences": [
+        {
+          "line": 22,
+          "quote": "no trigger wiring found"
+        }
+      ]
+    },
+    {
+      "id": "row-09/E07",
+      "proposition": "The syslog table on the instance has a caller access restriction.",
+      "kind": "state",
+      "polarity": "asserts",
+      "asserted_value": "caller-restriction",
+      "subject": {
+        "table": "syslog",
+        "field": "caller_access"
+      },
+      "occurrences": [
+        {
+          "line": 24,
+          "quote": "`syslog` has caller-restriction"
+        }
+      ]
+    },
+    {
+      "id": "row-09/E08",
+      "proposition": "A record exists in sn_aia_tool with sys_id d7728c6477db44a29c2ad0fed0df7419.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "subject": {
+        "table": "sn_aia_tool",
+        "record": "d7728c6477db44a29c2ad0fed0df7419"
+      },
+      "occurrences": [
+        {
+          "line": 35,
+          "quote": "`sn_aia_tool` · sys_id `d7728c6477db44a29c2ad0fed0df7419`"
+        },
+        {
+          "line": 37,
+          "quote": "`sn_aia_tool` · `d7728c6477db44a29c2ad0fed0df7419`"
+        },
+        {
+          "line": 61,
+          "quote": "`sn_aia_tool` · sys_id `d7728c6477db44a29c2ad0fed0df7419`"
+        },
+        {
+          "line": 71,
+          "quote": "`sn_aia_tool` · sys_id `d7728c6477db44a29c2ad0fed0df7419`"
+        },
+        {
+          "line": 80,
+          "quote": "`sn_aia_tool` record `d7728c6477db44a29c2ad0fed0df7419`"
+        }
+      ]
+    },
+    {
+      "id": "row-09/E09",
+      "proposition": "A schema lookup of the table x_snc_tsbench_ticket returns 8 fields.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "8",
+      "subject": {
+        "table": "x_snc_tsbench_ticket"
+      },
+      "occurrences": [
+        {
+          "line": 38,
+          "quote": "8 fields returned"
+        }
+      ]
+    },
+    {
+      "id": "row-09/E10",
+      "proposition": "The table x_snc_tsbench_ticket has a column named type, of type String with maximum length 40.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "asserted_value": "String, max 40",
+      "subject": {
+        "table": "x_snc_tsbench_ticket",
+        "field": "type"
+      },
+      "occurrences": [
+        {
+          "line": 38,
+          "quote": "`type` (String, max 40) present"
+        }
+      ]
+    },
+    {
+      "id": "row-09/E11",
+      "proposition": "The count_by_category tool call returned a count of 0 tickets.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "count:0",
+      "subject": {
+        "record": "d61d5fc72bea031017a6ffbeee91bff3"
+      },
+      "occurrences": [
+        {
+          "line": 40,
+          "quote": "response `{ok:true, category:'hardware', count:0, tickets:[]}`"
+        }
+      ]
+    },
+    {
+      "id": "row-09/E12",
+      "proposition": "The agent's active_tool_count is 0.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "0",
+      "subject": {
+        "table": "sn_aia_agent",
+        "record": "3e8b1e1f2b1c45c8b437c09ecb6c185a",
+        "field": "active_tool_count"
+      },
+      "occurrences": [
+        {
+          "line": 43,
+          "quote": "`active_tool_count = 0` on agent"
+        },
+        {
+          "line": 49,
+          "quote": "`agent_config` reports `active_tool_count: 0`"
+        }
+      ]
+    },
+    {
+      "id": "row-09/E13",
+      "proposition": "A record exists in sn_aia_agent with sys_id 3e8b1e1f2b1c45c8b437c09ecb6c185a.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "subject": {
+        "table": "sn_aia_agent",
+        "record": "3e8b1e1f2b1c45c8b437c09ecb6c185a"
+      },
+      "occurrences": [
+        {
+          "line": 48,
+          "quote": "`sn_aia_agent` · sys_id `3e8b1e1f2b1c45c8b437c09ecb6c185a`"
+        }
+      ]
+    },
+    {
+      "id": "row-09/E14",
+      "proposition": "Both tool bindings of the agent are individually flagged active with a value of 1.",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "active: 1",
+      "subject": {
+        "table": "sn_aia_agent_tool_m2m",
+        "field": "active"
+      },
+      "occurrences": [
+        {
+          "line": 49,
+          "quote": "Both bindings show `active: 1` individually"
+        }
+      ]
+    },
+    {
+      "id": "row-09/E15",
+      "proposition": "The agent's tool_count is 2.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "2",
+      "subject": {
+        "table": "sn_aia_agent",
+        "record": "3e8b1e1f2b1c45c8b437c09ecb6c185a",
+        "field": "tool_count"
+      },
+      "occurrences": [
+        {
+          "line": 49,
+          "quote": "while `tool_count: 2`"
+        }
+      ]
+    },
+    {
+      "id": "row-09/E16",
+      "proposition": "The description field of the sn_aia_tool record d7728c6477db44a29c2ad0fed0df7419 reads \"Counts bench tickets in one category. Give it the category name, for example hardware or network.\"",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "Counts bench tickets in one category. Give it the category name, for example hardware or network.",
+      "subject": {
+        "table": "sn_aia_tool",
+        "record": "d7728c6477db44a29c2ad0fed0df7419",
+        "field": "description"
+      },
+      "occurrences": [
+        {
+          "line": 72,
+          "quote": "Counts bench tickets in one category. Give it the category name, for example hardware or network."
+        }
+      ]
+    },
+    {
+      "id": "row-09/E17",
+      "proposition": "Conversation message records in sys_cs_message contain user utterance text.",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "subject": {
+        "table": "sys_cs_message"
+      },
+      "occurrences": [
+        {
+          "line": 92,
+          "quote": "`sys_cs_message` / conversation messages — contain user utterance text"
+        }
+      ]
+    },
+    {
+      "id": "row-09/E18",
+      "proposition": "The content digests of sn_aia_message records contain the user profile email admin@example.com and a user sys_id.",
+      "kind": "field_value",
+      "polarity": "asserts",
+      "asserted_value": "admin@example.com",
+      "subject": {
+        "table": "sn_aia_message"
+      },
+      "occurrences": [
+        {
+          "line": 93,
+          "quote": "`sn_aia_message` content digests — contain user profile email (`admin@example.com`) and user sys_id"
+        }
+      ]
+    },
+    {
+      "id": "row-09/E19",
+      "proposition": "The table x_snc_tsbench_ticket has a short_description field carrying values.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "subject": {
+        "table": "x_snc_tsbench_ticket",
+        "field": "short_description"
+      },
+      "occurrences": [
+        {
+          "line": 94,
+          "quote": "`short_description` values from `x_snc_tsbench_ticket`"
+        }
+      ]
+    }
+  ],
+  "rejected": [],
+  "conflicts": [],
+  "defects": []
+}

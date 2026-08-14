@@ -9269,3 +9269,70 @@ both the registered principle defeated by a mechanical detail — an optional ke
 in a module written specifically to enforce that principle, by an author who had just finished writing
 the registration. Neither would have appeared in a figure. **A rule and its enforcement are different
 artifacts, and writing the first is not evidence about the second.**
+
+---
+
+## AX15. The retry, and the bound that keeps it from becoming a re-roll
+
+Registered **2026-08-13**, with the sweep driver being written and **before any report has been
+extracted, any raw emission has been written, or any figure produced**. Same window and same reason as
+§AX13 and §AX14: it settles the shape of the measurement while nothing about the outcome is known.
+
+### AX15.1 The choice, and why the choice alone is not enough
+
+A per-report extraction runs in a fresh context (§AX12.1) and returns an envelope. Sometimes an envelope
+comes back that is not JSON at all, or is JSON without the top-level array the prompt specifies. Two
+handlings were put to the operator before the sweep:
+
+- **retry once** — a broken envelope is a *serialisation* failure, and scoring it as an empty emission
+  blames inference for plumbing;
+- **no retry** — every retry is an opportunity to re-roll a result, and once retries exist, *"it came
+  back malformed"* is a door that can be pushed on.
+
+> **Registered: retry once.** The operator chose it before any report had been dispatched, which is the
+> only time either option was choosable — afterwards, whichever is picked is a response to output.
+
+**The choice does not carry itself.** "Retry on failure" is a judgement unless *failure* is decided
+mechanically, and a discretionary retry is exactly the re-roll the second option was guarding against.
+So the bound is registered with the permission, not left to care.
+
+### AX15.2 What may be retried, decided by the parser and not by a reader
+
+> **Registered.** A retry is permitted **only** on an **envelope-level** defect, defined as: the raw
+> emission does not parse as JSON, **or** it parses without a top-level `claims` array. Both are decided
+> by `JSON.parse` and `Array.isArray` in the driver. Nothing else qualifies.
+>
+> **`{"claims": []}` is a well-formed envelope and is never retried.** It is the result the prompt
+> registers for a report asserting nothing about instance state, and two reports in this corpus are
+> structurally claim-free (§AX4), so an empty emission is an *expected* outcome. Retrying it would let
+> the instrument re-roll precisely the reports whose correct answer is nothing.
+>
+> **Content is never grounds for a retry** — not a low claim count, not claims the driver rejected as
+> structurally invalid, not an emission that looks wrong to whoever is watching. `rejected` is already a
+> recorded outcome (`claim-extraction.js` keeps rejections rather than dropping them, so a plumbing
+> failure cannot masquerade as a miss), and a report that emits little is a measurement, not a fault.
+>
+> **At most one retry per report.** A second envelope-level failure is recorded as a failed extraction
+> and the report carries that status into the figures. There is no third attempt and no operator
+> discretion to grant one.
+
+### AX15.3 The retry is auditable, which is what makes the bound checkable
+
+A bound nobody can verify after the fact is an attestation, and §AX0's whole substitution is *prefer a
+property you can check on the artifact*.
+
+> **Registered:** every attempt is preserved on disk. A retried report keeps its first emission
+> alongside its second, and the driver writes a manifest recording, per report, how many attempts ran
+> and which envelope-level defect triggered each retry. **A re-roll is therefore visible in the
+> artifacts** — a retry with no recorded defect, or a second attempt on a report whose first emission
+> parsed, is detectable by anyone reading the tree, without trusting the operator's account of it.
+
+**What this does not claim.** The retry runs in a fresh context, so the second attempt is not informed by
+the first — but it is a second sample from a stochastic process, and on an envelope-level defect that is
+the entire point. It buys nothing against a model that emits a valid envelope with claims missing from
+it; that failure is invisible here by construction and is what enumeration recall exists to measure.
+
+### AX15.4 What this does not decide
+
+No figure. Nothing about how many reports will need a retry — the honest expectation is zero, and
+recording the rule is not a prediction that it will fire.

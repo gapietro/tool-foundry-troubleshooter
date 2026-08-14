@@ -1,0 +1,142 @@
+{
+  "report": "row-10",
+  "arm": "custom",
+  "claim_count": 6,
+  "claims": [
+    {
+      "id": "row-10/E01",
+      "proposition": "A tool named count_by_category exists and is available to the agent on the instance.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "subject": {
+        "record": "count_by_category"
+      },
+      "occurrences": [
+        {
+          "line": 2,
+          "quote": "The tool call to count_by_category executed successfully"
+        },
+        {
+          "line": 72,
+          "quote": "count_by_category tool's response validation logic"
+        },
+        {
+          "line": 78,
+          "quote": "count_by_category tool"
+        }
+      ]
+    },
+    {
+      "id": "row-10/E02",
+      "proposition": "Incidents with the category 'hardware' exist on the instance.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "asserted_value": "hardware",
+      "subject": {
+        "table": "incident",
+        "field": "category"
+      },
+      "occurrences": [
+        {
+          "line": 2,
+          "quote": "valid hardware category incidents exist in the system"
+        },
+        {
+          "line": 22,
+          "quote": "query_table confirmed hardware incidents exist"
+        },
+        {
+          "line": 54,
+          "quote": "Valid hardware category incidents exist in the system"
+        }
+      ]
+    },
+    {
+      "id": "row-10/E03",
+      "proposition": "The count_by_category tool returned a count of 0 tickets for the hardware category.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "0",
+      "subject": {
+        "record": "count_by_category",
+        "field": "count"
+      },
+      "occurrences": [
+        {
+          "line": 2,
+          "quote": "returned a count of 0 tickets for the hardware category"
+        },
+        {
+          "line": 37,
+          "quote": "Tool response indicated 0 tickets in hardware category"
+        },
+        {
+          "line": 41,
+          "quote": "tool_call response_digest"
+        }
+      ]
+    },
+    {
+      "id": "row-10/E04",
+      "proposition": "A query of the incident table returned 20 hardware-category incidents.",
+      "kind": "count",
+      "polarity": "asserts",
+      "asserted_value": "20",
+      "subject": {
+        "table": "incident",
+        "field": "category"
+      },
+      "occurrences": [
+        {
+          "line": 45,
+          "quote": "query_table returned 20 hardware incidents"
+        },
+        {
+          "line": 58,
+          "quote": "query_table returned 20 hardware incidents"
+        }
+      ]
+    },
+    {
+      "id": "row-10/E05",
+      "proposition": "An incident record with sys_id 0047ca89f0252300964feeefe80ff00d exists on the instance and is one of the hardware-category incidents.",
+      "kind": "identity",
+      "polarity": "asserts",
+      "asserted_value": "0047ca89f0252300964feeefe80ff00d",
+      "subject": {
+        "table": "incident",
+        "record": "0047ca89f0252300964feeefe80ff00d",
+        "field": "sys_id"
+      },
+      "occurrences": [
+        {
+          "line": 45,
+          "quote": "with sys_ids like 0047ca89f0252300964feeefe80ff00d"
+        },
+        {
+          "line": 58,
+          "quote": "with sys_ids like 0047ca89f0252300964feeefe80ff00d"
+        }
+      ]
+    },
+    {
+      "id": "row-10/E06",
+      "proposition": "The count_by_category tool's response validation logic contains no validation of an empty ticket list.",
+      "kind": "state",
+      "polarity": "denies",
+      "asserted_value": "No validation of empty ticket list",
+      "subject": {
+        "record": "count_by_category"
+      },
+      "occurrences": [
+        {
+          "line": 73,
+          "quote": "No validation of empty ticket list"
+        }
+      ]
+    }
+  ],
+  "rejected": [],
+  "conflicts": [],
+  "defects": []
+}

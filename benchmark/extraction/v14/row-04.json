@@ -1,0 +1,64 @@
+{
+  "report": "row-04",
+  "arm": "custom",
+  "claim_count": 2,
+  "claims": [
+    {
+      "id": "row-04/E01",
+      "proposition": "A tool named 'measure_request' exists on the instance and is available to the AI agent that handled the request.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "subject": {
+        "record": "measure_request"
+      },
+      "occurrences": [
+        {
+          "line": 2,
+          "quote": "The agent routed the request via the 'measure_request' tool"
+        }
+      ]
+    },
+    {
+      "id": "row-04/E02",
+      "proposition": "The sn_aia_tool table exists on the instance and has a valid table structure.",
+      "kind": "existence",
+      "polarity": "asserts",
+      "subject": {
+        "table": "sn_aia_tool"
+      },
+      "occurrences": [
+        {
+          "line": 18,
+          "quote": "schema_lookup validated sn_aia_tool table structure"
+        },
+        {
+          "line": 49,
+          "quote": "schema_lookup validated tool table structure"
+        }
+      ]
+    }
+  ],
+  "rejected": [
+    {
+      "claim": {
+        "proposition": "The AI agent's configuration contains valid tool definitions.",
+        "kind": "state",
+        "polarity": "asserts",
+        "subject": {},
+        "occurrences": [
+          {
+            "line": 14,
+            "quote": "agent_config confirmed tool definitions"
+          },
+          {
+            "line": 46,
+            "quote": "agent_config confirmed tool definition validity"
+          }
+        ]
+      },
+      "reason": "quote is not verbatim at line 46"
+    }
+  ],
+  "conflicts": [],
+  "defects": []
+}
