@@ -17,6 +17,75 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1314 — 2026-08-13
+
+### Fixed — CLAUDE.md said nothing blocks a merge; branch protection blocks every merge (issue #253)
+
+`CLAUDE.md`'s "Build passing is not verification" section claimed *"There is currently **no CI and
+no branch protection** on this repo — nothing runs these checks for you, and nothing blocks a
+merge."* Every clause of that was false, and false **in the direction that changes behaviour**: a
+reader hitting the real refusal (*"the base branch policy prohibits the merge"*) would reach for
+`gh pr merge --admin`, which `enforce_admins: true` also refuses. Two dead ends, from the file every
+session loads first. That is how #253 was filed — it cost a session while merging PRs
+#248/#249/#250/#252.
+
+The claim was **true when written**. CI landed in #215 / PR #222 and `enforce_admins` in
+`2026.08.1206`; the paragraph simply did not move. Rot, not error.
+
+Measured, not assumed — `gh api repos/gapietro/tool-foundry-troubleshooter/branches/main/protection`:
+
+| setting | value |
+|---|---|
+| `required_status_checks.contexts` | `["build · test · lint"]` |
+| `required_status_checks.strict` | `true` — branch must be up to date with `main` to merge |
+| `enforce_admins.enabled` | `true` — `--admin` does not bypass |
+| `allow_force_pushes` / `allow_deletions` | `false` |
+
+The replacement keeps the section's actual argument intact (a green build carries almost no signal;
+`src/fluent/` stays unverified until installed and exercised on gpinst01; `src/server/` until jest
+runs; the PR still says which checks were run) and adds the two properties that change how work is
+*planned* rather than merely refused: `strict: true` means concurrent PRs land in sequence with a
+rebase between them, and `enforce_admins: true` means there is no per-merge escape hatch — pointing
+at the `2026.08.1206` recovery procedure for the wedged-CI case instead of leaving the reader to
+invent one.
+
+### Added — `test/branchProtectionDoc.test.js`, so the claim cannot rot silently again
+
+Guard in the same family as `test/instructionFlagGuard.test.js`: instruction files are **discovered
+by glob**, not by a hand roster, and records (`CHANGELOG.md`, `GRADE.md`, `BACKLOG.md`,
+`docs/superpowers/plans|specs`, `benchmark/seeds/history`) are permanently out of scope. `GRADE.md`
+quotes the false claim as the evidence for its sitting-1 *"No mandatory CI → B"* cap, and that
+file's own header states the sitting is deliberately not rewritten as fixes land — rewriting a
+measurement into present-day correctness destroys the baseline sitting 2 is measured against. It
+needs no edit: its remediation log already records F-02 closed with `enforce_admins: true`.
+
+**The obvious guard was unusable.** Forbidding `no CI` breaks five live lines under
+`.claude/skills/` where **CI means Configuration Item** — *"No CI found: I couldn't find that
+configuration item"*, *"NOT MET — no CI changes, multiple users same Outlook version"*. So the
+CI-abbreviation pattern fires only when the line also carries a source-control qualifier (branch
+protection, merge, workflow, pipeline, GitHub Actions, pull request). No ServiceNow incident-triage
+example talks about merges or workflows; the false paragraph did both in one sentence. A second test
+pins **both senses** against the same matcher, so loosening the qualifier logic starts failing
+instead of quietly demanding correct prose be reworded. The other three patterns (`no branch
+protection`, `nothing blocks a merge`, `no .github/workflows`) have no second meaning and need no
+qualifier.
+
+**It deliberately does not call `gh api`.** Reading branch protection needs an admin-scoped token;
+CI's `GITHUB_TOKEN` gets 403, so such a test would either red the pipeline permanently or be skipped
+— and `ci.yml`'s own header argues that "a CI step that passes vacuously is worse than no step — it
+reads as a gate." A guard that cannot run inside the gate it guards is the failure mode it exists to
+prevent. **The drift this cannot see is stated in the file rather than papered over:** disabling
+`enforce_admins`, dropping the required context, or flipping `strict` to false via the API all leave
+these assertions passing while CLAUDE.md becomes wrong in the opposite direction. What is checked
+instead is the coupling that actually rots *in a commit* — the required check's **name**, which is
+the workflow job's `name:` and is quoted verbatim in CLAUDE.md. Rename the job and it goes red;
+that assertion was observed failing before the text fix, which is what makes it non-vacuous.
+
+Verified: 49 suites / **2276 tests** pass, `npm run lint` clean, `now-sdk build` completed
+successfully. No `src/` change, so no instance verification applies.
+
+---
+
 ## 2026.08.1313 — 2026-08-13
 
 ### Fixed — the gate's premise was refuted by this repo's own record (issue #259)
