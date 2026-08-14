@@ -92,7 +92,12 @@ Rules #19, #33, #34, #40, #41, #42 and #43 all describe the same failure shape: 
 
 - A change under `src/fluent/` is **unverified** until it has been installed and exercised against gpinst01 via the foundry MCP tools.
 - A change under `src/server/` is unverified until its jest tests run.
-- There is currently **no CI and no branch protection** on this repo — nothing runs these checks for you, and nothing blocks a merge. Run them locally before opening a PR and say in the PR which ones you ran.
+- CI runs lint → `now-sdk build` → jest on every pull request (`.github/workflows/ci.yml`), and `main` is protected: the check **`build · test · lint`** is **required**, so a red or missing run refuses the merge. Run the checks locally anyway and say in the PR which ones you ran — CI tells you the build and the unit tests are green, which is the half of the problem this section says carries almost no signal.
+
+Two properties of that protection change how you plan work, and neither is discoverable from a refusal message:
+
+- **`strict: true`** — a branch must be up to date with `main` before it can merge. With several PRs open at once, each merge stales the rest, so they land in sequence with a rebase between them. Budget for it rather than rediscovering it.
+- **`enforce_admins: true`** — `gh pr merge --admin` does **not** bypass the gate; it is refused with *"the base branch policy prohibits the merge"*. There is no per-merge escape hatch by design. If CI itself wedges (broken workflow, GitHub outage), the documented recovery is to drop and restore `enforce_admins` via `gh api` — written out in `CHANGELOG.md` under `2026.08.1206`.
 
 ### SDK vs MCP boundary
 
