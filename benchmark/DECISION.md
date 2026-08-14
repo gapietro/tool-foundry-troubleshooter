@@ -9336,3 +9336,97 @@ it; that failure is invisible here by construction and is what enumeration recal
 
 No figure. Nothing about how many reports will need a retry — the honest expectation is zero, and
 recording the rule is not a prediction that it will fire.
+
+---
+
+## AX16. The two gaps the sweep exposed, registered before either repair ran
+
+Registered **2026-08-13**, after the sweep was frozen and committed (`c9feb11`) and after the metadata
+snapshot was collected, but **before any recall, spurious or AX-4 figure was computed**. Both repairs
+below were put to the operator as choices and both were chosen; what is registered here is the *bound*
+on each, on §AX15.1's principle that a permission does not carry itself.
+
+### AX16.1 The fixture predates polarity, so §AX2.4's denominator was empty
+
+§AX13 added `polarity` to the extractor's output schema. It was legal when made — no report had been
+extracted, so there was no output to respond to — and the section says so. **What it did not check is
+the artifact one step away.** The held-out inventory was frozen earlier (§AX2.2), carries no `polarity`,
+and the adjudicator's first branch refuses a claim without one.
+
+Measured, not predicted: all **62** inventory claims adjudicate `unresolvable / no_polarity`. §AX2.4
+requires every inventory claim adjudicated precisely so **AX-4** has a denominator, so AX-4 was
+unmeasurable — the second time in this instrument's history a prediction has been found unmeasurable as
+filed (§AX6 records the first, and its repair *was* §AX2.4).
+
+**This is §AX14.7's sentence again, one artifact further out.** A rule and its enforcement are different
+artifacts; so are an amendment and the fixtures it invalidates. §AX13 reasoned carefully about whether
+the freeze permitted the change and never asked what else consumed the schema.
+
+### AX16.2 The polarity amendment is an OVERLAY, and the fixture is not touched
+
+The obvious repair — add the field to the inventory — would edit an artifact whose entire evidential
+value is that `git log` shows it predating the extractor.
+
+> **Registered:** polarity is recorded in a **separate overlay file**, keyed by inventory claim id. The
+> fixture `benchmark/v14-claim-inventory-heldout.json` is **not modified**, stays byte-identical to the
+> commit that precedes the extractor, and its guarantee is untouched. The overlay is a later artifact
+> and is labelled as one.
+>
+> **Authored in fresh contexts, one per report**, holding only that report's inventory propositions —
+> never any extractor output, never an adjudication verdict, never a denominator or a recall target.
+> Per-report rather than per-claim because the contamination that matters is *extractor output*, and
+> sibling propositions from the same report carry none of it; §AX12.1's isolation is reproduced against
+> the hazard that actually exists here rather than copied by shape.
+>
+> **Polarity only.** No proposition, kind, subject or occurrence may be altered, and this is checked
+> mechanically rather than promised: the overlay carries no field but `polarity`, so there is nothing
+> for a drifting judgement to alter.
+
+**What must travel with every AX-4 quote, and it is a real reduction:** §AX2.2's pre-extractor guarantee
+covers this fixture's propositions, kinds, subjects and occurrences. **It does not cover polarity**,
+which was assigned after output existed — by contexts blind to that output, which is a weaker property
+than commit order and is offered as exactly that.
+
+**Why the repair was judged worth making, disclosed because it is operator exposure.** Before choosing,
+the operator measured the refuted population under each polarity taken uniformly: **10 and 11**, either
+side of AX-4's **K=5** floor. So the repair buys a live verdict rather than another `not exercised`.
+This inspected the *size* of a population, never which claims compose it, and it tuned nothing.
+
+### AX16.3 Matching is a judgement, so it is dispatched and not performed
+
+§AX2.3 defines recall as *"inventory claims the extractor emitted"*, matched per proposition. **It never
+registers who decides a match.** Two independently-worded propositions asserting one thing must be
+judged the same, and §AX12.2 deliberately built the extractor from a different operationalisation than
+the fixture — so honest wording divergence is guaranteed by construction, and it is the measurement.
+
+The operator is the contaminated party (§AX12.1 discloses reading one held-out proposition and the
+per-arm denominators), and the contamination runs in the direction that **inflates** recall.
+
+> **Registered, before the first match was made:** matching runs in **fresh contexts, one per report**,
+> each holding that report's inventory propositions and that report's emitted propositions and nothing
+> else — never another report, never the fixture as a whole, never a denominator, never the recall
+> target, never `DECISION.md`. It is posed as a neutral correspondence task; the dispatched context is
+> not told a recall figure depends on it. **The operator dispatches; the operator does not match.**
+>
+> **The same pass yields the spurious rate**, since emitted claims left unmatched are exactly §AX2.5's
+> numerator — one judgement, not two, so the two figures cannot disagree about what "the same claim"
+> means.
+
+### AX16.4 The snapshot's table list is dictated by BOTH frozen artifacts
+
+§AX14.4 registered the snapshot as collected over "the tables the frozen claims name", written when the
+only frozen artifact in view was the sweep. §AX2.4 requires **inventory** claims adjudicated too, and
+one table named by the inventory is named by no emitted claim — so a snapshot scoped to emitted claims
+alone returns `probe_failed` for it, an instrument gap masquerading as claim-level indeterminacy.
+
+> **Registered (amendment, in §AT3's sense — it restores a shipped condition to what §AX2.4 already
+> required, and is strictly a widening):** the table list is the union over **every frozen artifact the
+> adjudication reads** — the sweep and the held-out inventory. Both predate the snapshot, so §AX14.4's
+> bound is unweakened: the list is still dictated by frozen artifacts and still re-derivable from the
+> queries recorded in the snapshot's provenance.
+
+### AX16.5 What this does not decide
+
+No figure. Nothing about how many inventory claims will be matched, what either arm's recall will be, or
+whether AX-1a/AX-1b pass. §AX7.2 is untouched and continues to govern: if the extractor is repaired in
+response to what the matching finds, no valid recall figure is available from v14 at all.
