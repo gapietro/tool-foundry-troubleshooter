@@ -17,6 +17,70 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1313 — 2026-08-13
+
+### Fixed — the gate's premise was refuted by this repo's own record (issue #259)
+
+**A premise check run before designing #259 found the issue was filed on a claim its own parent had
+already refuted.** `BACKLOG.md` stated the gate as *"measure whether the Troubleshooter's root causes
+are RIGHT"*, asserting PRD Success Criterion 1 *"has never been measured"* and that v1–v14 scored
+admissibility and not correctness. **`benchmark/DECISION.md` §AW0 (2026-08-12) and `DESIGN.md` §5.6
+correction (a) both refute this, and both predate the paragraph they were re-imported over.**
+
+`root_cause_layer_correct` (0/2) and `fix_target_correct` (0/1/2) are correctness columns — 4 of the
+rubric's 6 points — and the former is one of the two terms in `passes_gate` (`scorecard-template.md`
+§A2). **Layer-level correctness has been in the gate figure since v9.** Seed ground truth predates
+every run and is checkable with `git merge-base --is-ancestor` — `82247ca` (seeds 01–03) and
+`1253cbf` (seeds 04–05), both 2026-07-31, plus `0c4f36c` (seeds 06–08, 2026-08-11) — which is the
+§AX0-preferred shape.
+
+**SC-1, quoted for the first time** (`scorecard-v14.md` §1, `root_cause_layer_correct == 2`):
+
+| arm | SC-1 |
+|---|---|
+| native | **7 / 10 — 70.0%** |
+| custom | **0 / 10 — 0.0%** |
+
+Both arms together (§AD7), quoted as a **v14 absolute with no cross-pass series**. Native is one row
+short of the ≥ 8/10 bar. This is *looser* than the 5/10 `passes_gate` figure, which additionally ANDs
+in `fix_usable_unedited`.
+
+**What the figure does not say, stated because the first draft of this entry got it wrong.** 70.0%
+counts whether a report **named** the right layer. §AO2's rows 09, 11 and 13 all named correctly and
+carried false factual claims regardless — row 09's Fix 1 repoints at a nonexistent column, row 11
+claims 0 rows against a 21-row table, row 13 lists five `u_*` columns that do not exist. So the
+reliability gap sits *beside* the layer call, not inside it, and **70.0% is not shown to be an upper
+bound**: §AO2 states row 09 "correctly identified seed 06's layer-4 defect", so it does not leave the
+numerator, and row 11's alternative reading is a Build Rule #42 harness defect rather than a
+fabrication, which §AO2 leaves open. *(Caught in `/code-review` of PR #261 — a cross-column inference
+in the very PR whose subject is imprecise claims that travel.)*
+
+**§AQ3 is not the authority for this figure**, and the first draft miscited it. §AQ3 binds the **v15
+custom gate** figure and states in terms that *"the native arm is unaffected … the native series
+remains continuous"*. Applying it to a v14 native non-gate column put a rule in the citation record
+that the ruling does not contain. A v12→v14 SC-1 series would need justification against §AN1a's
+not-single-variable finding instead.
+
+**The gate is restated** as *establish the reliability of the correctness judgements we already
+make* — §AO2's closing line, not an absent measurement.
+
+**#259 re-scoped to one direction.** Two of its three filed candidates are dead: "score the diagnosis
+against seeded ground truth" is `scorecard-template.md` §A2 as shipped since v9 (and §AW0 rules that
+sharpening seed labels would not have caught one of the three known-bad rows); "restrict to
+time-invariant claims" **is** #212, closed. Only *capture reference state at run time* survives, and
+it helps future passes only — recorded as the cost to weigh, not buried.
+
+### Changed — the correction is now stated where the claim is read
+
+`DESIGN.md` §5.6 already carried this correction **by reference**, and it was re-imported verbatim
+anyway — into `BACKLOG.md` and into #259, both on 2026-08-13, a day after §AW0. The correction is now
+inline at **§5.2**, where the claim actually is. *A correction that lives only at the pointer's far
+end is not a correction.* The refuted wording is quarantined rather than deleted in both files, so a
+third re-import is recognisable as one.
+
+**Nothing was measured and nothing was built this session.** No instrument was designed; the
+deliverable is a corrected record. `BACKLOG.md` also picks up **#253** at rank 2.
+
 ## 2026.08.1312 — 2026-08-13
 
 ### Added — the sweep, the two repairs it exposed, and the first correctness figures (issue #212)
