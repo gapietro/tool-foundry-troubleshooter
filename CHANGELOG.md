@@ -17,6 +17,55 @@ two-digit daily counter. Incremented on every merge to `main`.
 
 ---
 
+## 2026.08.1313 — 2026-08-13
+
+### Fixed — the gate's premise was refuted by this repo's own record (issue #259)
+
+**A premise check run before designing #259 found the issue was filed on a claim its own parent had
+already refuted.** `BACKLOG.md` stated the gate as *"measure whether the Troubleshooter's root causes
+are RIGHT"*, asserting PRD Success Criterion 1 *"has never been measured"* and that v1–v14 scored
+admissibility and not correctness. **`benchmark/DECISION.md` §AW0 (2026-08-12) and `DESIGN.md` §5.6
+correction (a) both refute this, and both predate the paragraph they were re-imported over.**
+
+`root_cause_layer_correct` (0/2) and `fix_target_correct` (0/1/2) are correctness columns — 4 of the
+rubric's 6 points — and the former is one of the two terms in `passes_gate` (`scorecard-template.md`
+§A2). **Layer-level correctness has been in the gate figure since v9.** Seed ground truth predates
+every run and is checkable with `git merge-base --is-ancestor` (`1253cbf` 2026-07-31, `0c4f36c`
+2026-08-11), which is the §AX0-preferred shape.
+
+**SC-1, quoted for the first time** (`scorecard-v14.md` §1, `root_cause_layer_correct == 2`):
+
+| arm | SC-1 |
+|---|---|
+| native | **7 / 10 — 70.0%** |
+| custom | **0 / 10 — 0.0%** |
+
+Both arms together (§AD7); **absolute only, §AQ3 forbids differencing against v12/v13/v14.** Native
+is one row short of the ≥ 8/10 bar. This is *looser* than the 5/10 `passes_gate` figure, which
+additionally ANDs in `fix_usable_unedited`. It is also an **upper bound**: §AO2's row 09 scored 6/6
+and cleared the gate while proposing a fix at a column that does not exist, so at least one of the
+seven is fabricated.
+
+**The gate is restated** as *establish the reliability of the correctness judgements we already
+make* — §AO2's closing line, not an absent measurement.
+
+**#259 re-scoped to one direction.** Two of its three filed candidates are dead: "score the diagnosis
+against seeded ground truth" is `scorecard-template.md` §A2 as shipped since v9 (and §AW0 rules that
+sharpening seed labels would not have caught one of the three known-bad rows); "restrict to
+time-invariant claims" **is** #212, closed. Only *capture reference state at run time* survives, and
+it helps future passes only — recorded as the cost to weigh, not buried.
+
+### Changed — the correction is now stated where the claim is read
+
+`DESIGN.md` §5.6 already carried this correction **by reference**, and it was re-imported verbatim
+anyway — into `BACKLOG.md` and into #259, both on 2026-08-13, a day after §AW0. The correction is now
+inline at **§5.2**, where the claim actually is. *A correction that lives only at the pointer's far
+end is not a correction.* The refuted wording is quarantined rather than deleted in both files, so a
+third re-import is recognisable as one.
+
+**Nothing was measured and nothing was built this session.** No instrument was designed; the
+deliverable is a corrected record. `BACKLOG.md` also picks up **#253** at rank 2.
+
 ## 2026.08.1312 — 2026-08-13
 
 ### Added — the sweep, the two repairs it exposed, and the first correctness figures (issue #212)

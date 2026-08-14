@@ -3,10 +3,19 @@
 Persisted by `/next` so no session re-derives priorities from scratch. Read this first when asked
 what is next. Ranked by gate-distance, not by issue age or severity label.
 
-**Last ranked:** 2026-08-13 · shipped at version `2026.08.1312` · board **4 open** / 115 closed ·
+**Last ranked:** 2026-08-13 · shipped at version `2026.08.1313` · board **5 open** / 115 closed ·
 **0 open PRs** · **blockers to gate: 1**
 
-> **What moved: the #212 sweep RAN, and its result is that the axis does not answer the gate.**
+> **What moved (2026-08-13, later): the gate's premise was refuted by this repo's own record, and
+> #259 was re-scoped.** A premise check run before designing #259 found that its gate statement —
+> *"SC-1 has never been measured"* — is contradicted by `DECISION.md` §AW0 and `DESIGN.md` §5.6,
+> both written the day before #259 was filed. Correctness has been in `passes_gate` since v9;
+> **SC-1 stands at native 7/10 · 70.0%, custom 0/10 · 0.0%** (§AD7, absolute only per §AQ3). The gate
+> is restated as *reliability of those judgements*, #259 is cut to the one direction that survives,
+> and no instrument was built. **Nothing was measured and nothing was designed this session** — the
+> deliverable is a corrected record.
+>
+> **What moved before that: the #212 sweep RAN, and its result is that the axis does not answer the gate.**
 > Twenty reports extracted in twenty fresh contexts, frozen, adjudicated against a live gpinst01
 > metadata snapshot, scored. Figures in `benchmark/extraction/v14/results.json`, re-derivable with
 > `node benchmark/scripts/pass-figures.js`, recorded in `DECISION.md` §AX17.
@@ -34,27 +43,46 @@ what is next. Ranked by gate-distance, not by issue age or severity label.
 
 ## Current gate
 
-**Measure whether the Troubleshooter's root causes are RIGHT.**
+**Establish the RELIABILITY of the correctness judgements we already make.**
 
-PRD Success Criterion 1 — *"identifies the correct root cause in ≥ 8/10"* — has never been measured.
-Benchmark passes v1–v14 scored **admissibility** (well-formed, sourced, determinate), not
-**correctness**. `DESIGN.md` §5.2 is the finding that forced this gate and it is the repo's own:
-§AO2 scored a row **6/6 proposing a fix at a column that does not exist**, and §AU passed every
-registered prediction with no trigger firing while correctness collapsed **4/4 → 0/4**.
+> **Corrected 2026-08-13.** This section previously read *"Measure whether the Troubleshooter's root
+> causes are RIGHT"* and asserted that PRD Success Criterion 1 *"has never been measured"* and that
+> v1–v14 scored admissibility and not correctness. **That is refuted by `benchmark/DECISION.md` §AW0**
+> (2026-08-12) and by `DESIGN.md` §5.6's correction (a), both of which predate the paragraph they were
+> re-imported over. The claim has now been refuted once and re-imported twice; it is quarantined here
+> rather than deleted so the third re-import is recognisable as one.
 
-**Blockers to this gate: 1.** It is no longer `#212` — that instrument is built, measured and closed
-(§AX17.5). **The gate is still open, and the pass is why we now know what it would take.** §AX17.3:
-schema-level claim veracity does not settle root-cause correctness, and the two cannot be bridged by
-sharpening the adjudicator. Reason 2 of §AX17.5 names the shape of the thing that could — an adjudicator
-able to settle **values and counts** against a reference state contemporaneous with the run — and rules
-it a *different instrument*, not an amendment to this one. That successor is **#259**, filed 2026-08-13 and labelled
-`next`. The gate now has a known requirement AND an owner, which is the state the last three sessions
-each failed to leave it in.
+**SC-1 is measured, and has been since v9.** `root_cause_layer_correct` (0/2) and
+`fix_target_correct` (0/1/2) are correctness columns — 4 of the rubric's 6 points — and the former is
+one of the two terms in `passes_gate` (`scorecard-template.md` §A2). Ground truth is independent of
+the harness and predates every run: each seed spec declares **Expected root-cause layer** and
+**Expected fix target**, authored when the defect was injected, committed `1253cbf` (2026-07-31) and
+`0c4f36c` (2026-08-11) — checkable with `git merge-base --is-ancestor`, which is the §AX0-preferred
+shape (a property of the artifact, not a certification about an author).
+
+**What is actually unmeasured is narrower: whether a report's factual claims are TRUE.** That is
+§AO2's own closing line, and it is why §AO2's row 09 scored **6/6 and cleared the gate while proposing
+a fix at a column that does not exist** — re-confirmed by live read (`DESIGN.md` §5.6 correction (b)).
+The judge reads report prose and never checks it against the instance. So **at least one of native's
+seven correct-layer rows is known-fabricated**, and that — not an absent measurement — is the gate.
+
+**Blockers to this gate: 1.** Not `#212`: that instrument is built, measured and closed (§AX17.5), and
+§AX17.3 rules that schema-level claim veracity cannot be bridged to root-cause correctness by
+sharpening the adjudicator. The one surviving requirement is **§AX17.5 reason 2** — an adjudicator able
+to settle **values and counts** against a reference state *contemporaneous with the run* — ruled a
+*different instrument*, not an amendment. That is **#259**, re-scoped 2026-08-13 to that reason alone
+and labelled `next`.
 
 ### Standing position, so it is not re-derived
 
-- Last scored pass **v14**: native **5/10 · 50.0%** · custom **0/10 · 0.0%**. Quote both arms
-  together, always (§AD7).
+- Last scored pass **v14**, `passes_gate`: native **5/10 · 50.0%** · custom **0/10 · 0.0%**. Quote
+  both arms together, always (§AD7).
+- **SC-1 itself** — `root_cause_layer_correct == 2`, the PRD's *"identifies the correct root cause"* —
+  is a **different and looser figure** than the gate, because `passes_gate` ANDs in
+  `fix_usable_unedited`. From `scorecard-v14.md` §1: native **7/10 · 70.0%** · custom **0/10 · 0.0%**.
+  Native is **one row short** of SC-1's ≥ 8/10 bar. Both arms together (§AD7); **absolute only —
+  §AQ3 forbids differencing either against v12/v13/v14.** Read it with the reliability caveat above:
+  one of those seven rows is known-fabricated, so 70.0% is an **upper bound**.
 - Native's middle band prescribes **triage only**; custom's bottom band prescribes **does not clear
   triage**. **Neither arm is a front door.**
 - **Phase 1b is closed on the board but its milestone is NOT met.** Board state and acceptance
@@ -70,8 +98,9 @@ each failed to leave it in.
 
 | # | Item | Why it ranks here |
 |---|---|---|
-| **1** | **#259 — a root-cause correctness instrument that settles values and counts** (`next`) | The gate's only remaining blocker, and the pass just established what it has to be. §AX17.5 reason 2: an adjudicator settling **values and counts** against a reference state **contemporaneous with the run** — the v14 snapshot is a read of the instance *now*, and the runs it judges already happened, which is why 77% of claims came back `unresolvable` rather than false. That is a different instrument, not an amendment (§AX17.5 forbids treating it as one). Filed 2026-08-13 as the successor to #212, with §AX17.5's reopening condition, the inherited constraints (§AX7.2's spent held-out set, §AX10's n≥10 custom bar, §AQ3, §AX0), and three candidate directions none of which is chosen. **Design gate first** — and §AX17.6 before that. |
-| 2 | **#212 — commission the correctness axis** *(instrument complete, kept open as #259's parent)* | Built, run, scored and closed out (§AX17). AX-1a 96.7% passed, AX-4 passed and exercised, AX-2 pre-satisfied. **Its headline ask is not satisfied** — the issue says "score whether a root cause is RIGHT" and §AX17.3 concludes the axis scores claim veracity instead. Kept open as #259's parent rather than closed, so the unmet half of its ask stays visible on the board instead of living only in a closed issue's tail. Closing it is still available and still the operator's call. |
+| **1** | **#259 — capture run-contemporaneous reference state** (`next`, **re-scoped 2026-08-13**) | The gate's only remaining blocker. §AX17.5 reason 2: an adjudicator settling **values and counts** against a reference state **contemporaneous with the run** — the v14 snapshot reads the instance *now* and the runs it judges already happened, which is why 77% of claims came back `unresolvable` rather than false. A different instrument, not an amendment. **Two of its three filed candidate directions are dead and were removed:** direction 2 (score the diagnosis against seeded ground truth) is what `scorecard-template.md` §A2 has done **since v9**, and §AW0 rules that sharpening seed labels "would not have caught a single one of the three known-bad rows"; direction 3 (restrict to time-invariant claims) **is** #212, built and closed. Only direction 1 survives — capture reference state at run time — and it helps **future passes only**, which is the honest cost to weigh before committing. Inherited and not renegotiable: §AX7.2 (held-out set spent), §AX10 (n ≥ 10 custom bar), §AQ3, §AX0, §AX7.1 (**stopping condition written before the first pass**). **Design gate first, and §AX17.6 before that.** |
+| 2 | **#253 — `CLAUDE.md` says there is no CI and no branch protection; both exist** | Not a gate blocker, so strictly register-class — ranked anyway because it is wrong *in the behaviour-changing direction* inside the file every session loads. `strict: true` means every branch needs rebasing onto `main`; `enforce_admins: true` means the escape hatch a reader would reach for (`gh pr merge --admin`) is refused. Costs a session per rediscovery, and #259 will run several PRs. ~10 minutes. |
+| 3 | **#212 — commission the correctness axis** *(instrument complete, kept open as #259's parent)* | Built, run, scored and closed out (§AX17). AX-1a 96.7% passed, AX-4 passed and exercised, AX-2 pre-satisfied. **Its headline ask is not satisfied** — the issue says "score whether a root cause is RIGHT" and §AX17.3 concludes the axis scores claim veracity instead. Note the ask was *also mis-stated*: §AW0, filed under #212's own pre-registration, records that correctness was already scored. Kept open as #259's parent so the unmet half stays visible on the board rather than in a closed issue's tail. Closing it remains the operator's call. |
 | — | Phase 2, shrunk — native triage + Fix Report export | The cheapest alternative source of correctness signal: put it in front of real SCs and let production supply the evidence. **Note it does NOT satisfy §5.6 reason 2**, which requires *the custom harness* in front of real users — shipping the native arm reopens nothing, so this buys production evidence on its own merits, not a reopening condition. Ranked below #1 because shipping a UI over an unmeasured diagnosis is the thing #1 exists to prevent. Considered and not chosen 2026-08-12. |
 | — | Close out and package for handoff | `/senior-grade` + `handoff-readiness`. The fallback if #1's design gate concludes a correctness axis cannot be built affordably. Not scheduled. |
 

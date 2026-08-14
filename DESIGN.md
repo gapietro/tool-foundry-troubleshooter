@@ -689,6 +689,18 @@ Carried forward from the ledger, because these constraints outlive the issues:
 
 ### 5.2 Determinacy is not correctness — the finding that ends the pass
 
+> **Read §5.6 correction (a) with this section — inlined here 2026-08-13 because the pointer
+> did not hold.** "Correctness went unmeasured" below is **imprecise, and it travels**:
+> `root_cause_layer_correct` and `fix_target_correct` are correctness columns and the former is a
+> `passes_gate` term, so layer-level correctness has been in the gate figure **since v9**
+> (`benchmark/DECISION.md` §AW0). Measured, v14: **native 7/10 · 70.0%, custom 0/10 · 0.0%** (§AD7;
+> absolute only, §AQ3). The genuinely unmeasured axis is narrower — **whether the report's factual
+> claims are true** — which is what §AO2's closing line says and what the first bullet below is an
+> instance of. §5.6 already carried this correction by reference; it was nonetheless re-imported
+> verbatim into `BACKLOG.md` and into issue #259 on 2026-08-13, so it is now stated where the claim
+> is read rather than one section away. **A correction that lives only at the pointer's far end is
+> not a correction.**
+
 The instrument measures whether a report is **admissible**, and got steadily better at it
 while **correctness went unmeasured**. Two results make this concrete, and they are the
 strongest argument for stopping:
