@@ -9538,3 +9538,47 @@ The v14 correctness instrument is **closed**. It reopens only on one of:
 
 **§AQ3 is untouched:** this commissions no gate term, so no gate figure moves and none may be differenced
 against v12/v13/v14.
+
+### AX17.6 What review found in the scorer, recorded rather than quietly fixed
+
+Following §AX13.5's and §AX14.7's precedent. Eight findings on PR #258, **all after the figures existed
+and none of which moved one** — the headline numbers are byte-identical before and after, which is the
+only reason this is a footnote rather than a retraction.
+
+1. **The overlay key was double-prefixed, and it worked.** Fixture claim ids are already
+   report-qualified (`row-NN/CNN`); the scorer prepended the report again, and §AX16.2's overlay was
+   authored to match that doubled shape. Reproduced by review: an overlay regenerated with the *natural*
+   key makes every lookup `undefined`, the adjudicator returns `no_polarity`, and **AX-4 collapses to
+   `not exercised (0 refuted)` with no error anywhere**. The figure was correct by a coincidence of two
+   artifacts sharing one mistake. Now keyed verbatim, with coverage asserted per claim.
+2. **A floored arm could set AX-4's bar.** The bar was `max` over both arms' miss rates, so the custom
+   arm — n=2, floored `not exercised` by §AX11 as evidentially worthless — could set it to 0.5 off a
+   single miss and pass AX-4 unconditionally, writing that floored fraction into `compared_against`
+   unlabelled. **This is §AX11's own failure reproduced inside the code applying §AX11.** Only arms that
+   reached the floor may now set the bar; with none eligible the verdict is `not exercised`, never a pass.
+3. **The scorer trusted the dispatched matching files with no structural check** — an extra `a_to_b` key
+   would push recall above its own denominator, a dropped one would lower it, silently in both
+   directions. A dispatched context is precisely the input that cannot be assumed well-formed. Key sets
+   are now asserted equal to both frozen artifacts, per report.
+4. **`freeze()` was not all-or-nothing** despite a header saying so in capitals: it normalised inside the
+   write loop, so a throw on a later report left earlier artifacts on disk with no manifest — a
+   half-frozen tree that reads as *complete* to a later scorer run. All records are now built before any
+   is written.
+5. **§AX15.2's ground for a retry was recorded but not enforced** — the attempt *count* was checked, so a
+   second attempt whose predecessor parsed cleanly was accepted and frozen. A re-roll, visible in the
+   manifest and not refused, under a header claiming the bound is enforced here rather than described
+   here. Now refused, including after an empty-but-well-formed envelope.
+6. **Two test comments asserted more than their tests did** — scorer/cleared disjointness was list
+   membership only (a cleared file could have reached the fixture transitively through a `require`), and
+   "cannot be joined by a sibling" was false for any scorer helper whose filename missed the discovery
+   pattern. Both are now checked: a require-graph walk, and a constraint that every scorer filename *be*
+   discoverable.
+7. **`0 of 0` rows contradicted the fixture's own `zero_claim_reporting_rule`** ("never as 1.0, never as
+   0.0"). Now emitted as `not applicable`.
+
+**What this says about the instrument, and it is the sentence §AX13.5 and §AX14.7 already wrote twice.**
+Findings 1, 2 and 5 are each a registered principle defeated by a mechanical detail — a key format, a
+`max`, an unchecked precondition — inside code written by the author who had just registered that
+principle. Finding 2 is the sharpest: the rule and its violation are in the same function. **Three
+sittings, three repetitions of one lesson: writing a rule is not evidence about its enforcement, and the
+gap is always mechanical rather than conceptual.**

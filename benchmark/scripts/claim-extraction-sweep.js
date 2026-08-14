@@ -167,6 +167,31 @@ function attemptsFor(report, root) {
 }
 
 /**
+ * §AX15.2's other half: a retry is permitted only ON an envelope defect.
+ *
+ * The attempt COUNT was enforced; the GROUND for the retry was only recorded, so
+ * a second attempt whose predecessor parsed fine was accepted and frozen — a
+ * re-roll, visible in the manifest but not refused, under a header claiming the
+ * bound is enforced here rather than described here (review of PR #258).
+ *
+ * Every attempt but the last must therefore carry a defect. The last one is
+ * unconstrained: it is the one that succeeded, or the one that ran out of
+ * attempts.
+ */
+function refuseUngroundedRetries(report, attempts) {
+    for (let i = 0; i < attempts.length - 1; i++) {
+        if (!attempts[i].defect) {
+            throw new Error(
+                report +
+                    ': attempt ' +
+                    attempts[i].attempt +
+                    ' parsed cleanly and was retried anyway — §AX15.2 permits a retry only on an envelope defect'
+            );
+        }
+    }
+}
+
+/**
  * §AX15.2's envelope test, and the whole of it.
  *
  * Returns null when the emission is usable. The two defects it can return are
@@ -211,6 +236,8 @@ function survey(root) {
             };
         });
 
+        refuseUngroundedRetries(report, attempts);
+
         const last = attempts.length ? attempts[attempts.length - 1] : null;
         reports.push({
             report: report,
@@ -241,17 +268,34 @@ function freeze(root) {
         throw new Error('refusing to freeze a partial sweep — ' + detail);
     }
 
+    /**
+     * EVERY record is built before ANY is written.
+     *
+     * The first draft normalised and wrote inside one loop, so the
+     * all-or-nothing property covered only envelope defects — checked above —
+     * and a throw out of `normalise` on the fifteenth report left fourteen
+     * frozen artifacts on disk with no manifest. That is exactly the
+     * half-frozen tree this module refuses to produce, and worse than the case
+     * it does refuse, because a later scorer run over a shrunken corpus looks
+     * complete (review of PR #258).
+     */
+    const built = surveyed.map((entry) => {
+        const body = fs.readFileSync(path.join(where.reports, entry.report + '.md'), 'utf8');
+        const last = entry.attempts[entry.attempts.length - 1];
+        return {
+            entry: entry,
+            record: normalise(JSON.parse(last.text), {
+                report: entry.report,
+                arm: entry.arm,
+                lines: body.split('\n'),
+            }),
+        };
+    });
+
     fs.mkdirSync(where.sweep, { recursive: true });
 
     const manifest = [];
-    for (const entry of surveyed) {
-        const body = fs.readFileSync(path.join(where.reports, entry.report + '.md'), 'utf8');
-        const last = entry.attempts[entry.attempts.length - 1];
-        const record = normalise(JSON.parse(last.text), {
-            report: entry.report,
-            arm: entry.arm,
-            lines: body.split('\n'),
-        });
+    for (const { entry, record } of built) {
         fs.writeFileSync(path.join(where.sweep, entry.report + '.json'), serialise(record), 'utf8');
 
         manifest.push({
